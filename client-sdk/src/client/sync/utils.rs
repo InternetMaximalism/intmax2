@@ -44,7 +44,7 @@ pub fn get_balance_proof(
     Ok(balance_proof)
 }
 
-const MAX_VALIDITY_PROVER_SYNC_TRIES: u32 = 5;
+const MAX_VALIDITY_PROVER_SYNC_TRIES: u32 = 8;
 const VALIDITY_PROVER_SYNC_SLEEP_TIME: u64 = 10;
 
 pub async fn wait_till_validity_prover_synced<V: ValidityProverClientInterface>(

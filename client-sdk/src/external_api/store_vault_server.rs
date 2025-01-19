@@ -53,7 +53,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
         stream_post_upload::<_, ()>(
             &self.base_url,
-            "/store-vault-server/save-user-data",
+            "/store-vault-server/save-user-data-stream",
             &request_with_auth,
         )
         .await?;
@@ -65,7 +65,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
         let response: GetUserDataResponse = stream_post_download(
             &self.base_url,
-            "/store-vault-server/get-user-data",
+            "/store-vault-server/get-user-data-stream",
             &request_with_auth,
         )
         .await?;
