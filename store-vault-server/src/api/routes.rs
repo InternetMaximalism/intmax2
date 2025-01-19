@@ -2,9 +2,10 @@ use crate::api::state::State;
 use actix_web::{
     error::ErrorUnauthorized,
     post,
-    web::{Data, Json},
-    Error,
+    web::{Bytes, BytesMut, Data, Json, Payload},
+    Error, HttpResponse,
 };
+use futures_util::{stream, Stream, StreamExt as _};
 use intmax2_interfaces::{
     api::store_vault_server::types::{
         GetDataBatchRequest, GetDataBatchResponse, GetDataSequenceRequest, GetDataSequenceResponse,
@@ -20,6 +21,33 @@ pub async fn save_user_data(
     state: Data<State>,
     request: Json<WithAuth<SaveUserDataRequest>>,
 ) -> Result<Json<()>, Error> {
+    request
+        .inner
+        .verify(&request.auth)
+        .map_err(ErrorUnauthorized)?;
+    let pubkey = request.auth.pubkey;
+    let request = &request.inner;
+    state
+        .store_vault_server
+        .save_user_data(pubkey, request.prev_digest, &request.data)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(()))
+}
+
+#[post("/save-user-data-stream")]
+pub async fn save_user_data_stream(
+    state: Data<State>,
+    mut payload: Payload,
+) -> Result<Json<()>, Error> {
+    let mut bytes = BytesMut::new();
+    while let Some(chunk) = payload.next().await {
+        let chunk = chunk?;
+        bytes.extend_from_slice(&chunk);
+    }
+    let request: WithAuth<SaveUserDataRequest> = bincode::deserialize(&bytes).map_err(|e| {
+        actix_web::error::ErrorBadRequest(format!("Failed to deserialize request: {}", e))
+    })?;
     request
         .inner
         .verify(&request.auth)
@@ -50,6 +78,37 @@ pub async fn get_user_data(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetUserDataResponse { data }))
+}
+
+#[post("/get-user-data-stream")]
+pub async fn get_user_data_stream(
+    state: Data<State>,
+    request: Json<WithAuth<GetUserDataRequest>>,
+) -> Result<HttpResponse, Error> {
+    request
+        .inner
+        .verify(&request.auth)
+        .map_err(ErrorUnauthorized)?;
+    let pubkey = request.auth.pubkey;
+    let data = state
+        .store_vault_server
+        .get_user_data(pubkey)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let response_bytes = bincode::serialize(&GetUserDataResponse { data }).unwrap();
+    let http_response = HttpResponse::Ok()
+        .append_header(("Content-Type", "application/octet-stream"))
+        .streaming(create_stream(response_bytes));
+    Ok(http_response)
+}
+
+fn create_stream(data: Vec<u8>) -> impl Stream<Item = anyhow::Result<Bytes>> {
+    const CHUNK_SIZE: usize = 1 << 20; // 1MB
+    let chunks: Vec<_> = data
+        .chunks(CHUNK_SIZE)
+        .map(|chunk| chunk.to_vec())
+        .collect();
+    stream::iter(chunks).map(|chunk| Ok(Bytes::from(chunk)))
 }
 
 #[post("/save-sender-proof-set")]
@@ -171,6 +230,8 @@ pub fn store_vault_server_scope() -> actix_web::Scope {
     actix_web::web::scope("/store-vault-server")
         .service(save_user_data)
         .service(get_user_data)
+        .service(save_user_data_stream)
+        .service(get_user_data_stream)
         .service(save_sender_proof_set)
         .service(get_sender_proof_set)
         .service(save_data_batch)

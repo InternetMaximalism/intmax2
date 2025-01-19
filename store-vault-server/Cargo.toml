@@ -29,3 +29,4 @@ hashbrown = { workspace = true }
 actix-web = { workspace = true }
 actix-cors = { workspace = true }
 serde_qs = { workspace = true }
+futures-util = { workspace = true }

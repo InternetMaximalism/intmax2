@@ -18,7 +18,10 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 
-use super::utils::query::post_request;
+use super::utils::{
+    query::post_request,
+    stream::{stream_post_download, stream_post_upload},
+};
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute
 
@@ -48,10 +51,10 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             prev_digest,
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        post_request::<_, ()>(
+        stream_post_upload::<_, ()>(
             &self.base_url,
             "/store-vault-server/save-user-data",
-            Some(&request_with_auth),
+            &request_with_auth,
         )
         .await?;
         Ok(())
@@ -60,10 +63,10 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
     async fn get_user_data(&self, key: KeySet) -> Result<Option<Vec<u8>>, ServerError> {
         let request = GetUserDataRequest;
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        let response: GetUserDataResponse = post_request(
+        let response: GetUserDataResponse = stream_post_download(
             &self.base_url,
             "/store-vault-server/get-user-data",
-            Some(&request_with_auth),
+            &request_with_auth,
         )
         .await?;
         Ok(response.data)

@@ -71,7 +71,7 @@ where
     handle_response(response, &url, &query_str).await
 }
 
-async fn handle_response<R: DeserializeOwned>(
+pub(crate) async fn handle_response<R: DeserializeOwned>(
     response: Response,
     url: &str,
     request_str: &Option<String>,

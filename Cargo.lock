@@ -3279,6 +3279,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bincode",
+ "bytes",
  "chrono",
  "clap",
  "config",
@@ -3287,6 +3288,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "ethers",
+ "futures-util",
  "getrandom",
  "gloo-timers 0.3.0",
  "hashbrown 0.15.2",
@@ -4828,11 +4830,13 @@ dependencies = [
  "system-configuration 0.6.1",
  "tokio",
  "tokio-native-tls",
+ "tokio-util",
  "tower",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
  "windows-registry",
 ]
@@ -5847,6 +5851,7 @@ dependencies = [
  "env_logger",
  "envy",
  "ethers",
+ "futures-util",
  "hashbrown 0.15.2",
  "intmax2-interfaces",
  "intmax2-zkp",
@@ -7004,6 +7009,19 @@ checksum = "074649a66bb306c8f2068c9016395fa65d8e08d2affcbf95acf3c24c3ab19718"
 dependencies = [
  "log",
  "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
