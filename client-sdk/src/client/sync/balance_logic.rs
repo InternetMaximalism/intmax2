@@ -333,7 +333,7 @@ pub async fn update_send_by_receiver<
     }
     let sender_leaf = sender_leaves
         .iter()
-        .find(|leaf| leaf.sender == key.pubkey)
+        .find(|leaf| leaf.sender == sender)
         .ok_or(SyncError::InvalidTransferError(
             "sender leaf not found in sender leaves".to_string(),
         ))?;
