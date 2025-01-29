@@ -24,7 +24,6 @@ async fn main() -> Result<(), std::io::Error> {
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");
     let listen_address = format!("{}:{}", hostname, port);
-
     let redis = match redis::Client::open(redis_url) {
         Ok(client) => client,
         Err(e) => {
@@ -35,9 +34,7 @@ async fn main() -> Result<(), std::io::Error> {
             ));
         }
     };
-
-    let state = AppState::new();
-
+    let state = AppState::default();
     log::info!("Listening to requests at {}...", listen_address);
     HttpServer::new(move || {
         App::new()

@@ -19,8 +19,8 @@ pub struct AppState {
     pub outer_wrap_circuit: Arc<WrapperCircuit<F, C, OuterC, D>>,
 }
 
-impl AppState {
-    pub fn new() -> Self {
+impl Default for AppState {
+    fn default() -> Self {
         let balance_vd = CircuitVerifiers::load().get_balance_vd();
         let withdrawal_processor = Arc::new(WithdrawalProcessor::new(&balance_vd.common));
         let inner_wrap_circuit = Arc::new(WrapperCircuit::new(
