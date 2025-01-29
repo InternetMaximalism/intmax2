@@ -1,10 +1,8 @@
 use super::error::WithdrawalServerError;
-use crate::api::{
-    encode::encode_plonky2_proof,
-    status::{SqlClaimStatus, SqlWithdrawalStatus},
-};
+use crate::api::status::{SqlClaimStatus, SqlWithdrawalStatus};
 use intmax2_interfaces::{
     api::withdrawal_server::interface::{ClaimInfo, ContractWithdrawal, WithdrawalInfo},
+    data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
     utils::circuit_verifiers::CircuitVerifiers,
 };
 use intmax2_zkp::{
@@ -94,9 +92,9 @@ impl WithdrawalServer {
         }
 
         // Serialize the proof and public inputs
-        let proof_bytes =
-            encode_plonky2_proof(single_withdrawal_proof.clone(), &single_withdrawal_vd)
-                .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+        let proof_bytes = CompressedSingleWithdrawalProof::new(single_withdrawal_proof)
+            .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?
+            .0;
         let uuid_str = Uuid::new_v4().to_string();
 
         let pubkey_str = pubkey.to_hex();
@@ -161,8 +159,9 @@ impl WithdrawalServer {
         }
 
         // Serialize the proof and public inputs
-        let proof_bytes = encode_plonky2_proof(single_claim_proof.clone(), &self.single_claim_vd)
-            .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+        let proof_bytes = CompressedSingleClaimProof::new(single_claim_proof)
+            .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?
+            .0;
         let uuid_str = Uuid::new_v4().to_string();
 
         let pubkey_str = pubkey.to_hex();

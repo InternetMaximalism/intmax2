@@ -102,6 +102,25 @@ impl CompressedSingleWithdrawalProof {
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompressedSingleClaimProof(#[serde_as(as = "Base64")] pub Vec<u8>);
+
+impl CompressedSingleClaimProof {
+    pub fn new(input: &ProofWithPublicInputs<F, C, D>) -> Result<Self> {
+        // We don't have single_claim_vd yet because of serialization issues
+        let serialized =
+            bincode::serialize(input).map_err(|_| ProofCompressionError::SerializationError)?;
+        Ok(Self(serialized))
+    }
+    pub fn decompress(&self) -> Result<ProofWithPublicInputs<F, C, D>> {
+        // Deserialize directly because we don't have single_claim_vd yet
+        let proof: ProofWithPublicInputs<F, C, D> = bincode::deserialize(&self.0)
+            .map_err(|_| ProofCompressionError::DeserializationError)?;
+        Ok(proof)
+    }
+}
+
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompressedSpentProof(#[serde_as(as = "Base64")] pub Vec<u8>);
 
 impl CompressedSpentProof {
