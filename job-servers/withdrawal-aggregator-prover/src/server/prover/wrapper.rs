@@ -1,13 +1,21 @@
 use crate::{
     app::{
-        encode::decode_plonky2_proof,
-        interface::{GenerateProofResponse, ProofResponse, WithdrawalWrapperProofRequest},
+        interface::{
+            GenerateProofResponse, WithdrawalWrapperProofRequest, WithdrawalWrapperProofResponse,
+        },
         state::AppState,
     },
-    server::job::generate_withdrawal_wrapper_proof_job,
+    server::jobs::generate_withdrawal_wrapper_proof_job,
 };
 use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
-use intmax2_zkp::ethereum_types::{address::Address, u32limb_trait::U32LimbTrait};
+use plonky2::{
+    field::goldilocks_field::GoldilocksField,
+    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
+};
+
+type C = PoseidonGoldilocksConfig;
+const D: usize = 2;
+type F = GoldilocksField;
 
 #[get("/proof/wrapper/{id}")]
 async fn get_proof(
@@ -25,7 +33,7 @@ async fn get_proof(
         .await
         .map_err(error::ErrorInternalServerError)?;
     if proof.is_none() {
-        let response = ProofResponse {
+        let response = WithdrawalWrapperProofResponse {
             success: false,
             proof: None,
             error_message: None,
@@ -34,7 +42,7 @@ async fn get_proof(
         return Ok(HttpResponse::Ok().json(response));
     }
 
-    let response = ProofResponse {
+    let response = WithdrawalWrapperProofResponse {
         success: true,
         proof,
         error_message: None,
@@ -60,7 +68,7 @@ async fn generate_proof(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     if old_proof.is_some() {
-        let response = ProofResponse {
+        let response = WithdrawalWrapperProofResponse {
             success: true,
             proof: None,
             error_message: Some("withdrawal wrapper proof already exists".to_string()),
@@ -75,17 +83,11 @@ async fn generate_proof(
         .data
         .verifier_data();
 
-    log::info!("requested proof size: {}", req.withdrawal_proof.len());
-    let withdrawal_proof = decode_plonky2_proof(&req.withdrawal_proof, &withdrawal_circuit_data)
-        .map_err(error::ErrorBadRequest)?;
+    let withdrawal_proof: ProofWithPublicInputs<F, C, D> =
+        bincode::deserialize(&req.withdrawal_proof).map_err(error::ErrorBadRequest)?;
     withdrawal_circuit_data
         .verify(withdrawal_proof.clone())
         .map_err(error::ErrorBadRequest)?;
-
-    let withdrawal_aggregator =
-        Address::from_hex(&req.withdrawal_aggregator).map_err(error::ErrorBadRequest)?;
-
-    // TODO: Validation check of withdrawal_witness
 
     // Spawn a new task to generate the proof
     actix_web::rt::spawn(async move {
@@ -93,7 +95,7 @@ async fn generate_proof(
             &state,
             request_id,
             withdrawal_proof,
-            withdrawal_aggregator,
+            req.withdrawal_aggregator,
             &mut redis_conn,
         )
         .await;

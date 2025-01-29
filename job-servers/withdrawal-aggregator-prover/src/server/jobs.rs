@@ -1,4 +1,4 @@
-use crate::app::{config, encode::encode_plonky2_proof, interface::ProofContent, state::AppState};
+use crate::app::{config, interface::WithdrawalProofContent, state::AppState};
 use anyhow::Context;
 use intmax2_zkp::{
     common::withdrawal::Withdrawal, ethereum_types::address::Address, utils::conversion::ToU64,
@@ -32,15 +32,8 @@ pub async fn generate_withdrawal_proof_job(
         .prove_chain(single_withdrawal_proof, &prev_withdrawal_proof)
         .map_err(|e| anyhow::anyhow!("Failed to prove withdrawal chain: {}", e))?;
 
-    let encoded_compressed_withdrawal_proof = encode_plonky2_proof(
-        withdrawal_proof,
-        &state
-            .withdrawal_processor
-            .withdrawal_wrapper_circuit
-            .data
-            .verifier_data(),
-    )
-    .with_context(|| "Failed to encode withdrawal")?;
+    let withdrawal_proof = bincode::serialize(&withdrawal_proof)
+        .with_context(|| "Failed to serialize withdrawal proof")?;
 
     let opts = SetOptions::default()
         .conditional_set(ExistenceCheck::NX)
@@ -48,13 +41,13 @@ pub async fn generate_withdrawal_proof_job(
         .with_expiration(SetExpiry::EX(config::get("proof_expiration")));
     let withdrawal =
         Withdrawal::from_u64_slice(&single_withdrawal_proof.public_inputs.to_u64_vec());
-    let proof_content = ProofContent {
-        proof: encoded_compressed_withdrawal_proof.clone(),
+    let proof_content = WithdrawalProofContent {
+        proof: withdrawal_proof,
         withdrawal,
     };
+
     let proof_content_json = serde_json::to_string(&proof_content)
         .with_context(|| "Failed to encode withdrawal proof")?;
-
     let _ = redis::Cmd::set_options(&request_id, proof_content_json, opts)
         .query_async::<_, Option<String>>(conn)
         .await

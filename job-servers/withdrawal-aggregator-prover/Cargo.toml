@@ -24,6 +24,8 @@ hex = "0.4.3"
 anyhow = "1.0.86"
 log = "0.4.22"
 env_logger = "0.11.5"
+serde_with = { version = "3.12.0", features = ["base64"] }
+bincode = "1.3.3"
 
 [dependencies.validator]
 version = "0.16.1"

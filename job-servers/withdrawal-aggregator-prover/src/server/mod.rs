@@ -1,3 +1,3 @@
 pub mod health;
-pub mod job;
+pub mod jobs;
 pub mod prover;

@@ -1,14 +1,23 @@
 use crate::{
     app::{
-        encode::decode_plonky2_proof,
         interface::{
-            GenerateProofResponse, ProofContent, WithdrawalProofRequest, WithdrawalProofResponse,
+            GenerateProofResponse, WithdrawalProofContent, WithdrawalProofRequest,
+            WithdrawalProofResponse,
         },
         state::AppState,
     },
-    server::job::generate_withdrawal_proof_job,
+    server::jobs::generate_withdrawal_proof_job,
 };
 use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
+use intmax2_interfaces::data::proof_compression::CompressedSingleWithdrawalProof;
+use plonky2::{
+    field::goldilocks_field::GoldilocksField,
+    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
+};
+
+type C = PoseidonGoldilocksConfig;
+const D: usize = 2;
+type F = GoldilocksField;
 
 #[get("/proof/withdrawal/{id}")]
 async fn get_proof(
@@ -21,20 +30,19 @@ async fn get_proof(
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let request_id = get_withdrawal_request_id(&id);
-    let proof_with_withdrawal = redis::Cmd::get(&request_id)
+    let proof_content_json = redis::Cmd::get(&request_id)
         .query_async::<_, Option<String>>(&mut conn)
         .await
         .map_err(error::ErrorInternalServerError)?;
 
-    if let Some(proof_content_json) = proof_with_withdrawal {
-        let proof_content: ProofContent =
+    if let Some(proof_content_json) = proof_content_json {
+        let proof_content: WithdrawalProofContent =
             serde_json::from_str(&proof_content_json).map_err(error::ErrorInternalServerError)?;
         let response = WithdrawalProofResponse {
             success: true,
             proof: Some(proof_content),
             error_message: None,
         };
-
         return Ok(HttpResponse::Ok().json(response));
     }
 
@@ -64,7 +72,7 @@ async fn generate_proof(
         .await
         .map_err(error::ErrorInternalServerError)?;
     if let Some(proof_content_json) = old_proof {
-        let proof_content: ProofContent =
+        let proof_content: WithdrawalProofContent =
             serde_json::from_str(&proof_content_json).map_err(error::ErrorInternalServerError)?;
         let response = WithdrawalProofResponse {
             success: true,
@@ -83,35 +91,24 @@ async fn generate_proof(
 
     let prev_withdrawal_proof = if let Some(req_prev_withdrawal_proof) = &req.prev_withdrawal_proof
     {
-        log::info!("requested proof size: {}", req_prev_withdrawal_proof.len());
         if req_prev_withdrawal_proof.is_empty() {
             None
         } else {
-            let prev_withdrawal_proof =
-                decode_plonky2_proof(req_prev_withdrawal_proof, &withdrawal_circuit_data)
+            let prev_withdrawal_proof: ProofWithPublicInputs<F, C, D> =
+                bincode::deserialize::<_>(&req_prev_withdrawal_proof)
                     .map_err(error::ErrorBadRequest)?;
-            println!("start withdrawal_circuit_data");
             withdrawal_circuit_data
                 .verify(prev_withdrawal_proof.clone())
                 .map_err(error::ErrorBadRequest)?;
-            println!("end withdrawal_circuit_data");
-
             Some(prev_withdrawal_proof)
         }
     } else {
         None
     };
-
-    let single_withdrawal_circuit = &state.withdrawal_processor.single_withdrawal_circuit;
-    println!("start withdrawal_witness");
-    let single_withdrawal_proof = decode_plonky2_proof(
-        &req.single_withdrawal_proof,
-        &single_withdrawal_circuit.data.verifier_data(),
-    )
-    .map_err(error::ErrorBadRequest)?;
-    println!("end withdrawal_witness");
-
-    // TODO: Validation check of withdrawal_witness
+    let single_withdrawal_proof =
+        CompressedSingleWithdrawalProof(req.single_withdrawal_proof.to_vec())
+            .decompress()
+            .map_err(error::ErrorBadRequest)?;
 
     // Spawn a new task to generate the proof
     actix_web::rt::spawn(async move {

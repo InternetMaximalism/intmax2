@@ -1,5 +1,6 @@
-use intmax2_zkp::common::withdrawal::Withdrawal;
+use intmax2_zkp::{common::withdrawal::Withdrawal, ethereum_types::address::Address};
 use serde::{Deserialize, Serialize};
+use serde_with::{base64::Base64, serde_as};
 
 #[derive(Serialize)]
 pub struct HealthCheckResponse {
@@ -8,47 +9,54 @@ pub struct HealthCheckResponse {
     pub uptime: f64,
 }
 
+#[serde_as]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalProofRequest {
     pub id: String,
-    pub prev_withdrawal_proof: Option<String>,
-    pub single_withdrawal_proof: String, // base64 encoded
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WithdrawalWrapperProofRequest {
-    pub id: String,
-    pub withdrawal_proof: String,
-    pub withdrawal_aggregator: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProofContent {
-    pub proof: String, // public inputs included
-    pub withdrawal: Withdrawal,
+    #[serde_as(as = "Option<Base64>")]
+    pub prev_withdrawal_proof: Option<Vec<u8>>,
+    #[serde_as(as = "Base64")]
+    pub single_withdrawal_proof: Vec<u8>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalProofResponse {
     pub success: bool,
-    pub proof: Option<ProofContent>,
+    pub proof: Option<WithdrawalProofContent>,
     pub error_message: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProofResponse {
-    pub success: bool,
-    pub proof: Option<String>,
-    pub error_message: Option<String>,
+pub struct WithdrawalProofContent {
+    #[serde_as(as = "Base64")]
+    pub proof: Vec<u8>,
+    pub withdrawal: Withdrawal,
 }
 
 #[derive(Serialize)]
 pub struct GenerateProofResponse {
     pub success: bool,
     pub message: String,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawalWrapperProofRequest {
+    pub id: String,
+    #[serde_as(as = "Base64")]
+    pub withdrawal_proof: Vec<u8>,
+    pub withdrawal_aggregator: Address,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawalWrapperProofResponse {
+    pub success: bool,
+    pub proof: Option<String>, // json string of withdrawal wrap proof
+    pub error_message: Option<String>,
 }

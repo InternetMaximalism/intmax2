@@ -4040,6 +4040,7 @@ dependencies = [
  "actix-web-validator",
  "anyhow",
  "base64 0.22.1",
+ "bincode",
  "config",
  "dotenv",
  "env_logger",
@@ -4054,6 +4055,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_qs 0.13.0",
+ "serde_with",
  "tokio",
  "validator",
 ]
