@@ -8,14 +8,6 @@ pub struct HealthCheckResponse {
     pub uptime: f64,
 }
 
-// #[derive(Clone, Debug, Deserialize)]
-// #[serde(rename_all = "camelCase")]
-// pub struct WithdrawalProofRequest {
-//     pub id: String,
-//     pub prev_withdrawal_proof: Option<String>,
-//     pub withdrawal_witness: SerializableWithdrawalWitness,
-// }
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalProofRequest {

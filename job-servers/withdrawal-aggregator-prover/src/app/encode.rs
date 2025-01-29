@@ -63,7 +63,7 @@ pub(crate) fn decode_plonky2_proof(
     encoded_proof: &str,
     circuit_data: &VerifierCircuitData<F, C, D>,
 ) -> anyhow::Result<ProofWithPublicInputs<F, C, D>> {
-    let decoded_proof = BASE64_STANDARD.decode(&encoded_proof)?;
+    let decoded_proof = BASE64_STANDARD.decode(encoded_proof)?;
     let compressed_proof = compressed_proof_from_bytes(decoded_proof, &circuit_data.common)
         .map_err(|e| anyhow::anyhow!(e))?;
 

@@ -62,7 +62,7 @@ async fn get_proofs(req: HttpRequest, redis: web::Data<redis::Client>) -> Result
 
     let mut proofs: Vec<WithdrawalProofValue> = Vec::new();
     for id in &request_ids {
-        let request_id = get_withdrawal_request_id(&id);
+        let request_id = get_withdrawal_request_id(id);
         let some_proof = redis::Cmd::get(&request_id)
             .query_async::<_, Option<String>>(&mut conn)
             .await
@@ -125,7 +125,7 @@ async fn generate_proof(
     let prev_withdrawal_proof = if let Some(req_prev_withdrawal_proof) = &req.prev_withdrawal_proof
     {
         log::debug!("requested proof size: {}", req_prev_withdrawal_proof.len());
-        if req_prev_withdrawal_proof == "" {
+        if req_prev_withdrawal_proof.is_empty() {
             None
         } else {
             let prev_withdrawal_proof =

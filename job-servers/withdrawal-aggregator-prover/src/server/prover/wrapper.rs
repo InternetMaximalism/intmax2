@@ -60,7 +60,7 @@ async fn get_proofs(req: HttpRequest, redis: web::Data<redis::Client>) -> Result
 
     let mut proofs: Vec<ProofValue> = Vec::new();
     for id in &request_ids {
-        let request_id = get_withdrawal_wrapper_request_id(&id);
+        let request_id = get_withdrawal_wrapper_request_id(id);
         let some_proof = redis::Cmd::get(&request_id)
             .query_async::<_, Option<String>>(&mut conn)
             .await

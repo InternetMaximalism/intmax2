@@ -16,6 +16,7 @@ type OuterC = PoseidonBN128GoldilocksConfig;
 const D: usize = 2;
 type F = GoldilocksField;
 
+#[derive(Clone)]
 pub struct AppState {
     pub withdrawal_processor: Arc<OnceLock<WithdrawalProcessor<F, C, D>>>,
     pub balance_circuit: Arc<OnceLock<BalanceCircuit<F, C, D>>>,
@@ -25,27 +26,16 @@ impl AppState {
     pub fn new() -> Self {
         let withdrawal_processor = Arc::new(OnceLock::new());
         let balance_circuit = Arc::new(OnceLock::new());
-        let wrapper_circuit1 = Arc::new(OnceLock::new());
-        let wrapper_circuit2 = Arc::new(OnceLock::new());
         let _: tokio::task::JoinHandle<()> = tokio::spawn(build_circuits(
-            Arc::clone(&withdrawal_processor),
-            Arc::clone(&balance_circuit),
-            Arc::clone(&wrapper_circuit1),
-            Arc::clone(&wrapper_circuit2),
+            Arc::new(OnceLock::new()),
+            Arc::new(OnceLock::new()),
+            Arc::new(OnceLock::new()),
+            Arc::new(OnceLock::new()),
         ));
 
         Self {
             withdrawal_processor,
             balance_circuit,
-        }
-    }
-}
-
-impl Clone for AppState {
-    fn clone(&self) -> Self {
-        Self {
-            withdrawal_processor: Arc::clone(&self.withdrawal_processor),
-            balance_circuit: Arc::clone(&self.balance_circuit),
         }
     }
 }
