@@ -1,4 +1,4 @@
-# withdraw-aggregator-prover
+# Aggregator-prover
 
 ## Development
 
@@ -6,17 +6,13 @@
 # env
 cp .env.example .env
 
-# run app
-RUST_LOG=debug cargo run -r --features dummy_proof
-```
-
 ## APIs
 
 ```sh
 WITHDRAWAL_PROVER_URL=http://localhost:8080
 
 # heath heck
-curl $WITHDRAWAL_PROVER_URL/health | jq
+http $WITHDRAWAL_PROVER_URL/health 
 ```
 
 ### Withdrawal

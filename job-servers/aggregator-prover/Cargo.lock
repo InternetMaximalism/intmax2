@@ -282,6 +282,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "aggregator-prover"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "actix-rt",
+ "actix-web",
+ "actix-web-validator",
+ "anyhow",
+ "base64 0.22.1",
+ "bincode",
+ "config",
+ "dotenv",
+ "env_logger",
+ "hex",
+ "intmax2-interfaces",
+ "intmax2-zkp",
+ "log",
+ "once_cell",
+ "plonky2",
+ "rand",
+ "redis",
+ "serde",
+ "serde_json",
+ "serde_qs 0.13.0",
+ "serde_with",
+ "tokio",
+ "validator",
+]
+
+[[package]]
 name = "ahash"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3996,36 +4026,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3268f3d866458b787f390cf61f4bbb563b922d091359f9608842999eaee3943c"
 dependencies = [
  "bitflags 2.6.0",
-]
-
-[[package]]
-name = "withdrawal-aggregator-prover"
-version = "0.1.0"
-dependencies = [
- "actix",
- "actix-rt",
- "actix-web",
- "actix-web-validator",
- "anyhow",
- "base64 0.22.1",
- "bincode",
- "config",
- "dotenv",
- "env_logger",
- "hex",
- "intmax2-interfaces",
- "intmax2-zkp",
- "log",
- "once_cell",
- "plonky2",
- "rand",
- "redis",
- "serde",
- "serde_json",
- "serde_qs 0.13.0",
- "serde_with",
- "tokio",
- "validator",
 ]
 
 [[package]]
