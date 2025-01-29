@@ -1,15 +1,12 @@
 use crate::{
     app::{
         encode::decode_plonky2_proof,
-        interface::{
-            GenerateProofResponse, ProofResponse, ProofValue, ProofsResponse,
-            WithdrawalWrapperIdQuery, WithdrawalWrapperProofRequest,
-        },
+        interface::{GenerateProofResponse, ProofResponse, WithdrawalWrapperProofRequest},
         state::AppState,
     },
     server::job::generate_withdrawal_wrapper_proof_job,
 };
-use actix_web::{error, get, post, web, HttpRequest, HttpResponse, Responder, Result};
+use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
 use intmax2_zkp::ethereum_types::{address::Address, u32limb_trait::U32LimbTrait};
 
 #[get("/proof/wrapper/{id}")]
@@ -40,42 +37,6 @@ async fn get_proof(
     let response = ProofResponse {
         success: true,
         proof,
-        error_message: None,
-    };
-
-    Ok(HttpResponse::Ok().json(response))
-}
-
-#[get("/proofs/wrapper")]
-async fn get_proofs(req: HttpRequest, redis: web::Data<redis::Client>) -> Result<impl Responder> {
-    let mut conn = redis
-        .get_async_connection()
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
-    let query_string = req.query_string();
-    let ids_query: WithdrawalWrapperIdQuery = serde_qs::from_str(query_string)
-        .map_err(|e| error::ErrorBadRequest(format!("Failed to deserialize query: {e:?}")))?;
-    let request_ids: Vec<String> = ids_query.ids;
-
-    let mut proofs: Vec<ProofValue> = Vec::new();
-    for id in &request_ids {
-        let request_id = get_withdrawal_wrapper_request_id(id);
-        let some_proof = redis::Cmd::get(&request_id)
-            .query_async::<_, Option<String>>(&mut conn)
-            .await
-            .map_err(error::ErrorInternalServerError)?;
-        if let Some(proof) = some_proof {
-            proofs.push(ProofValue {
-                id: (*id).to_string(),
-                proof,
-            });
-        }
-    }
-
-    let response = ProofsResponse {
-        success: true,
-        proofs,
         error_message: None,
     };
 

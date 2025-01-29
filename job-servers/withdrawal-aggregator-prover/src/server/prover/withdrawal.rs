@@ -2,14 +2,13 @@ use crate::{
     app::{
         encode::decode_plonky2_proof,
         interface::{
-            GenerateProofResponse, ProofContent, WithdrawalIdQuery, WithdrawalProofRequest,
-            WithdrawalProofResponse, WithdrawalProofValue, WithdrawalProofsResponse,
+            GenerateProofResponse, ProofContent, WithdrawalProofRequest, WithdrawalProofResponse,
         },
         state::AppState,
     },
     server::job::generate_withdrawal_proof_job,
 };
-use actix_web::{error, get, post, web, HttpRequest, HttpResponse, Responder, Result};
+use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
 
 #[get("/proof/withdrawal/{id}")]
 async fn get_proof(
@@ -42,44 +41,6 @@ async fn get_proof(
     let response = WithdrawalProofResponse {
         success: true,
         proof: None,
-        error_message: None,
-    };
-
-    Ok(HttpResponse::Ok().json(response))
-}
-
-#[get("/proofs/withdrawal")]
-async fn get_proofs(req: HttpRequest, redis: web::Data<redis::Client>) -> Result<impl Responder> {
-    let mut conn = redis
-        .get_async_connection()
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
-    let query_string = req.query_string();
-    let ids_query: WithdrawalIdQuery = serde_qs::from_str(query_string)
-        .map_err(|e| error::ErrorBadRequest(format!("Failed to deserialize query: {e:?}")))?;
-    let request_ids: Vec<String> = ids_query.ids;
-
-    let mut proofs: Vec<WithdrawalProofValue> = Vec::new();
-    for id in &request_ids {
-        let request_id = get_withdrawal_request_id(id);
-        let some_proof = redis::Cmd::get(&request_id)
-            .query_async::<_, Option<String>>(&mut conn)
-            .await
-            .map_err(error::ErrorInternalServerError)?;
-        if let Some(proof_content_json) = some_proof {
-            let proof_content: ProofContent = serde_json::from_str(&proof_content_json)
-                .map_err(error::ErrorInternalServerError)?;
-            proofs.push(WithdrawalProofValue {
-                id: (*id).to_string(),
-                proof: proof_content,
-            });
-        }
-    }
-
-    let response = WithdrawalProofsResponse {
-        success: true,
-        proofs,
         error_message: None,
     };
 
