@@ -14,7 +14,7 @@ members = [
     "server-common",
     "common",
 ]
-exclude = ["job-servers/withdrawal-aggregator-prover"]
+exclude = ["job-servers/aggregator-prover"]
 resolver = "2"
 
 [workspace.package]
