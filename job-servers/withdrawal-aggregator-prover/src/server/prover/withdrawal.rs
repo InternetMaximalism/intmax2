@@ -122,7 +122,7 @@ async fn generate_proof(
 
     let prev_withdrawal_proof = if let Some(req_prev_withdrawal_proof) = &req.prev_withdrawal_proof
     {
-        log::debug!("requested proof size: {}", req_prev_withdrawal_proof.len());
+        log::info!("requested proof size: {}", req_prev_withdrawal_proof.len());
         if req_prev_withdrawal_proof.is_empty() {
             None
         } else {

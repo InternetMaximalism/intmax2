@@ -20,18 +20,17 @@ pub async fn generate_withdrawal_proof_job(
     single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
     conn: &mut redis::aio::Connection,
 ) -> anyhow::Result<()> {
+    log::info!("generate_withdrawal_proof_job");
     state
         .withdrawal_processor
         .single_withdrawal_circuit
         .verify(single_withdrawal_proof)
         .map_err(|e| anyhow::anyhow!("Invalid single withdrawal proof: {:?}", e))?;
 
-    log::debug!("Proving...");
     let withdrawal_proof = state
         .withdrawal_processor
         .prove_chain(single_withdrawal_proof, &prev_withdrawal_proof)
         .map_err(|e| anyhow::anyhow!("Failed to prove withdrawal chain: {}", e))?;
-    // let withdrawal = Withdrawal::from_u64_slice(&withdrawal_proof.public_inputs.to_u64_vec());
 
     let encoded_compressed_withdrawal_proof = encode_plonky2_proof(
         withdrawal_proof,
@@ -71,7 +70,7 @@ pub async fn generate_withdrawal_wrapper_proof_job(
     withdrawal_aggregator: Address,
     conn: &mut redis::aio::Connection,
 ) -> anyhow::Result<()> {
-    log::debug!("Proving...");
+    log::info!("generate_withdrawal_wrapper_proof_job");
     let wrapped_withdrawal_proof = state
         .withdrawal_processor
         .prove_wrap(&withdrawal_proof, withdrawal_aggregator)

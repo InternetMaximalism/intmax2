@@ -1,46 +1,17 @@
 use base64::prelude::*;
 use plonky2::{
-    field::{extension::Extendable, goldilocks_field::GoldilocksField},
-    hash::hash_types::RichField,
+    field::goldilocks_field::GoldilocksField,
     plonk::{
         circuit_data::{CommonCircuitData, VerifierCircuitData},
-        config::{GenericConfig, PoseidonGoldilocksConfig},
+        config::PoseidonGoldilocksConfig,
         proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs},
     },
     util::serialization::{Buffer, IoResult, Read, Write},
 };
-use serde::{Deserialize, Serialize};
 
 const D: usize = 2;
 type C = PoseidonGoldilocksConfig;
 type F = GoldilocksField;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SerializableWithdrawalWitness {
-    pub single_withdrawal_proof: String,
-}
-
-pub struct SingleWithdrawalWitness<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    const D: usize,
-> {
-    pub single_withdrawal_proof: ProofWithPublicInputs<F, C, D>,
-}
-
-impl SerializableWithdrawalWitness {
-    pub fn decode(
-        &self,
-        withdrawal_circuit_data: &VerifierCircuitData<F, C, D>,
-    ) -> anyhow::Result<SingleWithdrawalWitness<F, C, D>> {
-        let single_withdrawal_proof =
-            decode_plonky2_proof(&self.single_withdrawal_proof, withdrawal_circuit_data)?;
-        Ok(SingleWithdrawalWitness {
-            single_withdrawal_proof,
-        })
-    }
-}
 
 pub(crate) fn encode_plonky2_proof(
     proof: ProofWithPublicInputs<F, C, D>,

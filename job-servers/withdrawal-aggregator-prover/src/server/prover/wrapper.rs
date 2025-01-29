@@ -114,7 +114,7 @@ async fn generate_proof(
         .data
         .verifier_data();
 
-    log::debug!("requested proof size: {}", req.withdrawal_proof.len());
+    log::info!("requested proof size: {}", req.withdrawal_proof.len());
     let withdrawal_proof = decode_plonky2_proof(&req.withdrawal_proof, &withdrawal_circuit_data)
         .map_err(error::ErrorBadRequest)?;
     withdrawal_circuit_data
