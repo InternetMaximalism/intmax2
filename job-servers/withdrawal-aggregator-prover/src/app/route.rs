@@ -1,5 +1,6 @@
-use crate::server::{health, prover};
 use actix_web::web;
+
+use crate::server::{health, prover};
 
 pub fn setup_routes(cfg: &mut web::ServiceConfig) {
     cfg.service((health::health_check,));
