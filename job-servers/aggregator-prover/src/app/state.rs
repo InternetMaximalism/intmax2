@@ -21,7 +21,7 @@ pub struct AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        let single_withdrawal_vd = CircuitVerifiers::load().get_balance_vd();
+        let single_withdrawal_vd = CircuitVerifiers::load().get_single_withdrawal_vd();
         let withdrawal_processor = Arc::new(HashChainProcessor::new(&single_withdrawal_vd));
         let inner_wrap_circuit = Arc::new(WrapperCircuit::new(
             &withdrawal_processor.chain_end_circuit.data.verifier_data(),
