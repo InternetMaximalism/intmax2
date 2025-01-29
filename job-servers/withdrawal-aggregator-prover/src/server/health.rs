@@ -1,4 +1,4 @@
-use crate::app::{errors::REDIS_CONNECTION_ERROR, interface::HealthCheckResponse};
+use crate::app::interface::HealthCheckResponse;
 use actix_web::{error, get, web, HttpResponse, Responder, Result};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -34,7 +34,10 @@ fn create_health_response(start_time: SystemTime) -> HealthCheckResponse {
 async fn health_check(redis: web::Data<redis::Client>) -> Result<impl Responder> {
     let start_time = SystemTime::now();
     if !is_redis_healthy(&redis).await {
-        return Err(error::ErrorInternalServerError(REDIS_CONNECTION_ERROR));
+        return Err(error::ErrorInternalServerError(
+            "Redis connection check failed: Unable to establish connection or receive response"
+                .to_string(),
+        ));
     }
     Ok(HttpResponse::Ok().json(create_health_response(start_time)))
 }
