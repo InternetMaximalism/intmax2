@@ -7,7 +7,7 @@ use crate::{
         },
         state::AppState,
     },
-    proof::generate_withdrawal_proof_job,
+    server::job::generate_withdrawal_proof_job,
 };
 use actix_web::{error, get, post, web, HttpRequest, HttpResponse, Responder, Result};
 
@@ -155,10 +155,10 @@ async fn generate_proof(
     // Spawn a new task to generate the proof
     actix_web::rt::spawn(async move {
         let response = generate_withdrawal_proof_job(
+            &state,
             request_id,
             prev_withdrawal_proof,
             &single_withdrawal_proof,
-            &state.withdrawal_processor,
             &mut redis_conn,
         )
         .await;

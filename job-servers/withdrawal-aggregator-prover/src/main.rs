@@ -11,7 +11,6 @@ use app::state::AppState;
 use crate::app::error_handler::handle_error;
 
 pub mod app;
-pub mod proof;
 pub mod server;
 
 #[actix_rt::main]
