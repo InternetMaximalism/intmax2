@@ -79,7 +79,7 @@ async fn generate_proof(
 
     let withdrawal_circuit_data = state
         .withdrawal_processor
-        .withdrawal_circuit
+        .cyclic_circuit
         .data
         .verifier_data();
 

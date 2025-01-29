@@ -85,7 +85,7 @@ async fn generate_proof(
 
     let withdrawal_circuit_data = state
         .withdrawal_processor
-        .withdrawal_circuit
+        .cyclic_circuit
         .data
         .verifier_data();
 
@@ -95,7 +95,7 @@ async fn generate_proof(
             None
         } else {
             let prev_withdrawal_proof: ProofWithPublicInputs<F, C, D> =
-                bincode::deserialize::<_>(&req_prev_withdrawal_proof)
+                bincode::deserialize::<_>(req_prev_withdrawal_proof)
                     .map_err(error::ErrorBadRequest)?;
             withdrawal_circuit_data
                 .verify(prev_withdrawal_proof.clone())

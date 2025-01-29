@@ -1,5 +1,6 @@
 use crate::app::{config, interface::WithdrawalProofContent, state::AppState};
 use anyhow::Context;
+use intmax2_interfaces::utils::circuit_verifiers::CircuitVerifiers;
 use intmax2_zkp::{
     common::withdrawal::Withdrawal, ethereum_types::address::Address, utils::conversion::ToU64,
 };
@@ -21,10 +22,9 @@ pub async fn generate_withdrawal_proof_job(
     conn: &mut redis::aio::Connection,
 ) -> anyhow::Result<()> {
     log::info!("generate_withdrawal_proof_job");
-    state
-        .withdrawal_processor
-        .single_withdrawal_circuit
-        .verify(single_withdrawal_proof)
+    let single_withdrawal_vd = CircuitVerifiers::load().get_single_withdrawal_vd();
+    single_withdrawal_vd
+        .verify(single_withdrawal_proof.clone())
         .map_err(|e| anyhow::anyhow!("Invalid single withdrawal proof: {:?}", e))?;
 
     let withdrawal_proof = state
@@ -66,7 +66,7 @@ pub async fn generate_withdrawal_wrapper_proof_job(
     log::info!("generate_withdrawal_wrapper_proof_job");
     let wrapped_withdrawal_proof = state
         .withdrawal_processor
-        .prove_wrap(&withdrawal_proof, withdrawal_aggregator)
+        .prove_end(&withdrawal_proof, withdrawal_aggregator)
         .with_context(|| "Failed to prove withdrawal")?;
 
     let inner_wrap_proof = state
