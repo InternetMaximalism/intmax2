@@ -23,10 +23,10 @@ curl $WITHDRAWAL_PROVER_URL/health | jq
 
 ```sh
 # generate proof
-curl -X POST -d '{ "id": "1", "singleWithdrawalProof": "'$(base64 --input data/single_withdrawal_proof.bin)'", "prevWithdrawalProof": null }' -H "Content-Type: application/json" $WITHDRAWAL_PROVER_URL/proof/withdrawal | jq
+curl -X POST -d '{ "id": "1", "singleWithdrawalProof": "'$(base64 --input test_data/single_withdrawal_proof.bin)'", "prevWithdrawalProof": null }' -H "Content-Type: application/json" $WITHDRAWAL_PROVER_URL/proof/withdrawal | jq
 
 # generate proof
-curl -X POST -d '{ "id": "2", "singleWithdrawalProof": "'$(base64 --input data/single_withdrawal_proof.bin)'", "prevWithdrawalProof": '$(cat data/prev_withdrawal_proof.json)' }' -H "Content-Type: application/json" $WITHDRAWAL_PROVER_URL/proof/withdrawal | jq
+curl -X POST -d '{ "id": "2", "singleWithdrawalProof": "'$(base64 --input test_data/single_withdrawal_proof.bin)'", "prevWithdrawalProof": '$(cat test_data/prev_withdrawal_proof.json)' }' -H "Content-Type: application/json" $WITHDRAWAL_PROVER_URL/proof/withdrawal | jq
 ```
 
 #### get proof

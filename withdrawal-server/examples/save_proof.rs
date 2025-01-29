@@ -33,7 +33,10 @@ async fn main() {
         .expect("single_withdrawal_proof is NULL");
 
     // save to files
-    std::fs::create_dir_all("../job-servers/witest_data").unwrap();
-
-    println!("hello");
+    std::fs::create_dir_all("../job-servers/aggregator-prover/test_data").unwrap();
+    std::fs::write(
+        "../job-servers/aggregator-prover/test_data/single_withdrawal_proof.bin",
+        single_withdrawal_proof,
+    )
+    .unwrap();
 }
