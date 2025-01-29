@@ -110,8 +110,6 @@ async fn generate_proof(
 
     let withdrawal_circuit_data = state
         .withdrawal_processor
-        .get()
-        .ok_or_else(|| error::ErrorInternalServerError("withdrawal circuit is not initialized"))?
         .withdrawal_circuit
         .data
         .verifier_data();
@@ -134,10 +132,7 @@ async fn generate_proof(
             request_id,
             withdrawal_proof,
             withdrawal_aggregator,
-            state
-                .withdrawal_processor
-                .get()
-                .expect("withdrawal wrapper circuit is not initialized"),
+            &state.withdrawal_processor,
             &mut redis_conn,
         )
         .await;

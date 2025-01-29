@@ -16,6 +16,7 @@ actix-web-validator = "5.0.1"
 rand = "0.8.5"
 serde_qs = "0.13.0"
 base64 = "0.22.1"
+intmax2-interfaces = { path = "../../interfaces" }
 intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp", rev = "db374cdd632ab524dee1e20a794bc8c25a1a2f34" } # cli branch
 plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
 tokio = "1.39.2"

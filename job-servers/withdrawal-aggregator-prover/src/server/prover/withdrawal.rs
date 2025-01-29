@@ -116,8 +116,6 @@ async fn generate_proof(
 
     let withdrawal_circuit_data = state
         .withdrawal_processor
-        .get()
-        .ok_or_else(|| error::ErrorInternalServerError("withdrawal circuit is not initialized"))?
         .withdrawal_circuit
         .data
         .verifier_data();
@@ -143,11 +141,7 @@ async fn generate_proof(
         None
     };
 
-    let single_withdrawal_circuit = &state
-        .withdrawal_processor
-        .get()
-        .expect("withdrawal circuit is not initialized")
-        .single_withdrawal_circuit;
+    let single_withdrawal_circuit = &state.withdrawal_processor.single_withdrawal_circuit;
     println!("start withdrawal_witness");
     let single_withdrawal_proof = decode_plonky2_proof(
         &req.single_withdrawal_proof,
@@ -164,10 +158,7 @@ async fn generate_proof(
             request_id,
             prev_withdrawal_proof,
             &single_withdrawal_proof,
-            state
-                .withdrawal_processor
-                .get()
-                .expect("withdrawal circuit is not initialized"),
+            &state.withdrawal_processor,
             &mut redis_conn,
         )
         .await;
