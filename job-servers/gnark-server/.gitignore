@@ -1,0 +1,7 @@
+*.log
+*/.DS_Store
+*.sol
+*.log
+verifier.sol
+.env*
+!.env.example

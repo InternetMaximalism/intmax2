@@ -1,0 +1,37 @@
+[package]
+name = "withdrawal-aggregator-prover"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix = "0.13"
+actix-web = "4.4"
+serde = "1.0.188"
+serde_json = "1.0.105"
+actix-rt = "2.9.0"
+config = "0.13.3"
+dotenv = "0.15.0"
+once_cell = "1.18.0"
+actix-web-validator = "5.0.1"
+rand = "0.8.5"
+serde_qs = "0.13.0"
+base64 = "0.22.1"
+intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp", rev = "db374cdd632ab524dee1e20a794bc8c25a1a2f34" } # cli branch
+plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
+tokio = "1.39.2"
+hex = "0.4.3"
+anyhow = "1.0.86"
+log = "0.4.22"
+env_logger = "0.11.5"
+
+[dependencies.validator]
+version = "0.16.1"
+features = ["derive"]
+
+[dependencies.redis]
+version = "0.24"
+default-features = false
+features = ["tokio-comp", "connection-manager"]
+
+[features]
+dummy_proof = ["intmax2-zkp/dummy_validity_proof"]
