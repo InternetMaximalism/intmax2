@@ -27,11 +27,13 @@ pub async fn generate_withdrawal_proof_job(
         .verify(single_withdrawal_proof.clone())
         .map_err(|e| anyhow::anyhow!("Invalid single withdrawal proof: {:?}", e))?;
 
+    log::info!("Proving withdrawal chain");
     let withdrawal_proof = state
         .withdrawal_processor
         .prove_chain(single_withdrawal_proof, &prev_withdrawal_proof)
         .map_err(|e| anyhow::anyhow!("Failed to prove withdrawal chain: {}", e))?;
 
+    log::info!("Serializing withdrawal proof");
     let withdrawal_proof = bincode::serialize(&withdrawal_proof)
         .with_context(|| "Failed to serialize withdrawal proof")?;
 
