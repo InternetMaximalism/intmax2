@@ -11,22 +11,30 @@ use super::common::{JsTransfer, JsTx};
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsDepositData {
     pub deposit_salt: String,     // hex string
+    pub depositor: String,        // hex string
     pub pubkey_salt_hash: String, // hex string
     pub amount: String,           // 10 base string
+    pub is_eligible: bool,
     pub token_type: u8,
     pub token_address: String, // hex string
     pub token_id: String,      // 10 base string
+    pub is_mining: bool,
+    pub token_index: Option<u32>, // The index of the token in the contract
 }
 
 impl From<DepositData> for JsDepositData {
     fn from(deposit_data: DepositData) -> Self {
         Self {
             deposit_salt: deposit_data.deposit_salt.to_string(),
+            depositor: deposit_data.depositor.to_hex(),
             pubkey_salt_hash: deposit_data.pubkey_salt_hash.to_hex(),
             amount: deposit_data.amount.to_string(),
+            is_eligible: deposit_data.is_eligible,
             token_type: deposit_data.token_type as u8,
             token_address: deposit_data.token_address.to_hex(),
             token_id: deposit_data.token_id.to_string(),
+            is_mining: deposit_data.is_mining,
+            token_index: deposit_data.token_index,
         }
     }
 }
