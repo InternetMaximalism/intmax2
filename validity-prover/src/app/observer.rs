@@ -311,6 +311,15 @@ impl Observer {
                     first.deposit_index, next_deposit_index
                 )));
             }
+        } else {
+            // no new deposits
+            let rollup_next_deposit_index = self.rollup_contract.get_next_deposit_index().await?;
+            if next_deposit_index < rollup_next_deposit_index {
+                return Err(ObserverError::FullBlockSyncError(format!(
+                    "next_deposit_index is less than rollup_next_deposit_index: {} < {}",
+                    next_deposit_index, rollup_next_deposit_index
+                )));
+            }
         }
         Ok((deposit_leaf_events, to_block))
     }

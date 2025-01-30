@@ -408,6 +408,16 @@ impl RollupContract {
                 })?;
         Ok(latest_block_number)
     }
+
+    pub async fn get_next_deposit_index(&self) -> Result<u32, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let next_deposit_index = with_retry(|| async { contract.deposit_index().call().await })
+            .await
+            .map_err(|_| {
+                BlockchainError::RPCError("failed to get latest block number".to_string())
+            })?;
+        Ok(next_deposit_index)
+    }
 }
 
 fn encode_flat_g1(g1: &FlatG1) -> [[u8; 32]; 2] {
