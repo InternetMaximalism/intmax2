@@ -1,7 +1,12 @@
 use chrono::DateTime;
 use colored::{ColoredString, Colorize as _};
-use intmax2_client_sdk::client::history::{EntryStatus, HistoryEntry};
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_client_sdk::client::history::EntryStatus;
+use intmax2_interfaces::data::{
+    deposit_data::{DepositData, TokenType},
+    meta_data::MetaData,
+    transfer_data::TransferData,
+    tx_data::TxData,
+};
 use intmax2_zkp::{
     common::{signature::key_set::KeySet, transfer::Transfer, trees::asset_tree::AssetLeaf},
     ethereum_types::u32limb_trait::U32LimbTrait as _,
@@ -92,7 +97,39 @@ pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
 
 pub async fn history(key: KeySet) -> Result<(), CliError> {
     let client = get_client()?;
-    let history = client.fetch_history(key).await?;
+    let deposit_history = client.fetch_deposit_history(key).await?;
+    let transfer_history = client.fetch_transfer_history(key).await?;
+    let tx_history = client.fetch_tx_history(key).await?;
+
+    let mut history: Vec<HistoryEum> = Vec::new();
+    for entry in deposit_history {
+        history.push(HistoryEum::Deposit {
+            deposit: entry.data,
+            status: entry.status,
+            meta: entry.meta,
+        });
+    }
+    for entry in transfer_history {
+        history.push(HistoryEum::Receive {
+            transfer: entry.data,
+            status: entry.status,
+            meta: entry.meta,
+        });
+    }
+    for entry in tx_history {
+        history.push(HistoryEum::Send {
+            tx: entry.data,
+            status: entry.status,
+            meta: entry.meta,
+        });
+    }
+
+    history.sort_by_key(|entry| match entry {
+        HistoryEum::Deposit { meta, .. } => (meta.timestamp, meta.uuid.clone()),
+        HistoryEum::Receive { meta, .. } => (meta.timestamp, meta.uuid.clone()),
+        HistoryEum::Send { meta, .. } => (meta.timestamp, meta.uuid.clone()),
+    });
+
     println!("History:");
     for entry in history {
         print_history_entry(&entry)?;
@@ -132,9 +169,27 @@ fn format_transfer(transfer: &Transfer) -> String {
     )
 }
 
-fn print_history_entry(entry: &HistoryEntry) -> Result<(), CliError> {
+enum HistoryEum {
+    Deposit {
+        deposit: DepositData,
+        status: EntryStatus,
+        meta: MetaData,
+    },
+    Receive {
+        transfer: TransferData,
+        status: EntryStatus,
+        meta: MetaData,
+    },
+    Send {
+        tx: TxData,
+        status: EntryStatus,
+        meta: MetaData,
+    },
+}
+
+fn print_history_entry(entry: &HistoryEum) -> Result<(), CliError> {
     match entry {
-        HistoryEntry::Deposit {
+        HistoryEum::Deposit {
             deposit,
             status,
             meta,
@@ -168,7 +223,7 @@ fn print_history_entry(entry: &HistoryEntry) -> Result<(), CliError> {
                     .map_or("N/A".to_string(), |h| h.to_string())
             );
         }
-        HistoryEntry::Receive {
+        HistoryEum::Receive {
             transfer,
             status,
             meta,
@@ -192,7 +247,7 @@ fn print_history_entry(entry: &HistoryEntry) -> Result<(), CliError> {
                 transfer.transfer.amount.to_string().bright_green()
             );
         }
-        HistoryEntry::Send { tx, status, meta } => {
+        HistoryEum::Send { tx, status, meta } => {
             let time = format_timestamp(meta.timestamp);
             println!("{} [{}]", "SEND".bright_red().bold(), time.bright_blue(),);
             println!("  UUID: {}", meta.uuid);

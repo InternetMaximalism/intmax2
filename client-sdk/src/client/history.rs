@@ -25,6 +25,14 @@ use super::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HistoryEntry<T> {
+    pub data: T,
+    pub status: EntryStatus,
+    pub meta: MetaData,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum EntryStatus {
     Settled(u32),   // Settled at block number but not processed yet
     Processed(u32), // Incorporated into the balance proof
@@ -42,27 +50,7 @@ impl EntryStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum HistoryEntry {
-    Deposit {
-        deposit: DepositData,
-        status: EntryStatus,
-        meta: MetaData,
-    },
-    Receive {
-        transfer: TransferData,
-        status: EntryStatus,
-        meta: MetaData,
-    },
-    Send {
-        tx: TxData,
-        status: EntryStatus,
-        meta: MetaData,
-    },
-}
-
-pub async fn fetch_history<
+pub async fn fetch_deposit_history<
     BB: BlockBuilderClientInterface,
     S: StoreVaultClientInterface,
     V: ValidityProverClientInterface,
@@ -71,12 +59,10 @@ pub async fn fetch_history<
 >(
     client: &Client<BB, S, V, B, W>,
     key: KeySet,
-) -> Result<Vec<HistoryEntry>, ClientError> {
+) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
     let user_data = client.get_user_data(key).await?;
 
     let mut history = Vec::new();
-
-    // Deposits
     let all_deposit_info = fetch_deposit_info(
         &client.store_vault_server,
         &client.validity_prover,
@@ -87,8 +73,8 @@ pub async fn fetch_history<
     )
     .await?;
     for (meta, settled) in all_deposit_info.settled {
-        history.push(HistoryEntry::Deposit {
-            deposit: settled,
+        history.push(HistoryEntry {
+            data: settled,
             status: EntryStatus::from_settled(
                 &user_data.deposit_status.processed_uuids,
                 meta.clone(),
@@ -97,20 +83,41 @@ pub async fn fetch_history<
         });
     }
     for (meta, pending) in all_deposit_info.pending {
-        history.push(HistoryEntry::Deposit {
-            deposit: pending,
+        history.push(HistoryEntry {
+            data: pending,
             status: EntryStatus::Pending,
             meta,
         });
     }
     for (meta, timeout) in all_deposit_info.timeout {
-        history.push(HistoryEntry::Deposit {
-            deposit: timeout,
+        history.push(HistoryEntry {
+            data: timeout,
             status: EntryStatus::Timeout,
             meta,
         });
     }
 
+    history.sort_by_key(|entry| {
+        let HistoryEntry { meta, .. } = entry;
+        (meta.timestamp, meta.uuid.clone())
+    });
+
+    Ok(history)
+}
+
+pub async fn fetch_transfer_history<
+    BB: BlockBuilderClientInterface,
+    S: StoreVaultClientInterface,
+    V: ValidityProverClientInterface,
+    B: BalanceProverClientInterface,
+    W: WithdrawalServerClientInterface,
+>(
+    client: &Client<BB, S, V, B, W>,
+    key: KeySet,
+) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
+    let user_data = client.get_user_data(key).await?;
+
+    let mut history = Vec::new();
     let all_transfers_info = fetch_transfer_info(
         &client.store_vault_server,
         &client.validity_prover,
@@ -120,8 +127,8 @@ pub async fn fetch_history<
     )
     .await?;
     for (meta, settled) in all_transfers_info.settled {
-        history.push(HistoryEntry::Receive {
-            transfer: settled,
+        history.push(HistoryEntry {
+            data: settled,
             status: EntryStatus::from_settled(
                 &user_data.transfer_status.processed_uuids,
                 meta.clone(),
@@ -130,20 +137,41 @@ pub async fn fetch_history<
         });
     }
     for (meta, pending) in all_transfers_info.pending {
-        history.push(HistoryEntry::Receive {
-            transfer: pending,
+        history.push(HistoryEntry {
+            data: pending,
             status: EntryStatus::Pending,
             meta: meta.clone(),
         });
     }
     for (meta, timeout) in all_transfers_info.timeout {
-        history.push(HistoryEntry::Receive {
-            transfer: timeout,
+        history.push(HistoryEntry {
+            data: timeout,
             status: EntryStatus::Timeout,
             meta: meta.clone(),
         });
     }
 
+    history.sort_by_key(|entry| {
+        let HistoryEntry { meta, .. } = entry;
+        (meta.timestamp, meta.uuid.clone())
+    });
+
+    Ok(history)
+}
+
+pub async fn fetch_tx_history<
+    BB: BlockBuilderClientInterface,
+    S: StoreVaultClientInterface,
+    V: ValidityProverClientInterface,
+    B: BalanceProverClientInterface,
+    W: WithdrawalServerClientInterface,
+>(
+    client: &Client<BB, S, V, B, W>,
+    key: KeySet,
+) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
+    let user_data = client.get_user_data(key).await?;
+
+    let mut history = Vec::new();
     let all_tx_info = fetch_tx_info(
         &client.store_vault_server,
         &client.validity_prover,
@@ -153,32 +181,30 @@ pub async fn fetch_history<
     )
     .await?;
     for (meta, settled) in all_tx_info.settled {
-        history.push(HistoryEntry::Send {
-            tx: settled,
+        history.push(HistoryEntry {
+            data: settled,
             status: EntryStatus::from_settled(&user_data.tx_status.processed_uuids, meta.clone()),
             meta: meta.meta.clone(),
         });
     }
     for (meta, pending) in all_tx_info.pending {
-        history.push(HistoryEntry::Send {
-            tx: pending,
+        history.push(HistoryEntry {
+            data: pending,
             status: EntryStatus::Pending,
             meta,
         });
     }
     for (meta, timeout) in all_tx_info.timeout {
-        history.push(HistoryEntry::Send {
-            tx: timeout,
+        history.push(HistoryEntry {
+            data: timeout,
             status: EntryStatus::Timeout,
             meta,
         });
     }
 
-    // sort history by timestamp, priority, and uuid
-    history.sort_by_key(|entry| match entry {
-        HistoryEntry::Send { meta, .. } => (meta.timestamp, 0, meta.uuid.clone()),
-        HistoryEntry::Deposit { meta, .. } => (meta.timestamp, 1, meta.uuid.clone()),
-        HistoryEntry::Receive { meta, .. } => (meta.timestamp, 2, meta.uuid.clone()),
+    history.sort_by_key(|entry| {
+        let HistoryEntry { meta, .. } = entry;
+        (meta.timestamp, meta.uuid.clone())
     });
 
     Ok(history)

@@ -17,7 +17,7 @@ use intmax2_zkp::{
 use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
     data::{JsDepositData, JsDepositResult, JsTransferData, JsTxData, JsTxResult, JsUserData},
-    history::JsHistoryEntry,
+    history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     utils::{parse_address, parse_u256},
     wrapper::JsTxRequestMemo,
 };
@@ -214,6 +214,19 @@ pub async fn get_withdrawal_info(
 }
 
 #[wasm_bindgen]
+pub async fn get_withdrawal_info_by_recipient(
+    config: &Config,
+    recipient: &str,
+) -> Result<Vec<JsWithdrawalInfo>, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let recipient = parse_address(recipient)?;
+    let info = client.get_withdrawal_info_by_recipient(recipient).await?;
+    let js_info = info.into_iter().map(JsWithdrawalInfo::from).collect();
+    Ok(js_info)
+}
+
+#[wasm_bindgen]
 pub async fn get_mining_list(config: &Config, private_key: &str) -> Result<Vec<JsMining>, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
@@ -237,15 +250,41 @@ pub async fn get_claim_info(
 }
 
 #[wasm_bindgen]
-pub async fn fetch_history(
+pub async fn fetch_deposit_history(
     config: &Config,
     private_key: &str,
-) -> Result<Vec<JsHistoryEntry>, JsError> {
+) -> Result<Vec<JsDepositEntry>, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
-    let history = client.fetch_history(key).await?;
-    let js_history = history.into_iter().map(JsHistoryEntry::from).collect();
+    let history = client.fetch_deposit_history(key).await?;
+    let js_history = history.into_iter().map(JsDepositEntry::from).collect();
+    Ok(js_history)
+}
+
+#[wasm_bindgen]
+pub async fn fetch_transfer_history(
+    config: &Config,
+    private_key: &str,
+) -> Result<Vec<JsTransferEntry>, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    let history = client.fetch_transfer_history(key).await?;
+    let js_history = history.into_iter().map(JsTransferEntry::from).collect();
+    Ok(js_history)
+}
+
+#[wasm_bindgen]
+pub async fn fetch_tx_history(
+    config: &Config,
+    private_key: &str,
+) -> Result<Vec<JsTxEntry>, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    let history = client.fetch_tx_history(key).await?;
+    let js_history = history.into_iter().map(JsTxEntry::from).collect();
     Ok(js_history)
 }
 

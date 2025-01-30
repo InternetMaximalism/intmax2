@@ -41,7 +41,7 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
-    history::{fetch_history, HistoryEntry},
+    history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     strategy::mining::{fetch_mining_info, Mining},
     sync::utils::{generate_spent_witness, get_balance_proof},
 };
@@ -88,6 +88,8 @@ pub struct TxResult {
     pub tx_tree_root: Bytes32,
     pub transfer_uuids: Vec<String>,
     pub withdrawal_uuids: Vec<String>,
+    pub transfer_data_vec: Vec<TransferData>,
+    pub withdrawal_data_vec: Vec<TransferData>,
 }
 
 impl<BB, S, V, B, W> Client<BB, S, V, B, W>
@@ -330,6 +332,8 @@ where
             transfer_tree.push(*transfer);
         }
 
+        let mut transfer_data_vec = Vec::new();
+        let mut withdrawal_data_vec = Vec::new();
         for (i, transfer) in memo.transfers.iter().enumerate() {
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
             let transfer_data = TransferData {
@@ -350,8 +354,10 @@ where
                 DataType::Withdrawal
             };
             let pubkey = if transfer.recipient.is_pubkey {
+                transfer_data_vec.push(transfer_data.clone());
                 transfer.recipient.to_pubkey().unwrap()
             } else {
+                withdrawal_data_vec.push(transfer_data.clone());
                 key.pubkey
             };
             entries.push(SaveDataEntry {
@@ -405,6 +411,8 @@ where
             tx_tree_root: proposal.tx_tree_root,
             transfer_uuids,
             withdrawal_uuids,
+            transfer_data_vec,
+            withdrawal_data_vec,
         };
 
         Ok(result)
@@ -415,6 +423,17 @@ where
         key: KeySet,
     ) -> Result<Vec<WithdrawalInfo>, ClientError> {
         let withdrawal_info = self.withdrawal_server.get_withdrawal_info(key).await?;
+        Ok(withdrawal_info)
+    }
+
+    pub async fn get_withdrawal_info_by_recipient(
+        &self,
+        recipient: Address,
+    ) -> Result<Vec<WithdrawalInfo>, ClientError> {
+        let withdrawal_info = self
+            .withdrawal_server
+            .get_withdrawal_info_by_recipient(recipient)
+            .await?;
         Ok(withdrawal_info)
     }
 
@@ -435,7 +454,24 @@ where
         Ok(claim_info)
     }
 
-    pub async fn fetch_history(&self, key: KeySet) -> Result<Vec<HistoryEntry>, ClientError> {
-        fetch_history(self, key).await
+    pub async fn fetch_deposit_history(
+        &self,
+        key: KeySet,
+    ) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
+        fetch_deposit_history(self, key).await
+    }
+
+    pub async fn fetch_transfer_history(
+        &self,
+        key: KeySet,
+    ) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
+        fetch_transfer_history(self, key).await
+    }
+
+    pub async fn fetch_tx_history(
+        &self,
+        key: KeySet,
+    ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
+        fetch_tx_history(self, key).await
     }
 }

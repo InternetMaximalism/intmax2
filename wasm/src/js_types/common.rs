@@ -282,15 +282,6 @@ impl From<ClaimInfo> for JsClaimInfo {
     }
 }
 
-// #[derive(Debug, Clone)]
-// pub struct Mining {
-//     pub meta: MetaDataWithBlockNumber,
-//     pub deposit_data: DepositData,
-//     pub block: Block,  // the first block that contains the deposit
-//     pub maturity: u64, // maturity unix timestamp
-//     pub status: MiningStatus,
-// }
-
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsBlock {
