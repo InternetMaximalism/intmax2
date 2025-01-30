@@ -1,5 +1,5 @@
 import { cleanEnv, num, str, url } from 'envalid';
-import { Config, fetch_history, generate_intmax_account_from_eth_key, get_user_data, get_withdrawal_info, JsGenericAddress, JsHistoryEntry, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, send_tx_request, sync, sync_withdrawals, } from '../pkg';
+import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_intmax_account_from_eth_key, get_user_data, get_withdrawal_info, JsGenericAddress, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, send_tx_request, sync, sync_withdrawals, } from '../pkg';
 import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
 import * as dotenv from 'dotenv';
@@ -142,10 +142,20 @@ async function main() {
   await syncBalanceProof(config, privateKey);
   console.log("balance proof synced");
 
-  const history = await fetch_history(config, privateKey,);
-  for (let i = 0; i < history.length; i++) {
-    const entry = history[i];
-    await printHistoryEntry(entry);
+  const deposit_history = await fetch_deposit_history(config, privateKey,);
+  for (let i = 0; i < deposit_history.length; i++) {
+    const entry = deposit_history[i];
+    console.log(`Deposit: depositor ${entry.data.depositor} of ${entry.data.amount} (#${entry.data.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
+  }
+  const transfer_history = await fetch_transfer_history(config, privateKey);
+  for (let i = 0; i < transfer_history.length; i++) {
+    const entry = transfer_history[i];
+    console.log(`Receive: sender ${entry.data.sender} of ${entry.data.transfer.amount} (#${entry.data.transfer.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
+  }
+  const tx_history = await fetch_tx_history(config, privateKey);
+  for (let i = 0; i < tx_history.length; i++) {
+    const entry = tx_history[i];
+    console.log(`Send: transfers ${entry.data.transfers.length} at ${entry.meta.timestamp} ${entry.status.status}`);
   }
   // print withdrawal status 
   const withdrawalInfo = await get_withdrawal_info(config, privateKey);
@@ -186,17 +196,7 @@ async function sleep(sec: number) {
 }
 
 
-async function printHistoryEntry(entry: JsHistoryEntry) {
-  if (entry.deposit) {
-    console.log("Deposit: ", entry.deposit);
-  }
-  if (entry.receive) {
-    console.log("Receive: ", entry.receive);
-  }
-  if (entry.send) {
-    console.log("Send: ", entry.send);
-  }
-}
+
 
 main().then(() => {
   process.exit(0);

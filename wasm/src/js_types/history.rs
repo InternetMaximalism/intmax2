@@ -10,18 +10,14 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-#[wasm_bindgen]
-pub enum JsEntryStatus {
-    Settled,   // Settled at block number but not processed yet
-    Processed, // Incorporated into the balance proof
-    Pending,   // Not settled yet
-    Timeout,   // Timed out
-}
-
-#[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsEntryStatusWithBlockNumber {
-    pub status: JsEntryStatus,
+    /// The status of the entry
+    /// - "settled": The entry has been on-chain but not yet incorporated into the proof
+    /// - "processed": The entry has been incorporated into the proof
+    /// - "pending": The entry is not yet on-chain
+    /// - "timeout": The entry is not yet on-chain and has timed out
+    pub status: String,
     pub block_number: Option<u32>,
 }
 
@@ -29,19 +25,19 @@ impl From<EntryStatus> for JsEntryStatusWithBlockNumber {
     fn from(status: EntryStatus) -> Self {
         match status {
             EntryStatus::Settled(b) => Self {
-                status: JsEntryStatus::Settled,
+                status: "settled".to_string(),
                 block_number: Some(b),
             },
             EntryStatus::Processed(b) => Self {
-                status: JsEntryStatus::Processed,
+                status: "processed".to_string(),
                 block_number: Some(b),
             },
             EntryStatus::Pending => Self {
-                status: JsEntryStatus::Pending,
+                status: "pending".to_string(),
                 block_number: None,
             },
             EntryStatus::Timeout => Self {
-                status: JsEntryStatus::Timeout,
+                status: "timeout".to_string(),
                 block_number: None,
             },
         }
