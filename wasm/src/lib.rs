@@ -3,12 +3,7 @@ use intmax2_client_sdk::{
     client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key,
     external_api::utils::time::sleep_for,
 };
-use intmax2_interfaces::data::{
-    deposit_data::{DepositData, TokenType},
-    encryption::Encryption as _,
-    transfer_data::TransferData,
-    tx_data::TxData,
-};
+use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::transfer::Transfer,
     constants::NUM_TRANSFERS_IN_TX,
@@ -16,7 +11,7 @@ use intmax2_zkp::{
 };
 use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
-    data::{JsDepositData, JsDepositResult, JsTransferData, JsTxData, JsTxResult, JsUserData},
+    data::{JsDepositResult, JsTxResult, JsUserData},
     history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     utils::{parse_address, parse_u256},
     wrapper::JsTxRequestMemo,
@@ -27,6 +22,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 pub mod client;
 pub mod js_types;
+pub mod native;
 pub mod utils;
 
 #[derive(Debug, Clone)]
@@ -286,41 +282,6 @@ pub async fn fetch_tx_history(
     let history = client.fetch_tx_history(key).await?;
     let js_history = history.into_iter().map(JsTxEntry::from).collect();
     Ok(js_history)
-}
-
-/// Decrypt the deposit data.
-#[wasm_bindgen]
-pub async fn decrypt_deposit_data(
-    private_key: &str,
-    data: &[u8],
-) -> Result<JsDepositData, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let deposit_data =
-        DepositData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
-    Ok(deposit_data.into())
-}
-
-/// Decrypt the transfer data. This is also used to decrypt the withdrawal data.
-#[wasm_bindgen]
-pub async fn decrypt_transfer_data(
-    private_key: &str,
-    data: &[u8],
-) -> Result<JsTransferData, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let transfer_data =
-        TransferData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
-    Ok(transfer_data.into())
-}
-
-/// Decrypt the tx data.
-#[wasm_bindgen]
-pub async fn decrypt_tx_data(private_key: &str, data: &[u8]) -> Result<JsTxData, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let tx_data = TxData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
-    Ok(tx_data.into())
 }
 
 fn init_logger() {

@@ -150,7 +150,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         let mut metadata_cursor = metadata_cursor.clone();
         while has_more {
             let (data, cursor) = self
-                .get_data_sequence_inner(key, data_type, &metadata_cursor, &None)
+                .get_data_sequence_raw(key, data_type, &metadata_cursor, &None, &None)
                 .await?;
             has_more = cursor.has_more;
             metadata_cursor = cursor.next_cursor;
@@ -161,20 +161,6 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
 }
 
 impl StoreVaultServerClient {
-    pub fn sign_auth_for_get_data_sequence(&self, key: KeySet) -> Auth {
-        // because auth is not dependent on the datatype and cursor, we can use a dummy request
-        let dummy_request = GetDataSequenceRequest {
-            data_type: DataType::Deposit,
-            cursor: MetaDataCursor {
-                cursor: None,
-                order: CursorOrder::Asc,
-                limit: None,
-            },
-        };
-        let dummy_request_with_auth = dummy_request.sign(key, TIME_TO_EXPIRY_READONLY);
-        dummy_request_with_auth.auth
-    }
-
     fn verify_auth_for_get_data_sequence(&self, auth: &Auth) -> anyhow::Result<()> {
         let dummy_request = GetDataSequenceRequest {
             data_type: DataType::Deposit,
@@ -187,11 +173,12 @@ impl StoreVaultServerClient {
         dummy_request.verify(auth)
     }
 
-    pub async fn get_data_sequence_inner(
+    pub async fn get_data_sequence_raw(
         &self,
         key: KeySet,
         data_type: DataType,
         metadata_cursor: &Option<MetaData>,
+        limit: &Option<u32>,
         auth: &Option<Auth>,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         let auth = if let Some(auth) = auth {
@@ -199,7 +186,7 @@ impl StoreVaultServerClient {
                 .map_err(|e| ServerError::InvalidAuth(e.to_string()))?;
             auth.clone()
         } else {
-            self.sign_auth_for_get_data_sequence(key)
+            generate_auth_for_get_data_sequence(key)
         };
         let request_with_auth = WithAuth {
             inner: GetDataSequenceRequest {
@@ -207,7 +194,7 @@ impl StoreVaultServerClient {
                 cursor: MetaDataCursor {
                     cursor: metadata_cursor.clone(),
                     order: CursorOrder::Asc,
-                    limit: None,
+                    limit: *limit,
                 },
             },
             auth,
@@ -220,4 +207,18 @@ impl StoreVaultServerClient {
         .await?;
         Ok((response.data, response.cursor_response))
     }
+}
+
+pub fn generate_auth_for_get_data_sequence(key: KeySet) -> Auth {
+    // because auth is not dependent on the datatype and cursor, we can use a dummy request
+    let dummy_request = GetDataSequenceRequest {
+        data_type: DataType::Deposit,
+        cursor: MetaDataCursor {
+            cursor: None,
+            order: CursorOrder::Asc,
+            limit: None,
+        },
+    };
+    let dummy_request_with_auth = dummy_request.sign(key, TIME_TO_EXPIRY_READONLY);
+    dummy_request_with_auth.auth
 }
