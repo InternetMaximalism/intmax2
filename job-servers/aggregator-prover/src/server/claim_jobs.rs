@@ -70,11 +70,11 @@ pub async fn generate_claim_wrapper_proof_job(
         .with_context(|| "Failed to prove claim")?;
 
     let inner_wrap_proof = state
-        .withdrawal_inner_wrap_circuit
+        .claim_inner_wrap_circuit
         .prove(&wrapped_claim_proof)
         .with_context(|| "Failed to prove claim wrapper")?;
     let outer_wrap_proof = state
-        .withdrawal_outer_wrap_circuit
+        .claim_outer_wrap_circuit
         .prove(&inner_wrap_proof)
         .with_context(|| "Failed to prove claim wrapper")?;
 
