@@ -148,9 +148,16 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
 
         let mut has_more = true;
         let mut metadata_cursor = metadata_cursor.clone();
+        let auth = generate_auth_for_get_data_sequence(key);
         while has_more {
             let (data, cursor) = self
-                .get_data_sequence_raw(key, data_type, &metadata_cursor, &None, &None)
+                .get_data_sequence_native(
+                    data_type,
+                    &metadata_cursor,
+                    &None,
+                    &CursorOrder::Asc,
+                    &auth,
+                )
                 .await?;
             has_more = cursor.has_more;
             metadata_cursor = cursor.next_cursor;
@@ -173,31 +180,26 @@ impl StoreVaultServerClient {
         dummy_request.verify(auth)
     }
 
-    pub async fn get_data_sequence_raw(
+    pub async fn get_data_sequence_native(
         &self,
-        key: KeySet,
         data_type: DataType,
         metadata_cursor: &Option<MetaData>,
         limit: &Option<u32>,
-        auth: &Option<Auth>,
+        order: &CursorOrder,
+        auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        let auth = if let Some(auth) = auth {
-            self.verify_auth_for_get_data_sequence(auth)
-                .map_err(|e| ServerError::InvalidAuth(e.to_string()))?;
-            auth.clone()
-        } else {
-            generate_auth_for_get_data_sequence(key)
-        };
+        self.verify_auth_for_get_data_sequence(auth)
+            .map_err(|e| ServerError::InvalidAuth(e.to_string()))?;
         let request_with_auth = WithAuth {
             inner: GetDataSequenceRequest {
                 data_type,
                 cursor: MetaDataCursor {
                     cursor: metadata_cursor.clone(),
-                    order: CursorOrder::Asc,
+                    order: order.clone(),
                     limit: *limit,
                 },
             },
-            auth,
+            auth: auth.clone(),
         };
         let response: GetDataSequenceResponse = post_request(
             &self.base_url,

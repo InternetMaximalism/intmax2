@@ -1,15 +1,21 @@
 use crate::{
+    client::{get_client, Config},
     init_logger,
     js_types::{
         auth::JsAuth,
         data::{JsDepositData, JsTransferData, JsTxData},
+        encrypted_data::JsEncryptedData,
     },
     utils::str_privkey_to_keyset,
 };
 use intmax2_client_sdk::external_api::store_vault_server::generate_auth_for_get_data_sequence;
-use intmax2_interfaces::data::{
-    deposit_data::DepositData, encryption::Encryption as _, transfer_data::TransferData,
-    tx_data::TxData,
+use intmax2_interfaces::{
+    api::store_vault_server::{interface::DataType, types::CursorOrder},
+    data::{
+        deposit_data::DepositData, encryption::Encryption as _, meta_data::MetaData,
+        transfer_data::TransferData, tx_data::TxData,
+    },
+    utils::signature::Auth,
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -56,10 +62,65 @@ pub async fn generate_auth_for_store_vault(private_key: &str) -> Result<JsAuth, 
     Ok(auth.into())
 }
 
-// #[wasm_bindgen]
-// pub async fn fetch_encrypted_data(
-//     config: &Config,
-//     auth: &JsAuth,
-//     cursor: &Option<JsMetaData>,
-//     limit: &Option<u32>,
-// ) -> Result<JsEncryptedData, JsError> {
+#[wasm_bindgen]
+pub async fn fetch_encrypted_data(
+    config: &Config,
+    auth: &JsAuth,
+    timestamp: Option<u64>,
+    uuid: Option<String>,
+    limit: Option<u32>,
+    order: String, // asc or desc
+) -> Result<Vec<JsEncryptedData>, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let sv = client.store_vault_server;
+    if (timestamp.is_none() && uuid.is_some()) || (timestamp.is_some() && uuid.is_none()) {
+        return Err(JsError::new(
+            "Either both timestamp and uuid should be provided or none",
+        ));
+    }
+    let auth: Auth = auth
+        .clone()
+        .try_into()
+        .map_err(|e| JsError::new(&format!("failed to convert JsAuth to Auth: {}", e)))?;
+    let order: CursorOrder = order
+        .parse()
+        .map_err(|e| JsError::new(&format!("failed to parse order: {}", e)))?;
+
+    let metadata_cursor = if let (Some(timestamp), Some(uuid)) = (timestamp, uuid) {
+        Some(MetaData { timestamp, uuid })
+    } else {
+        None
+    };
+    let mut data_array = Vec::new();
+    let (deposit_data, _) = sv
+        .get_data_sequence_native(DataType::Deposit, &metadata_cursor, &limit, &order, &auth)
+        .await?;
+    data_array.extend(
+        deposit_data
+            .into_iter()
+            .map(|data| JsEncryptedData::new(DataType::Deposit, data)),
+    );
+    let (transfer_data, _) = sv
+        .get_data_sequence_native(DataType::Transfer, &metadata_cursor, &limit, &order, &auth)
+        .await?;
+    data_array.extend(
+        transfer_data
+            .into_iter()
+            .map(|data| JsEncryptedData::new(DataType::Transfer, data)),
+    );
+    let (tx_data, _) = sv
+        .get_data_sequence_native(DataType::Tx, &metadata_cursor, &limit, &order, &auth)
+        .await?;
+    data_array.extend(
+        tx_data
+            .into_iter()
+            .map(|data| JsEncryptedData::new(DataType::Tx, data)),
+    );
+    data_array.sort_by_key(|data| (data.timestamp, data.uuid.clone()));
+    if order == CursorOrder::Desc {
+        data_array.reverse();
+    }
+    data_array.truncate(limit.unwrap_or(data_array.len() as u32) as usize);
+    Ok(data_array)
+}

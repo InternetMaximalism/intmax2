@@ -1,3 +1,8 @@
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
+
 use super::interface::{DataType, SaveDataEntry};
 use crate::{data::meta_data::MetaData, utils::signature::Signable};
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
@@ -155,11 +160,32 @@ pub struct MetaDataCursor {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CursorOrder {
     #[default]
     Asc,
     Desc,
+}
+
+impl Display for CursorOrder {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            CursorOrder::Asc => write!(f, "asc"),
+            CursorOrder::Desc => write!(f, "desc"),
+        }
+    }
+}
+
+impl FromStr for CursorOrder {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "asc" => Ok(CursorOrder::Asc),
+            "desc" => Ok(CursorOrder::Desc),
+            _ => Err(format!("Invalid CursorOrder: {}", s)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
