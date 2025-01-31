@@ -234,10 +234,12 @@ impl StoreVaultServer {
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse)> {
         let pubkey_hex = pubkey.to_hex();
         let actual_limit = cursor.limit.unwrap_or(self.config.max_pagination_limit) as i64;
-        let cursor_meta = cursor.cursor.clone().unwrap_or_default();
+
         let result: Vec<DataWithMetaData> = match cursor.order {
-            CursorOrder::Asc => sqlx::query!(
-                r#"
+            CursorOrder::Asc => {
+                let cursor_meta = cursor.cursor.clone().unwrap_or_default();
+                sqlx::query!(
+                    r#"
             SELECT uuid, timestamp, encrypted_data
             FROM encrypted_data
             WHERE data_type = $1 
@@ -246,28 +248,40 @@ impl StoreVaultServer {
             ORDER BY timestamp ASC, uuid ASC
             LIMIT $5
         "#,
-                data_type as i32,
-                pubkey_hex,
-                cursor_meta.timestamp as i64,
-                cursor_meta.uuid,
-                actual_limit + 1
-            )
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|r| {
-                let meta = MetaData {
-                    uuid: r.uuid,
-                    timestamp: r.timestamp as u64,
-                };
-                DataWithMetaData {
-                    meta,
-                    data: r.encrypted_data,
-                }
-            })
-            .collect(),
-            CursorOrder::Desc => sqlx::query!(
-                r#"
+                    data_type as i32,
+                    pubkey_hex,
+                    cursor_meta.timestamp as i64,
+                    cursor_meta.uuid,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|r| {
+                    let meta = MetaData {
+                        uuid: r.uuid,
+                        timestamp: r.timestamp as u64,
+                    };
+                    DataWithMetaData {
+                        meta,
+                        data: r.encrypted_data,
+                    }
+                })
+                .collect()
+            }
+            CursorOrder::Desc => {
+                let timestamp = cursor
+                    .cursor
+                    .as_ref()
+                    .map(|c| c.timestamp)
+                    .unwrap_or_else(|| u64::MAX);
+                let uuid = cursor
+                    .cursor
+                    .as_ref()
+                    .map(|c| c.uuid.clone())
+                    .unwrap_or_default();
+                sqlx::query!(
+                    r#"
             SELECT uuid, timestamp, encrypted_data
             FROM encrypted_data
             WHERE data_type = $1 
@@ -276,26 +290,27 @@ impl StoreVaultServer {
             ORDER BY timestamp DESC, uuid DESC
             LIMIT $5
         "#,
-                data_type as i32,
-                pubkey_hex,
-                cursor_meta.timestamp as i64,
-                cursor_meta.uuid,
-                actual_limit + 1
-            )
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|r| {
-                let meta = MetaData {
-                    uuid: r.uuid,
-                    timestamp: r.timestamp as u64,
-                };
-                DataWithMetaData {
-                    meta,
-                    data: r.encrypted_data,
-                }
-            })
-            .collect(),
+                    data_type as i32,
+                    pubkey_hex,
+                    timestamp as i64,
+                    uuid,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|r| {
+                    let meta = MetaData {
+                        uuid: r.uuid,
+                        timestamp: r.timestamp as u64,
+                    };
+                    DataWithMetaData {
+                        meta,
+                        data: r.encrypted_data,
+                    }
+                })
+                .collect()
+            }
         };
         let has_more = result.len() > actual_limit as usize;
         let result = result
