@@ -1,3 +1,4 @@
+pub mod claim_jobs;
 pub mod health;
-pub mod jobs;
 pub mod prover;
+pub mod withdrawal_jobs;

@@ -72,11 +72,11 @@ pub async fn generate_withdrawal_wrapper_proof_job(
         .with_context(|| "Failed to prove withdrawal")?;
 
     let inner_wrap_proof = state
-        .inner_wrap_circuit
+        .withdrawal_inner_wrap_circuit
         .prove(&wrapped_withdrawal_proof)
         .with_context(|| "Failed to prove withdrawal wrapper")?;
     let outer_wrap_proof = state
-        .outer_wrap_circuit
+        .withdrawal_outer_wrap_circuit
         .prove(&inner_wrap_proof)
         .with_context(|| "Failed to prove withdrawal wrapper")?;
 

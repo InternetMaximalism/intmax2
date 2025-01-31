@@ -1,11 +1,9 @@
 use crate::{
     app::{
-        interface::{
-            GenerateProofResponse, WithdrawalWrapperProofRequest, WithdrawalWrapperProofResponse,
-        },
+        interface::{ClaimWrapperProofRequest, GenerateProofResponse, WrapperProofResponse},
         state::AppState,
     },
-    server::jobs::generate_withdrawal_wrapper_proof_job,
+    server::claim_jobs::generate_claim_wrapper_proof_job,
 };
 use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
 use plonky2::{
@@ -17,7 +15,7 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 type F = GoldilocksField;
 
-#[get("/proof/wrapper/{id}")]
+#[get("/proof/wrapper/claim/{id}")]
 async fn get_proof(
     id: web::Path<String>,
     redis: web::Data<redis::Client>,
@@ -27,13 +25,13 @@ async fn get_proof(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    let request_id = get_withdrawal_wrapper_request_id(&id);
+    let request_id = get_claim_wrapper_request_id(&id);
     let proof = redis::Cmd::get(&request_id)
         .query_async::<_, Option<String>>(&mut conn)
         .await
         .map_err(error::ErrorInternalServerError)?;
     if proof.is_none() {
-        let response = WithdrawalWrapperProofResponse {
+        let response = WrapperProofResponse {
             success: false,
             proof: None,
             error_message: None,
@@ -42,7 +40,7 @@ async fn get_proof(
         return Ok(HttpResponse::Ok().json(response));
     }
 
-    let response = WithdrawalWrapperProofResponse {
+    let response = WrapperProofResponse {
         success: true,
         proof,
         error_message: None,
@@ -51,9 +49,9 @@ async fn get_proof(
     Ok(HttpResponse::Ok().json(response))
 }
 
-#[post("/proof/wrapper")]
+#[post("/proof/wrapper/claim")]
 async fn generate_proof(
-    req: web::Json<WithdrawalWrapperProofRequest>,
+    req: web::Json<ClaimWrapperProofRequest>,
     redis: web::Data<redis::Client>,
     state: web::Data<AppState>,
 ) -> Result<impl Responder> {
@@ -62,40 +60,36 @@ async fn generate_proof(
         .await
         .map_err(error::ErrorInternalServerError)?;
 
-    let request_id = get_withdrawal_wrapper_request_id(&req.id);
+    let request_id = get_claim_wrapper_request_id(&req.id);
     let old_proof = redis::Cmd::get(&request_id)
         .query_async::<_, Option<String>>(&mut redis_conn)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     if old_proof.is_some() {
-        let response = WithdrawalWrapperProofResponse {
+        let response = WrapperProofResponse {
             success: true,
             proof: None,
-            error_message: Some("withdrawal wrapper proof already exists".to_string()),
+            error_message: Some("claim wrapper proof already exists".to_string()),
         };
 
         return Ok(HttpResponse::Ok().json(response));
     }
 
-    let withdrawal_circuit_data = state
-        .withdrawal_processor
-        .cyclic_circuit
-        .data
-        .verifier_data();
+    let claim_circuit_data = state.claim_processor.cyclic_circuit.data.verifier_data();
 
-    let withdrawal_proof: ProofWithPublicInputs<F, C, D> =
-        bincode::deserialize(&req.withdrawal_proof).map_err(error::ErrorBadRequest)?;
-    withdrawal_circuit_data
-        .verify(withdrawal_proof.clone())
+    let claim_proof: ProofWithPublicInputs<F, C, D> =
+        bincode::deserialize(&req.claim_proof).map_err(error::ErrorBadRequest)?;
+    claim_circuit_data
+        .verify(claim_proof.clone())
         .map_err(error::ErrorBadRequest)?;
 
     // Spawn a new task to generate the proof
     actix_web::rt::spawn(async move {
-        let response = generate_withdrawal_wrapper_proof_job(
+        let response = generate_claim_wrapper_proof_job(
             &state,
             request_id,
-            withdrawal_proof,
-            req.withdrawal_aggregator,
+            claim_proof,
+            req.claim_aggregator,
             &mut redis_conn,
         )
         .await;
@@ -114,10 +108,10 @@ async fn generate_proof(
 
     Ok(HttpResponse::Ok().json(GenerateProofResponse {
         success: true,
-        message: "withdrawal wrapper proof is generating".to_string(),
+        message: "claim wrapper proof is generating".to_string(),
     }))
 }
 
-fn get_withdrawal_wrapper_request_id(id: &str) -> String {
-    format!("withdrawal-wrapper/{}", id)
+fn get_claim_wrapper_request_id(id: &str) -> String {
+    format!("claim-wrapper/{}", id)
 }

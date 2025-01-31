@@ -1,12 +1,22 @@
 use actix_web::web;
 
-use crate::server::{health, prover};
+use crate::server::{
+    health,
+    prover::{claim, claim_wrapper, withdrawal, withdrawal_wrapper},
+};
 
 pub fn setup_routes(cfg: &mut web::ServiceConfig) {
     cfg.service((health::health_check,));
     cfg.service((
-        prover::withdrawal::get_proof,
-        prover::withdrawal::generate_proof,
+        withdrawal::get_proof,
+        withdrawal::generate_proof,
+        claim::get_proof,
+        claim::generate_proof,
     ));
-    cfg.service((prover::wrapper::get_proof, prover::wrapper::generate_proof));
+    cfg.service((
+        withdrawal_wrapper::get_proof,
+        withdrawal_wrapper::generate_proof,
+        claim_wrapper::get_proof,
+        claim_wrapper::generate_proof,
+    ));
 }
