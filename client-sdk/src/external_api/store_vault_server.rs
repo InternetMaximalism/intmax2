@@ -5,7 +5,7 @@ use intmax2_interfaces::{
         store_vault_server::{
             interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
             types::{
-                DataWithMetaData, GetDataBatchRequest, GetDataBatchResponse,
+                CursorOrder, DataWithMetaData, GetDataBatchRequest, GetDataBatchResponse,
                 GetDataSequenceRequest, GetDataSequenceResponse, GetSenderProofSetRequest,
                 GetSenderProofSetResponse, GetUserDataRequest, GetUserDataResponse, MetaDataCursor,
                 MetaDataCursorResponse, SaveDataBatchRequest, SaveDataBatchResponse,
@@ -170,6 +170,7 @@ impl StoreVaultServerClient {
             data_type,
             cursor: MetaDataCursor {
                 cursor: metadata_cursor.clone(),
+                order: CursorOrder::Asc,
                 limit: None,
             },
         };

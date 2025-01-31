@@ -130,7 +130,15 @@ pub struct GetDataSequenceResponse {
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataCursor {
     pub cursor: Option<MetaData>,
+    pub order: CursorOrder,
     pub limit: Option<u32>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum CursorOrder {
+    #[default]
+    Asc,
+    Desc,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

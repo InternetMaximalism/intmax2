@@ -72,7 +72,6 @@ impl CircuitVerifiers {
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
-        // save_verifier_circuit_data(&spent_circuit_data_path(), &self.spent_vd)?;
         save_verifier_circuit_data(&balance_circuit_data_path(), &self.balance_vd)?;
         save_verifier_circuit_data(&validity_circuit_data_path(), &self.validity_vd)?;
         save_verifier_circuit_data(&transition_circuit_data_path(), &self.transition_vd)?;
