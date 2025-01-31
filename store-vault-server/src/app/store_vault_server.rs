@@ -273,8 +273,8 @@ impl StoreVaultServer {
                 let timestamp = cursor
                     .cursor
                     .as_ref()
-                    .map(|c| c.timestamp)
-                    .unwrap_or_else(|| u64::MAX);
+                    .map(|c| c.timestamp as i64)
+                    .unwrap_or_else(|| i64::MAX);
                 let uuid = cursor
                     .cursor
                     .as_ref()
@@ -292,7 +292,7 @@ impl StoreVaultServer {
         "#,
                     data_type as i32,
                     pubkey_hex,
-                    timestamp as i64,
+                    timestamp,
                     uuid,
                     actual_limit + 1
                 )
