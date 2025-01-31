@@ -13,6 +13,13 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
+// a prefix to make the content unique
+fn content_prefix(path: &str) -> Vec<u8> {
+    format!("intmax2/v1/withdrawal-server/{}", path)
+        .as_bytes()
+        .to_vec()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetFeeResponse {
@@ -27,7 +34,11 @@ pub struct RequestWithdrawalRequest {
 
 impl Signable for RequestWithdrawalRequest {
     fn content(&self) -> Vec<u8> {
-        bincode::serialize(&self.single_withdrawal_proof).unwrap()
+        [
+            content_prefix("request_withdrawal"),
+            bincode::serialize(&self.single_withdrawal_proof).unwrap(),
+        ]
+        .concat()
     }
 }
 
@@ -39,7 +50,11 @@ pub struct RequestClaimRequest {
 
 impl Signable for RequestClaimRequest {
     fn content(&self) -> Vec<u8> {
-        bincode::serialize(&self.single_claim_proof).unwrap()
+        [
+            content_prefix("request_claim"),
+            bincode::serialize(&self.single_claim_proof).unwrap(),
+        ]
+        .concat()
     }
 }
 
@@ -49,7 +64,7 @@ pub struct GetWithdrawalInfoRequest;
 
 impl Signable for GetWithdrawalInfoRequest {
     fn content(&self) -> Vec<u8> {
-        vec![]
+        content_prefix("get_withdrawal_info")
     }
 }
 
@@ -65,7 +80,7 @@ pub struct GetClaimInfoRequest;
 
 impl Signable for GetClaimInfoRequest {
     fn content(&self) -> Vec<u8> {
-        vec![]
+        content_prefix("get_claim_info")
     }
 }
 
