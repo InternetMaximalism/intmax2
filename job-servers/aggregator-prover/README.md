@@ -19,10 +19,10 @@ http $PROVER_URL/health
 
 ```sh
 # generate proof
-curl -X POST -d '{ "id": "1", "singleWithdrawalProof": "'$(base64 --input test_data/single_withdrawal_proof.bin)'", "prevWithdrawalProof": null }' -H "Content-Type: application/json" $PROVER_URL/proof/withdrawal | jq
+curl -X POST -d '{ "id": "1", "singleWithdrawalProof": "'$(cat test_data/single_withdrawal_proof.txt)'", "prevWithdrawalProof": null }' -H "Content-Type: application/json" $PROVER_URL/proof/withdrawal | jq
 
 # generate proof
-curl -X POST -d '{ "id": "2", "singleWithdrawalProof": "'$(base64 --input test_data/single_withdrawal_proof.bin)'", "prevWithdrawalProof": "'$(cat test_data/withdrawal_proof.txt)'" }' -H "Content-Type: application/json" $PROVER_URL/proof/withdrawal | jq
+curl -X POST -d '{ "id": "2", "singleWithdrawalProof": "'$(cat test_data/single_withdrawal_proof.txt)'", "prevWithdrawalProof": "'$(cat test_data/withdrawal_proof.txt)'" }' -H "Content-Type: application/json" $PROVER_URL/proof/withdrawal | jq
 ```
 
 #### get proof
@@ -65,10 +65,10 @@ curl $PROVER_URL/proof/wrapper/withdrawal/1 | jq
 
 ```sh
 # generate proof
-curl -X POST -d '{ "id": "1", "singleClaimProof": "'$(base64 --input test_data/single_claim_proof.bin)'", "prevClaimProof": null }' -H "Content-Type: application/json" $PROVER_URL/proof/claim | jq
+curl -X POST -d '{ "id": "1", "singleClaimProof": "'$(cat test_data/single_claim_proof.txt)'", "prevClaimProof": null }' -H "Content-Type: application/json" $PROVER_URL/proof/claim | jq
 
 # generate proof
-curl -X POST -d '{ "id": "2", "singleClaimProof": "'$(base64 --input test_data/single_claim_proof.bin)'", "prevClaimProof": "'$(cat test_data/claim_proof.txt)'" }' -H "Content-Type: application/json" $PROVER_URL/proof/claim | jq
+curl -X POST -d '{ "id": "2", "singleClaimProof": "'$(cat test_data/single_claim_proof.txt)'", "prevClaimProof": "'$(cat test_data/claim_proof.txt)'" }' -H "Content-Type: application/json" $PROVER_URL/proof/claim | jq
 ```
 
 #### get proof
@@ -86,7 +86,6 @@ Response
     "proof": "AAA=",
     "claim": {
       "recipient": "0xd267c67f2a1c9b754a27c8e27d32758641e8434a",
-      "tokenIndex": 0,
       "amount": "1000",
       "nullifier": "0x7717e1ae50be08d94ee5ae5c8c1a314619f1255921bce4ac642ba4f4d97dfe67",
       "blockHash": "0x0597f8beb025cbe314ecce32c822a785d1914e0500f8321a1594b0833e54b0c2",

@@ -84,7 +84,7 @@ pub async fn mining_list(key: KeySet) -> Result<(), CliError> {
 pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
     let client = get_client()?;
     let claim_info = client.get_claim_info(key).await?;
-    println!("Withdrawal status:");
+    println!("Claim status:");
     for (i, claim_info) in claim_info.iter().enumerate() {
         let claim = claim_info.claim.clone();
         println!(
