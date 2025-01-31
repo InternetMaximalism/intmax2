@@ -61,7 +61,6 @@ curl -X POST -d '{ "id": "1", "withdrawalAggregator": "0x420a5b76e11e80d97c7eb3a
 curl $PROVER_URL/proof/wrapper/withdrawal/1 | jq
 
 
-
 ### Claim
 
 ```sh

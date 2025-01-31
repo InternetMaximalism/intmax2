@@ -1,3 +1,4 @@
+use base64::{prelude::BASE64_STANDARD, Engine as _};
 use server_common::db::{DbPool, DbPoolConfig};
 use withdrawal_server::Env;
 
@@ -14,7 +15,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let result = sqlx::query!(
+    let withdrawal_result = sqlx::query!(
         r#"
     SELECT 
         uuid,
@@ -28,15 +29,41 @@ async fn main() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    let single_withdrawal_proof = result
+    let single_withdrawal_proof = withdrawal_result
         .single_withdrawal_proof
         .expect("single_withdrawal_proof is NULL");
+    let single_withdrawal_proof_base64 = BASE64_STANDARD.encode(single_withdrawal_proof);
+
+    let claim_result = sqlx::query!(
+        r#"
+    SELECT 
+        uuid,
+        single_claim_proof,
+        created_at
+    FROM claims
+    WHERE single_claim_proof IS NOT NULL
+    LIMIT 1
+    "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let single_claim_proof = claim_result
+        .single_claim_proof
+        .expect("single_claim_proof is NULL");
+
+    let single_claim_proof_base64 = BASE64_STANDARD.encode(single_claim_proof);
 
     // save to files
     std::fs::create_dir_all("../job-servers/aggregator-prover/test_data").unwrap();
     std::fs::write(
-        "../job-servers/aggregator-prover/test_data/single_withdrawal_proof.bin",
-        single_withdrawal_proof,
+        "../job-servers/aggregator-prover/test_data/single_withdrawal_proof.txt",
+        single_withdrawal_proof_base64,
+    )
+    .unwrap();
+    std::fs::write(
+        "../job-servers/aggregator-prover/test_data/single_claim_proof.txt",
+        single_claim_proof_base64,
     )
     .unwrap();
 }

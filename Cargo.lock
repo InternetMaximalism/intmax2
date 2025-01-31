@@ -7440,6 +7440,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "anyhow",
+ "base64 0.22.1",
  "bincode",
  "chrono",
  "dotenv",
