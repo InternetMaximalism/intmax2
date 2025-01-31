@@ -267,6 +267,15 @@ where
     ) -> Result<(), SyncError> {
         log::info!("update_no_send: {:?}", to_block_number);
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let current_user_block_number = user_data.block_number()?;
+        if current_user_block_number >= to_block_number {
+            log::info!(
+                "No need to update: current {} >= to {}",
+                current_user_block_number,
+                to_block_number
+            );
+            return Ok(());
+        }
         log::info!(
             "update_no_send: user_data.block_number {},  to_block_number {}",
             user_data.block_number()?,
