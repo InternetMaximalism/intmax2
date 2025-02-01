@@ -5,8 +5,8 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        block::Block, claim::Claim, generic_address::GenericAddress, transfer::Transfer, tx::Tx,
-        withdrawal::get_withdrawal_nullifier,
+        block::Block, claim::Claim, generic_address::GenericAddress, signature::flatten::FlatG2,
+        transfer::Transfer, tx::Tx, withdrawal::get_withdrawal_nullifier,
     },
     ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
@@ -324,4 +324,30 @@ impl From<Mining> for JsMining {
             status: mining.status.to_string(),
         }
     }
+}
+
+pub type JsSignature = Vec<String>;
+
+pub(crate) fn to_signature(data: FlatG2) -> JsSignature {
+    vec![
+        data.0[0].to_string(),
+        data.0[1].to_string(),
+        data.0[2].to_string(),
+        data.0[3].to_string(),
+    ]
+}
+
+pub(crate) fn parse_signature(data: JsSignature) -> Result<FlatG2, JsError> {
+    if data.len() != 4 {
+        return Err(JsError::new("Invalid signature length"));
+    }
+
+    let signature = FlatG2([
+        parse_u256(&data[0]).map_err(|_| JsError::new("Failed to parse first element"))?,
+        parse_u256(&data[1]).map_err(|_| JsError::new("Failed to parse second element"))?,
+        parse_u256(&data[2]).map_err(|_| JsError::new("Failed to parse third element"))?,
+        parse_u256(&data[3]).map_err(|_| JsError::new("Failed to parse fourth element"))?,
+    ]);
+
+    Ok(signature)
 }

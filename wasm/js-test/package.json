@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "main": "ts-node src/main.ts"
+    "main": "ts-node src/main.ts",
+    "signature": "ts-node src/signature.ts"
   },
   "keywords": [],
   "author": "",

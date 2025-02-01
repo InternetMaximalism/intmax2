@@ -5,12 +5,18 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
-    common::transfer::Transfer,
+    common::{
+        signature::{self, flatten::FlatG2},
+        transfer::Transfer,
+    },
     constants::NUM_TRANSFERS_IN_TX,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use js_types::{
-    common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
+    common::{
+        parse_signature, to_signature, JsClaimInfo, JsMining, JsSignature, JsTransfer,
+        JsWithdrawalInfo,
+    },
     data::{JsDepositResult, JsTxResult, JsUserData},
     history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     utils::{parse_address, parse_u256},
@@ -282,6 +288,31 @@ pub async fn fetch_tx_history(
     let history = client.fetch_tx_history(key).await?;
     let js_history = history.into_iter().map(JsTxEntry::from).collect();
     Ok(js_history)
+}
+
+#[wasm_bindgen]
+pub async fn sign_message(private_key: &str, message: Vec<u8>) -> Result<JsSignature, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let signature = signature::sign::sign_message(key.privkey, &message);
+
+    Ok(to_signature(FlatG2::from(signature)))
+}
+
+#[wasm_bindgen]
+pub async fn verify_signature(
+    signature: JsSignature,
+    public_key: &str,
+    message: Vec<u8>,
+) -> Result<(), JsError> {
+    let public_key =
+        U256::from_hex(public_key).map_err(|_| JsError::new("Failed to parse public key"))?;
+    let signature = parse_signature(signature)?;
+
+    signature::sign::verify_signature(signature.into(), public_key, &message)
+        .map_err(|e| JsError::new(&e.to_string()))?;
+
+    Ok(())
 }
 
 fn init_logger() {
