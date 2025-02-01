@@ -27,18 +27,12 @@ const shouldBeFailed = async (fn: () => Promise<void>, expectedError?: string) =
 
 async function main() {
   const ethKey = env.USER_ETH_PRIVATE_KEY;
-  if (!ethKey) {
-    throw new Error("USER_ETH_PRIVATE_KEY is required");
-  }
-
   const key = await generate_intmax_account_from_eth_key(ethKey);
   let longMessage = "";
   for (let i = 0; i < 100; i++) {
     longMessage += "hello world ";
   }
   const message = Buffer.from(longMessage, "utf-8");
-
-  // get auth for store vault using private key
   const signature = await sign_message(key.privkey, message);
 
   await verify_signature(signature, key.pubkey, message);
