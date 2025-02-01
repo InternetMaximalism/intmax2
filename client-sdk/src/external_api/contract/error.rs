@@ -31,4 +31,7 @@ pub enum BlockchainError {
 
     #[error("Parse error: {0}")]
     ParseError(String),
+
+    #[error("Env error: {0}")]
+    EnvError(String),
 }

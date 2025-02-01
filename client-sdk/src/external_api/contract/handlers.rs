@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ethers::{
     abi::Detokenize,
     core::k256::ecdsa::SigningKey,
@@ -8,7 +10,7 @@ use ethers::{
 };
 
 use crate::external_api::{
-    contract::utils::{estimate_eip1559_fees, get_base_fee},
+    contract::utils::get_base_fee,
     utils::{retry::with_retry, time::sleep_for},
 };
 
@@ -17,7 +19,7 @@ use super::error::BlockchainError;
 const MAX_GAS_BUMP_ATTEMPTS: u32 = 3;
 const WAIT_TIME: u64 = 20;
 const GAS_BUMP_PERCENTAGE: u64 = 25; // Should be above 10 to avoid replacement transaction underpriced error
-const DEFAULT_PRIORITY_FEE_PER_GAS: u64 = 3_000_000_000;
+const DEFAULT_PRIORITY_FEE_PER_GAS: u128 = 1_000_000_000;
 
 pub async fn handle_contract_call<S: ToString, O: Detokenize>(
     client: &SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
@@ -27,7 +29,12 @@ pub async fn handle_contract_call<S: ToString, O: Detokenize>(
     >,
     tx_name: S,
 ) -> Result<H256, BlockchainError> {
-    set_gas_price(client.provider().url().as_str(), tx).await?;
+    let chain_id = client
+        .get_chainid()
+        .await
+        .map_err(|e| BlockchainError::RPCError(e.to_string()))?
+        .as_u64();
+    set_gas_price(chain_id, client.provider().url().as_str(), tx).await?;
     let result = tx.send().await;
     match result {
         Ok(tx) => {
@@ -149,13 +156,20 @@ async fn check_if_tx_succeeded(
 }
 
 async fn set_gas_price<O>(
+    chain_id: u64,
     rpc_url: &str,
     tx: &mut ethers::contract::builders::ContractCall<
         SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
         O,
     >,
 ) -> Result<(), BlockchainError> {
-    let (max_fee_per_gas, max_priority_fee_per_gas) = estimate_eip1559_fees(rpc_url).await?;
+    let base_fee = get_base_fee(rpc_url).await?;
+    let max_priority_fee_per_gas: U256 = parse_initial_max_priority_fee_per_gas_env()?
+        .get(&chain_id)
+        .cloned()
+        .unwrap_or(DEFAULT_PRIORITY_FEE_PER_GAS)
+        .into();
+    let max_fee_per_gas = base_fee * 2 + max_priority_fee_per_gas;
     log::info!(
         "max_fee_per_gas: {:?}, max_priority_fee_per_gas: {:?}",
         max_fee_per_gas,
@@ -167,4 +181,31 @@ async fn set_gas_price<O>(
         .max_priority_fee_per_gas(max_priority_fee_per_gas)
         .max_fee_per_gas(max_fee_per_gas);
     Ok(())
+}
+
+fn parse_initial_max_priority_fee_per_gas_env() -> Result<HashMap<u64, u128>, BlockchainError> {
+    // chain_id:gas_price,chain_id:gas_price,...
+    let var = match std::env::var("INITIAL_MAX_PRIORITY_FEE_PER_GAS") {
+        Ok(val) => val,
+        Err(_) => return Ok(HashMap::new()),
+    };
+    let mut gas_prices: HashMap<u64, u128> = HashMap::new();
+    for chain_gas_price in var.split(',') {
+        let mut chain_gas_price_iter = chain_gas_price.split(':');
+        let chain_id = chain_gas_price_iter
+            .next()
+            .ok_or(BlockchainError::EnvError("chain_id".to_string()))?;
+        let gas_price = chain_gas_price_iter
+            .next()
+            .ok_or(BlockchainError::EnvError("gas_price".to_string()))?;
+        gas_prices.insert(
+            chain_id
+                .parse()
+                .map_err(|_| BlockchainError::ParseError("chain_id".to_string()))?,
+            gas_price
+                .parse()
+                .map_err(|_| BlockchainError::ParseError("gas_price".to_string()))?,
+        );
+    }
+    Ok(gas_prices)
 }
