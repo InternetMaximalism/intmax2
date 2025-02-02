@@ -2,7 +2,7 @@ use crate::{
     client::{get_client, Config},
     init_logger,
     js_types::{
-        auth::JsAuth,
+        auth::{JsAuth, JsFlatG2},
         data::{JsDepositData, JsTransferData, JsTxData},
         encrypted_data::JsEncryptedData,
     },
@@ -16,6 +16,10 @@ use intmax2_interfaces::{
         transfer_data::TransferData, tx_data::TxData,
     },
     utils::signature::Auth,
+};
+use intmax2_zkp::{
+    common::signature::{self, flatten::FlatG2},
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -123,4 +127,30 @@ pub async fn fetch_encrypted_data(
     }
     data_array.truncate(limit.unwrap_or(data_array.len() as u32) as usize);
     Ok(data_array)
+}
+
+#[wasm_bindgen]
+pub async fn sign_message(private_key: &str, message: &[u8]) -> Result<JsFlatG2, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let signature = signature::sign::sign_message(key.privkey, message);
+
+    Ok(FlatG2::from(signature).into())
+}
+
+#[wasm_bindgen]
+pub async fn verify_signature(
+    signature: &JsFlatG2,
+    public_key: &str,
+    message: &[u8],
+) -> Result<(), JsError> {
+    let public_key =
+        U256::from_hex(public_key).map_err(|_| JsError::new("Failed to parse public key"))?;
+    let signature = FlatG2::try_from(signature.clone())
+        .map_err(|_| JsError::new("Failed to parse signature"))?;
+
+    signature::sign::verify_signature(signature.into(), public_key, message)
+        .map_err(|e| JsError::new(&e.to_string()))?;
+
+    Ok(())
 }
