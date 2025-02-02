@@ -143,14 +143,22 @@ pub async fn verify_signature(
     signature: &JsFlatG2,
     public_key: &str,
     message: &[u8],
-) -> Result<(), JsError> {
+) -> Result<bool, JsError> {
     let public_key =
         U256::from_hex(public_key).map_err(|_| JsError::new("Failed to parse public key"))?;
     let signature = FlatG2::try_from(signature.clone())
         .map_err(|_| JsError::new("Failed to parse signature"))?;
 
-    signature::sign::verify_signature(signature.into(), public_key, message)
-        .map_err(|e| JsError::new(&e.to_string()))?;
+    let result = signature::sign::verify_signature(signature.into(), public_key, message);
 
-    Ok(())
+    match result {
+        Ok(()) => Ok(true),
+        Err(e) => {
+            if e.to_string().contains("Invalid signature") {
+                Ok(false)
+            } else {
+                Err(JsError::new(&e.to_string()))
+            }
+        }
+    }
 }

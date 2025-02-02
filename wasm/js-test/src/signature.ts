@@ -35,23 +35,28 @@ async function main() {
   const message = Buffer.from(longMessage, "utf-8");
   const signature = await sign_message(key.privkey, message);
 
-  await verify_signature(signature, key.pubkey, message);
+  const result = await verify_signature(signature, key.pubkey, message);
+  if (!result) {
+    throw new Error("Invalid signature");
+  }
 
-  await shouldBeFailed(
-    async () => {
-      const key = await generate_intmax_account_from_eth_key("7397927abf5b7665c4667e8cb8b92e929e287625f79264564bb66c1fa2232b2c");
-      await verify_signature(signature, key.pubkey, message);
-    },
-    "Invalid signature"
-  );
+  const test1 = async () => {
+    const key = await generate_intmax_account_from_eth_key("7397927abf5b7665c4667e8cb8b92e929e287625f79264564bb66c1fa2232b2c");
+    const result = await verify_signature(signature, key.pubkey, message);
+    if (result) {
+      throw new Error("Should be failed because of invalid pubkey");
+    }
+  };
+  await test1();
 
-  await shouldBeFailed(
-    async () => {
-      const message = Buffer.from("hello world", "utf-8");
-      await verify_signature(signature, key.pubkey, message);
-    },
-    "Invalid signature"
-  );
+  const test2 = async () => {
+    const message = Buffer.from("hello world", "utf-8");
+    const result = await verify_signature(signature, key.pubkey, message);
+    if (result) {
+      throw new Error("Should be failed because of invalid message");
+    }
+  };
+  await test2();
 
   console.log("Done");
 }
