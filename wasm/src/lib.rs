@@ -13,10 +13,8 @@ use intmax2_zkp::{
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use js_types::{
-    common::{
-        parse_signature, to_signature, JsClaimInfo, JsMining, JsSignature, JsTransfer,
-        JsWithdrawalInfo,
-    },
+    auth::JsFlatG2,
+    common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
     data::{JsDepositResult, JsTxResult, JsUserData},
     history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     utils::{parse_address, parse_u256},
@@ -291,23 +289,24 @@ pub async fn fetch_tx_history(
 }
 
 #[wasm_bindgen]
-pub async fn sign_message(private_key: &str, message: Vec<u8>) -> Result<JsSignature, JsError> {
+pub async fn sign_message(private_key: &str, message: Vec<u8>) -> Result<JsFlatG2, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let signature = signature::sign::sign_message(key.privkey, &message);
 
-    Ok(to_signature(FlatG2::from(signature)))
+    Ok(FlatG2::from(signature).into())
 }
 
 #[wasm_bindgen]
 pub async fn verify_signature(
-    signature: JsSignature,
+    signature: &JsFlatG2,
     public_key: &str,
     message: Vec<u8>,
 ) -> Result<(), JsError> {
     let public_key =
         U256::from_hex(public_key).map_err(|_| JsError::new("Failed to parse public key"))?;
-    let signature = parse_signature(signature)?;
+    let signature = FlatG2::try_from(signature.clone())
+        .map_err(|_| JsError::new("Failed to parse signature"))?;
 
     signature::sign::verify_signature(signature.into(), public_key, &message)
         .map_err(|e| JsError::new(&e.to_string()))?;
