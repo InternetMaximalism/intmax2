@@ -11,6 +11,14 @@ pub struct JsFlatG2 {
     pub elements: Vec<String>, // hex string
 }
 
+#[wasm_bindgen]
+impl JsFlatG2 {
+    #[wasm_bindgen(constructor)]
+    pub fn new(elements: Vec<String>) -> Self {
+        Self { elements }
+    }
+}
+
 impl From<FlatG2> for JsFlatG2 {
     fn from(flat_g2: FlatG2) -> Self {
         Self {

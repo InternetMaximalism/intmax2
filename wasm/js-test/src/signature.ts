@@ -1,5 +1,5 @@
 import { cleanEnv, str } from 'envalid';
-import { generate_intmax_account_from_eth_key, sign_message, verify_signature } from '../pkg';
+import { generate_intmax_account_from_eth_key, JsFlatG2, sign_message, verify_signature } from '../pkg';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -34,7 +34,9 @@ async function main() {
   const message = Buffer.from(longMessage, "utf-8");
   const signature = await sign_message(key.privkey, message);
 
-  const result = await verify_signature(signature, key.pubkey, message);
+  const newSignature = new JsFlatG2(signature.elements); // construct a signature from raw data
+
+  const result = await verify_signature(newSignature, key.pubkey, message);
   if (!result) {
     throw new Error("Invalid signature");
   }
