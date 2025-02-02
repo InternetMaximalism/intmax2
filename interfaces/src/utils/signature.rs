@@ -1,13 +1,10 @@
-use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
-use ark_ec::{pairing::Pairing, AffineRepr};
 use intmax2_zkp::{
-    common::signature::{flatten::FlatG2, key_set::KeySet},
-    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
-};
-use num_traits::identities::Zero;
-use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
-use plonky2_bn254::{
-    curves::g2::G2Target, fields::recover::RecoverFromX, utils::hash_to_g2::HashToG2,
+    common::signature::{
+        flatten::FlatG2,
+        key_set::KeySet,
+        sign::{sign_message, verify_signature},
+    },
+    ethereum_types::u256::U256,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -45,8 +42,7 @@ impl Auth {
         };
         let serialized = bincode::serialize(&sign_content).unwrap();
         let digest = sha2::Sha256::digest(&serialized);
-        let hash = Bytes32::from_bytes_be(&digest);
-        let signature = sign_message(key.privkey, hash).unwrap();
+        let signature = sign_message(key.privkey, &digest).into();
         Auth {
             pubkey: key.pubkey,
             expiry,
@@ -65,8 +61,7 @@ impl Auth {
         };
         let serialized = bincode::serialize(&sign_content).unwrap();
         let digest = sha2::Sha256::digest(&serialized);
-        let hash = Bytes32::from_bytes_be(&digest);
-        verify_signature(self.signature.clone(), self.pubkey, hash)
+        verify_signature(self.signature.clone().into(), self.pubkey, &digest)
     }
 }
 
@@ -83,41 +78,8 @@ pub trait Signable: Sized {
     }
 }
 
-pub fn sign_message(priv_key: Fr, hash: Bytes32) -> anyhow::Result<FlatG2> {
-    let message_point = hash_to_message_point(hash);
-    let signature: G2Affine = (message_point * priv_key).into();
-    Ok(FlatG2::from(signature))
-}
-
-pub fn verify_signature(signature: FlatG2, pubkey: U256, hash: Bytes32) -> anyhow::Result<()> {
-    let pubkey_x: Fq = pubkey.into();
-    let pubkey_g1 = G1Affine::recover_from_x(pubkey_x);
-    let g1_generator_inv = -G1Affine::generator();
-    let message_g2 = hash_to_message_point(hash);
-    let signature_g2 = G2Affine::from(signature);
-    let g1s = vec![g1_generator_inv, pubkey_g1];
-    let g2s = vec![signature_g2, message_g2];
-    if !check_pairing(g1s, g2s) {
-        anyhow::bail!("Invalid signature");
-    }
-    Ok(())
-}
-
 pub fn current_time() -> u64 {
     chrono::Utc::now().timestamp() as u64
-}
-
-fn hash_to_message_point(hash: Bytes32) -> G2Affine {
-    let elements = hash
-        .to_u32_vec()
-        .iter()
-        .map(|x| GoldilocksField::from_canonical_u32(*x))
-        .collect::<Vec<_>>();
-    G2Target::<GoldilocksField, 2>::hash_to_g2(&elements)
-}
-
-fn check_pairing(g1s: Vec<G1Affine>, g2s: Vec<G2Affine>) -> bool {
-    Bn254::multi_pairing(g1s, g2s).is_zero()
 }
 
 #[cfg(test)]
@@ -125,7 +87,7 @@ mod test {
     use super::{sign_message, verify_signature};
     use intmax2_zkp::{
         common::signature::key_set::KeySet,
-        ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
+        ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
     };
 
     #[test]
@@ -133,8 +95,8 @@ mod test {
         let mut rnd = rand::thread_rng();
         let key = KeySet::rand(&mut rnd);
         let hash = Bytes32::rand(&mut rnd);
-        let signature = sign_message(key.privkey, hash).unwrap();
-        assert!(verify_signature(signature.clone(), key.pubkey, hash).is_ok());
+        let signature = sign_message(key.privkey, &hash.to_bytes_be());
+        assert!(verify_signature(signature, key.pubkey, &hash.to_bytes_be()).is_ok());
     }
 
     #[test]
