@@ -151,14 +151,5 @@ pub async fn verify_signature(
 
     let result = signature::sign::verify_signature(signature.into(), public_key, message);
 
-    match result {
-        Ok(()) => Ok(true),
-        Err(e) => {
-            if e.to_string().contains("Invalid signature") {
-                Ok(false)
-            } else {
-                Err(JsError::new(&e.to_string()))
-            }
-        }
-    }
+    Ok(result.is_ok())
 }
