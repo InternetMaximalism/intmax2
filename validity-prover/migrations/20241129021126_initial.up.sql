@@ -68,6 +68,18 @@ CREATE TABLE IF NOT EXISTS leaves (
     PRIMARY KEY (timestamp_value, tag, position)
 );
 
+CREATE TABLE IF NOT EXISTS indexed_leaves (
+    timestamp_value bigint NOT NULL,
+    tag int NOT NULL,
+    position bigint NOT NULL,
+    leaf_hash bytea NOT NULL,
+    next_index bigint NOT NULL,
+    key NUMERIC(78, 0) NOT NULL,
+    next_key NUMERIC(78, 0) NOT NULL,
+    value_a bigint NOT NULL,
+    PRIMARY KEY (timestamp_value, tag, position)
+);
+
 CREATE TABLE IF NOT EXISTS leaves_len (
     timestamp_value bigint NOT NULL,
     tag int NOT NULL,
