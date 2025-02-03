@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS indexed_leaves (
     next_index bigint NOT NULL,
     key NUMERIC(78, 0) NOT NULL,
     next_key NUMERIC(78, 0) NOT NULL,
-    value_a bigint NOT NULL,
+    value bigint NOT NULL,
     PRIMARY KEY (timestamp_value, tag, position)
 );
 
