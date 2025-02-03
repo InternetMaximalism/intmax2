@@ -188,7 +188,7 @@ mod tests {
         let database_url = crate::trees::setup_test();
         let tag = 3;
         let db = SqlMerkleTree::<IndexedMerkleLeaf>::new(&database_url, tag, ACCOUNT_TREE_HEIGHT);
-        db.reset().await?;
+        db.reset(0).await?;
         let db_tree = HistoricalAccountTree::initialize(db).await?;
         let timestamp = db_tree.0.get_last_timestamp().await?;
         for i in 2..10 {

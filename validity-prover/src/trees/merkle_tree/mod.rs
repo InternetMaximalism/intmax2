@@ -1,11 +1,21 @@
 use async_trait::async_trait;
 use error::MerkleTreeError;
-use intmax2_zkp::utils::{
-    leafable::Leafable, leafable_hasher::LeafableHasher, trees::merkle_tree::MerkleProof,
+use intmax2_zkp::{
+    ethereum_types::u256::U256,
+    utils::{
+        leafable::Leafable,
+        leafable_hasher::LeafableHasher,
+        poseidon_hash_out::PoseidonHashOut,
+        trees::{
+            indexed_merkle_tree::{leaf::IndexedMerkleLeaf, IndexedMerkleProof},
+            merkle_tree::MerkleProof,
+        },
+    },
 };
 use serde::{de::DeserializeOwned, Serialize};
 
 pub mod error;
+pub mod mock_indexed_merkle_tree;
 pub mod mock_merkle_tree;
 pub mod sql_indexed_merkle_tree;
 pub mod sql_merkle_tree;
@@ -25,8 +35,21 @@ pub trait MerkleTreeClient<V: Leafable + Serialize + DeserializeOwned>:
     async fn get_leaves(&self, timestamp: u64) -> MTResult<Vec<V>>;
     async fn get_num_leaves(&self, timestamp: u64) -> MTResult<usize>;
     async fn prove(&self, timestamp: u64, position: u64) -> MTResult<MerkleProof<V>>;
-    async fn reset(&self) -> MTResult<()>;
     async fn get_last_timestamp(&self) -> MTResult<u64>;
+    async fn reset(&self, timestamp: u64) -> MTResult<()>;
+}
+
+#[async_trait(?Send)]
+pub trait IndexedMerkleTreeClient: std::fmt::Debug + Clone {
+    async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut>;
+    async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf>;
+    async fn prove(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleProof>;
+    async fn low_index(&self, timestamp: u64, key: U256) -> MTResult<u64>;
+    async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>>;
+    async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256>;
+    async fn update(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()>;
+    async fn len(&self, timestamp: u64) -> MTResult<usize>;
+    async fn reset(&self, timestamp: u64) -> MTResult<()>;
 }
 
 #[cfg(test)]

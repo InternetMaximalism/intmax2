@@ -320,13 +320,14 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlMerkleTree<V> {
         Ok(MerkleProof { siblings })
     }
 
-    async fn reset(&self) -> MTResult<()> {
+    async fn reset(&self, timestamp: u64) -> MTResult<()> {
         sqlx::query!(
             r#"
             DELETE FROM hash_nodes
-            WHERE tag = $1
+            WHERE tag = $1 AND timestamp_value >= $2
             "#,
-            self.tag as i32
+            self.tag as i32,
+            timestamp as i64
         )
         .execute(&self.pool)
         .await?;
@@ -334,9 +335,10 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlMerkleTree<V> {
         sqlx::query!(
             r#"
             DELETE FROM leaves
-            WHERE tag = $1
+            WHERE tag = $1 AND timestamp_value >= $2
             "#,
-            self.tag as i32
+            self.tag as i32,
+            timestamp as i64
         )
         .execute(&self.pool)
         .await?;
@@ -344,9 +346,10 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlMerkleTree<V> {
         sqlx::query!(
             r#"
             DELETE FROM leaves_len
-            WHERE tag = $1
+            WHERE tag = $1 AND timestamp_value >= $2
             "#,
-            self.tag as i32
+            self.tag as i32,
+            timestamp as i64
         )
         .execute(&self.pool)
         .await?;
@@ -411,8 +414,8 @@ impl<V: Leafable + Serialize + DeserializeOwned> MerkleTreeClient<V> for SqlMerk
         self.prove(timestamp, position).await
     }
 
-    async fn reset(&self) -> MTResult<()> {
-        self.reset().await
+    async fn reset(&self, timestamp: u64) -> MTResult<()> {
+        self.reset(timestamp).await
     }
 
     fn height(&self) -> usize {

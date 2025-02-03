@@ -15,7 +15,7 @@ use sqlx::{Pool, Postgres};
 
 use crate::trees::utils::bit_path::BitPath;
 
-use super::{error::MerkleTreeError, HashOut, Hasher, MTResult};
+use super::{error::MerkleTreeError, HashOut, Hasher, IndexedMerkleTreeClient, MTResult};
 
 type V = IndexedMerkleLeaf;
 
@@ -438,7 +438,9 @@ impl SqlIndexedMerkleTree {
         .await?;
 
         if rows.is_empty() {
-            return Err(MerkleTreeError::InternalError("key already exists".to_string()));
+            return Err(MerkleTreeError::InternalError(
+                "key already exists".to_string(),
+            ));
         }
         if rows.len() > 1 {
             return Err(MerkleTreeError::InternalError(
@@ -513,55 +515,78 @@ impl SqlIndexedMerkleTree {
     }
 }
 
-use crate::trees::merkle_tree::MerkleTreeClient;
+fn from_str_to_u256(s: &str) -> U256 {
+    U256::from_bytes_be(&BigUint::from_str(s).unwrap().to_bytes_be())
+}
+
+// #[async_trait(?Send)]
+// pub trait IndexedMerkleTreeClient: std::fmt::Debug + Clone {
+//     async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut>;
+//     async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf>;
+//     async fn prove(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleProof>;
+//     async fn low_index(&self, timestamp: u64, key: U256) -> MTResult<u64>;
+//     async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>>;
+//     async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256>;
+//     async fn update(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()>;
+//     async fn len(&self, timestamp: u64) -> MTResult<usize>;
+// }
 
 #[async_trait::async_trait(?Send)]
-impl MerkleTreeClient<V> for SqlIndexedMerkleTree {
-    async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()> {
-        self.update_leaf(timestamp, position, leaf).await?;
-        Ok(())
-    }
-
-    async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
+impl IndexedMerkleTreeClient for SqlIndexedMerkleTree {
+    async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut> {
         self.get_root(timestamp).await
     }
 
-    async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V> {
+    async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf> {
         let mut tx = self.pool.begin().await?;
-        let leaf = self.get_leaf(&mut tx, timestamp, position).await?;
+        let leaf = self.get_leaf(&mut tx, timestamp, index).await?;
         tx.commit().await?;
         Ok(leaf)
     }
 
-    async fn get_leaves(&self, timestamp: u64) -> MTResult<Vec<V>> {
-        let leaves = self.get_leaves(timestamp).await?;
-        Ok(leaves.into_iter().map(|(_, leaf)| leaf).collect())
+    async fn prove(&self, timestamp: u64, index: u64) -> MTResult<MerkleProof<V>> {
+        self.prove(timestamp, index).await
     }
 
-    async fn get_num_leaves(&self, timestamp: u64) -> MTResult<usize> {
+    async fn low_index(&self, timestamp: u64, key: U256) -> MTResult<u64> {
+        let mut tx = self.pool.begin().await?;
+        let low_index = self.low_index(&mut tx, timestamp, key).await?;
+        tx.commit().await?;
+        Ok(low_index)
+    }
+
+    async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>> {
+        let mut tx = self.pool.begin().await?;
+        let index = self.index(&mut tx, timestamp, key).await?;
+        tx.commit().await?;
+        Ok(index)
+    }
+
+    async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256> {
+        self.key(timestamp, index).await
+    }
+
+    async fn update(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()> {
+        let mut tx = self.pool.begin().await?;
+        self.update_leaf(
+            &mut tx,
+            timestamp,
+            key.as_u64(),
+            IndexedMerkleLeaf::new(key, value),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn reset(&self, timestamp: u64) -> MTResult<()> {
+        self.reset(timestamp).await
+    }
+
+    async fn len(&self, timestamp: u64) -> MTResult<usize> {
         let mut tx = self.pool.begin().await?;
         let len = self.get_num_leaves(&mut tx, timestamp).await?;
         tx.commit().await?;
         Ok(len)
     }
-
-    async fn prove(&self, timestamp: u64, position: u64) -> MTResult<MerkleProof<V>> {
-        self.prove(timestamp, position).await
-    }
-
-    async fn reset(&self) -> MTResult<()> {
-        self.reset().await
-    }
-
-    fn height(&self) -> usize {
-        self.height
-    }
-
-    async fn get_last_timestamp(&self) -> MTResult<u64> {
-        Ok(self.get_last_timestamp().await)
-    }
-}
-
-fn from_str_to_u256(s: &str) -> U256 {
-    U256::from_bytes_be(&BigUint::from_str(s).unwrap().to_bytes_be())
 }
