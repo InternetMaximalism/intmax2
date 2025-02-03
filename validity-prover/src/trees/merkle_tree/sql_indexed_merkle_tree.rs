@@ -1,11 +1,16 @@
+use std::str::FromStr;
+
+use bigdecimal::{num_bigint::BigUint, BigDecimal};
 use hashbrown::HashMap;
-use intmax2_zkp::utils::{
-    leafable::Leafable,
-    leafable_hasher::LeafableHasher,
-    poseidon_hash_out::PoseidonHashOut,
-    trees::{indexed_merkle_tree::leaf::IndexedMerkleLeaf, merkle_tree::MerkleProof},
+use intmax2_zkp::{
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    utils::{
+        leafable::Leafable,
+        leafable_hasher::LeafableHasher,
+        poseidon_hash_out::PoseidonHashOut,
+        trees::{indexed_merkle_tree::leaf::IndexedMerkleLeaf, merkle_tree::MerkleProof},
+    },
 };
-use serde::{de::DeserializeOwned, Serialize};
 use sqlx::{Pool, Postgres};
 
 use crate::trees::utils::bit_path::BitPath;
@@ -13,6 +18,11 @@ use crate::trees::utils::bit_path::BitPath;
 use super::{error::MerkleTreeError, HashOut, Hasher, MTResult};
 
 type V = IndexedMerkleLeaf;
+
+// next_index bigint NOT NULL,
+// key NUMERIC(78, 0) NOT NULL,
+// next_key NUMERIC(78, 0) NOT NULL,
+// value bigint NOT NULL,
 
 #[derive(Clone, Debug)]
 pub struct SqlIndexedMerkleTree {
@@ -116,23 +126,26 @@ impl SqlIndexedMerkleTree {
         leaf: V,
     ) -> super::MTResult<()> {
         let leaf_hash_serialized = bincode::serialize(&leaf.hash()).unwrap();
-        let leaf_serialized = bincode::serialize(&leaf).unwrap();
-
         let current_len = self.get_num_leaves(tx, timestamp).await?;
         let next_len = ((position + 1) as usize).max(current_len);
 
+        let key = BigDecimal::from_str(&leaf.key.to_string()).unwrap();
+        let next_key = BigDecimal::from_str(&leaf.next_key.to_string()).unwrap();
         sqlx::query!(
             r#"
-            INSERT INTO leaves (timestamp_value, tag, position, leaf_hash, leaf)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO indexed_leaves (timestamp_value, tag, position, leaf_hash, next_index, key, next_key, value)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (timestamp_value, tag, position)
-            DO UPDATE SET leaf_hash = $4, leaf = $5
+            DO UPDATE SET leaf_hash = $4, next_index = $5, key = $6, next_key = $7, value = $8
             "#,
             timestamp as i64,
             self.tag as i32,
             position as i64,
             leaf_hash_serialized,
-            leaf_serialized,
+            leaf.next_index as i64,
+            key,
+            next_key,
+            leaf.value as i64,
         )
         .execute(tx.as_mut())
         .await?;
@@ -161,8 +174,8 @@ impl SqlIndexedMerkleTree {
     ) -> super::MTResult<V> {
         let record = sqlx::query!(
             r#"
-        SELECT leaf 
-        FROM leaves 
+        SELECT next_index, key, next_key, value
+        FROM indexed_leaves
         WHERE position = $1 
           AND timestamp_value <= $2 
           AND tag = $3 
@@ -178,7 +191,16 @@ impl SqlIndexedMerkleTree {
 
         match record {
             Some(row) => {
-                let leaf = bincode::deserialize(&row.leaf)?;
+                let next_index = row.next_index as u64;
+                let key = from_str_to_u256(&row.key.to_string());
+                let next_key = from_str_to_u256(&row.next_key.to_string());
+                let value = row.value as u64;
+                let leaf = IndexedMerkleLeaf {
+                    next_index,
+                    key,
+                    next_key,
+                    value,
+                };
                 Ok(leaf)
             }
             None => Ok(V::empty_leaf()),
@@ -196,7 +218,7 @@ impl SqlIndexedMerkleTree {
                         PARTITION BY position 
                         ORDER BY timestamp_value DESC
                     ) as rn
-                FROM leaves
+                FROM indexed_leaves
                 WHERE timestamp_value <= $1
                 AND tag = $2
             )
@@ -205,7 +227,10 @@ impl SqlIndexedMerkleTree {
                 tag,
                 position,
                 leaf_hash,
-                leaf
+                next_index,
+                key,
+                next_key,
+                value
             FROM RankedLeaves
             WHERE rn = 1
             ORDER BY position
@@ -220,7 +245,16 @@ impl SqlIndexedMerkleTree {
         let mut leaves = HashMap::new();
         for record in records {
             let position = record.position as u64;
-            let leaf: V = bincode::deserialize(&record.leaf)?;
+            let next_index = record.next_index as u64;
+            let key = from_str_to_u256(&record.key.to_string());
+            let next_key = from_str_to_u256(&record.next_key.to_string());
+            let value = record.value as u64;
+            let leaf = IndexedMerkleLeaf {
+                next_index,
+                key,
+                next_key,
+                value,
+            };
             leaves.insert(position, leaf);
         }
         for i in 0..num_leaves {
@@ -336,7 +370,7 @@ impl SqlIndexedMerkleTree {
 
         sqlx::query!(
             r#"
-            DELETE FROM leaves
+            DELETE FROM indexed_leaves
             WHERE tag = $1
             "#,
             self.tag as i32
@@ -361,7 +395,7 @@ impl SqlIndexedMerkleTree {
         let record = sqlx::query!(
             r#"
             SELECT timestamp_value
-            FROM leaves
+            FROM indexed_leaves
             WHERE tag = $1
             ORDER BY timestamp_value DESC
             LIMIT 1
@@ -425,4 +459,8 @@ impl MerkleTreeClient<V> for SqlIndexedMerkleTree {
     async fn get_last_timestamp(&self) -> MTResult<u64> {
         Ok(self.get_last_timestamp().await)
     }
+}
+
+fn from_str_to_u256(s: &str) -> U256 {
+    U256::from_bytes_be(&BigUint::from_str(s).unwrap().to_bytes_be())
 }
