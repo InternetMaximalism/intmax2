@@ -410,6 +410,107 @@ impl SqlIndexedMerkleTree {
             None => 0,
         }
     }
+
+    pub async fn low_index(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        key: U256,
+    ) -> MTResult<u64> {
+        let key_decimal = BigDecimal::from_str(&key.to_string()).unwrap();
+        let rows = sqlx::query!(
+            r#"
+            WITH latest_leaves AS (
+                SELECT DISTINCT ON (position) position, key, next_key
+                FROM indexed_leaves
+                WHERE timestamp_value <= $1 AND tag = $2
+                ORDER BY position, timestamp_value DESC
+            )
+            SELECT position
+            FROM latest_leaves
+            WHERE key < $3 AND ($3 < next_key OR next_key = '0'::numeric)
+            "#,
+            timestamp as i64,
+            self.tag as i32,
+            key_decimal
+        )
+        .fetch_all(tx.as_mut())
+        .await?;
+
+        if rows.is_empty() {
+            return Err(MerkleTreeError::InternalError("key already exists".to_string()));
+        }
+        if rows.len() > 1 {
+            return Err(MerkleTreeError::InternalError(
+                "low_index: too many candidates".to_string(),
+            ));
+        }
+        Ok(rows[0].position as u64)
+    }
+
+    pub async fn index(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        key: U256,
+    ) -> MTResult<Option<u64>> {
+        let key_decimal = BigDecimal::from_str(&key.to_string())
+            .map_err(|e| MerkleTreeError::InternalError(e.to_string()))?;
+        let rows = sqlx::query!(
+            r#"
+            WITH latest_leaves AS (
+                SELECT DISTINCT ON (position) position, key
+                FROM indexed_leaves
+                WHERE timestamp_value <= $1 AND tag = $2
+                ORDER BY position, timestamp_value DESC
+            )
+            SELECT position
+            FROM latest_leaves
+            WHERE key = $3
+            "#,
+            timestamp as i64,
+            self.tag as i32,
+            key_decimal
+        )
+        .fetch_all(tx.as_mut())
+        .await?;
+
+        if rows.is_empty() {
+            Ok(None)
+        } else if rows.len() > 1 {
+            Err(MerkleTreeError::InternalError(
+                "find_index: too many candidates".to_string(),
+            ))
+        } else {
+            Ok(Some(rows[0].position as u64))
+        }
+    }
+
+    pub async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256> {
+        let rec = sqlx::query!(
+            r#"
+            WITH latest_leaves AS (
+                SELECT DISTINCT ON (position) position, key
+                FROM indexed_leaves
+                WHERE timestamp_value <= $1 AND tag = $2
+                ORDER BY position, timestamp_value DESC
+            )
+            SELECT key
+            FROM latest_leaves
+            WHERE position = $3
+            "#,
+            timestamp as i64,
+            self.tag as i32,
+            index as i64
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        if let Some(row) = rec {
+            Ok(from_str_to_u256(&row.key.to_string()))
+        } else {
+            Ok(U256::default())
+        }
+    }
 }
 
 use crate::trees::merkle_tree::MerkleTreeClient;
