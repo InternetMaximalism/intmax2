@@ -1,6 +1,6 @@
 use crate::trees::{
     incremental_merkle_tree::HistoricalIncrementalMerkleTree,
-    indexed_merkle_tree::HistoricalIndexedMerkleTree, merkle_tree::MerkleTreeClient,
+    indexed_merkle_tree::HistoricalIndexedMerkleTree, merkle_tree::IncrementalMerkleTreeClient,
 };
 use anyhow::Result;
 use intmax2_zkp::{
@@ -15,7 +15,7 @@ use intmax2_zkp::{
 type V = IndexedMerkleLeaf;
 pub type HistoricalAccountTree<DB> = HistoricalIndexedMerkleTree<DB>;
 
-impl<DB: MerkleTreeClient<V>> HistoricalAccountTree<DB> {
+impl<DB: IncrementalMerkleTreeClient<V>> HistoricalAccountTree<DB> {
     pub async fn initialize(db: DB) -> Result<Self> {
         let last_timestamp = db.get_last_timestamp().await?;
         let tree = HistoricalIndexedMerkleTree(HistoricalIncrementalMerkleTree::new(db));
@@ -145,7 +145,7 @@ impl<DB: MerkleTreeClient<V>> HistoricalAccountTree<DB> {
 mod tests {
     use crate::trees::{
         account_tree::HistoricalAccountTree,
-        merkle_tree::{sql_incremental_merkle_tree::SqlIncrementalMerkleTree, MerkleTreeClient},
+        merkle_tree::{sql_incremental_merkle_tree::SqlIncrementalMerkleTree, IncrementalMerkleTreeClient},
     };
     use intmax2_zkp::{
         common::trees::account_tree::AccountTree, constants::ACCOUNT_TREE_HEIGHT,

@@ -12,7 +12,9 @@ use intmax2_zkp::{
 
 use crate::trees::merkle_tree::error::MerkleTreeError;
 
-use super::{mock_incremental_merkle_tree::MockIncrementalMerkleTree, MTResult};
+use super::{
+    mock_incremental_merkle_tree::MockIncrementalMerkleTree, IndexedMerkleTreeClient, MTResult,
+};
 
 type V = IndexedMerkleLeaf;
 
@@ -96,6 +98,15 @@ impl MockIndexedMerkleTree {
     pub async fn len(&self, timestamp: u64) -> MTResult<usize> {
         let len = self.0.len(timestamp).await?;
         Ok(len)
+    }
+
+    pub async fn get_last_timestamp(&self) -> u64 {
+        self.0.get_last_timestamp().await
+    }
+
+    pub async fn reset(&self, timestamp: u64) -> MTResult<()> {
+        self.0.reset(timestamp).await?;
+        Ok(())
     }
 
     pub async fn prove_membership(&self, timestamp: u64, key: U256) -> MTResult<MembershipProof> {
@@ -209,25 +220,55 @@ impl MockIndexedMerkleTree {
     }
 }
 
-// #[async_trait::async_trait(?Send)]
-// impl IndexedMerkleTreeClient for MockIndexedMerkleTree {
-//     async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut> {
-//         self.get_root(timestamp).await
-//     }
+#[async_trait::async_trait(?Send)]
+impl IndexedMerkleTreeClient for MockIndexedMerkleTree {
+    async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut> {
+        self.get_root(timestamp).await
+    }
 
-//     async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf> {
-//         self.get_leaf(timestamp, index).await
-//     }
+    async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf> {
+        self.get_leaf(timestamp, index).await
+    }
 
-//     async fn prove(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleProof> {
-//         self.prove(timestamp, index).await
-//     }
+    async fn len(&self, timestamp: u64) -> MTResult<usize> {
+        self.len(timestamp).await
+    }
 
-//     async fn update(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()> {
-//         self.update(timestamp, key, value).await
-//     }
+    async fn push(&self, timestamp: u64, leaf: IndexedMerkleLeaf) -> MTResult<()> {
+        self.insert(timestamp, leaf.key, leaf.value).await
+    }
 
-//     async fn len(&self, timestamp: u64) -> MTResult<usize> {
-//         self.len(timestamp).await
-//     }
-// }
+    async fn get_last_timestamp(&self) -> MTResult<u64> {
+        Ok(self.get_last_timestamp().await)
+    }
+
+    async fn reset(&self, timestamp: u64) -> MTResult<()> {
+        self.reset(timestamp).await
+    }
+
+    async fn prove_membership(&self, timestamp: u64, key: U256) -> MTResult<MembershipProof> {
+        self.prove_membership(timestamp, key).await
+    }
+
+    async fn insert(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()> {
+        self.insert(timestamp, key, value).await
+    }
+
+    async fn prove_and_insert(
+        &self,
+        timestamp: u64,
+        key: U256,
+        value: u64,
+    ) -> MTResult<IndexedInsertionProof> {
+        self.prove_and_insert(timestamp, key, value).await
+    }
+
+    async fn prove_and_update(
+        &self,
+        timestamp: u64,
+        key: U256,
+        new_value: u64,
+    ) -> MTResult<UpdateProof> {
+        self.prove_and_update(timestamp, key, new_value).await
+    }
+}

@@ -7,7 +7,7 @@ use sqlx::{Pool, Postgres};
 
 use crate::trees::utils::bit_path::BitPath;
 
-use super::{sql_node_hash::SqlNodeHashes, Hasher, MTResult};
+use super::{sql_node_hash::SqlNodeHashes, HashOut, Hasher, IncrementalMerkleTreeClient, MTResult};
 
 #[derive(Clone, Debug)]
 pub struct SqlIncrementalMerkleTree<V: Leafable + Serialize + DeserializeOwned> {
@@ -244,57 +244,67 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
     }
 }
 
-// #[async_trait::async_trait(?Send)]
-// impl<V: Leafable + Serialize + DeserializeOwned> MerkleTreeClient<V> for SqlMerkleTree<V> {
-//     async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
-//         let mut tx = self.pool.begin().await?;
-//         let root = self.get_root(&mut tx, timestamp).await?;
-//         tx.commit().await?;
-//         Ok(root)
-//     }
+#[async_trait::async_trait(?Send)]
+impl<V: Leafable + Serialize + DeserializeOwned> IncrementalMerkleTreeClient<V>
+    for SqlIncrementalMerkleTree<V>
+{
+    fn height(&self) -> usize {
+        self.height()
+    }
 
-//     async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V> {
-//         let mut tx = self.pool.begin().await?;
-//         let leaf = self.get_leaf(&mut tx, timestamp, position).await?;
-//         tx.commit().await?;
-//         Ok(leaf)
-//     }
+    async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
+        let mut tx = self.pool().begin().await?;
+        let root = self.sql_node_hashes.get_root(&mut tx, timestamp).await?;
+        tx.commit().await?;
+        Ok(root)
+    }
 
-//     async fn len(&self, timestamp: u64) -> MTResult<usize> {
-//         let mut tx = self.pool.begin().await?;
-//         let len = self.len(&mut tx, timestamp).await?;
-//         tx.commit().await?;
-//         Ok(len)
-//     }
+    async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V> {
+        let mut tx = self.pool().begin().await?;
+        let leaf = self.get_leaf(&mut tx, timestamp, position).await?;
+        tx.commit().await?;
+        Ok(leaf)
+    }
 
-//     async fn push(&self, timestamp: u64, leaf: V) -> MTResult<()> {
-//         let mut tx = self.pool.begin().await?;
-//         self.push(&mut tx, timestamp, leaf).await?;
-//         tx.commit().await?;
-//         Ok(())
-//     }
+    async fn len(&self, timestamp: u64) -> MTResult<usize> {
+        let mut tx = self.pool().begin().await?;
+        let len = self.len(&mut tx, timestamp).await?;
+        tx.commit().await?;
+        Ok(len)
+    }
 
-//     async fn prove(&self, timestamp: u64, position: u64) -> MTResult<MerkleProof<V>> {
-//         let mut tx = self.pool.begin().await?;
-//         let proof = self.prove(&mut tx, timestamp, position).await?;
-//         tx.commit().await?;
-//         Ok(proof)
-//     }
+    async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()> {
+        let mut tx = self.pool().begin().await?;
+        self.update_leaf(&mut tx, timestamp, position, leaf).await?;
+        tx.commit().await?;
+        Ok(())
+    }
 
-//     async fn reset(&self, timestamp: u64) -> MTResult<()> {
-//         let mut tx = self.pool.begin().await?;
-//         self.reset(&mut tx, timestamp).await?;
-//         tx.commit().await?;
-//     }
+    async fn push(&self, timestamp: u64, leaf: V) -> MTResult<()> {
+        let mut tx = self.pool().begin().await?;
+        self.push(&mut tx, timestamp, leaf).await?;
+        tx.commit().await?;
+        Ok(())
+    }
 
-//     fn height(&self) -> usize {
-//         self.height
-//     }
+    async fn prove(&self, timestamp: u64, position: u64) -> MTResult<IncrementalMerkleProof<V>> {
+        let mut tx = self.pool().begin().await?;
+        let proof = self.prove(&mut tx, timestamp, position).await?;
+        tx.commit().await?;
+        Ok(proof)
+    }
 
-//     async fn get_last_timestamp(&self) -> MTResult<u64> {
-//         let mut tx = self.pool.begin().await?;
-//         let last_timestamp = self.get_last_timestamp(&mut tx).await;
-//         tx.commit().await?;
-//         Ok(last_timestamp)
-//     }
-// }
+    async fn get_last_timestamp(&self) -> MTResult<u64> {
+        let mut tx = self.pool().begin().await?;
+        let timestamp = self.get_last_timestamp(&mut tx).await;
+        tx.commit().await?;
+        Ok(timestamp)
+    }
+
+    async fn reset(&self, timestamp: u64) -> MTResult<()> {
+        let mut tx = self.pool().begin().await?;
+        self.reset(&mut tx, timestamp).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+}

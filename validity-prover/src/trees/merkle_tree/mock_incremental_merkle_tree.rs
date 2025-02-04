@@ -1,14 +1,17 @@
 use std::{collections::HashMap, sync::Arc};
 
+use async_trait::async_trait;
 use intmax2_zkp::utils::{
-    leafable::Leafable, leafable_hasher::LeafableHasher, trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
+    leafable::Leafable,
+    leafable_hasher::LeafableHasher,
+    trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::RwLock;
 
 use crate::trees::utils::bit_path::BitPath;
 
-use super::{error::MerkleTreeError, HashOut, Hasher, MTResult};
+use super::{error::MerkleTreeError, HashOut, Hasher, IncrementalMerkleTreeClient, MTResult};
 
 #[derive(Debug, Clone)]
 pub struct HashNode<V: Leafable> {
@@ -204,7 +207,11 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
         Ok(())
     }
 
-    pub async fn prove(&self, timestamp: u64, index: u64) -> super::MTResult<IncrementalMerkleProof<V>> {
+    pub async fn prove(
+        &self,
+        timestamp: u64,
+        index: u64,
+    ) -> super::MTResult<IncrementalMerkleProof<V>> {
         let mut path = BitPath::new(self.height as u32, index);
         path.reverse(); // path is big endian
         let mut siblings = vec![];
@@ -219,10 +226,21 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
         self.get_node_hash(timestamp, BitPath::default()).await
     }
 
-    pub async fn reset(&self) -> MTResult<()> {
-        self.hash_nodes.write().await.clear();
-        self.leaves.write().await.clear();
-        self.leaves_len.write().await.clear();
+    pub async fn reset(&self, timestamp: u64) -> MTResult<()> {
+        // delete everything that has a timestamp greater than or equal to the given timestamp
+        self.hash_nodes.write().await.retain(|_, hash_nodes| {
+            hash_nodes.retain(|hash_node| hash_node.timestamp_value < timestamp);
+            !hash_nodes.is_empty()
+        });
+        self.leaves.write().await.retain(|_, leaves| {
+            leaves.retain(|leaf| leaf.timestamp_value < timestamp);
+            !leaves.is_empty()
+        });
+        self.leaves_len
+            .write()
+            .await
+            .retain(|ts, _| *ts < timestamp);
+
         Ok(())
     }
 
@@ -249,43 +267,59 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
     }
 }
 
-// #[async_trait::async_trait(?Send)]
-// impl<V: Leafable + Serialize + DeserializeOwned> super::MerkleTreeClient<V> for MockMerkleTree<V> {
-//     async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()> {
-//         self.update_leaf(timestamp, position, leaf).await?;
-//         Ok(())
-//     }
-
-//     async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
-//         self.get_root(timestamp).await
-//     }
-
-//     async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V> {
-//         self.get_leaf(timestamp, position).await
-//     }
-
-//     async fn get_leaves(&self, timestamp: u64) -> MTResult<Vec<V>> {
-//         let leaves = self.get_leaves(timestamp).await?;
-//         Ok(leaves.into_iter().map(|(_, leaf)| leaf).collect())
-//     }
-
-//     async fn get_num_leaves(&self, timestamp: u64) -> MTResult<usize> {
-//         self.get_num_leaves(timestamp).await
-//     }
-
-//     async fn prove(&self, timestamp: u64, position: u64) -> MTResult<MerkleProof<V>> {
-//         self.prove(timestamp, position).await
-//     }
-
-//     async fn reset(&self) -> MTResult<()> {
-//         self.reset().await
-//     }
-
-//     fn height(&self) -> usize {
-//         self.height
-//     }
-
-//     async fn get_last_timestamp(&self) -> MTResult<u64> {
-//         Ok(self.get_last_timestamp().await)
-//     }
+// #[async_trait(?Send)]
+// pub trait IncrementalMerkleTreeClient<V: Leafable + Serialize + DeserializeOwned>:
+//     std::fmt::Debug + Clone
+// {
+//     fn height(&self) -> usize;
+//     async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>>;
+//     async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V>;
+//     async fn len(&self, timestamp: u64) -> MTResult<usize>;
+//     async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()>;
+//     async fn push(&self, timestamp: u64, leaf: V) -> MTResult<()>;
+//     async fn prove(&self, timestamp: u64, position: u64) -> MTResult<IncrementalMerkleProof<V>>;
+//     async fn get_last_timestamp(&self) -> MTResult<u64>;
+//     async fn reset(&self, timestamp: u64) -> MTResult<()>;
 // }
+
+#[async_trait(?Send)]
+impl<V: Leafable + Serialize + DeserializeOwned> IncrementalMerkleTreeClient<V>
+    for MockIncrementalMerkleTree<V>
+{
+    fn height(&self) -> usize {
+        self.height
+    }
+
+    async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
+        self.get_root(timestamp).await
+    }
+
+    async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V> {
+        self.get_leaf(timestamp, position).await
+    }
+
+    async fn len(&self, timestamp: u64) -> MTResult<usize> {
+        self.len(timestamp).await
+    }
+
+    async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()> {
+        self.update_leaf(timestamp, position, leaf).await
+    }
+
+    async fn push(&self, timestamp: u64, leaf: V) -> MTResult<()> {
+        self.push(timestamp, leaf).await
+    }
+
+    async fn prove(&self, timestamp: u64, position: u64) -> MTResult<IncrementalMerkleProof<V>> {
+        self.prove(timestamp, position).await
+    }
+
+    async fn get_last_timestamp(&self) -> MTResult<u64> {
+        let last_timestamp = self.get_last_timestamp().await;
+        Ok(last_timestamp)
+    }
+
+    async fn reset(&self, timestamp: u64) -> MTResult<()> {
+        self.reset(timestamp).await
+    }
+}

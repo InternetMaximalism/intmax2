@@ -16,12 +16,12 @@ use intmax2_zkp::{
 
 use crate::trees::{
     account_tree::HistoricalAccountTree, block_tree::HistoricalBlockHashTree,
-    merkle_tree::MerkleTreeClient,
+    merkle_tree::IncrementalMerkleTreeClient,
 };
 
 pub async fn to_block_witness<
-    ADB: MerkleTreeClient<IndexedMerkleLeaf>,
-    BDB: MerkleTreeClient<Bytes32>,
+    ADB: IncrementalMerkleTreeClient<IndexedMerkleLeaf>,
+    BDB: IncrementalMerkleTreeClient<Bytes32>,
 >(
     full_block: &FullBlock,
     timestamp: u64,
@@ -96,8 +96,8 @@ pub async fn to_block_witness<
 }
 
 pub async fn update_trees<
-    ADB: MerkleTreeClient<IndexedMerkleLeaf>,
-    BDB: MerkleTreeClient<Bytes32>,
+    ADB: IncrementalMerkleTreeClient<IndexedMerkleLeaf>,
+    BDB: IncrementalMerkleTreeClient<Bytes32>,
 >(
     block_witness: &BlockWitness,
     timestamp: u64,
