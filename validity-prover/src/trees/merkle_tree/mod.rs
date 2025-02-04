@@ -94,6 +94,7 @@ mod tests {
     type V = u32;
 
     #[tokio::test]
+    #[ignore]
     async fn test_speed_incremental_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
         let n = 1 << 8;
@@ -121,9 +122,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_speed_indexed_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
-        let n = 1 << 8;
+        let n = 1 << 10;
         let mut rng = rand::thread_rng();
 
         let database_url = setup_test();
@@ -133,18 +135,25 @@ mod tests {
         tree.reset(0).await?;
         tree.initialize().await?;
 
-        let timestamp = 0;
-        let time = std::time::Instant::now();
-        for i in 0..n {
-            let key = U256::rand(&mut rng);
-            let _ = tree.prove_and_insert(timestamp, key, i as u64).await?;
+        for timestamp in 0..n {
+            for i in 0..n {
+                let key = U256::rand(&mut rng);
+                let _ = tree.prove_and_insert(timestamp, key, i).await?;
+            }
+            print_time(&tree, timestamp).await?;
         }
-        println!(
-            "SqlIndexedMerkleTree: {} leaves, {} height, {} seconds",
-            n,
-            height,
-            time.elapsed().as_secs_f64()
-        );
+
+        async fn print_time(tree: &SqlIndexedMerkleTree, timestamp: u64) -> anyhow::Result<()> {
+            let now = std::time::Instant::now();
+            let mut rng = rand::thread_rng();
+            let _ = tree
+                .prove_and_insert(timestamp, U256::rand(&mut rng), 0)
+                .await?;
+            let len = tree.len(timestamp).await?;
+            println!("leaf.len: {}, insert time: {:?}", len, now.elapsed());
+            Ok(())
+        }
+
         Ok(())
     }
 }
