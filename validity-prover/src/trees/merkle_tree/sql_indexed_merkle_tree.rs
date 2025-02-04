@@ -3,7 +3,7 @@ use std::str::FromStr;
 use bigdecimal::{num_bigint::BigUint, BigDecimal};
 use intmax2_zkp::{
     common::trees::account_tree::AccountMerkleProof,
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::u256::U256,
     utils::{
         leafable::Leafable,
         leafable_hasher::LeafableHasher,
@@ -525,7 +525,8 @@ impl SqlIndexedMerkleTree {
 }
 
 fn from_str_to_u256(s: &str) -> U256 {
-    U256::from_bytes_be(&BigUint::from_str(s).unwrap().to_bytes_be())
+    let biguint = BigUint::from_str(s).unwrap();
+    biguint.try_into().unwrap()
 }
 
 #[async_trait::async_trait(?Send)]
@@ -642,7 +643,7 @@ impl IndexedMerkleTreeClient for SqlIndexedMerkleTree {
 mod tests {
     use super::IndexedMerkleTreeClient;
     use crate::trees::merkle_tree::sql_indexed_merkle_tree::SqlIndexedMerkleTree;
-    use intmax2_zkp::constants::ACCOUNT_TREE_HEIGHT;
+    use intmax2_zkp::{common::trees::account_tree::AccountTree, constants::ACCOUNT_TREE_HEIGHT};
 
     #[tokio::test]
     async fn test_account_tree() -> anyhow::Result<()> {
@@ -656,63 +657,57 @@ mod tests {
         tree.initialize().await?;
 
         let timestamp0 = 0;
+        let mut tx = tree.pool().begin().await?;
         for i in 2..5 {
-            <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::insert(
-                &tree,
-                timestamp0,
-                i.into(),
-                i.into(),
-            )
-            .await?;
+            tree.insert(&mut tx, timestamp0, i.into(), i.into()).await?;
         }
-        let old_root = tree.get_root(timestamp0).await?;
+        let old_root = tree.sql_node_hashes.get_root(&mut tx, timestamp0).await?;
 
         let timestamp1 = 1;
+
         for i in 5..8 {
-            <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::insert(
-                &tree,
-                timestamp1,
-                i.into(),
-                i.into(),
-            )
-            .await?;
+            tree.insert(&mut tx, timestamp1, i.into(), i.into()).await?;
         }
+        tx.commit().await?;
 
         let account_id = 3;
-        let proof = <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::prove_inclusion(
-            &tree, timestamp0, account_id,
-        )
-        .await?;
+        let mut tx = tree.pool().begin().await?;
+        let proof = tree
+            .prove_inclusion(&mut tx, timestamp0, account_id)
+            .await?;
+        tx.commit().await?;
+
         let result = proof.verify(old_root, account_id, (account_id as u32).into());
         assert!(result);
 
         Ok(())
     }
 
-    // #[tokio::test]
-    // async fn test_comparison_account_tree() -> anyhow::Result<()> {
-    //     let database_url = crate::trees::setup_test();
-    //     let tag = 3;
-    //     let db = SqlIncrementalMerkleTree::<IndexedMerkleLeaf>::new(
-    //         &database_url,
-    //         tag,
-    //         ACCOUNT_TREE_HEIGHT,
-    //     );
-    //     db.reset(0).await?;
-    //     let db_tree = HistoricalAccountTree::initialize(db).await?;
-    //     let timestamp = db_tree.0.get_last_timestamp().await?;
-    //     for i in 2..10 {
-    //         db_tree.insert(timestamp, i.into(), i.into()).await?;
-    //     }
-    //     let db_root = db_tree.get_root(timestamp).await?;
+    #[tokio::test]
+    async fn test_comparison_account_tree() -> anyhow::Result<()> {
+        let database_url = crate::trees::setup_test();
+        let tag = 3;
+        let pool = sqlx::Pool::connect(&database_url).await?;
+        let db_tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
+        <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&db_tree, 0).await?;
 
-    //     let mut tree = AccountTree::initialize();
-    //     for i in 2..10 {
-    //         tree.insert(i.into(), i.into())?;
-    //     }
-    //     let root = tree.get_root();
-    //     assert_eq!(db_root, root);
+        db_tree.initialize().await?;
 
-    //     Ok(())
-    // }
+        let mut tx = db_tree.pool().begin().await?;
+        let timestamp = db_tree.get_last_timestamp(&mut tx).await;
+        for i in 2..10 {
+            db_tree
+                .insert(&mut tx, timestamp, i.into(), i.into())
+                .await?;
+        }
+        let db_root = db_tree.sql_node_hashes.get_root(&mut tx, timestamp).await?;
+
+        let mut tree = AccountTree::initialize();
+        for i in 2..10 {
+            tree.insert(i.into(), i.into())?;
+        }
+        let root = tree.get_root();
+        assert_eq!(db_root, root);
+        Ok(())
+    }
 }

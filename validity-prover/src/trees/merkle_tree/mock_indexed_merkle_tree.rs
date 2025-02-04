@@ -58,7 +58,7 @@ impl MockIndexedMerkleTree {
             ));
         }
         let (low_leaf_index, _) = low_leaf_candidates[0];
-        Ok(low_leaf_index as u64)
+        Ok(low_leaf_index)
     }
 
     pub async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>> {
@@ -77,7 +77,7 @@ impl MockIndexedMerkleTree {
             "find_index: too many candidates"
         );
         let (leaf_index, _) = leaf_candidates[0];
-        Ok(Some(leaf_index as u64))
+        Ok(Some(leaf_index))
     }
 
     pub async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256> {

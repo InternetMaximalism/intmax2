@@ -267,21 +267,6 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
     }
 }
 
-// #[async_trait(?Send)]
-// pub trait IncrementalMerkleTreeClient<V: Leafable + Serialize + DeserializeOwned>:
-//     std::fmt::Debug + Clone
-// {
-//     fn height(&self) -> usize;
-//     async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>>;
-//     async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V>;
-//     async fn len(&self, timestamp: u64) -> MTResult<usize>;
-//     async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()>;
-//     async fn push(&self, timestamp: u64, leaf: V) -> MTResult<()>;
-//     async fn prove(&self, timestamp: u64, position: u64) -> MTResult<IncrementalMerkleProof<V>>;
-//     async fn get_last_timestamp(&self) -> MTResult<u64>;
-//     async fn reset(&self, timestamp: u64) -> MTResult<()>;
-// }
-
 #[async_trait(?Send)]
 impl<V: Leafable + Serialize + DeserializeOwned> IncrementalMerkleTreeClient<V>
     for MockIncrementalMerkleTree<V>
