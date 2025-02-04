@@ -445,29 +445,9 @@ impl WitnessGenerator {
 
     async fn reset_merkle_tree(&self, block_number: u32) -> Result<(), ValidityProverError> {
         log::warn!("Reset merkle tree from block number {}", block_number);
-        // delete all records which timestamp_value is equal or greater than block_number.
-        let mut tx = self.pool.begin().await?;
-        sqlx::query!(
-            "DELETE FROM hash_nodes WHERE timestamp_value >= $1",
-            block_number as i64
-        )
-        .execute(tx.as_mut())
-        .await?;
-
-        sqlx::query!(
-            "DELETE FROM leaves WHERE timestamp_value >= $1",
-            block_number as i64
-        )
-        .execute(tx.as_mut())
-        .await?;
-
-        sqlx::query!(
-            "DELETE FROM leaves_len WHERE timestamp_value >= $1",
-            block_number as i64
-        )
-        .execute(tx.as_mut())
-        .await?;
-        tx.commit().await?;
+        self.account_tree.reset(block_number as u64).await?;
+        self.block_tree.reset(block_number as u64).await?;
+        self.deposit_hash_tree.reset(block_number as u64).await?;
         Ok(())
     }
 
