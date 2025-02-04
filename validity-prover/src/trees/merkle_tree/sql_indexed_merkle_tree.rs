@@ -20,7 +20,10 @@ use sqlx::{Pool, Postgres};
 
 use crate::trees::utils::bit_path::BitPath;
 
-use super::{error::MerkleTreeError, sql_node_hash::SqlNodeHashes, HashOut, Hasher, IndexedMerkleTreeClient, MTResult};
+use super::{
+    error::MerkleTreeError, sql_node_hash::SqlNodeHashes, HashOut, Hasher, IndexedMerkleTreeClient,
+    MTResult,
+};
 
 type V = IndexedMerkleLeaf;
 
@@ -522,30 +525,6 @@ fn from_str_to_u256(s: &str) -> U256 {
     U256::from_bytes_be(&BigUint::from_str(s).unwrap().to_bytes_be())
 }
 
-// #[async_trait(?Send)]
-// pub trait IndexedMerkleTreeClient: std::fmt::Debug + Clone {
-//     async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut>;
-//     async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf>;
-//     async fn len(&self, timestamp: u64) -> MTResult<usize>;
-//     async fn push(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()>;
-//     async fn get_last_timestamp(&self) -> MTResult<u64>;
-//     async fn reset(&self, timestamp: u64) -> MTResult<()>;
-//     async fn prove_membership(&self, timestamp: u64, key: U256) -> MTResult<MembershipProof>;
-//     async fn insert(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()>;
-//     async fn prove_and_insert(
-//         &self,
-//         timestamp: u64,
-//         key: U256,
-//         value: u64,
-//     ) -> MTResult<IndexedInsertionProof>;
-//     async fn prove_and_update(
-//         &self,
-//         timestamp: u64,
-//         key: U256,
-//         new_value: u64,
-//     ) -> MTResult<UpdateProof>;
-// }
-
 #[async_trait::async_trait(?Send)]
 impl IndexedMerkleTreeClient for SqlIndexedMerkleTree {
     async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
@@ -588,6 +567,31 @@ impl IndexedMerkleTreeClient for SqlIndexedMerkleTree {
         self.reset(&mut tx, timestamp).await?;
         tx.commit().await?;
         Ok(())
+    }
+
+    async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256> {
+        let mut tx = self.pool().begin().await?;
+        let key = self.key(&mut tx, timestamp, index).await?;
+        tx.commit().await?;
+        Ok(key)
+    }
+
+    async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>> {
+        let mut tx = self.pool().begin().await?;
+        let index = self.index(&mut tx, timestamp, key).await?;
+        tx.commit().await?;
+        Ok(index)
+    }
+
+    async fn prove_inclusion(
+        &self,
+        timestamp: u64,
+        account_id: u64,
+    ) -> MTResult<AccountMerkleProof> {
+        let mut tx = self.pool().begin().await?;
+        let proof = self.prove_inclusion(&mut tx, timestamp, account_id).await;
+        tx.commit().await?;
+        proof
     }
 
     async fn prove_membership(&self, timestamp: u64, key: U256) -> MTResult<MembershipProof> {

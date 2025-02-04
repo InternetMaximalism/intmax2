@@ -246,6 +246,22 @@ impl IndexedMerkleTreeClient for MockIndexedMerkleTree {
         self.reset(timestamp).await
     }
 
+    async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>> {
+        self.index(timestamp, key).await
+    }
+
+    async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256> {
+        self.key(timestamp, index).await
+    }
+
+    async fn prove_inclusion(
+        &self,
+        timestamp: u64,
+        account_id: u64,
+    ) -> MTResult<AccountMerkleProof> {
+        self.prove_inclusion(timestamp, account_id).await
+    }
+
     async fn prove_membership(&self, timestamp: u64, key: U256) -> MTResult<MembershipProof> {
         self.prove_membership(timestamp, key).await
     }

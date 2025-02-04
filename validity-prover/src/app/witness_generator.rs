@@ -36,9 +36,6 @@ use tokio::time::interval;
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
     trees::{
-        account_tree::HistoricalAccountTree,
-        block_tree::HistoricalBlockHashTree,
-        deposit_hash_tree::{DepositHash, HistoricalDepositHashTree},
         merkle_tree::sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
         update::{to_block_witness, update_trees},
     },
@@ -102,10 +99,12 @@ impl WitnessGenerator {
         })
         .await?;
 
-        let account_db = SqlIncrementalMerkleTree::new(&env.database_url, ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
+        let account_db =
+            SqlIncrementalMerkleTree::new(&env.database_url, ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
         let account_tree = HistoricalAccountTree::initialize(account_db).await?;
 
-        let block_db = SqlIncrementalMerkleTree::new(&env.database_url, BLOCK_DB_TAG, BLOCK_HASH_TREE_HEIGHT);
+        let block_db =
+            SqlIncrementalMerkleTree::new(&env.database_url, BLOCK_DB_TAG, BLOCK_HASH_TREE_HEIGHT);
         let block_tree = HistoricalBlockHashTree::new(block_db);
         let last_timestamp = block_tree.get_last_timestamp().await?;
         if last_timestamp == 0 {
@@ -117,7 +116,8 @@ impl WitnessGenerator {
             }
         }
 
-        let deposit_db = SqlIncrementalMerkleTree::new(&env.database_url, DEPOSIT_DB_TAG, DEPOSIT_TREE_HEIGHT);
+        let deposit_db =
+            SqlIncrementalMerkleTree::new(&env.database_url, DEPOSIT_DB_TAG, DEPOSIT_TREE_HEIGHT);
         let deposit_hash_tree = HistoricalDepositHashTree::new(deposit_db);
 
         log::info!("block tree len: {}", block_tree.len(last_timestamp).await?);

@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use error::MerkleTreeError;
 use intmax2_zkp::{
-    ethereum_types::u256::U256,
-    utils::{
+    common::trees::account_tree::AccountMerkleProof, ethereum_types::u256::U256, utils::{
         leafable::Leafable,
         leafable_hasher::LeafableHasher,
         poseidon_hash_out::PoseidonHashOut,
@@ -13,7 +12,7 @@ use intmax2_zkp::{
                 membership::MembershipProof, update::UpdateProof,
             },
         },
-    },
+    }
 };
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -51,6 +50,15 @@ pub trait IndexedMerkleTreeClient: std::fmt::Debug + Clone {
     async fn push(&self, timestamp: u64, leaf: IndexedMerkleLeaf) -> MTResult<()>;
     async fn get_last_timestamp(&self) -> MTResult<u64>;
     async fn reset(&self, timestamp: u64) -> MTResult<()>;
+
+    async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>>;
+    async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256>;
+
+    async fn prove_inclusion(
+        &self,
+        timestamp: u64,
+        account_id: u64,
+    ) -> MTResult<AccountMerkleProof>;
     async fn prove_membership(&self, timestamp: u64, key: U256) -> MTResult<MembershipProof>;
     async fn insert(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()>;
     async fn prove_and_insert(
@@ -67,36 +75,38 @@ pub trait IndexedMerkleTreeClient: std::fmt::Debug + Clone {
     ) -> MTResult<UpdateProof>;
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::trees::setup_test;
+#[cfg(test)]
+mod tests {
+    use crate::trees::{
+        merkle_tree::{
+            sql_incremental_merkle_tree::SqlIncrementalMerkleTree, IncrementalMerkleTreeClient,
+        },
+        setup_test,
+    };
 
-//     use super::sql_merkle_tree::SqlMerkleTree;
-//     use crate::trees::merkle_tree::MerkleTreeClient;
+    type V = u32;
 
-//     type V = u32;
+    #[tokio::test]
+    async fn test_speed_merkle_tree() -> anyhow::Result<()> {
+        let height = 32;
+        let n = 1 << 8;
 
-//     #[tokio::test]
-//     async fn test_speed_merkle_tree() -> anyhow::Result<()> {
-//         let height = 32;
-//         let n = 1 << 12;
+        let database_url = setup_test();
+        let tree = SqlIncrementalMerkleTree::<V>::new(&database_url, 0, height);
+        tree.reset(0).await?;
 
-//         let database_url = setup_test();
-//         let tree = SqlMerkleTree::<V>::new(&database_url, 0, height);
-//         tree.reset(0).await?;
+        let timestamp = 0;
+        let time = std::time::Instant::now();
+        for i in 0..n {
+            tree.push(timestamp, i as u32).await?;
+        }
+        println!(
+            "SqlMerkleTree: {} leaves, {} height, {} seconds",
+            n,
+            height,
+            time.elapsed().as_secs_f64()
+        );
 
-//         let timestamp = 0;
-//         let time = std::time::Instant::now();
-//         for i in 0..n {
-//             tree.push(timestamp, i as u32).await?;
-//         }
-//         println!(
-//             "SqlMerkleTree: {} leaves, {} height, {} seconds",
-//             n,
-//             height,
-//             time.elapsed().as_secs_f64()
-//         );
-
-//         Ok(())
-//     }
-// }
+        Ok(())
+    }
+}

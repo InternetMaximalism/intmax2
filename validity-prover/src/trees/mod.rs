@@ -3,15 +3,15 @@ use tracing_subscriber::{
     layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter, Layer as _,
 };
 
-pub mod account_tree;
-pub mod block_tree;
-pub mod deposit_hash_tree;
-pub mod incremental_merkle_tree;
+// pub mod account_tree;
+// pub mod block_tree;
+// pub mod deposit_hash_tree;
+// pub mod incremental_merkle_tree;
 pub mod merkle_tree;
 pub mod update;
 pub mod utils;
-
-pub mod indexed_merkle_tree;
+pub mod deposit_hash;
+// pub mod indexed_merkle_tree;
 
 pub fn setup_test() -> String {
     dotenv::dotenv().ok();
@@ -25,3 +25,5 @@ pub fn setup_test() -> String {
         .unwrap();
     std::env::var("DATABASE_URL").unwrap()
 }
+
+

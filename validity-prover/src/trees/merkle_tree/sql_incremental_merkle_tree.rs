@@ -171,7 +171,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
         }
     }
 
-    pub async fn push(
+    async fn push(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
