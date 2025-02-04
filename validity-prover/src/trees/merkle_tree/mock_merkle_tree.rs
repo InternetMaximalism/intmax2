@@ -243,43 +243,43 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockMerkleTree<V> {
     }
 }
 
-#[async_trait::async_trait(?Send)]
-impl<V: Leafable + Serialize + DeserializeOwned> super::MerkleTreeClient<V> for MockMerkleTree<V> {
-    async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()> {
-        self.update_leaf(timestamp, position, leaf).await?;
-        Ok(())
-    }
+// #[async_trait::async_trait(?Send)]
+// impl<V: Leafable + Serialize + DeserializeOwned> super::MerkleTreeClient<V> for MockMerkleTree<V> {
+//     async fn update_leaf(&self, timestamp: u64, position: u64, leaf: V) -> MTResult<()> {
+//         self.update_leaf(timestamp, position, leaf).await?;
+//         Ok(())
+//     }
 
-    async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
-        self.get_root(timestamp).await
-    }
+//     async fn get_root(&self, timestamp: u64) -> MTResult<HashOut<V>> {
+//         self.get_root(timestamp).await
+//     }
 
-    async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V> {
-        self.get_leaf(timestamp, position).await
-    }
+//     async fn get_leaf(&self, timestamp: u64, position: u64) -> MTResult<V> {
+//         self.get_leaf(timestamp, position).await
+//     }
 
-    async fn get_leaves(&self, timestamp: u64) -> MTResult<Vec<V>> {
-        let leaves = self.get_leaves(timestamp).await?;
-        Ok(leaves.into_iter().map(|(_, leaf)| leaf).collect())
-    }
+//     async fn get_leaves(&self, timestamp: u64) -> MTResult<Vec<V>> {
+//         let leaves = self.get_leaves(timestamp).await?;
+//         Ok(leaves.into_iter().map(|(_, leaf)| leaf).collect())
+//     }
 
-    async fn get_num_leaves(&self, timestamp: u64) -> MTResult<usize> {
-        self.get_num_leaves(timestamp).await
-    }
+//     async fn get_num_leaves(&self, timestamp: u64) -> MTResult<usize> {
+//         self.get_num_leaves(timestamp).await
+//     }
 
-    async fn prove(&self, timestamp: u64, position: u64) -> MTResult<MerkleProof<V>> {
-        self.prove(timestamp, position).await
-    }
+//     async fn prove(&self, timestamp: u64, position: u64) -> MTResult<MerkleProof<V>> {
+//         self.prove(timestamp, position).await
+//     }
 
-    async fn reset(&self) -> MTResult<()> {
-        self.reset().await
-    }
+//     async fn reset(&self) -> MTResult<()> {
+//         self.reset().await
+//     }
 
-    fn height(&self) -> usize {
-        self.height
-    }
+//     fn height(&self) -> usize {
+//         self.height
+//     }
 
-    async fn get_last_timestamp(&self) -> MTResult<u64> {
-        Ok(self.get_last_timestamp().await)
-    }
-}
+//     async fn get_last_timestamp(&self) -> MTResult<u64> {
+//         Ok(self.get_last_timestamp().await)
+//     }
+// }

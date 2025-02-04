@@ -1,8 +1,13 @@
 use intmax2_zkp::{
-    common::trees::account_tree::AccountMerkleProof, ethereum_types::u256::U256, utils::{
+    common::trees::account_tree::AccountMerkleProof,
+    ethereum_types::u256::U256,
+    utils::{
         poseidon_hash_out::PoseidonHashOut,
-        trees::indexed_merkle_tree::{insertion::IndexedInsertionProof, leaf::IndexedMerkleLeaf, membership::MembershipProof, update::UpdateProof, IndexedMerkleProof},
-    }
+        trees::indexed_merkle_tree::{
+            insertion::IndexedInsertionProof, leaf::IndexedMerkleLeaf, membership::MembershipProof,
+            update::UpdateProof, IndexedMerkleProof,
+        },
+    },
 };
 
 use crate::trees::{
@@ -187,10 +192,9 @@ impl MockIndexedMerkleTree {
         key: U256,
         new_value: u64,
     ) -> MTResult<UpdateProof> {
-        let index = self
-            .index(timestamp, key)
-            .await?
-            .ok_or_else(|| MerkleTreeError::InternalError("Error: key doesn't exist".to_string()))?;
+        let index = self.index(timestamp, key).await?.ok_or_else(|| {
+            MerkleTreeError::InternalError("Error: key doesn't exist".to_string())
+        })?;
         let prev_leaf = self.0.get_leaf(timestamp, index).await?;
         let new_leaf = IndexedMerkleLeaf {
             value: new_value,
@@ -205,37 +209,25 @@ impl MockIndexedMerkleTree {
     }
 }
 
-#[async_trait::async_trait(?Send)]
-impl IndexedMerkleTreeClient for MockIndexedMerkleTree {
-    async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut> {
-        self.get_root(timestamp).await
-    }
+// #[async_trait::async_trait(?Send)]
+// impl IndexedMerkleTreeClient for MockIndexedMerkleTree {
+//     async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut> {
+//         self.get_root(timestamp).await
+//     }
 
-    async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf> {
-        self.get_leaf(timestamp, index).await
-    }
+//     async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf> {
+//         self.get_leaf(timestamp, index).await
+//     }
 
-    async fn prove(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleProof> {
-        self.prove(timestamp, index).await
-    }
+//     async fn prove(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleProof> {
+//         self.prove(timestamp, index).await
+//     }
 
-    async fn low_index(&self, timestamp: u64, key: U256) -> MTResult<u64> {
-        self.low_index(timestamp, key).await
-    }
+//     async fn update(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()> {
+//         self.update(timestamp, key, value).await
+//     }
 
-    async fn index(&self, timestamp: u64, key: U256) -> MTResult<Option<u64>> {
-        self.index(timestamp, key).await
-    }
-
-    async fn key(&self, timestamp: u64, index: u64) -> MTResult<U256> {
-        self.key(timestamp, index).await
-    }
-
-    async fn update(&self, timestamp: u64, key: U256, value: u64) -> MTResult<()> {
-        self.update(timestamp, key, value).await
-    }
-
-    async fn len(&self, timestamp: u64) -> MTResult<usize> {
-        self.len(timestamp).await
-    }
-}
+//     async fn len(&self, timestamp: u64) -> MTResult<usize> {
+//         self.len(timestamp).await
+//     }
+// }
