@@ -16,12 +16,7 @@ pub struct SqlNodeHashes<V: Leafable + Serialize + DeserializeOwned> {
 }
 
 impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
-    pub fn new(database_url: &str, tag: u32, height: usize) -> Self {
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(5)
-            .connect_lazy(database_url)
-            .unwrap();
-
+    pub fn new(pool: Pool<Postgres>, tag: u32, height: usize) -> Self {
         let mut zero_hashes = vec![];
         let mut h = V::empty_leaf().hash();
         zero_hashes.push(h);

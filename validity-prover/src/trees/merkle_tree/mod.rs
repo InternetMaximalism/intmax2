@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use error::MerkleTreeError;
 use intmax2_zkp::{
-    common::trees::account_tree::AccountMerkleProof, ethereum_types::u256::U256, utils::{
+    common::trees::account_tree::AccountMerkleProof,
+    ethereum_types::u256::U256,
+    utils::{
         leafable::Leafable,
         leafable_hasher::LeafableHasher,
         poseidon_hash_out::PoseidonHashOut,
@@ -12,7 +14,7 @@ use intmax2_zkp::{
                 membership::MembershipProof, update::UpdateProof,
             },
         },
-    }
+    },
 };
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -92,7 +94,9 @@ mod tests {
         let n = 1 << 8;
 
         let database_url = setup_test();
-        let tree = SqlIncrementalMerkleTree::<V>::new(&database_url, 0, height);
+        let pool = sqlx::Pool::connect(&database_url).await?;
+
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, 0, height);
         tree.reset(0).await?;
 
         let timestamp = 0;

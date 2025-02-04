@@ -88,20 +88,16 @@ impl WitnessGenerator {
         )
         .await?;
 
-        let pool = DbPool::from_config(&DbPoolConfig {
-            max_connections: env.database_max_connections,
-            idle_timeout: env.database_timeout,
-            url: env.database_url.clone(),
-        })
-        .await?;
+        let pool = sqlx::Pool::connect(&env.database_url).await?;
 
-        let account_db =
-            SqlIncrementalMerkleTree::new(&env.database_url, ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
-        let account_tree = HistoricalAccountTree::initialize(account_db).await?;
-
-        let block_db =
-            SqlIncrementalMerkleTree::new(&env.database_url, BLOCK_DB_TAG, BLOCK_HASH_TREE_HEIGHT);
-        let block_tree = HistoricalBlockHashTree::new(block_db);
+        let account_tree =
+            SqlIndexedMerkleTree::new(pool.clone(), ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
+        account_tree.initialize().await?;
+        let block_tree = SqlIncrementalMerkleTree::<Bytes32>::new(
+            pool.clone(),
+            BLOCK_DB_TAG,
+            BLOCK_HASH_TREE_HEIGHT,
+        );
         let last_timestamp = block_tree.get_last_timestamp().await?;
         if last_timestamp == 0 {
             let len = block_tree.len(last_timestamp).await?;
@@ -111,11 +107,11 @@ impl WitnessGenerator {
                     .await?;
             }
         }
-
-        let deposit_db =
-            SqlIncrementalMerkleTree::new(&env.database_url, DEPOSIT_DB_TAG, DEPOSIT_TREE_HEIGHT);
-        let deposit_hash_tree = HistoricalDepositHashTree::new(deposit_db);
-
+        let deposit_hash_tree = SqlIncrementalMerkleTree::<DepositHash>::new(
+            pool.clone(),
+            DEPOSIT_DB_TAG,
+            DEPOSIT_TREE_HEIGHT,
+        );
         log::info!("block tree len: {}", block_tree.len(last_timestamp).await?);
         log::info!(
             "deposit tree len: {}",
@@ -125,6 +121,13 @@ impl WitnessGenerator {
             "account tree len: {}",
             account_tree.len(last_timestamp).await?
         );
+
+        let pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: env.database_url.clone(),
+        })
+        .await?;
 
         Ok(Self {
             config,

@@ -38,21 +38,24 @@ pub struct SqlIndexedMerkleTree {
 }
 
 impl SqlIndexedMerkleTree {
-    pub fn new(database_url: &str, tag: u32, height: usize) -> Self {
-        let sql_node_hashes = SqlNodeHashes::new(database_url, tag, height);
+    pub fn new(pool: Pool<Postgres>, tag: u32, height: usize) -> Self {
+        let sql_node_hashes = SqlNodeHashes::new(pool, tag, height);
         SqlIndexedMerkleTree { sql_node_hashes }
     }
 
     // add default leaf to the first position of the tree
-    pub async fn initialize(database_url: &str, tag: u32, height: usize) -> MTResult<Self> {
-        let tree = Self::new(database_url, tag, height);
-        let mut tx = tree.pool().begin().await?;
-        let last_timestamp = tree.get_last_timestamp(&mut tx).await;
-        if last_timestamp == 0 && tree.len(&mut tx, last_timestamp).await? == 0 {
-            tree.push(&mut tx, last_timestamp, V::default()).await?;
+    pub async fn initialize(&self) -> MTResult<()> {
+        let mut tx = self.pool().begin().await?;
+        let last_timestamp = self.get_last_timestamp(&mut tx).await;
+        if last_timestamp == 0 && self.len(&mut tx, last_timestamp).await? == 0 {
+            self.push(&mut tx, last_timestamp, V::default()).await?;
+            if self.len(&mut tx, last_timestamp).await? == 1 {
+                self.insert(&mut tx, last_timestamp, U256::dummy_pubkey(), 0)
+                    .await?; // add default account
+            }
         }
         tx.commit().await?;
-        Ok(tree)
+        Ok(())
     }
 
     pub fn tag(&self) -> u32 {

@@ -15,8 +15,8 @@ pub struct SqlIncrementalMerkleTree<V: Leafable + Serialize + DeserializeOwned> 
 }
 
 impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
-    pub fn new(database_url: &str, tag: u32, height: usize) -> Self {
-        let sql_node_hashes = SqlNodeHashes::new(database_url, tag, height);
+    pub fn new(pool: Pool<Postgres>, tag: u32, height: usize) -> Self {
+        let sql_node_hashes = SqlNodeHashes::new(pool, tag, height);
         SqlIncrementalMerkleTree { sql_node_hashes }
     }
 
