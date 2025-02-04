@@ -637,3 +637,82 @@ impl IndexedMerkleTreeClient for SqlIndexedMerkleTree {
         proof
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::IndexedMerkleTreeClient;
+    use crate::trees::merkle_tree::sql_indexed_merkle_tree::SqlIndexedMerkleTree;
+    use intmax2_zkp::constants::ACCOUNT_TREE_HEIGHT;
+
+    #[tokio::test]
+    async fn test_account_tree() -> anyhow::Result<()> {
+        let database_url = crate::trees::setup_test();
+
+        let tag = 3;
+        let pool = sqlx::Pool::connect(&database_url).await?;
+        let tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
+        <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&tree, 0).await?;
+
+        tree.initialize().await?;
+
+        let timestamp0 = 0;
+        for i in 2..5 {
+            <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::insert(
+                &tree,
+                timestamp0,
+                i.into(),
+                i.into(),
+            )
+            .await?;
+        }
+        let old_root = tree.get_root(timestamp0).await?;
+
+        let timestamp1 = 1;
+        for i in 5..8 {
+            <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::insert(
+                &tree,
+                timestamp1,
+                i.into(),
+                i.into(),
+            )
+            .await?;
+        }
+
+        let account_id = 3;
+        let proof = <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::prove_inclusion(
+            &tree, timestamp0, account_id,
+        )
+        .await?;
+        let result = proof.verify(old_root, account_id, (account_id as u32).into());
+        assert!(result);
+
+        Ok(())
+    }
+
+    // #[tokio::test]
+    // async fn test_comparison_account_tree() -> anyhow::Result<()> {
+    //     let database_url = crate::trees::setup_test();
+    //     let tag = 3;
+    //     let db = SqlIncrementalMerkleTree::<IndexedMerkleLeaf>::new(
+    //         &database_url,
+    //         tag,
+    //         ACCOUNT_TREE_HEIGHT,
+    //     );
+    //     db.reset(0).await?;
+    //     let db_tree = HistoricalAccountTree::initialize(db).await?;
+    //     let timestamp = db_tree.0.get_last_timestamp().await?;
+    //     for i in 2..10 {
+    //         db_tree.insert(timestamp, i.into(), i.into()).await?;
+    //     }
+    //     let db_root = db_tree.get_root(timestamp).await?;
+
+    //     let mut tree = AccountTree::initialize();
+    //     for i in 2..10 {
+    //         tree.insert(i.into(), i.into())?;
+    //     }
+    //     let root = tree.get_root();
+    //     assert_eq!(db_root, root);
+
+    //     Ok(())
+    // }
+}
