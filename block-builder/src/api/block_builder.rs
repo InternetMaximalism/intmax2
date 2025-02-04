@@ -4,7 +4,10 @@ use ark_bn254::{Bn254, Fr, G1Affine, G2Affine};
 use ark_ec::{pairing::Pairing as _, AffineRepr as _};
 use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
-    contract::rollup_contract::RollupContract, validity_prover::ValidityProverClient,
+    contract::{
+        block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
+    },
+    validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
     block_builder::interface::BlockBuilderStatus,
@@ -36,11 +39,14 @@ use super::{builder_state::BuilderState, error::BlockBuilderError};
 
 #[derive(Debug, Clone)]
 struct Config {
+    block_builder_url: String,
     block_builder_private_key: H256,
     eth_allowance_for_block: ethers::types::U256,
     deposit_check_interval: Option<u64>,
     accepting_tx_interval: u64,
     proposing_block_interval: u64,
+    initial_heart_beat_delay: u64,
+    heart_beat_interval: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +54,7 @@ pub struct BlockBuilder {
     config: Config,
     validity_prover_client: ValidityProverClient,
     rollup_contract: RollupContract,
+    registry_contract: BlockBuilderRegistryContract,
 
     force_post: Arc<RwLock<bool>>,
     next_deposit_index: Arc<RwLock<u32>>,
@@ -64,24 +71,44 @@ impl BlockBuilder {
             env.rollup_contract_address,
             env.rollup_contract_deployed_block_number,
         );
+        let registry_contract = BlockBuilderRegistryContract::new(
+            &env.l2_rpc_url,
+            env.l2_chain_id,
+            env.block_builder_registry_contract_address,
+        );
         let eth_allowance_for_block =
             ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
         let config = Config {
+            block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
             eth_allowance_for_block,
             deposit_check_interval: env.deposit_check_interval,
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
+            initial_heart_beat_delay: env.initial_heart_beat_delay,
+            heart_beat_interval: env.heart_beat_interval,
         };
         Self {
             config,
             validity_prover_client,
             rollup_contract,
+            registry_contract,
+
             force_post: Arc::new(RwLock::new(false)),
             next_deposit_index: Arc::new(RwLock::new(0)),
             registration_state: Arc::new(RwLock::new(BuilderState::default())),
             non_registration_state: Arc::new(RwLock::new(BuilderState::default())),
         }
+    }
+
+    async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
+        self.registry_contract
+            .emit_heart_beat(
+                self.config.block_builder_private_key,
+                &self.config.block_builder_url,
+            )
+            .await?;
+        Ok(())
     }
 
     async fn state_read(
@@ -462,6 +489,37 @@ impl BlockBuilder {
     }
 
     // job
+    fn emit_heart_beat_job(self) {
+        let start_time = chrono::Utc::now().timestamp() as u64;
+        actix_web::rt::spawn(async move {
+            let now = chrono::Utc::now().timestamp() as u64;
+            let initial_heartbeat_time = start_time + self.config.initial_heart_beat_delay;
+            let delay_secs = if initial_heartbeat_time > now {
+                initial_heartbeat_time - now
+            } else {
+                0
+            };
+
+            // wait for the initial heart beat
+            tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+
+            // emit initial heart beat
+            match self.emit_heart_beat().await {
+                Ok(_) => log::info!("Initial heart beat emitted"),
+                Err(e) => log::error!("Error in emitting initial heart beat: {}", e),
+            }
+
+            // emit heart beat periodically
+            loop {
+                tokio::time::sleep(Duration::from_secs(self.config.heart_beat_interval)).await;
+                match self.emit_heart_beat().await {
+                    Ok(_) => log::info!("Heart beat emitted"),
+                    Err(e) => log::error!("Error in emitting heart beat: {}", e),
+                }
+            }
+        });
+    }
+
     fn post_empty_block_job(self, deposit_check_interval: u64) {
         actix_web::rt::spawn(async move {
             loop {
@@ -507,6 +565,7 @@ impl BlockBuilder {
         }
         self.clone().cycle_job(true);
         self.clone().cycle_job(false);
+        self.clone().emit_heart_beat_job();
     }
 }
 

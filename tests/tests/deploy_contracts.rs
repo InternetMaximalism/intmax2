@@ -1,8 +1,8 @@
 use ethers::types::{Address, H256};
 use intmax2_client_sdk::external_api::contract::{
-    erc1155_contract::ERC1155Contract, erc20_contract::ERC20Contract,
-    erc721_contract::ERC721Contract, liquidity_contract::LiquidityContract,
-    rollup_contract::RollupContract,
+    block_builder_registry::BlockBuilderRegistryContract, erc1155_contract::ERC1155Contract,
+    erc20_contract::ERC20Contract, erc721_contract::ERC721Contract,
+    liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
 };
 use serde::Deserialize;
 
@@ -64,6 +64,18 @@ async fn deploy_contracts() -> anyhow::Result<()> {
     println!(
         "Liquidity contract address: {:?}",
         liquidity_contract.address()
+    );
+
+    let registry_contract = BlockBuilderRegistryContract::deploy(
+        &config.rpc_url,
+        config.chain_id,
+        config.deployer_private_key,
+    )
+    .await?;
+
+    println!(
+        "registry contract address: {:?}",
+        registry_contract.address()
     );
 
     let erc20_token = ERC20Contract::deploy(
