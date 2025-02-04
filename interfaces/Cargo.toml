@@ -14,7 +14,7 @@ serde = { workspace = true }
 anyhow = "1.0.93"
 bincode = "1.3.3"
 hashbrown = "0.15.2"
-async-trait = "0.1.83"
+async-trait = "0.1.86"
 thiserror = "2.0.3"
 ark-ec = { workspace = true }
 ark-bn254 = { workspace = true }
