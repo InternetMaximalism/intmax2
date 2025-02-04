@@ -79,9 +79,14 @@ pub trait IndexedMerkleTreeClient: std::fmt::Debug + Clone {
 
 #[cfg(test)]
 mod tests {
+    use intmax2_zkp::ethereum_types::u256::U256;
+    use rand::Rng;
+
     use crate::trees::{
         merkle_tree::{
-            sql_incremental_merkle_tree::SqlIncrementalMerkleTree, IncrementalMerkleTreeClient,
+            sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
+            sql_indexed_merkle_tree::SqlIndexedMerkleTree, IncrementalMerkleTreeClient,
+            IndexedMerkleTreeClient,
         },
         setup_test,
     };
@@ -89,14 +94,15 @@ mod tests {
     type V = u32;
 
     #[tokio::test]
-    async fn test_speed_merkle_tree() -> anyhow::Result<()> {
+    async fn test_speed_incremental_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
         let n = 1 << 8;
+        let mut rng = rand::thread_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
 
-        let tree = SqlIncrementalMerkleTree::<V>::new(pool, 0, height);
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
         tree.reset(0).await?;
 
         let timestamp = 0;
@@ -105,12 +111,40 @@ mod tests {
             tree.push(timestamp, i as u32).await?;
         }
         println!(
-            "SqlMerkleTree: {} leaves, {} height, {} seconds",
+            "SqlIncrementMerkleTree: {} leaves, {} height, {} seconds",
             n,
             height,
             time.elapsed().as_secs_f64()
         );
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_speed_indexed_merkle_tree() -> anyhow::Result<()> {
+        let height = 32;
+        let n = 1 << 8;
+        let mut rng = rand::thread_rng();
+
+        let database_url = setup_test();
+        let pool = sqlx::Pool::connect(&database_url).await?;
+
+        let tree = SqlIndexedMerkleTree::new(pool, rng.gen(), height);
+        tree.reset(0).await?;
+        tree.initialize().await?;
+
+        let timestamp = 0;
+        let time = std::time::Instant::now();
+        for i in 0..n {
+            let key = U256::rand(&mut rng);
+            let _ = tree.prove_and_insert(timestamp, key, i as u64).await?;
+        }
+        println!(
+            "SqlIndexedMerkleTree: {} leaves, {} height, {} seconds",
+            n,
+            height,
+            time.elapsed().as_secs_f64()
+        );
         Ok(())
     }
 }
