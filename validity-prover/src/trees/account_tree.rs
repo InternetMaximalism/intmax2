@@ -145,7 +145,7 @@ impl<DB: MerkleTreeClient<V>> HistoricalAccountTree<DB> {
 mod tests {
     use crate::trees::{
         account_tree::HistoricalAccountTree,
-        merkle_tree::{sql_merkle_tree::SqlMerkleTree, MerkleTreeClient},
+        merkle_tree::{sql_incremental_merkle_tree::SqlIncrementalMerkleTree, MerkleTreeClient},
     };
     use intmax2_zkp::{
         common::trees::account_tree::AccountTree, constants::ACCOUNT_TREE_HEIGHT,
@@ -157,7 +157,11 @@ mod tests {
         let database_url = crate::trees::setup_test();
 
         let tag = 3;
-        let db = SqlMerkleTree::<IndexedMerkleLeaf>::new(&database_url, tag, ACCOUNT_TREE_HEIGHT);
+        let db = SqlIncrementalMerkleTree::<IndexedMerkleLeaf>::new(
+            &database_url,
+            tag,
+            ACCOUNT_TREE_HEIGHT,
+        );
         db.reset().await?;
         let tree = HistoricalAccountTree::initialize(db).await?;
 
@@ -187,7 +191,11 @@ mod tests {
     async fn test_comparison_account_tree() -> anyhow::Result<()> {
         let database_url = crate::trees::setup_test();
         let tag = 3;
-        let db = SqlMerkleTree::<IndexedMerkleLeaf>::new(&database_url, tag, ACCOUNT_TREE_HEIGHT);
+        let db = SqlIncrementalMerkleTree::<IndexedMerkleLeaf>::new(
+            &database_url,
+            tag,
+            ACCOUNT_TREE_HEIGHT,
+        );
         db.reset(0).await?;
         let db_tree = HistoricalAccountTree::initialize(db).await?;
         let timestamp = db_tree.0.get_last_timestamp().await?;

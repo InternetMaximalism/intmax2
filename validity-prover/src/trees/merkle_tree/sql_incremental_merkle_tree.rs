@@ -1,24 +1,23 @@
 use intmax2_zkp::utils::{
-    leafable::Leafable,
-    leafable_hasher::LeafableHasher,
-    trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
+    leafable::Leafable, leafable_hasher::LeafableHasher,
+    trees::incremental_merkle_tree::IncrementalMerkleProof,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sqlx::{Pool, Postgres};
 
 use crate::trees::utils::bit_path::BitPath;
 
-use super::{sql_node_hash::SqlNodeHashes, Hasher, MTResult, MerkleTreeClient};
+use super::{sql_node_hash::SqlNodeHashes, Hasher, MTResult};
 
 #[derive(Clone, Debug)]
-pub struct SqlMerkleTree<V: Leafable + Serialize + DeserializeOwned> {
+pub struct SqlIncrementalMerkleTree<V: Leafable + Serialize + DeserializeOwned> {
     sql_node_hashes: SqlNodeHashes<V>,
 }
 
-impl<V: Leafable + Serialize + DeserializeOwned> SqlMerkleTree<V> {
+impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
     pub fn new(database_url: &str, tag: u32, height: usize) -> Self {
         let sql_node_hashes = SqlNodeHashes::new(database_url, tag, height);
-        SqlMerkleTree { sql_node_hashes }
+        SqlIncrementalMerkleTree { sql_node_hashes }
     }
 
     pub fn tag(&self) -> u32 {

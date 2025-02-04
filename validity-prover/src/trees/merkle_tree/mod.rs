@@ -15,10 +15,10 @@ use intmax2_zkp::{
 use serde::{de::DeserializeOwned, Serialize};
 
 pub mod error;
-// pub mod mock_indexed_merkle_tree;
-pub mod mock_merkle_tree;
+pub mod mock_indexed_merkle_tree;
+pub mod mock_incremental_merkle_tree;
 pub mod sql_indexed_merkle_tree;
-pub mod sql_merkle_tree;
+pub mod sql_incremental_merkle_tree;
 pub mod sql_node_hash;
 
 pub type Hasher<V> = <V as Leafable>::LeafableHasher;

@@ -7,14 +7,12 @@ use intmax2_zkp::{
     utils::{
         leafable::Leafable,
         leafable_hasher::LeafableHasher,
-        poseidon_hash_out::PoseidonHashOut,
         trees::{
             incremental_merkle_tree::IncrementalMerkleProof,
             indexed_merkle_tree::{
                 insertion::IndexedInsertionProof, leaf::IndexedMerkleLeaf,
                 membership::MembershipProof, update::UpdateProof, IndexedMerkleProof,
             },
-            merkle_tree::MerkleProof,
         },
     },
 };
@@ -22,10 +20,7 @@ use sqlx::{Pool, Postgres};
 
 use crate::trees::utils::bit_path::BitPath;
 
-use super::{
-    error::MerkleTreeError, sql_node_hash::SqlNodeHashes, HashOut, Hasher, IndexedMerkleTreeClient,
-    MTResult,
-};
+use super::{error::MerkleTreeError, sql_node_hash::SqlNodeHashes, Hasher, MTResult};
 
 type V = IndexedMerkleLeaf;
 
@@ -485,7 +480,8 @@ impl SqlIndexedMerkleTree {
             value,
         };
         let low_leaf_proof = self.prove(tx, timestamp, low_index).await?;
-        self.update_leaf(tx, timestamp, low_index, new_low_leaf).await?;
+        self.update_leaf(tx, timestamp, low_index, new_low_leaf)
+            .await?;
         self.push(tx, timestamp, leaf).await?;
         let leaf_proof = self.prove(tx, timestamp, index).await?;
         Ok(IndexedInsertionProof {

@@ -10,16 +10,14 @@ use intmax2_zkp::{
     },
 };
 
-use crate::trees::{
-    incremental_merkle_tree::HistoricalIncrementalMerkleTree, merkle_tree::error::MerkleTreeError,
-};
+use crate::trees::merkle_tree::error::MerkleTreeError;
 
-use super::{mock_merkle_tree::MockMerkleTree, IndexedMerkleTreeClient, MTResult};
+use super::{mock_incremental_merkle_tree::MockIncrementalMerkleTree, MTResult};
 
 type V = IndexedMerkleLeaf;
 
 #[derive(Debug, Clone)]
-pub struct MockIndexedMerkleTree(HistoricalIncrementalMerkleTree<V, MockMerkleTree<V>>);
+pub struct MockIndexedMerkleTree(MockIncrementalMerkleTree<V>);
 
 impl MockIndexedMerkleTree {
     pub async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut> {
@@ -43,7 +41,6 @@ impl MockIndexedMerkleTree {
             .get_leaves(timestamp)
             .await?
             .into_iter()
-            .enumerate()
             .filter(|(_, leaf)| {
                 (leaf.key < key) && (key < leaf.next_key || leaf.next_key == U256::default())
             })
@@ -68,7 +65,6 @@ impl MockIndexedMerkleTree {
             .get_leaves(timestamp)
             .await?
             .into_iter()
-            .enumerate()
             .filter(|(_, leaf)| leaf.key == key)
             .collect::<Vec<_>>();
         if leaf_candidates.is_empty() {
@@ -93,7 +89,7 @@ impl MockIndexedMerkleTree {
         })?;
         let mut leaf = self.0.get_leaf(timestamp, index).await?;
         leaf.value = value;
-        self.0.update(timestamp, index, leaf).await?;
+        self.0.update_leaf(timestamp, index, leaf).await?;
         Ok(())
     }
 
@@ -109,7 +105,7 @@ impl MockIndexedMerkleTree {
                 is_included: true,
                 leaf_index: index,
                 leaf: self.0.get_leaf(timestamp, index).await?,
-                leaf_proof: self.0.prove(timestamp, index).await?,
+                leaf_proof: self.prove(timestamp, index).await?,
             })
         } else {
             // exclusion proof
@@ -118,7 +114,7 @@ impl MockIndexedMerkleTree {
                 is_included: false,
                 leaf_index: low_index,
                 leaf: self.0.get_leaf(timestamp, low_index).await?,
-                leaf_proof: self.0.prove(timestamp, low_index).await?,
+                leaf_proof: self.prove(timestamp, low_index).await?,
             })
         }
     }
@@ -148,7 +144,9 @@ impl MockIndexedMerkleTree {
             next_key: prev_low_leaf.next_key,
             value,
         };
-        self.0.update(timestamp, low_index, new_low_leaf).await?;
+        self.0
+            .update_leaf(timestamp, low_index, new_low_leaf)
+            .await?;
         self.0.push(timestamp, leaf).await?;
         Ok(())
     }
@@ -174,7 +172,9 @@ impl MockIndexedMerkleTree {
             value,
         };
         let low_leaf_proof = self.0.prove(timestamp, low_index).await?;
-        self.0.update(timestamp, low_index, new_low_leaf).await?;
+        self.0
+            .update_leaf(timestamp, low_index, new_low_leaf)
+            .await?;
         self.0.push(timestamp, leaf).await?;
         let leaf_proof = self.0.prove(timestamp, index).await?;
         Ok(IndexedInsertionProof {
@@ -200,7 +200,7 @@ impl MockIndexedMerkleTree {
             value: new_value,
             ..prev_leaf
         };
-        self.0.update(timestamp, index, new_leaf).await?;
+        self.0.update_leaf(timestamp, index, new_leaf).await?;
         Ok(UpdateProof {
             leaf_proof: self.0.prove(timestamp, index).await?,
             leaf_index: index,

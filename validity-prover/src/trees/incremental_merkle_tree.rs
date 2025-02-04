@@ -77,7 +77,8 @@ mod tests {
     use crate::trees::{
         incremental_merkle_tree::HistoricalIncrementalMerkleTree,
         merkle_tree::{
-            mock_merkle_tree::MockMerkleTree, sql_merkle_tree::SqlMerkleTree, MerkleTreeClient,
+            mock_incremental_merkle_tree::MockIncrementalMerkleTree,
+            sql_incremental_merkle_tree::SqlIncrementalMerkleTree, MerkleTreeClient,
         },
         utils::bit_path::BitPath,
     };
@@ -87,7 +88,7 @@ mod tests {
         let height = 3;
         type V = u32;
 
-        let db = MockMerkleTree::<V>::new(height);
+        let db = MockIncrementalMerkleTree::<V>::new(height);
         let db_tree = HistoricalIncrementalMerkleTree::new(db);
         let timestamp = db_tree.get_last_timestamp().await?;
         for i in 0..4 {
@@ -121,9 +122,9 @@ mod tests {
 
         type V = u32;
 
-        let db = SqlMerkleTree::<V>::new(&database_url, tag, height);
+        let db = SqlIncrementalMerkleTree::<V>::new(&database_url, tag, height);
         db.reset().await?;
-        let db = MockMerkleTree::<V>::new(height);
+        let db = MockIncrementalMerkleTree::<V>::new(height);
         let db_tree = HistoricalIncrementalMerkleTree::new(db);
 
         let timestamp = db_tree.get_last_timestamp().await?;
