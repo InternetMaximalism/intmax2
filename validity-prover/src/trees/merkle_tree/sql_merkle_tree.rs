@@ -1,5 +1,7 @@
 use intmax2_zkp::utils::{
-    leafable::Leafable, leafable_hasher::LeafableHasher, trees::merkle_tree::MerkleProof,
+    leafable::Leafable,
+    leafable_hasher::LeafableHasher,
+    trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sqlx::{Pool, Postgres};
@@ -230,6 +232,16 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlMerkleTree<V> {
             Some(row) => row.timestamp_value as u64,
             None => 0,
         }
+    }
+
+    pub async fn prove(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        index: u64,
+    ) -> MTResult<IncrementalMerkleProof<V>> {
+        let proof = self.sql_node_hashes.prove(tx, timestamp, index).await?;
+        Ok(IncrementalMerkleProof(proof))
     }
 }
 

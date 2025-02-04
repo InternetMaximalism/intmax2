@@ -2,12 +2,20 @@ use std::str::FromStr;
 
 use bigdecimal::{num_bigint::BigUint, BigDecimal};
 use intmax2_zkp::{
+    common::trees::account_tree::AccountMerkleProof,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
     utils::{
         leafable::Leafable,
         leafable_hasher::LeafableHasher,
         poseidon_hash_out::PoseidonHashOut,
-        trees::{indexed_merkle_tree::leaf::IndexedMerkleLeaf, merkle_tree::MerkleProof},
+        trees::{
+            incremental_merkle_tree::IncrementalMerkleProof,
+            indexed_merkle_tree::{
+                insertion::IndexedInsertionProof, leaf::IndexedMerkleLeaf,
+                membership::MembershipProof, update::UpdateProof, IndexedMerkleProof,
+            },
+            merkle_tree::MerkleProof,
+        },
     },
 };
 use sqlx::{Pool, Postgres};
@@ -35,6 +43,18 @@ impl SqlIndexedMerkleTree {
     pub fn new(database_url: &str, tag: u32, height: usize) -> Self {
         let sql_node_hashes = SqlNodeHashes::new(database_url, tag, height);
         SqlIndexedMerkleTree { sql_node_hashes }
+    }
+
+    // add default leaf to the first position of the tree
+    pub async fn initialize(database_url: &str, tag: u32, height: usize) -> MTResult<Self> {
+        let tree = Self::new(database_url, tag, height);
+        let mut tx = tree.pool().begin().await?;
+        let last_timestamp = tree.get_last_timestamp(&mut tx).await;
+        if last_timestamp == 0 && tree.len(&mut tx, last_timestamp).await? == 0 {
+            tree.push(&mut tx, last_timestamp, V::default()).await?;
+        }
+        tx.commit().await?;
+        Ok(tree)
     }
 
     pub fn tag(&self) -> u32 {
@@ -261,7 +281,7 @@ impl SqlIndexedMerkleTree {
         }
     }
 
-    pub async fn low_index(
+    async fn low_index(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -300,7 +320,7 @@ impl SqlIndexedMerkleTree {
         Ok(rows[0].position as u64)
     }
 
-    pub async fn index(
+    async fn index(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -338,7 +358,7 @@ impl SqlIndexedMerkleTree {
         }
     }
 
-    pub async fn key(
+    async fn key(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -369,8 +389,137 @@ impl SqlIndexedMerkleTree {
         }
     }
 
+    async fn prove(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        index: u64,
+    ) -> MTResult<IndexedMerkleProof> {
+        let proof = self.sql_node_hashes.prove(tx, timestamp, index).await?;
+        Ok(IncrementalMerkleProof(proof))
+    }
 
-    
+    pub async fn prove_membership(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        key: U256,
+    ) -> MTResult<MembershipProof> {
+        if let Some(index) = self.index(tx, timestamp, key).await? {
+            // inclusion proof
+            Ok(MembershipProof {
+                is_included: true,
+                leaf_index: index,
+                leaf: self.get_leaf(tx, timestamp, index).await?,
+                leaf_proof: self.prove(tx, timestamp, index).await?,
+            })
+        } else {
+            // exclusion proof
+            let low_index = self.low_index(tx, timestamp, key).await?; // unwrap is safe here
+            Ok(MembershipProof {
+                is_included: false,
+                leaf_index: low_index,
+                leaf: self.get_leaf(tx, timestamp, low_index).await?,
+                leaf_proof: self.prove(tx, timestamp, low_index).await?,
+            })
+        }
+    }
+
+    pub async fn prove_inclusion(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        account_id: u64,
+    ) -> MTResult<AccountMerkleProof> {
+        let leaf = self.get_leaf(tx, timestamp, account_id).await?;
+        let merkle_proof = self.prove(tx, timestamp, account_id).await?;
+        Ok(AccountMerkleProof { merkle_proof, leaf })
+    }
+
+    pub async fn insert(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        key: U256,
+        value: u64,
+    ) -> MTResult<()> {
+        let index = self.len(tx, timestamp).await? as u64;
+        let low_index = self.low_index(tx, timestamp, key).await?;
+        let prev_low_leaf = self.get_leaf(tx, timestamp, low_index).await?;
+        let new_low_leaf = IndexedMerkleLeaf {
+            next_index: index,
+            next_key: key,
+            ..prev_low_leaf
+        };
+        let leaf = IndexedMerkleLeaf {
+            next_index: prev_low_leaf.next_index,
+            key,
+            next_key: prev_low_leaf.next_key,
+            value,
+        };
+        self.update_leaf(tx, timestamp, low_index, new_low_leaf)
+            .await?;
+        self.push(tx, timestamp, leaf).await?;
+        Ok(())
+    }
+
+    pub async fn prove_and_insert(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        key: U256,
+        value: u64,
+    ) -> MTResult<IndexedInsertionProof> {
+        let index = self.len(tx, timestamp).await? as u64;
+        let low_index = self.low_index(tx, timestamp, key).await?;
+        let prev_low_leaf = self.get_leaf(tx, timestamp, low_index).await?;
+        let new_low_leaf = IndexedMerkleLeaf {
+            next_index: index,
+            next_key: key,
+            ..prev_low_leaf
+        };
+        let leaf = IndexedMerkleLeaf {
+            next_index: prev_low_leaf.next_index,
+            key,
+            next_key: prev_low_leaf.next_key,
+            value,
+        };
+        let low_leaf_proof = self.prove(tx, timestamp, low_index).await?;
+        self.update_leaf(tx, timestamp, low_index, new_low_leaf).await?;
+        self.push(tx, timestamp, leaf).await?;
+        let leaf_proof = self.prove(tx, timestamp, index).await?;
+        Ok(IndexedInsertionProof {
+            index,
+            low_leaf_proof,
+            leaf_proof,
+            low_leaf_index: low_index,
+            prev_low_leaf,
+        })
+    }
+
+    pub async fn prove_and_update(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        key: U256,
+        new_value: u64,
+    ) -> MTResult<UpdateProof> {
+        let index = self
+            .index(tx, timestamp, key)
+            .await?
+            .ok_or_else(|| MerkleTreeError::InternalError("key not found".to_string()))?;
+        let prev_leaf = self.get_leaf(tx, timestamp, index).await?;
+        let new_leaf = IndexedMerkleLeaf {
+            value: new_value,
+            ..prev_leaf
+        };
+        self.update_leaf(tx, timestamp, index, new_leaf).await?;
+        Ok(UpdateProof {
+            leaf_proof: self.prove(tx, timestamp, index).await?,
+            leaf_index: index,
+            prev_leaf,
+        })
+    }
 }
 
 fn from_str_to_u256(s: &str) -> U256 {
