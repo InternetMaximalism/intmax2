@@ -218,7 +218,7 @@ impl SqlIndexedMerkleTree {
         }
     }
 
-    pub async fn push(
+    async fn push(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -397,7 +397,7 @@ impl SqlIndexedMerkleTree {
         Ok(IncrementalMerkleProof(proof))
     }
 
-    pub async fn prove_membership(
+    async fn prove_membership(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -423,7 +423,7 @@ impl SqlIndexedMerkleTree {
         }
     }
 
-    pub async fn prove_inclusion(
+    async fn prove_inclusion(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -434,7 +434,7 @@ impl SqlIndexedMerkleTree {
         Ok(AccountMerkleProof { merkle_proof, leaf })
     }
 
-    pub async fn insert(
+    async fn insert(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -461,7 +461,7 @@ impl SqlIndexedMerkleTree {
         Ok(())
     }
 
-    pub async fn prove_and_insert(
+    async fn prove_and_insert(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
@@ -496,7 +496,7 @@ impl SqlIndexedMerkleTree {
         })
     }
 
-    pub async fn prove_and_update(
+    async fn prove_and_update(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,

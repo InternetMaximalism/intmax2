@@ -19,11 +19,10 @@ use intmax2_zkp::{
     },
     constants::{ACCOUNT_TREE_HEIGHT, BLOCK_HASH_TREE_HEIGHT, DEPOSIT_TREE_HEIGHT},
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _},
-    utils::trees::{
-        incremental_merkle_tree::IncrementalMerkleProof,
-        indexed_merkle_tree::leaf::IndexedMerkleLeaf, merkle_tree::MerkleProof,
-    },
+    utils::trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
 };
+
+use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
 
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
@@ -36,7 +35,11 @@ use tokio::time::interval;
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
     trees::{
-        merkle_tree::sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
+        deposit_hash::DepositHash,
+        merkle_tree::{
+            sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
+            sql_indexed_merkle_tree::SqlIndexedMerkleTree, IndexedMerkleTreeClient,
+        },
         update::{to_block_witness, update_trees},
     },
     Env,
@@ -45,13 +48,6 @@ use crate::{
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
-
-#[allow(clippy::upper_case_acronyms)]
-type ADB = SqlIncrementalMerkleTree<IndexedMerkleLeaf>;
-#[allow(clippy::upper_case_acronyms)]
-type BDB = SqlIncrementalMerkleTree<Bytes32>;
-#[allow(clippy::upper_case_acronyms)]
-type DDB = SqlIncrementalMerkleTree<DepositHash>;
 
 const ACCOUNT_DB_TAG: u32 = 1;
 const BLOCK_DB_TAG: u32 = 2;
@@ -66,9 +62,9 @@ pub struct Config {
 pub struct WitnessGenerator {
     config: Config,
     observer: Observer,
-    account_tree: HistoricalAccountTree<ADB>,
-    block_tree: HistoricalBlockHashTree<BDB>,
-    deposit_hash_tree: HistoricalDepositHashTree<DDB>,
+    account_tree: SqlIndexedMerkleTree,
+    block_tree: SqlIncrementalMerkleTree<Bytes32>,
+    deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
     pool: DbPool,
 }
 
