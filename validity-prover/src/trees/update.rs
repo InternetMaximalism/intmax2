@@ -11,22 +11,21 @@ use intmax2_zkp::{
     },
     constants::{ACCOUNT_TREE_HEIGHT, NUM_SENDERS_IN_BLOCK},
     ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
-    utils::trees::indexed_merkle_tree::{leaf::IndexedMerkleLeaf, membership::MembershipProof},
+    utils::trees::indexed_merkle_tree::membership::MembershipProof,
 };
 
-use crate::trees::{
-    account_tree::HistoricalAccountTree, block_tree::HistoricalBlockHashTree,
-    merkle_tree::MerkleTreeClient,
-};
+use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
+
+use super::merkle_tree::IndexedMerkleTreeClient;
 
 pub async fn to_block_witness<
-    ADB: MerkleTreeClient<IndexedMerkleLeaf>,
-    BDB: MerkleTreeClient<Bytes32>,
+    HistoricalAccountTree: IndexedMerkleTreeClient,
+    HistoricalBlockHashTree: IncrementalMerkleTreeClient<Bytes32>,
 >(
     full_block: &FullBlock,
     timestamp: u64,
-    account_tree: &HistoricalAccountTree<ADB>,
-    block_tree: &HistoricalBlockHashTree<BDB>,
+    account_tree: &HistoricalAccountTree,
+    block_tree: &HistoricalBlockHashTree,
 ) -> anyhow::Result<BlockWitness> {
     ensure!(
         full_block.block.block_number != 0,
@@ -96,13 +95,13 @@ pub async fn to_block_witness<
 }
 
 pub async fn update_trees<
-    ADB: MerkleTreeClient<IndexedMerkleLeaf>,
-    BDB: MerkleTreeClient<Bytes32>,
+    HistoricalAccountTree: IndexedMerkleTreeClient,
+    HistoricalBlockHashTree: IncrementalMerkleTreeClient<Bytes32>,
 >(
     block_witness: &BlockWitness,
     timestamp: u64,
-    account_tree: &HistoricalAccountTree<ADB>,
-    block_tree: &HistoricalBlockHashTree<BDB>,
+    account_tree: &HistoricalAccountTree,
+    block_tree: &HistoricalBlockHashTree,
 ) -> anyhow::Result<ValidityWitness> {
     let block_pis = block_witness.to_main_validation_pis().map_err(|e| {
         anyhow::anyhow!("failed to convert to main validation public inputs: {}", e)

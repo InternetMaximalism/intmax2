@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH latest_leaves AS (\n                SELECT DISTINCT ON (position) position, key, next_key\n                FROM indexed_leaves\n                WHERE timestamp_value <= $1 AND tag = $2\n                ORDER BY position, timestamp_value DESC\n            )\n            SELECT position\n            FROM latest_leaves\n            WHERE key < $3 AND ($3 < next_key OR next_key = '0'::numeric)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cf8665ddd536ae98f7d284cb52401c6349bedf1e7e4900431d8bd0ba3f1ce3eb"
+}

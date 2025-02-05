@@ -31,4 +31,5 @@ rand = "0.8.5"
 tracing = "0.1.41"
 tracing-actix-web = { workspace = true }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-async-trait = "0.1.86"
+async-trait = "0.1.83"
+bigdecimal = "0.4.7"

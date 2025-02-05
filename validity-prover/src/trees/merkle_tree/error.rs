@@ -16,4 +16,7 @@ pub enum MerkleTreeError {
 
     #[error("Leaf not found for hash: {0}")]
     LeafNotFoundError(String),
+
+    #[error("Internal error: {0}")]
+    InternalError(String),
 }
