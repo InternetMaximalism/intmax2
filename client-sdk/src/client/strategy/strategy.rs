@@ -279,11 +279,13 @@ pub async fn determine_claims<S: StoreVaultClientInterface, V: ValidityProverCli
     deposit_timeout: u64,
 ) -> Result<Vec<Mining>, StrategyError> {
     log::info!("determine_claims");
+    let user_data = fetch_user_data(store_vault_server, key).await?;
     let minings = fetch_mining_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
         key,
+        &user_data.claim_status,
         tx_timeout,
         deposit_timeout,
     )

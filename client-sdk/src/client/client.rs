@@ -15,6 +15,7 @@ use intmax2_interfaces::{
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
         tx_data::TxData,
+        user_data::ProcessStatus,
     },
 };
 use intmax2_zkp::{
@@ -443,6 +444,7 @@ where
             &self.validity_prover,
             &self.liquidity_contract,
             key,
+            &ProcessStatus::default(),
             self.config.tx_timeout,
             self.config.deposit_timeout,
         )

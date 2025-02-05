@@ -57,6 +57,7 @@ pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverCl
     validity_prover: &V,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
+    claim_status: &ProcessStatus,
     tx_timeout: u64,
     deposit_timeout: u64,
 ) -> Result<Vec<Mining>, StrategyError> {
@@ -74,7 +75,7 @@ pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverCl
     let candidate_deposits = deposit_info
         .settled
         .into_iter()
-        .filter(|(_, deposit_data)| {
+        .filter(|(meta, deposit_data)| {
             let deposit = deposit_data.deposit().unwrap(); // unwrap is safe here because already settled
             if !deposit.is_eligible {
                 // skip ineligible deposits
@@ -82,6 +83,10 @@ pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverCl
             }
             if !validate_mining_deposit_criteria(deposit_data.token_type, deposit.amount) {
                 // skip deposits that do not meet the mining criteria
+                return false;
+            }
+            if claim_status.processed_uuids.contains(&meta.meta.uuid) {
+                // skip deposits that are already claimed
                 return false;
             }
             true
@@ -108,8 +113,9 @@ pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverCl
     let settled_txs = tx_info.settled;
 
     let mut minings = Vec::new();
-    let current_time = chrono::Utc::now().timestamp() as u64;
     let current_block_number = validity_prover.get_block_number().await?;
+    let current_block = fetch_block(validity_prover, current_block_number).await?;
+    let current_time = current_block.timestamp;
 
     for (meta, deposit_data) in candidate_deposits {
         let block = fetch_block(validity_prover, meta.block_number).await?;
