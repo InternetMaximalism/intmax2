@@ -10,4 +10,4 @@ DROP TABLE IF EXISTS prover_tasks;
 -- Merkle tree tables
 DROP TABLE IF EXISTS hash_nodes;
 DROP TABLE IF EXISTS leaves;
-DROP TABLE IF EXISTS leaves_len;
+DROP TABLE IF EXISTS indexed_leaves;
