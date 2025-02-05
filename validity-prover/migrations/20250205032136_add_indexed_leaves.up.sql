@@ -1,3 +1,9 @@
+-- truncate tree related tables
+TRUNCATE TABLE validity_state;
+TRUNCATE TABLE hash_nodes;
+TRUNCATE TABLE leaves;
+TRUNCATE TABLE leaves_len;
+
 CREATE TABLE IF NOT EXISTS indexed_leaves (
     timestamp_value bigint NOT NULL,
     tag int NOT NULL,
