@@ -68,16 +68,11 @@ CREATE TABLE IF NOT EXISTS leaves (
     PRIMARY KEY (timestamp_value, tag, position)
 );
 
-CREATE TABLE IF NOT EXISTS indexed_leaves (
+CREATE TABLE IF NOT EXISTS leaves_len (
     timestamp_value bigint NOT NULL,
     tag int NOT NULL,
-    position bigint NOT NULL,
-    leaf_hash bytea NOT NULL,
-    next_index bigint NOT NULL,
-    key NUMERIC(78, 0) NOT NULL,
-    next_key NUMERIC(78, 0) NOT NULL,
-    value bigint NOT NULL,
-    PRIMARY KEY (timestamp_value, tag, position)
+    len int NOT NULL,
+    PRIMARY KEY (timestamp_value, tag)
 );
 
 --- Observer indexes
@@ -90,5 +85,4 @@ CREATE INDEX idx_hash_nodes_timestamp ON hash_nodes (timestamp_value DESC, tag);
 CREATE INDEX idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, timestamp_value DESC);
 CREATE INDEX idx_leaves_lookup ON leaves (position, tag, timestamp_value DESC);
 CREATE INDEX idx_leaves_timestamp ON leaves (timestamp_value DESC, tag);
-CREATE INDEX idx_leaves_lookup ON indexed_leaves (position, tag, timestamp_value DESC);
-CREATE INDEX idx_leaves_timestamp ON indexed_leaves (timestamp_value DESC, tag);
+CREATE INDEX idx_leaves_len_lookup ON leaves_len (tag, timestamp_value DESC);
