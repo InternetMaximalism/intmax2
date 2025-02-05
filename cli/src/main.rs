@@ -9,7 +9,7 @@ use intmax2_cli::{
         error::CliError,
         get::{balance, claim_status, history, mining_list, withdrawal_status},
         send::{transfer, TransferInput},
-        sync::{sync_claim, sync_withdrawals},
+        sync::{sync_claims, sync_withdrawals},
     },
     format::{format_token_info, privkey_to_keyset},
 };
@@ -109,12 +109,12 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let key = privkey_to_keyset(private_key);
             sync_withdrawals(key).await?;
         }
-        Commands::SyncClaim {
+        Commands::SyncClaims {
             private_key,
             recipient,
         } => {
             let key = privkey_to_keyset(private_key);
-            sync_claim(key, recipient).await?;
+            sync_claims(key, recipient).await?;
         }
         Commands::Balance { private_key } => {
             let key = generate_key(private_key);

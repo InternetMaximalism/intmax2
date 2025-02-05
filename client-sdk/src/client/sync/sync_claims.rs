@@ -19,7 +19,10 @@ use intmax2_zkp::{
     ethereum_types::address::Address,
 };
 
-use crate::client::{client::Client, strategy::strategy::determine_claim};
+use crate::client::{
+    client::Client,
+    strategy::{mining::MiningStatus, strategy::determine_claims},
+};
 
 use super::error::SyncError;
 
@@ -32,41 +35,36 @@ where
     W: WithdrawalServerClientInterface,
 {
     /// Sync the client's withdrawals and relays to the withdrawal server
-    pub async fn sync_claim(&self, key: KeySet, recipient: Address) -> Result<(), SyncError> {
-        if let Some(mining) = determine_claim(
+    pub async fn sync_claims(&self, key: KeySet, recipient: Address) -> Result<(), SyncError> {
+        let minings = determine_claims(
             &self.store_vault_server,
             &self.validity_prover,
             &self.liquidity_contract,
             key,
+            self.config.tx_timeout,
             self.config.deposit_timeout,
         )
-        .await?
-        {
+        .await?;
+        if minings.is_empty() {
+            log::info!("No claimable mining found");
+            return Ok(());
+        }
+        for mining in minings {
             log::info!("sync_claim: {:?}", mining.meta);
 
-            // update to current block number
-            let current_block_number = self.validity_prover.get_block_number().await?;
-            self.update_no_send(key, current_block_number).await?;
-
-            // check the block number
-            let user_data = self.get_user_data(key).await?;
-            if user_data.block_number()? != current_block_number {
-                return Err(SyncError::BalanceProofBlockNumberMismatch {
-                    balance_proof_block_number: user_data.block_number()?,
-                    block_number: current_block_number,
-                });
-            }
+            let claim_block_number = match mining.status {
+                MiningStatus::Claimable(block_number) => block_number,
+                _ => {
+                    // this should never happen because we only claim claimable minings
+                    panic!("mining status is not claimable");
+                }
+            };
 
             // collect witnesses
             let deposit_block_number = mining.block.block_number;
             let update_witness = self
                 .validity_prover
-                .get_update_witness(
-                    key.pubkey,
-                    current_block_number,
-                    deposit_block_number,
-                    false,
-                )
+                .get_update_witness(key.pubkey, claim_block_number, deposit_block_number, false)
                 .await?;
             let last_block_number = update_witness.account_membership_proof.get_value() as u32;
             if deposit_block_number <= last_block_number {
@@ -131,8 +129,6 @@ where
                 .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
                 .await?;
             log::info!("Claimed {}", mining.meta.meta.uuid.clone());
-        } else {
-            log::info!("No claim to sync");
         }
         Ok(())
     }

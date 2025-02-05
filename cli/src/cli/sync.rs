@@ -9,9 +9,9 @@ pub async fn sync_withdrawals(key: KeySet) -> Result<(), CliError> {
     Ok(())
 }
 
-pub async fn sync_claim(key: KeySet, recipient: Address) -> Result<(), CliError> {
+pub async fn sync_claims(key: KeySet, recipient: Address) -> Result<(), CliError> {
     let client = get_client()?;
     let recipient = convert_address(recipient);
-    client.sync_claim(key, recipient).await?;
+    client.sync_claims(key, recipient).await?;
     Ok(())
 }

@@ -443,6 +443,7 @@ where
             &self.validity_prover,
             &self.liquidity_contract,
             key,
+            self.config.tx_timeout,
             self.config.deposit_timeout,
         )
         .await?;

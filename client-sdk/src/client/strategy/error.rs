@@ -1,4 +1,4 @@
-use intmax2_interfaces::api::error::ServerError;
+use intmax2_interfaces::{api::error::ServerError, data::encryption::errors::EncryptionError};
 use thiserror::Error;
 
 use crate::external_api::contract::error::BlockchainError;
@@ -7,6 +7,9 @@ use crate::external_api::contract::error::BlockchainError;
 pub enum StrategyError {
     #[error("Server client error: {0}")]
     ServerError(#[from] ServerError),
+
+    #[error("Encryption error: {0}")]
+    EncryptionError(#[from] EncryptionError),
 
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),

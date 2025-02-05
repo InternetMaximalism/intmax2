@@ -48,7 +48,7 @@ pub enum Commands {
         #[clap(long)]
         private_key: H256,
     },
-    SyncClaim {
+    SyncClaims {
         #[clap(long)]
         private_key: H256,
         #[clap(long)]

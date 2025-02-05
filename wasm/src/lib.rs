@@ -173,7 +173,7 @@ pub async fn sync_withdrawals(config: &Config, private_key: &str) -> Result<(), 
 /// Synchronize the user's claim of staking mining, and send request to the withdrawal aggregator.
 /// It may take a long time to generate ZKP.
 #[wasm_bindgen]
-pub async fn sync_claim(
+pub async fn sync_claims(
     config: &Config,
     private_key: &str,
     recipient: &str,
@@ -182,7 +182,7 @@ pub async fn sync_claim(
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
     let recipient = parse_address(recipient)?;
-    client.sync_claim(key, recipient).await?;
+    client.sync_claims(key, recipient).await?;
     Ok(())
 }
 
