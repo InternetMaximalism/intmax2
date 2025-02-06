@@ -1,29 +1,31 @@
 use async_trait::async_trait;
 use intmax2_zkp::{
     common::{
-        block_builder::BlockProposal, signature::flatten::FlatG2, tx::Tx,
+        block_builder::BlockProposal,
+        signature::{flatten::FlatG2, SignatureContent},
+        tx::Tx,
         witness::transfer_witness::TransferWitness,
     },
     ethereum_types::u256::U256,
-};
-use plonky2::{
-    field::goldilocks_field::GoldilocksField,
-    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::api::error::ServerError;
 
-type F = GoldilocksField;
-type C = PoseidonGoldilocksConfig;
-const D: usize = 2;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeProof {
-    pub spent_proof: ProofWithPublicInputs<F, C, D>,
-    pub prev_balance_proof: ProofWithPublicInputs<F, C, D>,
-    pub transfer_witness: TransferWitness,
+    pub sender_proof_set_ephemeral_key: U256,
+    pub fee_transfer_witness: TransferWitness,
+    pub collateral_block: CollateralBlock,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollateralBlock {
+    pub expiry: u64,
+    pub tx_tree_root: U256,
+    pub signature: SignatureContent,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
