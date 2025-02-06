@@ -1,7 +1,5 @@
 use std::{sync::Arc, time::Duration};
 
-use ark_bn254::{Bn254, Fr, G1Affine, G2Affine};
-use ark_ec::{pairing::Pairing as _, AffineRepr as _};
 use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
     contract::{
@@ -15,22 +13,12 @@ use intmax2_interfaces::api::{
 };
 use intmax2_zkp::{
     common::{
-        block_builder::{BlockProposal, UserSignature},
-        signature::{
-            flatten::FlatG2,
-            sign::{hash_to_weight, tx_tree_root_and_expiry_to_message_point},
-            SignatureContent,
-        },
+        block_builder::{construct_signature, BlockProposal, SenderWithSignature, UserSignature},
         tx::Tx,
     },
     constants::NUM_SENDERS_IN_BLOCK,
-    ethereum_types::{
-        account_id_packed::AccountIdPacked, bytes16::Bytes16, bytes32::Bytes32, u256::U256,
-        u32limb_trait::U32LimbTrait,
-    },
+    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
-use num::BigUint;
-use plonky2_bn254::fields::recover::RecoverFromX as _;
 use tokio::{sync::RwLock, time::sleep};
 
 use crate::EnvVar;
@@ -566,69 +554,5 @@ impl BlockBuilder {
         self.clone().cycle_job(true);
         self.clone().cycle_job(false);
         self.clone().emit_heart_beat_job();
-    }
-}
-
-struct SenderWithSignature {
-    sender: U256,
-    signature: Option<FlatG2>,
-}
-
-fn construct_signature(
-    tx_tree_root: Bytes32,
-    expiry: u64,
-    pubkey_hash: Bytes32,
-    account_id_hash: Bytes32,
-    is_registration_block: bool,
-    sender_with_signatures: &[SenderWithSignature],
-) -> SignatureContent {
-    assert_eq!(sender_with_signatures.len(), NUM_SENDERS_IN_BLOCK);
-    let sender_flag_bits = sender_with_signatures
-        .iter()
-        .map(|s| s.signature.is_some())
-        .collect::<Vec<_>>();
-    let sender_flag = Bytes16::from_bits_be(&sender_flag_bits);
-    let agg_pubkey = sender_with_signatures
-        .iter()
-        .map(|s| {
-            let weight = hash_to_weight(s.sender, pubkey_hash);
-            if s.signature.is_some() {
-                let pubkey_g1: G1Affine = G1Affine::recover_from_x(s.sender.into());
-                (pubkey_g1 * Fr::from(BigUint::from(weight))).into()
-            } else {
-                G1Affine::zero()
-            }
-        })
-        .fold(G1Affine::zero(), |acc: G1Affine, x: G1Affine| {
-            (acc + x).into()
-        });
-    let agg_signature = sender_with_signatures
-        .iter()
-        .map(|s| {
-            if let Some(signature) = s.signature.clone() {
-                signature.into()
-            } else {
-                G2Affine::zero()
-            }
-        })
-        .fold(G2Affine::zero(), |acc: G2Affine, x: G2Affine| {
-            (acc + x).into()
-        });
-    // message point
-    let message_point = tx_tree_root_and_expiry_to_message_point(tx_tree_root, expiry.into());
-    assert!(
-        Bn254::pairing(agg_pubkey, message_point)
-            == Bn254::pairing(G1Affine::generator(), agg_signature)
-    );
-    SignatureContent {
-        tx_tree_root,
-        expiry: expiry.into(),
-        is_registration_block,
-        sender_flag,
-        pubkey_hash,
-        account_id_hash,
-        agg_pubkey: agg_pubkey.into(),
-        agg_signature: agg_signature.into(),
-        message_point: message_point.into(),
     }
 }
