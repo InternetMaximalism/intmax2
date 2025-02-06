@@ -2,6 +2,7 @@ use ethers::types::{Address, H256};
 use serde::Deserialize;
 
 pub mod api;
+pub mod app;
 
 #[derive(Deserialize)]
 pub struct EnvVar {

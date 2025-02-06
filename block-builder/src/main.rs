@@ -1,7 +1,7 @@
 use actix_cors::Cors;
 use actix_web::{web::Data, App, HttpServer};
 use block_builder::{
-    api::{api::block_builder_scope, state::State},
+    api::{routes::block_builder_scope, state::State},
     EnvVar,
 };
 use intmax2_client_sdk::external_api::contract::utils::get_address;

@@ -1,6 +1,4 @@
-use crate::EnvVar;
-
-use super::block_builder::BlockBuilder;
+use crate::{app::block_builder::BlockBuilder, EnvVar};
 
 #[derive(Debug, Clone)]
 pub struct State {
