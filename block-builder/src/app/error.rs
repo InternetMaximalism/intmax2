@@ -1,5 +1,7 @@
-use intmax2_client_sdk::external_api::contract::error::BlockchainError;
-use intmax2_interfaces::api::error::ServerError;
+use intmax2_client_sdk::{
+    client::strategy::error::StrategyError, external_api::contract::error::BlockchainError,
+};
+use intmax2_interfaces::{api::error::ServerError, data::proof_compression::ProofCompressionError};
 use intmax2_zkp::ethereum_types::u256::U256;
 use redis::RedisError;
 
@@ -52,4 +54,25 @@ pub enum BlockBuilderError {
 
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FeeError {
+    #[error("Fetch error: {0}")]
+    FetchError(#[from] StrategyError),
+
+    #[error("Proof compression error: {0}")]
+    ProofCompressionError(#[from] ProofCompressionError),
+
+    #[error("Proof verification error: {0}")]
+    ProofVerificationError(String),
+
+    #[error("Merkle tree error: {0}")]
+    MerkleTreeError(String),
+
+    #[error("Invalid recipient: {0}")]
+    InvalidRecipient(String),
+
+    #[error("Invalid fee: {0}")]
+    InvalidFee(String),
 }

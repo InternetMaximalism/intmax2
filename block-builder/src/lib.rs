@@ -15,6 +15,7 @@ pub struct EnvVar {
     pub rollup_contract_deployed_block_number: u64,
     pub block_builder_registry_contract_address: Address,
 
+    pub store_vault_server_base_url: String,
     pub validity_prover_base_url: String,
 
     pub block_builder_private_key: H256,

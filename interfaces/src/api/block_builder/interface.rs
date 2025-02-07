@@ -1,31 +1,30 @@
 use async_trait::async_trait;
 use intmax2_zkp::{
     common::{
-        block_builder::BlockProposal,
-        signature::{flatten::FlatG2, SignatureContent},
-        tx::Tx,
+        block_builder::BlockProposal, signature::flatten::FlatG2, tx::Tx,
         witness::transfer_witness::TransferWitness,
     },
     ethereum_types::u256::U256,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::api::error::ServerError;
+use crate::{api::error::ServerError, data::proof_compression::CompressedSpentProof};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeProof {
     pub sender_proof_set_ephemeral_key: U256,
     pub fee_transfer_witness: TransferWitness,
-    pub collateral_block: CollateralBlock,
+    pub collateral_block: Option<CollateralBlock>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CollateralBlock {
+    pub spent_proof: CompressedSpentProof,
+    pub fee_transfer_witness: TransferWitness,
     pub expiry: u64,
-    pub tx_tree_root: U256,
-    pub signature: SignatureContent,
+    pub signature: FlatG2,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

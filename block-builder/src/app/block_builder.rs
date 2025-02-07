@@ -5,6 +5,7 @@ use intmax2_client_sdk::external_api::{
     contract::{
         block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
     },
+    store_vault_server::StoreVaultServerClient,
     validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
@@ -50,6 +51,7 @@ struct Config {
 #[derive(Debug, Clone)]
 pub struct BlockBuilder {
     config: Config,
+    store_vault_server_client: StoreVaultServerClient,
     validity_prover_client: ValidityProverClient,
     rollup_contract: RollupContract,
     registry_contract: BlockBuilderRegistryContract,
@@ -63,6 +65,8 @@ pub struct BlockBuilder {
 
 impl BlockBuilder {
     pub fn new(env: &EnvVar) -> Self {
+        let store_vault_server_client =
+            StoreVaultServerClient::new(&env.store_vault_server_base_url);
         let validity_prover_client = ValidityProverClient::new(&env.validity_prover_base_url);
         let rollup_contract = RollupContract::new(
             &env.l2_rpc_url,
@@ -95,6 +99,7 @@ impl BlockBuilder {
         };
         Self {
             config,
+            store_vault_server_client,
             validity_prover_client,
             rollup_contract,
             registry_contract,
