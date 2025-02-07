@@ -29,6 +29,9 @@ use super::{block_post::post_block, builder_state::BuilderState, error::BlockBui
 // key for post_block
 pub const POST_BLOCK_KEY: &str = "block_builder::post_block";
 
+// secondary key for post_block
+pub const POST_BLOCK_SECONDARY_KEY: &str = "block_builder::post_block_secondary";
+
 // dead letter queue for post_block
 pub const POST_BLOCK_DLQ_KEY: &str = "block_builder::post_block_dlq";
 
@@ -268,7 +271,7 @@ impl BlockBuilder {
         Ok(())
     }
 
-    pub async fn num_tx_requests(
+    async fn num_tx_requests(
         &self,
         is_registration_block: bool,
     ) -> Result<usize, BlockBuilderError> {
@@ -390,11 +393,6 @@ impl BlockBuilder {
         Ok(())
     }
 
-    pub async fn evoke_force_post(&self) -> Result<(), BlockBuilderError> {
-        *self.force_post.write().await = true;
-        Ok(())
-    }
-
     // job
     fn emit_heart_beat_job(self) {
         let start_time = chrono::Utc::now().timestamp() as u64;
@@ -429,7 +427,9 @@ impl BlockBuilder {
 
     async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        let (_key, block_post_str): (String, String) = conn.blpop(POST_BLOCK_KEY, 0.).await?;
+        let (_key, block_post_str): (String, String) = conn
+            .blpop(&[POST_BLOCK_KEY, POST_BLOCK_SECONDARY_KEY], 0.)
+            .await?;
         let block_post: BlockPost = serde_json::from_str(&block_post_str).unwrap();
         match post_block(
             self.config.block_builder_private_key,
@@ -473,7 +473,7 @@ impl BlockBuilder {
                 match self.check_new_deposits().await {
                     Ok(new_deposits_exist) => {
                         if new_deposits_exist {
-                            self.evoke_force_post().await.unwrap();
+                            *self.force_post.write().await = true;
                         }
                     }
                     Err(e) => {
