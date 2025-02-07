@@ -13,18 +13,34 @@ use intmax2_zkp::{
     common::{signature::key_set::KeySet, witness::transfer_witness::TransferWitness},
     ethereum_types::u256::U256,
 };
+use num_bigint::BigUint;
 
 use super::error::FeeError;
 
 pub async fn validate_fee_proof(
-    store_vault_server_client: StoreVaultServerClient,
-    beneficiary_pubkey: U256,
-    required_fee: &HashMap<u32, U256>,
+    store_vault_server_client: &StoreVaultServerClient,
+    beneficiary_pubkey: Option<U256>,
+    required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
-    fee_proof: &FeeProof,
+    fee_proof: &Option<FeeProof>,
 ) -> Result<(), FeeError> {
+    if required_fee.is_none() {
+        return Ok(());
+    }
+    let required_fee = required_fee.unwrap();
+    if fee_proof.is_none() {
+        return Err(FeeError::InvalidFee("Fee proof is missing".to_string()));
+    }
+    let fee_proof = fee_proof.as_ref().unwrap();
+    if beneficiary_pubkey.is_none() {
+        return Err(FeeError::InvalidFee(
+            "Beneficiary pubkey is missing".to_string(),
+        ));
+    }
+    let beneficiary_pubkey = beneficiary_pubkey.unwrap();
+
     let sender_proof_set = fetch_sender_proof_set(
-        &store_vault_server_client,
+        store_vault_server_client,
         fee_proof.sender_proof_set_ephemeral_key,
     )
     .await?;
@@ -132,4 +148,28 @@ async fn validate_fee_single(
         )));
     }
     Ok(())
+}
+
+// Parse fee string into a map of token index -> fee amount
+// Example: "0:100,1:200" -> {0: 100, 1: 200}
+pub fn parse_fee_str(fee: &str) -> Result<HashMap<u32, U256>, FeeError> {
+    let mut fee_map = HashMap::new();
+    for fee_str in fee.split(',') {
+        let fee_parts: Vec<&str> = fee_str.split(':').collect();
+        if fee_parts.len() != 2 {
+            return Err(FeeError::ParseError(
+                "Invalid fee format: should be token_index:fee_amount".to_string(),
+            ));
+        }
+        let token_index = fee_parts[0]
+            .parse::<u32>()
+            .map_err(|e| FeeError::ParseError(format!("Failed to parse token index: {}", e)))?;
+        let fee_amount: U256 = fee_parts[1]
+            .parse::<BigUint>()
+            .map_err(|e| FeeError::ParseError(format!("Failed to parse fee amount: {}", e)))?
+            .try_into()
+            .map_err(|e| FeeError::ParseError(format!("Failed to convert fee amount: {}", e)))?;
+        fee_map.insert(token_index, fee_amount);
+    }
+    Ok(fee_map)
 }

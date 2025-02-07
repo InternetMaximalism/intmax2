@@ -16,6 +16,9 @@ pub enum BlockBuilderError {
     #[error("Redis error: {0}")]
     RedisError(#[from] RedisError),
 
+    #[error("Fee error: {0}")]
+    FeeError(#[from] FeeError),
+
     #[error("Not accepting transactions")]
     NotAcceptingTx,
 
@@ -75,4 +78,7 @@ pub enum FeeError {
 
     #[error("Invalid fee: {0}")]
     InvalidFee(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
 }

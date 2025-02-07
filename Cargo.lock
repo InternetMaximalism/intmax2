@@ -1031,6 +1031,7 @@ dependencies = [
  "intmax2-interfaces",
  "intmax2-zkp",
  "log",
+ "num-bigint 0.4.6",
  "plonky2",
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
  "redis",

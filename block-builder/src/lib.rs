@@ -26,4 +26,10 @@ pub struct EnvVar {
     pub deposit_check_interval: Option<u64>,
     pub initial_heart_beat_delay: u64,
     pub heart_beat_interval: u64,
+
+    pub beneficiary_pubkey: Option<H256>,
+    pub registration_fee: Option<String>,
+    pub non_registration_fee: Option<String>,
+    pub registration_collateral_fee: Option<String>,
+    pub non_registration_collateral_fee: Option<String>,
 }

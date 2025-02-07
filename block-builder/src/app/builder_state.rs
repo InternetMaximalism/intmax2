@@ -1,4 +1,4 @@
-use intmax2_interfaces::api::block_builder::interface::BlockBuilderStatus;
+use intmax2_interfaces::api::block_builder::interface::{BlockBuilderStatus, FeeProof};
 use intmax2_zkp::{
     common::{
         block_builder::{BlockProposal, UserSignature},
@@ -28,6 +28,7 @@ pub struct TxRequest {
     pubkey: U256,
     account_id: Option<u64>,
     tx: Tx,
+    fee_proof: Option<FeeProof>,
 }
 
 impl Default for TxRequest {
@@ -36,6 +37,7 @@ impl Default for TxRequest {
             pubkey: U256::dummy_pubkey(),
             account_id: Some(1), // account id of dummy pubkey is 1
             tx: Tx::default(),
+            fee_proof: None,
         }
     }
 }
@@ -163,13 +165,20 @@ impl BuilderState {
     }
 
     /// Accept tx request
-    pub fn append_tx_request(&mut self, pubkey: U256, account_id: Option<u64>, tx: Tx) {
+    pub fn append_tx_request(
+        &mut self,
+        pubkey: U256,
+        account_id: Option<u64>,
+        tx: Tx,
+        fee_proof: Option<FeeProof>,
+    ) {
         match self {
             BuilderState::AcceptingTxs(state) => {
                 state.tx_requests.push(TxRequest {
                     pubkey,
                     account_id,
                     tx,
+                    fee_proof,
                 });
             }
             _ => panic!("Invalid state transition"),

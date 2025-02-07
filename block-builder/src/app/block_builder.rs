@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
@@ -9,7 +9,7 @@ use intmax2_client_sdk::external_api::{
     validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
-    block_builder::interface::BlockBuilderStatus,
+    block_builder::interface::{BlockBuilderStatus, FeeProof},
     validity_prover::interface::ValidityProverClientInterface,
 };
 use intmax2_zkp::{
@@ -23,9 +23,15 @@ use intmax2_zkp::{
 use redis::AsyncCommands as _;
 use tokio::{sync::RwLock, time::sleep};
 
-use crate::{app::block_post::BlockPost, EnvVar};
+use crate::{
+    app::{block_post::BlockPost, fee::validate_fee_proof},
+    EnvVar,
+};
 
-use super::{block_post::post_block, builder_state::BuilderState, error::BlockBuilderError};
+use super::{
+    block_post::post_block, builder_state::BuilderState, error::BlockBuilderError,
+    fee::parse_fee_str,
+};
 
 // key for post_block
 pub const POST_BLOCK_KEY: &str = "block_builder::post_block";
@@ -46,6 +52,13 @@ struct Config {
     proposing_block_interval: u64,
     initial_heart_beat_delay: u64,
     heart_beat_interval: u64,
+
+    // fees
+    beneficiary_pubkey: Option<U256>,
+    registration_fee: Option<HashMap<u32, U256>>,
+    non_registration_fee: Option<HashMap<u32, U256>>,
+    registration_collateral_fee: Option<HashMap<u32, U256>>,
+    non_registration_collateral_fee: Option<HashMap<u32, U256>>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,7 +77,7 @@ pub struct BlockBuilder {
 }
 
 impl BlockBuilder {
-    pub fn new(env: &EnvVar) -> Self {
+    pub fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
         let store_vault_server_client =
             StoreVaultServerClient::new(&env.store_vault_server_base_url);
         let validity_prover_client = ValidityProverClient::new(&env.validity_prover_base_url);
@@ -87,6 +100,31 @@ impl BlockBuilder {
         };
 
         let redis_client = redis::Client::open(env.redis_url.clone()).unwrap();
+        let registration_fee = env
+            .registration_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let non_registration_fee = env
+            .non_registration_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let registration_collateral_fee = env
+            .registration_collateral_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let non_registration_collateral_fee = env
+            .non_registration_collateral_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+
+        let beneficiary_pubkey = env
+            .beneficiary_pubkey
+            .map(|pubkey| U256::from_bytes_be(&pubkey.as_bytes()));
+
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
@@ -96,8 +134,13 @@ impl BlockBuilder {
             proposing_block_interval: env.proposing_block_interval,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
+            beneficiary_pubkey,
+            registration_fee,
+            non_registration_fee,
+            registration_collateral_fee,
+            non_registration_collateral_fee,
         };
-        Self {
+        Ok(Self {
             config,
             store_vault_server_client,
             validity_prover_client,
@@ -109,7 +152,7 @@ impl BlockBuilder {
             next_deposit_index: Arc::new(RwLock::new(0)),
             registration_state: Arc::new(RwLock::new(BuilderState::default())),
             non_registration_state: Arc::new(RwLock::new(BuilderState::default())),
-        }
+        })
     }
 
     async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
@@ -158,6 +201,7 @@ impl BlockBuilder {
         is_registration_block: bool,
         pubkey: U256,
         tx: Tx,
+        fee_proof: &Option<FeeProof>,
     ) -> Result<(), BlockBuilderError> {
         log::info!(
             "send_tx_request is_registration_block: {}",
@@ -192,8 +236,27 @@ impl BlockBuilder {
             return Err(BlockBuilderError::AccountNotFound(pubkey));
         }
 
-        let mut state = self.state_write(is_registration_block).await;
+        // fee check
+        let required_fee = if is_registration_block {
+            self.config.registration_fee.as_ref()
+        } else {
+            self.config.non_registration_fee.as_ref()
+        };
+        let required_collateral_fee = if is_registration_block {
+            self.config.registration_collateral_fee.as_ref()
+        } else {
+            self.config.non_registration_collateral_fee.as_ref()
+        };
+        validate_fee_proof(
+            &self.store_vault_server_client,
+            self.config.beneficiary_pubkey,
+            required_fee,
+            required_collateral_fee,
+            fee_proof,
+        )
+        .await?;
 
+        let mut state = self.state_write(is_registration_block).await;
         // check again after the async call
         if !state.is_accepting_txs() {
             return Err(BlockBuilderError::NotAcceptingTx);
@@ -204,9 +267,8 @@ impl BlockBuilder {
         if state.is_pubkey_contained(pubkey) {
             return Err(BlockBuilderError::OnlyOneSenderAllowed);
         }
-
         // update state
-        state.append_tx_request(pubkey, account_id, tx);
+        state.append_tx_request(pubkey, account_id, tx, fee_proof.clone());
 
         Ok(())
     }

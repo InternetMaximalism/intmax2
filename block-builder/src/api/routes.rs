@@ -32,7 +32,12 @@ pub async fn tx_request(
     let request = request.into_inner();
     state
         .block_builder
-        .send_tx_request(request.is_registration_block, request.pubkey, request.tx)
+        .send_tx_request(
+            request.is_registration_block,
+            request.pubkey,
+            request.tx,
+            &request.fee_proof,
+        )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))
