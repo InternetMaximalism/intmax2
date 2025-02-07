@@ -172,23 +172,15 @@ impl BlockBuilder {
         }
 
         // registration check
-        let block_number = self.rollup_contract.get_latest_block_number().await?;
         let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
-        if block_number != account_info.block_number {
-            // todo: better error handling, maybe wait for the validity prover to sync
-            return Err(BlockBuilderError::ValidityProverIsNotSynced(
-                block_number,
-                account_info.block_number,
-            ));
-        }
-
+        let account_id = account_info.account_id;
         if is_registration_block {
-            if let Some(account_id) = account_info.account_id {
+            if let Some(account_id) = account_id {
                 return Err(BlockBuilderError::AccountAlreadyRegistered(
                     pubkey, account_id,
                 ));
             }
-        } else if account_info.account_id.is_none() {
+        } else if account_id.is_none() {
             return Err(BlockBuilderError::AccountNotFound(pubkey));
         }
 
@@ -206,7 +198,7 @@ impl BlockBuilder {
         }
 
         // update state
-        state.append_tx_request(pubkey, tx);
+        state.append_tx_request(pubkey, account_id, tx);
 
         Ok(())
     }
@@ -308,6 +300,7 @@ impl BlockBuilder {
             tx_tree_root: memo.tx_tree_root,
             expiry: memo.expiry,
             pubkeys: memo.pubkeys.clone(),
+            account_ids: memo.get_account_ids(),
             pubkey_hash: memo.pubkey_hash,
             signatures,
         };

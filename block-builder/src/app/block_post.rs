@@ -12,13 +12,15 @@ use serde::{Deserialize, Serialize};
 use super::error::BlockBuilderError;
 
 const PENALTY_FEE_POLLING_INTERVAL: u64 = 2;
+const EXPIRY_BUFFER: u64 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockPost {
     pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
     pub expiry: u64,
-    pub pubkeys: Vec<U256>, // sorted & padded pubkeys
+    pub pubkeys: Vec<U256>,            // sorted & padded pubkeys
+    pub account_ids: Vec<Option<u64>>, // account ids of the pubkeys
     pub pubkey_hash: Bytes32,
     pub signatures: Vec<UserSignature>,
 }
@@ -36,6 +38,7 @@ pub(crate) async fn post_block(
         block_post.tx_tree_root,
         block_post.expiry,
     );
+
     // wait until penalty fee is below allowance
     loop {
         let penalty_fee = rollup_contract.get_penalty().await?;
@@ -53,10 +56,23 @@ pub(crate) async fn post_block(
         .await;
     }
 
+    // expiry check
+    let current_time = chrono::Utc::now().timestamp() as u64;
+    if block_post.expiry != 0 && block_post.expiry < current_time + EXPIRY_BUFFER {
+        log::error!(
+            "Block already expired: expiry={}, current_time={}, buffer={}",
+            block_post.expiry,
+            current_time,
+            EXPIRY_BUFFER
+        );
+        return Err(BlockBuilderError::AlreadyExpired);
+    }
+
     // construct signature
     let mut account_id_packed = None;
     let mut eliminated_pubkeys = Vec::new();
     if block_post.is_registration_block {
+        // todo: batch check
         for pubkey in block_post.pubkeys.iter() {
             if pubkey.is_dummy_pubkey() {
                 // ignore dummy pubkey
@@ -68,18 +84,11 @@ pub(crate) async fn post_block(
             }
         }
     } else {
-        let mut account_ids = Vec::new();
-        for pubkey in block_post.pubkeys.iter() {
-            if pubkey.is_dummy_pubkey() {
-                account_ids.push(1); // dummy account id
-                continue;
-            }
-            let account_info = validity_prover_client.get_account_info(*pubkey).await?;
-            if account_info.account_id.is_none() {
-                return Err(BlockBuilderError::AccountNotFound(*pubkey));
-            }
-            account_ids.push(account_info.account_id.unwrap());
-        }
+        let account_ids: Vec<u64> = block_post
+            .account_ids
+            .iter()
+            .map(|id| (*id).unwrap())
+            .collect();
         account_id_packed = Some(AccountIdPacked::pack(&account_ids));
     }
     let account_id_hash = account_id_packed.map_or(Bytes32::default(), |ids| ids.hash());
@@ -148,6 +157,5 @@ pub(crate) async fn post_block(
             )
             .await?;
     };
-
     Ok(())
 }

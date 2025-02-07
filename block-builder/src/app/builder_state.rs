@@ -20,7 +20,24 @@ pub enum BuilderState {
 
 #[derive(Debug, Clone)]
 pub struct AcceptingTxState {
-    tx_requests: Vec<(U256, Tx)>, // hold in the order the request came
+    tx_requests: Vec<TxRequest>, // hold in the order the request came
+}
+
+#[derive(Debug, Clone)]
+pub struct TxRequest {
+    pubkey: U256,
+    account_id: Option<u64>,
+    tx: Tx,
+}
+
+impl Default for TxRequest {
+    fn default() -> Self {
+        Self {
+            pubkey: U256::dummy_pubkey(),
+            account_id: Some(1), // account id of dummy pubkey is 1
+            tx: Tx::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -35,7 +52,7 @@ pub struct ProposalMemo {
     pub expiry: u64,
     pub pubkeys: Vec<U256>,            // sorted & padded pubkeys
     pub pubkey_hash: Bytes32,          // hash of the sorted & padded pubkeys
-    pub tx_requests: Vec<(U256, Tx)>,  // not sorted tx requests
+    pub tx_requests: Vec<TxRequest>,   // not sorted tx requests
     pub proposals: Vec<BlockProposal>, // proposals in the order of the tx requests
 }
 
@@ -44,8 +61,27 @@ impl ProposalMemo {
         let position = self
             .tx_requests
             .iter()
-            .position(|(p, t)| *p == pubkey && *t == tx);
+            .position(|r| r.pubkey == pubkey && r.tx == tx);
         position.map(|pos| self.proposals[pos].clone())
+    }
+
+    fn get_account_id(&self, pubkey: U256) -> Option<u64> {
+        self.tx_requests
+            .iter()
+            .find(|r| r.pubkey == pubkey)
+            .and_then(|r| r.account_id)
+    }
+
+    pub fn get_account_ids(&self) -> Vec<Option<u64>> {
+        let mut account_ids = Vec::new();
+        for pubkey in self.pubkeys.iter() {
+            if *pubkey == U256::dummy_pubkey() {
+                account_ids.push(Some(1));
+            } else {
+                account_ids.push(self.get_account_id(*pubkey));
+            }
+        }
+        account_ids
     }
 }
 
@@ -75,7 +111,7 @@ impl BuilderState {
             BuilderState::AcceptingTxs(state) => state
                 .tx_requests
                 .iter()
-                .any(|(p, t)| p == &pubkey && t == &tx),
+                .any(|r| r.pubkey == pubkey && r.tx == tx),
             _ => false,
         }
     }
@@ -83,7 +119,7 @@ impl BuilderState {
     pub fn is_pubkey_contained(&self, pubkey: U256) -> bool {
         match self {
             BuilderState::AcceptingTxs(state) => {
-                state.tx_requests.iter().any(|(p, _)| p == &pubkey)
+                state.tx_requests.iter().any(|r| r.pubkey == pubkey)
             }
             _ => false,
         }
@@ -122,10 +158,14 @@ impl BuilderState {
     }
 
     /// Accept tx request
-    pub fn append_tx_request(&mut self, pubkey: U256, tx: Tx) {
+    pub fn append_tx_request(&mut self, pubkey: U256, account_id: Option<u64>, tx: Tx) {
         match self {
             BuilderState::AcceptingTxs(state) => {
-                state.tx_requests.push((pubkey, tx));
+                state.tx_requests.push(TxRequest {
+                    pubkey,
+                    account_id,
+                    tx,
+                });
             }
             _ => panic!("Invalid state transition"),
         }
@@ -142,26 +182,27 @@ impl BuilderState {
         };
 
         let mut sorted_and_padded_txs = tx_requests.clone();
-        sorted_and_padded_txs.sort_by(|a, b| b.0.cmp(&a.0));
-        sorted_and_padded_txs.resize(NUM_SENDERS_IN_BLOCK, (U256::dummy_pubkey(), Tx::default()));
+        sorted_and_padded_txs.sort_by(|a, b| b.pubkey.cmp(&a.pubkey));
+        sorted_and_padded_txs.resize(NUM_SENDERS_IN_BLOCK, TxRequest::default());
 
         let pubkeys = sorted_and_padded_txs
             .iter()
-            .map(|tx| tx.0)
+            .map(|tx| tx.pubkey)
             .collect::<Vec<_>>();
         let pubkey_hash = get_pubkey_hash(&pubkeys);
 
         let mut tx_tree = TxTree::new(TX_TREE_HEIGHT);
-        for (_, tx) in sorted_and_padded_txs.iter() {
-            tx_tree.push(*tx);
+        for r in sorted_and_padded_txs.iter() {
+            tx_tree.push(r.tx);
         }
         let tx_tree_root: Bytes32 = tx_tree.get_root().into();
 
         let mut proposals = Vec::new();
-        for (pubkey, _tx) in tx_requests.iter() {
+        for r in tx_requests.iter() {
+            let pubkey = r.pubkey;
             let tx_index = sorted_and_padded_txs
                 .iter()
-                .position(|(p, _)| p == pubkey)
+                .position(|r| r.pubkey == pubkey)
                 .unwrap() as u32;
             let tx_merkle_proof = tx_tree.prove(tx_index as u64);
             proposals.push(BlockProposal {

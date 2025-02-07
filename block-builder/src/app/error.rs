@@ -47,6 +47,9 @@ pub enum BlockBuilderError {
     #[error("Block builder should be pausing")]
     ShouldBePausing,
 
+    #[error("Block already expired")]
+    AlreadyExpired,
+
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
 }
