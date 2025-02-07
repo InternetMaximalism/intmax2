@@ -6,7 +6,7 @@ use ethers::{
     middleware::SignerMiddleware,
     providers::{Http, Provider},
     signers::Wallet,
-    types::{self, Bytes, H256},
+    types::{self, Bytes, H256, U256 as EthU256},
 };
 use intmax2_zkp::{
     common::{
@@ -303,7 +303,7 @@ impl RollupContract {
     pub async fn post_registration_block(
         &self,
         signer_private_key: H256,
-        msg_value: ethers::types::U256,
+        msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
         sender_flag: Bytes16,
@@ -322,6 +322,7 @@ impl RollupContract {
             .iter()
             .map(|e| ethers::types::U256::from_big_endian(&e.to_bytes_be()))
             .collect();
+        let msg_value = ethers::types::U256::from_big_endian(&msg_value.to_bytes_be());
         let mut tx = contract
             .post_registration_block(
                 tx_tree_root,
@@ -343,7 +344,7 @@ impl RollupContract {
     pub async fn post_non_registration_block(
         &self,
         signer_private_key: H256,
-        msg_value: ethers::types::U256,
+        msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
         sender_flag: Bytes16,
@@ -361,6 +362,7 @@ impl RollupContract {
         let message_point = encode_flat_g2(&message_point);
         let public_keys_hash: [u8; 32] = public_keys_hash.to_bytes_be().try_into().unwrap();
         let account_ids: Bytes = Bytes::from(account_ids);
+        let msg_value = ethers::types::U256::from_big_endian(&msg_value.to_bytes_be());
         let mut tx = contract
             .post_non_registration_block(
                 tx_tree_root,
@@ -414,9 +416,22 @@ impl RollupContract {
         let next_deposit_index = with_retry(|| async { contract.deposit_index().call().await })
             .await
             .map_err(|_| {
-                BlockchainError::RPCError("failed to get latest block number".to_string())
+                BlockchainError::RPCError("failed to get next deposit index".to_string())
             })?;
         Ok(next_deposit_index)
+    }
+
+    pub async fn get_penalty(&self) -> Result<U256, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let penalty: EthU256 = with_retry(|| async { contract.get_penalty().call().await })
+            .await
+            .map_err(|_| BlockchainError::RPCError("failed to get penalty fee".to_string()))?;
+        let penalty = {
+            let mut buf = [0u8; 32];
+            penalty.to_big_endian(&mut buf);
+            U256::from_bytes_be(&buf)
+        };
+        Ok(penalty)
     }
 }
 
@@ -445,6 +460,7 @@ mod tests {
         common::signature::SignatureContent,
         ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
     };
+    use num_bigint::BigUint;
 
     use crate::external_api::contract::rollup_contract::RollupContract;
 
@@ -488,7 +504,7 @@ mod tests {
         rollup_contract
             .post_non_registration_block(
                 private_key,
-                ethers::utils::parse_ether("1").unwrap(),
+                BigUint::from(10u32).pow(18).try_into().unwrap(),
                 Bytes32::rand(&mut rng),
                 signature.expiry.into(),
                 signature.sender_flag,

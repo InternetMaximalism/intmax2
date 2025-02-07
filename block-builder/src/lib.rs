@@ -7,6 +7,7 @@ pub mod app;
 #[derive(Deserialize)]
 pub struct EnvVar {
     pub port: u16,
+    pub redis_url: String,
     pub block_builder_url: String,
     pub l2_rpc_url: String,
     pub l2_chain_id: u64,

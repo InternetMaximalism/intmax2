@@ -43,6 +43,7 @@ pub struct BlockBuilder {
     validity_prover_client: ValidityProverClient,
     rollup_contract: RollupContract,
     registry_contract: BlockBuilderRegistryContract,
+    redis_client: redis::Client,
 
     force_post: Arc<RwLock<bool>>,
     next_deposit_index: Arc<RwLock<u32>>,
@@ -66,6 +67,8 @@ impl BlockBuilder {
         );
         let eth_allowance_for_block =
             ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
+
+        let redis_client = redis::Client::open(env.redis_url.clone()).unwrap();
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
@@ -81,6 +84,7 @@ impl BlockBuilder {
             validity_prover_client,
             rollup_contract,
             registry_contract,
+            redis_client,
 
             force_post: Arc::new(RwLock::new(false)),
             next_deposit_index: Arc::new(RwLock::new(0)),
