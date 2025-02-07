@@ -436,7 +436,7 @@ impl BlockBuilder {
 
     async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        let block_post_str: String = conn.blpop(POST_BLOCK_KEY, 0.).await?;
+        let (_key, block_post_str): (String, String) = conn.blpop(POST_BLOCK_KEY, 0.).await?;
         let block_post: BlockPost = serde_json::from_str(&block_post_str).unwrap();
         match post_block(
             self.config.block_builder_private_key,

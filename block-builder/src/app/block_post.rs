@@ -30,6 +30,12 @@ pub(crate) async fn post_block(
     validity_prover_client: &ValidityProverClient,
     block_post: BlockPost,
 ) -> Result<(), BlockBuilderError> {
+    log::info!(
+        "Posting block: is_registration_block={}, tx_tree_root={}, expiry={}",
+        block_post.is_registration_block,
+        block_post.tx_tree_root,
+        block_post.expiry,
+    );
     // wait until penalty fee is below allowance
     loop {
         let penalty_fee = rollup_contract.get_penalty().await?;
