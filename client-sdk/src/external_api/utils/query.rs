@@ -11,7 +11,36 @@ struct ErrorResponse {
     message: Option<String>,
 }
 
+#[cfg(not(test))]
 pub async fn post_request<B: Serialize, R: DeserializeOwned>(
+    base_url: &str,
+    endpoint: &str,
+    body: Option<&B>,
+) -> Result<R, ServerError> {
+    post_request_without_timeout_retry(base_url, endpoint, body).await
+}
+
+#[cfg(test)]
+pub async fn post_request<B: Serialize, R: DeserializeOwned>(
+    base_url: &str,
+    endpoint: &str,
+    body: Option<&B>,
+) -> Result<R, ServerError> {
+    let should_retry = |e: &ServerError| matches!(e, ServerError::ServerError(408, _, _, _));
+    log::info!("If a timeout occurs, we will retry.");
+
+    super::retry::retry_if(
+        should_retry,
+        || post_request_without_timeout_retry(base_url, endpoint, body),
+        super::retry::RetryConfig {
+            max_retries: 5,
+            initial_delay: 4000,
+        },
+    )
+    .await
+}
+
+pub async fn post_request_without_timeout_retry<B: Serialize, R: DeserializeOwned>(
     base_url: &str,
     endpoint: &str,
     body: Option<&B>,

@@ -41,6 +41,7 @@ pub struct MnemonicToPrivateKeyOptions {
 }
 
 const ETH_TOKEN_INDEX: u32 = 0;
+const NUM_TRANSFER_LOOPS: usize = 4;
 
 fn mnemonic_to_private_key(
     mnemonic_phrase: &str,
@@ -60,7 +61,10 @@ fn mnemonic_to_private_key(
     Ok(H256(private_key_bytes))
 }
 
-async fn wait_for_balance_synchronization(intmax_sender: KeySet) -> Result<(), CliError> {
+async fn wait_for_balance_synchronization(
+    intmax_sender: KeySet,
+    retry_interval: Duration,
+) -> Result<(), CliError> {
     loop {
         let result = balance(intmax_sender).await;
         match result {
@@ -95,23 +99,29 @@ async fn wait_for_balance_synchronization(intmax_sender: KeySet) -> Result<(), C
             }
         }
 
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        tokio::time::sleep(retry_interval).await;
     }
 }
 
 async fn transfer_with_error_handling(
     key: KeySet,
     transfer_inputs: &[TransferInput],
-) -> Option<CliError> {
-    let result = transfer(key, transfer_inputs).await;
-
-    match result {
-        Ok(_) => None,
-        Err(e) => Some(e),
+    num_loops: usize,
+) -> Result<(), CliError> {
+    for i in 0..num_loops {
+        log::trace!(
+            "Starting transfer from {} (iteration {}/{})",
+            key.pubkey,
+            i + 1,
+            num_loops
+        );
+        transfer(key, transfer_inputs).await?;
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
     }
-}
 
-// TODO: retry for rate limit
+    Ok(())
+}
 
 #[tokio::test]
 async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
@@ -149,7 +159,7 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
         intmax_recipients.push(key);
     }
 
-    // 1. sender -> recipients (bulk-transfer)
+    // sender -> multiple recipients (bulk-transfer)
     let transfers = intmax_recipients
         .iter()
         .map(|recipient| TransferInput {
@@ -159,9 +169,6 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<Vec<_>>();
     transfer(intmax_sender, &transfers).await?;
-
-    // println!("Transferred to recipients. Waiting for the balance to be updated...");
-    // tokio::time::sleep(Duration::from_secs(30)).await;
 
     Ok(())
 }
@@ -198,12 +205,23 @@ async fn test_sync_balance() -> Result<(), Box<dyn std::error::Error>> {
         intmax_recipients.push(key);
     }
 
-    wait_for_balance_synchronization(intmax_sender).await?;
+    wait_for_balance_synchronization(intmax_sender, Duration::from_secs(5)).await?;
     println!("Balance updated. Proceeding to the next step.");
 
     for (i, recipient) in intmax_recipients.iter().enumerate() {
         println!("Recipient ({}/{})", i + 1, num_of_recipients);
-        wait_for_balance_synchronization(*recipient).await?;
+        wait_for_balance_synchronization(*recipient, Duration::from_secs(5)).await?;
+    }
+    println!("Balance updated. Proceeding to the next step.");
+
+    {
+        let options = MnemonicToPrivateKeyOptions {
+            account_index: 1,
+            address_index: 0,
+        };
+        let private_key = mnemonic_to_private_key(&master_mnemonic_phrase, options)?;
+        let key = generate_intmax_account_from_eth_key(private_key);
+        wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
     }
 
     Ok(())
@@ -223,7 +241,6 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
         config.balance_prover_base_url
     );
 
-    // For example, MNEMONIC="park remain person kitchen mule spell knee armed position rail grid ankle"
     let master_mnemonic_phrase = config.master_mnemonic;
     let num_of_recipients = config.num_of_recipients.unwrap_or(1);
     log::debug!("Number of recipients: {}", num_of_recipients);
@@ -233,7 +250,7 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
 
     let offset = 0;
 
-    let mut intmax_recipients = vec![];
+    let mut intmax_senders = vec![];
     for address_index in 0..num_of_recipients {
         let options = MnemonicToPrivateKeyOptions {
             account_index: 0,
@@ -241,7 +258,7 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
         };
         let private_key = mnemonic_to_private_key(&master_mnemonic_phrase, options)?;
         let key = generate_intmax_account_from_eth_key(private_key);
-        intmax_recipients.push(key);
+        intmax_senders.push(key);
     }
 
     let intmax_recipient = {
@@ -254,7 +271,7 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
         generate_intmax_account_from_eth_key(private_key)
     };
 
-    // 2. recipients -> sender (simultaneously)
+    // multiple senders -> receiver (simultaneously)
     let transfer_input = TransferInput {
         recipient: intmax_recipient.pubkey.to_hex(),
         amount: 100u128,
@@ -265,11 +282,14 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
     log::info!("Transferring from recipients to sender...");
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let futures = intmax_recipients.iter().map(|recipient| {
-        let future = transfer_with_error_handling(*recipient, &transfers);
+    let futures = intmax_senders.iter().map(|sender| async {
+        let future = transfer_with_error_handling(*sender, &transfers, NUM_TRANSFER_LOOPS)
+            .await
+            .err();
 
         future
     });
+
     let errors = join_all(futures).await;
     for (i, error) in errors.iter().enumerate() {
         if let Some(e) = error {
