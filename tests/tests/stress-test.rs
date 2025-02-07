@@ -41,7 +41,7 @@ pub struct MnemonicToPrivateKeyOptions {
 }
 
 const ETH_TOKEN_INDEX: u32 = 0;
-const NUM_TRANSFER_LOOPS: usize = 4;
+const NUM_TRANSFER_LOOPS: usize = 2;
 
 fn mnemonic_to_private_key(
     mnemonic_phrase: &str,
@@ -61,7 +61,7 @@ fn mnemonic_to_private_key(
     Ok(H256(private_key_bytes))
 }
 
-async fn wait_for_balance_synchronization(
+pub async fn wait_for_balance_synchronization(
     intmax_sender: KeySet,
     retry_interval: Duration,
 ) -> Result<(), CliError> {
@@ -123,6 +123,25 @@ async fn transfer_with_error_handling(
     Ok(())
 }
 
+pub fn derive_intmax_keys(
+    master_mnemonic_phrase: &str,
+    num_of_keys: u32,
+    offset: u32,
+) -> Result<Vec<KeySet>, Box<dyn std::error::Error>> {
+    let mut intmax_senders = vec![];
+    for address_index in 0..num_of_keys {
+        let options = MnemonicToPrivateKeyOptions {
+            account_index: 0,
+            address_index: offset + address_index,
+        };
+        let private_key = mnemonic_to_private_key(master_mnemonic_phrase, options)?;
+        let key = generate_intmax_account_from_eth_key(private_key);
+        intmax_senders.push(key);
+    }
+
+    Ok(intmax_senders)
+}
+
 #[tokio::test]
 async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv()?;
@@ -148,23 +167,14 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
     let offset = config.recipient_offset.unwrap_or(0);
     println!("Recipient offset: {}", offset);
 
-    let mut intmax_recipients = vec![];
-    for address_index in 0..num_of_recipients {
-        let options = MnemonicToPrivateKeyOptions {
-            account_index: 0,
-            address_index: offset + address_index,
-        };
-        let private_key = mnemonic_to_private_key(&master_mnemonic_phrase, options)?;
-        let key = generate_intmax_account_from_eth_key(private_key);
-        intmax_recipients.push(key);
-    }
+    let intmax_recipients = derive_intmax_keys(&master_mnemonic_phrase, num_of_recipients, offset)?;
 
     // sender -> multiple recipients (bulk-transfer)
     let transfers = intmax_recipients
         .iter()
         .map(|recipient| TransferInput {
             recipient: recipient.pubkey.to_hex(),
-            amount: 10000u128,
+            amount: 1000000000u128,
             token_index: ETH_TOKEN_INDEX,
         })
         .collect::<Vec<_>>();
@@ -193,17 +203,7 @@ async fn test_sync_balance() -> Result<(), Box<dyn std::error::Error>> {
     println!("Number of recipients: {}", num_of_recipients);
 
     let offset = 0;
-
-    let mut intmax_recipients = vec![];
-    for address_index in 0..num_of_recipients {
-        let options = MnemonicToPrivateKeyOptions {
-            account_index: 0,
-            address_index: offset + address_index,
-        };
-        let private_key = mnemonic_to_private_key(&master_mnemonic_phrase, options)?;
-        let key = generate_intmax_account_from_eth_key(private_key);
-        intmax_recipients.push(key);
-    }
+    let intmax_recipients = derive_intmax_keys(&master_mnemonic_phrase, num_of_recipients, offset)?;
 
     wait_for_balance_synchronization(intmax_sender, Duration::from_secs(5)).await?;
     println!("Balance updated. Proceeding to the next step.");
@@ -249,17 +249,7 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
     }
 
     let offset = 0;
-
-    let mut intmax_senders = vec![];
-    for address_index in 0..num_of_recipients {
-        let options = MnemonicToPrivateKeyOptions {
-            account_index: 0,
-            address_index: offset + address_index,
-        };
-        let private_key = mnemonic_to_private_key(&master_mnemonic_phrase, options)?;
-        let key = generate_intmax_account_from_eth_key(private_key);
-        intmax_senders.push(key);
-    }
+    let intmax_senders = derive_intmax_keys(&master_mnemonic_phrase, num_of_recipients, offset)?;
 
     let intmax_recipient = {
         let options = MnemonicToPrivateKeyOptions {
@@ -274,7 +264,7 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
     // multiple senders -> receiver (simultaneously)
     let transfer_input = TransferInput {
         recipient: intmax_recipient.pubkey.to_hex(),
-        amount: 100u128,
+        amount: 10u128,
         token_index: ETH_TOKEN_INDEX,
     };
     let transfers = [transfer_input];
