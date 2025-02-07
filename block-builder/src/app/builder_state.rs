@@ -7,7 +7,7 @@ use intmax2_zkp::{
         tx::Tx,
     },
     constants::{NUM_SENDERS_IN_BLOCK, TX_TREE_HEIGHT},
-    ethereum_types::{bytes32::Bytes32, u256::U256},
+    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
 
 #[derive(Default, Debug, Clone)]
@@ -48,6 +48,7 @@ pub struct ProposingBlockState {
 
 #[derive(Debug, Clone)]
 pub struct ProposalMemo {
+    pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
     pub expiry: u64,
     pub pubkeys: Vec<U256>,            // sorted & padded pubkeys
@@ -66,22 +67,26 @@ impl ProposalMemo {
     }
 
     fn get_account_id(&self, pubkey: U256) -> Option<u64> {
+        if pubkey == U256::dummy_pubkey() {
+            return Some(1);
+        }
         self.tx_requests
             .iter()
             .find(|r| r.pubkey == pubkey)
             .and_then(|r| r.account_id)
     }
 
-    pub fn get_account_ids(&self) -> Vec<Option<u64>> {
-        let mut account_ids = Vec::new();
-        for pubkey in self.pubkeys.iter() {
-            if *pubkey == U256::dummy_pubkey() {
-                account_ids.push(Some(1));
-            } else {
-                account_ids.push(self.get_account_id(*pubkey));
-            }
+    pub fn get_account_ids(&self) -> Option<AccountIdPacked> {
+        if self.is_registration_block {
+            None
+        } else {
+            let account_ids: Vec<u64> = self
+                .pubkeys
+                .iter()
+                .map(|pubkey| self.get_account_id(*pubkey).unwrap())
+                .collect();
+            Some(AccountIdPacked::pack(&account_ids))
         }
-        account_ids
     }
 }
 
@@ -172,7 +177,7 @@ impl BuilderState {
     }
 
     /// Propose a block with the tx requests
-    pub fn propose_block(&mut self) {
+    pub fn propose_block(&mut self, is_registration_block: bool) {
         // todo: set
         let expiry = 0;
 
@@ -216,6 +221,7 @@ impl BuilderState {
         }
 
         let memo = ProposalMemo {
+            is_registration_block,
             tx_tree_root,
             expiry,
             pubkeys,

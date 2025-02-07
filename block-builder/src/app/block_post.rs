@@ -19,8 +19,8 @@ pub struct BlockPost {
     pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
     pub expiry: u64,
-    pub pubkeys: Vec<U256>,            // sorted & padded pubkeys
-    pub account_ids: Vec<Option<u64>>, // account ids of the pubkeys
+    pub pubkeys: Vec<U256>, // sorted & padded pubkeys
+    pub account_ids: Option<AccountIdPacked>,
     pub pubkey_hash: Bytes32,
     pub signatures: Vec<UserSignature>,
 }
@@ -84,12 +84,8 @@ pub(crate) async fn post_block(
             }
         }
     } else {
-        let account_ids: Vec<u64> = block_post
-            .account_ids
-            .iter()
-            .map(|id| (*id).unwrap())
-            .collect();
-        account_id_packed = Some(AccountIdPacked::pack(&account_ids));
+        let account_ids = block_post.account_ids.expect("account_ids is not set");
+        account_id_packed = Some(account_ids);
     }
     let account_id_hash = account_id_packed.map_or(Bytes32::default(), |ids| ids.hash());
     let mut sender_with_signatures = block_post

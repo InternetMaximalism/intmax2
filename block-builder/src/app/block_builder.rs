@@ -216,7 +216,7 @@ impl BlockBuilder {
         if !state.is_accepting_txs() {
             return Err(BlockBuilderError::NotAcceptingTx);
         }
-        state.propose_block();
+        state.propose_block(is_registration_block);
         Ok(())
     }
 
