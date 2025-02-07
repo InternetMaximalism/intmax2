@@ -13,23 +13,30 @@ use intmax2_interfaces::api::{
 };
 use intmax2_zkp::{
     common::{
-        block_builder::{construct_signature, BlockProposal, SenderWithSignature, UserSignature},
+        block_builder::{BlockProposal, UserSignature},
         tx::Tx,
     },
     constants::NUM_SENDERS_IN_BLOCK,
-    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
+use redis::AsyncCommands as _;
 use tokio::{sync::RwLock, time::sleep};
 
-use crate::EnvVar;
+use crate::{app::block_post::BlockPost, EnvVar};
 
-use super::{builder_state::BuilderState, error::BlockBuilderError};
+use super::{block_post::post_block, builder_state::BuilderState, error::BlockBuilderError};
+
+// key for post_block
+pub const POST_BLOCK_KEY: &str = "block_builder::post_block";
+
+// dead letter queue for post_block
+pub const POST_BLOCK_DLQ_KEY: &str = "block_builder::post_block_dlq";
 
 #[derive(Debug, Clone)]
 struct Config {
     block_builder_url: String,
     block_builder_private_key: H256,
-    eth_allowance_for_block: ethers::types::U256,
+    eth_allowance_for_block: U256,
     deposit_check_interval: Option<u64>,
     accepting_tx_interval: u64,
     proposing_block_interval: u64,
@@ -65,8 +72,12 @@ impl BlockBuilder {
             env.l2_chain_id,
             env.block_builder_registry_contract_address,
         );
-        let eth_allowance_for_block =
-            ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
+        let eth_allowance_for_block = {
+            let u = ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
+            let mut buf = [0u8; 32];
+            u.to_big_endian(&mut buf);
+            U256::from_bytes_be(&buf)
+        };
 
         let redis_client = redis::Client::open(env.redis_url.clone()).unwrap();
         let config = Config {
@@ -291,108 +302,19 @@ impl BlockBuilder {
         let signatures = state.get_signatures().unwrap();
         drop(state); // release the lock
 
-        let mut account_id_packed = None;
-        if is_registration_block {
-            for pubkey in memo.pubkeys.iter() {
-                if pubkey.is_dummy_pubkey() {
-                    // ignore dummy pubkey
-                    continue;
-                }
-                let account_info = self
-                    .validity_prover_client
-                    .get_account_info(*pubkey)
-                    .await?;
-                if account_info.account_id.is_some() {
-                    // This is unrecoverable so abandon the block
-                    self.reset(is_registration_block).await;
-                    return Err(BlockBuilderError::AccountAlreadyRegistered(
-                        *pubkey,
-                        account_info.account_id.unwrap(),
-                    ));
-                }
-            }
-        } else {
-            let mut account_ids = Vec::new();
-            for pubkey in memo.pubkeys.iter() {
-                if pubkey.is_dummy_pubkey() {
-                    account_ids.push(1); // dummy account id
-                    continue;
-                }
-                let account_info = self
-                    .validity_prover_client
-                    .get_account_info(*pubkey)
-                    .await?;
-                if account_info.account_id.is_none() {
-                    // This is unrecoverable so abandon the block
-                    self.reset(is_registration_block).await;
-                    return Err(BlockBuilderError::AccountNotFound(*pubkey));
-                }
-                account_ids.push(account_info.account_id.unwrap());
-            }
-            account_id_packed = Some(AccountIdPacked::pack(&account_ids));
-        }
-        let account_id_hash = account_id_packed.map_or(Bytes32::default(), |ids| ids.hash());
-        let mut sender_with_signatures = memo
-            .pubkeys
-            .iter()
-            .map(|pubkey| SenderWithSignature {
-                sender: *pubkey,
-                signature: None,
-            })
-            .collect::<Vec<_>>();
-        for signature in signatures.iter() {
-            let tx_index = memo
-                .pubkeys
-                .iter()
-                .position(|pubkey| pubkey == &signature.pubkey)
-                .unwrap(); // safe
-            sender_with_signatures[tx_index].signature = Some(signature.signature.clone());
-        }
-        let signature = construct_signature(
-            memo.tx_tree_root,
-            memo.expiry,
-            memo.pubkey_hash,
-            account_id_hash,
+        // queue the block post
+        let block_post = BlockPost {
             is_registration_block,
-            &sender_with_signatures,
-        );
-
-        // call contract
-        if is_registration_block {
-            let trimmed_pubkeys = memo
-                .pubkeys
-                .into_iter()
-                .filter(|pubkey| !pubkey.is_dummy_pubkey())
-                .collect::<Vec<_>>();
-            self.rollup_contract
-                .post_registration_block(
-                    self.config.block_builder_private_key,
-                    self.config.eth_allowance_for_block,
-                    memo.tx_tree_root,
-                    memo.expiry,
-                    signature.sender_flag,
-                    signature.agg_pubkey,
-                    signature.agg_signature,
-                    signature.message_point,
-                    trimmed_pubkeys,
-                )
-                .await?;
-        } else {
-            self.rollup_contract
-                .post_non_registration_block(
-                    self.config.block_builder_private_key,
-                    self.config.eth_allowance_for_block,
-                    memo.tx_tree_root,
-                    memo.expiry,
-                    signature.sender_flag,
-                    signature.agg_pubkey,
-                    signature.agg_signature,
-                    signature.message_point,
-                    memo.pubkey_hash,
-                    account_id_packed.unwrap().to_trimmed_bytes(),
-                )
-                .await?;
+            tx_tree_root: memo.tx_tree_root,
+            expiry: memo.expiry,
+            pubkeys: memo.pubkeys.clone(),
+            pubkey_hash: memo.pubkey_hash,
+            signatures,
         };
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        conn.rpush::<&str, String, ()>(POST_BLOCK_KEY, serde_json::to_string(&block_post).unwrap())
+            .await?;
+
         // update state
         self.state_write(is_registration_block)
             .await
@@ -512,6 +434,45 @@ impl BlockBuilder {
         });
     }
 
+    async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let block_post_str: String = conn.blpop(POST_BLOCK_KEY, 0.).await?;
+        let block_post: BlockPost = serde_json::from_str(&block_post_str).unwrap();
+        match post_block(
+            self.config.block_builder_private_key,
+            self.config.eth_allowance_for_block,
+            &self.rollup_contract,
+            &self.validity_prover_client,
+            block_post,
+        )
+        .await
+        {
+            Ok(_) => {
+                log::info!("Block posted");
+            }
+            Err(e) => {
+                log::error!("Error in posting block: {}", e);
+                conn.rpush::<&str, String, ()>(POST_BLOCK_DLQ_KEY, block_post_str)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    fn post_block_job(self) {
+        actix_web::rt::spawn(async move {
+            loop {
+                match self.post_block_inner().await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("Error in post block job: {}", e);
+                    }
+                }
+                sleep(Duration::from_secs(10)).await;
+            }
+        });
+    }
+
     fn post_empty_block_job(self, deposit_check_interval: u64) {
         actix_web::rt::spawn(async move {
             loop {
@@ -555,6 +516,7 @@ impl BlockBuilder {
         if let Some(deposit_check_interval) = self.config.deposit_check_interval {
             self.clone().post_empty_block_job(deposit_check_interval);
         }
+        self.clone().post_block_job();
         self.clone().cycle_job(true);
         self.clone().cycle_job(false);
         self.clone().emit_heart_beat_job();

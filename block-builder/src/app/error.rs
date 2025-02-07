@@ -1,6 +1,7 @@
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
 use intmax2_interfaces::api::error::ServerError;
 use intmax2_zkp::ethereum_types::u256::U256;
+use redis::RedisError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BlockBuilderError {
@@ -9,6 +10,9 @@ pub enum BlockBuilderError {
 
     #[error("Server error: {0}")]
     ServerError(#[from] ServerError),
+
+    #[error("Redis error: {0}")]
+    RedisError(#[from] RedisError),
 
     #[error("Not accepting transactions")]
     NotAcceptingTx,

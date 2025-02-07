@@ -23,7 +23,7 @@ pub struct BlockPost {
     pub signatures: Vec<UserSignature>,
 }
 
-pub async fn post_block(
+pub(crate) async fn post_block(
     block_builder_private_key: H256,
     eth_allowance_for_block: U256,
     rollup_contract: &RollupContract,
