@@ -15,7 +15,7 @@ use intmax2_interfaces::{
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
         tx_data::TxData,
-        user_data::ProcessStatus,
+        user_data::{Balances, ProcessStatus},
     },
 };
 use intmax2_zkp::{
@@ -42,6 +42,7 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
+    fee::generate_fee_proof,
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     strategy::mining::{fetch_mining_info, Mining},
     sync::utils::{generate_spent_witness, get_balance_proof},
@@ -171,6 +172,8 @@ where
         block_builder_url: &str,
         key: KeySet,
         transfers: Vec<Transfer>,
+        fee_index: Option<u32>,
+        collateral_transfer: Option<Transfer>,
     ) -> Result<TxRequestMemo, ClientError> {
         // input validation
         if transfers.is_empty() {
@@ -183,6 +186,13 @@ where
                 "transfers is too long".to_string(),
             ));
         }
+        if let Some(fee_index) = fee_index {
+            if fee_index >= transfers.len() as u32 {
+                return Err(ClientError::TransferLenError(
+                    "fee_index is out of range".to_string(),
+                ));
+            }
+        }
 
         // sync balance proof
         self.sync(key).await?;
@@ -194,24 +204,11 @@ where
 
         // balance check
         let balances = user_data.balances();
-        for transfer in &transfers {
-            let balance = balances
-                .0
-                .get(&transfer.token_index)
-                .cloned()
-                .unwrap_or_default();
-            if balance.is_insufficient {
-                return Err(ClientError::BalanceError(format!(
-                    "Already insufficient: token index {}",
-                    transfer.token_index
-                )));
-            }
-            if balance.amount < transfer.amount {
-                return Err(ClientError::BalanceError(format!(
-                    "Insufficient balance: {} < {} for token #{}",
-                    balance.amount, transfer.amount, transfer.token_index
-                )));
-            }
+        balance_check(&balances, &transfers)?;
+
+        // balance check for collateral transfer
+        if let Some(collateral_transfer) = collateral_transfer.as_ref() {
+            balance_check(&balances, &[*collateral_transfer])?;
         }
 
         // generate spent proof
@@ -238,6 +235,23 @@ where
         let sender_proof_set_ephemeral_key: U256 =
             BigUint::from(ephemeral_key.privkey).try_into().unwrap();
 
+        let fee_proof = if let Some(fee_index) = fee_index {
+            let fee_proof = generate_fee_proof(
+                &self.balance_prover,
+                key,
+                &user_data,
+                sender_proof_set_ephemeral_key,
+                tx_nonce,
+                fee_index,
+                &transfers,
+                collateral_transfer,
+            )
+            .await?;
+            Some(fee_proof)
+        } else {
+            None
+        };
+
         // fetch if this is first time tx
         let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
@@ -252,7 +266,7 @@ where
                     is_registration_block,
                     key.pubkey,
                     tx,
-                    None,
+                    fee_proof.clone(),
                 )
                 .await;
             match result {
@@ -477,4 +491,19 @@ where
     ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
         fetch_tx_history(self, key).await
     }
+}
+
+fn balance_check(balances: &Balances, transfers: &[Transfer]) -> Result<(), ClientError> {
+    let mut balances = balances.clone();
+    for transfer in transfers {
+        let prev_balance = balances.get(transfer.token_index);
+        let is_insufficient = balances.sub_transfer(transfer);
+        if is_insufficient {
+            return Err(ClientError::BalanceError(format!(
+                "Insufficient balance: {} < {} for token #{}",
+                prev_balance, transfer.amount, transfer.token_index
+            )));
+        }
+    }
+    Ok(())
 }
