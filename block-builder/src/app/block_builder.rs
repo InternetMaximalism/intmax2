@@ -24,7 +24,10 @@ use redis::AsyncCommands as _;
 use tokio::{sync::RwLock, time::sleep};
 
 use crate::{
-    app::{block_post::BlockPost, fee::validate_fee_proof},
+    app::{
+        block_post::BlockPost,
+        fee::{collect_fee, validate_fee_proof, FeeCollection},
+    },
     EnvVar,
 };
 
@@ -363,13 +366,43 @@ impl BlockBuilder {
             pubkeys: memo.pubkeys.clone(),
             account_ids: memo.get_account_ids(),
             pubkey_hash: memo.pubkey_hash,
-            signatures,
+            signatures: signatures.clone(),
         };
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         conn.rpush::<&str, String, ()>(POST_BLOCK_KEY, serde_json::to_string(&block_post).unwrap())
             .await?;
 
         // queue fee transfer
+        let use_fee = if is_registration_block {
+            self.config.registration_fee.is_some()
+        } else {
+            self.config.non_registration_fee.is_some()
+        };
+        if use_fee {
+            let beneficiary_pubkey =
+                self.config
+                    .beneficiary_pubkey
+                    .ok_or(BlockBuilderError::UnexpectedError(
+                        "Beneficiary pubkey is not set".to_string(),
+                    ))?;
+            let use_collateral = if is_registration_block {
+                self.config.registration_collateral_fee.is_some()
+            } else {
+                self.config.non_registration_collateral_fee.is_some()
+            };
+            let fee_collection = FeeCollection {
+                use_collateral,
+                memo,
+                signatures,
+            };
+            collect_fee(
+                &self.redis_client,
+                &self.store_vault_server_client,
+                beneficiary_pubkey,
+                &fee_collection,
+            )
+            .await?;
+        }
 
         // update state
         self.state_write(is_registration_block)

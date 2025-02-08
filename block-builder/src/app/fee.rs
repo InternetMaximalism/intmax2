@@ -196,7 +196,6 @@ pub fn parse_fee_str(fee: &str) -> Result<HashMap<u32, U256>, FeeError> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeeCollection {
-    pub use_fee: bool,
     pub use_collateral: bool,
     pub memo: ProposalMemo,
     pub signatures: Vec<UserSignature>,
@@ -208,6 +207,10 @@ pub async fn collect_fee(
     beneficiary_pubkey: U256,
     fee_collection: &FeeCollection,
 ) -> Result<(), BlockBuilderError> {
+    log::info!(
+        "collect_fee: use_collateral {}",
+        fee_collection.use_collateral
+    );
     let mut transfer_data_vec = Vec::new();
     let memo = &fee_collection.memo;
     let mut conn = redis_client.get_multiplexed_async_connection().await?;
@@ -290,6 +293,7 @@ pub async fn collect_fee(
         return Ok(());
     }
 
+    // save transfer data to the store vault server
     let entries = transfer_data_vec
         .iter()
         .map(|transfer_data| SaveDataEntry {
