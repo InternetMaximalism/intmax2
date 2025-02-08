@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
-
 use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
     contract::{
@@ -9,7 +7,7 @@ use intmax2_client_sdk::external_api::{
     validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
-    block_builder::interface::{BlockBuilderStatus, FeeProof},
+    block_builder::interface::{BlockBuilderStatus, FeeInfo, FeeProof},
     validity_prover::interface::ValidityProverClientInterface,
 };
 use intmax2_zkp::{
@@ -21,6 +19,7 @@ use intmax2_zkp::{
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use redis::AsyncCommands as _;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::sleep};
 
 use crate::{
@@ -32,8 +31,10 @@ use crate::{
 };
 
 use super::{
-    block_post::post_block, builder_state::BuilderState, error::BlockBuilderError,
-    fee::parse_fee_str,
+    block_post::post_block,
+    builder_state::BuilderState,
+    error::BlockBuilderError,
+    fee::{convert_fee_vec, parse_fee_str},
 };
 
 // key for post_block
@@ -156,6 +157,17 @@ impl BlockBuilder {
             registration_state: Arc::new(RwLock::new(BuilderState::default())),
             non_registration_state: Arc::new(RwLock::new(BuilderState::default())),
         })
+    }
+
+    pub fn get_fee_info(&self) -> FeeInfo {
+        FeeInfo {
+            registration_fee: convert_fee_vec(&self.config.registration_fee),
+            non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
+            registration_collateral_fee: convert_fee_vec(&self.config.registration_collateral_fee),
+            non_registration_collateral_fee: convert_fee_vec(
+                &self.config.non_registration_collateral_fee,
+            ),
+        }
     }
 
     // utility functions

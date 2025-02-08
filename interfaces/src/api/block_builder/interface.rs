@@ -35,8 +35,24 @@ pub enum BlockBuilderStatus {
     ProposingBlock, // after constructed the block, accepting signatures for the block
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Fee {
+    pub token_index: u32,
+    pub amount: U256,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FeeInfo {
+    pub registration_fee: Option<Vec<Fee>>,
+    pub non_registration_fee: Option<Vec<Fee>>,
+    pub registration_collateral_fee: Option<Vec<Fee>>,
+    pub non_registration_collateral_fee: Option<Vec<Fee>>,
+}
+
 #[async_trait(?Send)]
 pub trait BlockBuilderClientInterface {
+    async fn get_fee_info(&self, block_builder_url: &str) -> Result<FeeInfo, ServerError>;
+
     // Get the status of the block builder
     async fn get_status(
         &self,

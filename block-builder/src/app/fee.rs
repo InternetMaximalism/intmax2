@@ -7,7 +7,7 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::{
     api::{
-        block_builder::interface::FeeProof,
+        block_builder::interface::{Fee, FeeProof},
         store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
@@ -307,4 +307,15 @@ pub async fn collect_fee(
         .save_data_batch(dummy_key, &entries)
         .await?;
     Ok(())
+}
+
+pub fn convert_fee_vec(fee: &Option<HashMap<u32, U256>>) -> Option<Vec<Fee>> {
+    fee.as_ref().map(|fee| {
+        fee.iter()
+            .map(|(token_index, amount)| Fee {
+                token_index: *token_index,
+                amount: *amount,
+            })
+            .collect()
+    })
 }

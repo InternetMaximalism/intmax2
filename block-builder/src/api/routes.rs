@@ -3,14 +3,23 @@ use actix_web::{
     web::{Data, Json},
     Error,
 };
-use intmax2_interfaces::api::block_builder::types::{
-    GetBlockBuilderStatusQuery, GetBlockBuilderStatusResponse, PostSignatureRequest,
-    QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
+use intmax2_interfaces::api::block_builder::{
+    interface::FeeInfo,
+    types::{
+        GetBlockBuilderStatusQuery, GetBlockBuilderStatusResponse, PostSignatureRequest,
+        QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
+    },
 };
 use intmax2_zkp::common::block_builder::UserSignature;
 use serde_qs::actix::QsQuery;
 
 use crate::api::state::State;
+
+#[get("/fee-info")]
+pub async fn get_fee_info(state: Data<State>) -> Result<Json<FeeInfo>, Error> {
+    let fee_info = state.block_builder.get_fee_info();
+    Ok(Json(fee_info))
+}
 
 #[get("/status")]
 pub async fn get_status(
@@ -77,6 +86,7 @@ pub async fn post_signature(
 
 pub fn block_builder_scope() -> actix_web::Scope {
     actix_web::web::scope("/block-builder")
+        .service(get_fee_info)
         .service(get_status)
         .service(tx_request)
         .service(query_proposal)
