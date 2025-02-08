@@ -161,6 +161,7 @@ impl BlockBuilder {
 
     pub fn get_fee_info(&self) -> FeeInfo {
         FeeInfo {
+            beneficiary: self.config.beneficiary_pubkey,
             registration_fee: convert_fee_vec(&self.config.registration_fee),
             non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
             registration_collateral_fee: convert_fee_vec(&self.config.registration_collateral_fee),

@@ -91,8 +91,7 @@ pub async fn send_tx_request(
     block_builder_url: &str,
     private_key: &str,
     transfers: Vec<JsTransfer>,
-    fee_index: Option<u32>,
-    collateral_transfer: Option<JsTransfer>,
+    fee_token_index: u32,
 ) -> Result<JsTxRequestMemo, JsError> {
     init_logger();
     if transfers.len() > NUM_TRANSFERS_IN_TX {
@@ -106,17 +105,10 @@ pub async fn send_tx_request(
         .iter()
         .map(|transfer| transfer.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
-    let collateral_transfer = collateral_transfer.map(|t| t.try_into()).transpose()?;
 
     let client = get_client(config);
     let memo = client
-        .send_tx_request(
-            block_builder_url,
-            key,
-            transfers,
-            fee_index,
-            collateral_transfer,
-        )
+        .send_tx_request(block_builder_url, key, transfers, fee_token_index)
         .await
         .map_err(|e| JsError::new(&format!("failed to send tx request {}", e)))?;
 

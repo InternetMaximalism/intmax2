@@ -39,6 +39,9 @@ pub enum ClientError {
     #[error("Invalid mining deposit criteria")]
     InvalidMiningDepositCriteria,
 
+    #[error("Fee token {0} is not supported")]
+    FeeTokenIsNotSupported(u32),
+
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
 }

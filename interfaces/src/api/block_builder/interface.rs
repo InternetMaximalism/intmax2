@@ -42,7 +42,9 @@ pub struct Fee {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FeeInfo {
+    pub beneficiary: Option<U256>,
     pub registration_fee: Option<Vec<Fee>>,
     pub non_registration_fee: Option<Vec<Fee>>,
     pub registration_collateral_fee: Option<Vec<Fee>>,

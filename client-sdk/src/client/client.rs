@@ -20,9 +20,9 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        block_builder::BlockProposal, deposit::get_pubkey_salt_hash, signature::key_set::KeySet,
-        transfer::Transfer, trees::transfer_tree::TransferTree, tx::Tx,
-        witness::spent_witness::SpentWitness,
+        block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
+        generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer,
+        trees::transfer_tree::TransferTree, tx::Tx, witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
@@ -42,7 +42,7 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
-    fee::generate_fee_proof,
+    fee::{generate_fee_proof, quote_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     strategy::mining::{fetch_mining_info, Mining},
     sync::utils::{generate_spent_witness, get_balance_proof},
@@ -172,8 +172,7 @@ where
         block_builder_url: &str,
         key: KeySet,
         transfers: Vec<Transfer>,
-        fee_index: Option<u32>,
-        collateral_transfer: Option<Transfer>,
+        fee_token_index: u32,
     ) -> Result<TxRequestMemo, ClientError> {
         // input validation
         if transfers.is_empty() {
@@ -181,18 +180,48 @@ where
                 "transfers is empty".to_string(),
             ));
         }
-        if transfers.len() > NUM_TRANSFERS_IN_TX {
+        if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
             return Err(ClientError::TransferLenError(
-                "transfers is too long".to_string(),
+                "transfers is too many".to_string(),
             ));
         }
-        if let Some(fee_index) = fee_index {
-            if fee_index >= transfers.len() as u32 {
-                return Err(ClientError::TransferLenError(
-                    "fee_index is out of range".to_string(),
-                ));
-            }
-        }
+        // fetch if this is first time tx
+        let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
+        let is_registration_block = account_info.account_id.is_none();
+
+        // get fee info
+        let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
+        let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
+        let fee_transfer = fee_info.beneficiary.map(|beneficiary| Transfer {
+            recipient: GenericAddress::from_pubkey(beneficiary),
+            amount: fee,
+            token_index: fee_token_index,
+            salt: generate_salt(),
+        });
+        // add fee transfer to the end
+        let transfers = if let Some(fee_transfer) = fee_transfer {
+            transfers
+                .into_iter()
+                .chain(std::iter::once(fee_transfer))
+                .collect()
+        } else {
+            transfers
+        };
+        let fee_index = if fee_transfer.is_some() {
+            Some(transfers.len() as u32 - 1)
+        } else {
+            None
+        };
+        let collateral_transfer = if collateral_fee > 0.into() {
+            Some(Transfer {
+                recipient: GenericAddress::from_pubkey(key.pubkey),
+                amount: collateral_fee,
+                token_index: fee_token_index,
+                salt: generate_salt(),
+            })
+        } else {
+            None
+        };
 
         // sync balance proof
         self.sync(key).await?;
@@ -251,10 +280,6 @@ where
         } else {
             None
         };
-
-        // fetch if this is first time tx
-        let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
-        let is_registration_block = account_info.account_id.is_none();
 
         // send tx request
         let mut retries = 0;

@@ -54,6 +54,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             to,
             amount,
             token_index,
+            fee_token_index,
         } => {
             let key = privkey_to_keyset(private_key);
             let transfer_input = TransferInput {
@@ -61,11 +62,12 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
                 amount,
                 token_index,
             };
-            transfer(key, &[transfer_input]).await?;
+            transfer(key, &[transfer_input], fee_token_index.unwrap_or_default()).await?;
         }
         Commands::BatchTransfer {
             private_key,
             csv_path,
+            fee_token_index,
         } => {
             let key = privkey_to_keyset(private_key);
             let mut reader = csv::Reader::from_path(csv_path)?;
@@ -77,7 +79,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             if transfers.len() > MAX_BATCH_TRANSFER {
                 return Err(CliError::TooManyTransfer(transfers.len()));
             }
-            transfer(key, &transfers).await?;
+            transfer(key, &transfers, fee_token_index.unwrap_or_default()).await?;
         }
         Commands::Deposit {
             eth_private_key,

@@ -21,12 +21,16 @@ pub enum Commands {
         amount: u128,
         #[clap(long)]
         token_index: u32,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
     },
     BatchTransfer {
         #[clap(long)]
         private_key: H256,
         #[clap(long)]
         csv_path: String,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
     },
     Deposit {
         #[clap(long)]
