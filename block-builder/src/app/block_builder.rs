@@ -123,7 +123,7 @@ impl BlockBuilder {
 
         let beneficiary_pubkey = env
             .beneficiary_pubkey
-            .map(|pubkey| U256::from_bytes_be(&pubkey.as_bytes()));
+            .map(|pubkey| U256::from_bytes_be(pubkey.as_bytes()));
 
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
@@ -155,16 +155,7 @@ impl BlockBuilder {
         })
     }
 
-    async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
-        self.registry_contract
-            .emit_heart_beat(
-                self.config.block_builder_private_key,
-                &self.config.block_builder_url,
-            )
-            .await?;
-        Ok(())
-    }
-
+    // utility functions
     async fn state_read(
         &self,
         is_registration_block: bool,
@@ -193,6 +184,18 @@ impl BlockBuilder {
         } else {
             self.non_registration_state.read().await.get_status()
         }
+    }
+
+    async fn num_tx_requests(
+        &self,
+        is_registration_block: bool,
+    ) -> Result<usize, BlockBuilderError> {
+        log::info!(
+            "num_tx_requests is_registration_block: {}",
+            is_registration_block
+        );
+        let state = self.state_read(is_registration_block).await;
+        Ok(state.count_tx_requests())
     }
 
     // Send a tx request by the user.
@@ -338,18 +341,6 @@ impl BlockBuilder {
         Ok(())
     }
 
-    async fn num_tx_requests(
-        &self,
-        is_registration_block: bool,
-    ) -> Result<usize, BlockBuilderError> {
-        log::info!(
-            "num_tx_requests is_registration_block: {}",
-            is_registration_block
-        );
-        let state = self.state_read(is_registration_block).await;
-        Ok(state.count_tx_requests())
-    }
-
     // Post the block with the given signatures.
     pub async fn post_block(&self, is_registration_block: bool) -> Result<(), BlockBuilderError> {
         log::info!(
@@ -378,6 +369,8 @@ impl BlockBuilder {
         conn.rpush::<&str, String, ()>(POST_BLOCK_KEY, serde_json::to_string(&block_post).unwrap())
             .await?;
 
+        // queue fee transfer
+
         // update state
         self.state_write(is_registration_block)
             .await
@@ -385,6 +378,7 @@ impl BlockBuilder {
         Ok(())
     }
 
+    // cycle functions
     async fn start_accepting_txs(
         &self,
         is_registration_block: bool,
@@ -461,6 +455,16 @@ impl BlockBuilder {
     }
 
     // job
+    async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
+        self.registry_contract
+            .emit_heart_beat(
+                self.config.block_builder_private_key,
+                &self.config.block_builder_url,
+            )
+            .await?;
+        Ok(())
+    }
+
     fn emit_heart_beat_job(self) {
         let start_time = chrono::Utc::now().timestamp() as u64;
         actix_web::rt::spawn(async move {

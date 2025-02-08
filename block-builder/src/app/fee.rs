@@ -1,21 +1,40 @@
 use std::collections::HashMap;
 
+use ethers::core::rand;
 use intmax2_client_sdk::{
     client::strategy::common::fetch_sender_proof_set,
     external_api::store_vault_server::StoreVaultServerClient,
 };
 use intmax2_interfaces::{
-    api::block_builder::interface::FeeProof,
-    data::{sender_proof_set::SenderProofSet, validation::Validation},
+    api::{
+        block_builder::interface::FeeProof,
+        store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+    },
+    data::{
+        encryption::Encryption, sender_proof_set::SenderProofSet, transfer_data::TransferData,
+        validation::Validation,
+    },
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
-    common::{signature::key_set::KeySet, witness::transfer_witness::TransferWitness},
-    ethereum_types::u256::U256,
+    common::{
+        block_builder::UserSignature,
+        signature::{key_set::KeySet, sign::get_pubkey_hash},
+        witness::transfer_witness::TransferWitness,
+    },
+    constants::NUM_SENDERS_IN_BLOCK,
+    ethereum_types::{account_id_packed::AccountIdPacked, u256::U256},
 };
 use num_bigint::BigUint;
+use redis::AsyncCommands as _;
+use serde::{Deserialize, Serialize};
 
-use super::error::FeeError;
+use super::{
+    block_builder::POST_BLOCK_SECONDARY_KEY,
+    block_post::BlockPost,
+    builder_state::ProposalMemo,
+    error::{BlockBuilderError, FeeError},
+};
 
 pub async fn validate_fee_proof(
     store_vault_server_client: &StoreVaultServerClient,
@@ -24,20 +43,21 @@ pub async fn validate_fee_proof(
     required_collateral_fee: Option<&HashMap<u32, U256>>,
     fee_proof: &Option<FeeProof>,
 ) -> Result<(), FeeError> {
+    log::info!(
+        "validate_fee_proof: required_fee {}, required_collateral_fee {}",
+        required_fee.is_some(),
+        required_collateral_fee.is_some()
+    );
     if required_fee.is_none() {
         return Ok(());
     }
     let required_fee = required_fee.unwrap();
-    if fee_proof.is_none() {
-        return Err(FeeError::InvalidFee("Fee proof is missing".to_string()));
-    }
-    let fee_proof = fee_proof.as_ref().unwrap();
-    if beneficiary_pubkey.is_none() {
-        return Err(FeeError::InvalidFee(
-            "Beneficiary pubkey is missing".to_string(),
-        ));
-    }
-    let beneficiary_pubkey = beneficiary_pubkey.unwrap();
+    let fee_proof = fee_proof
+        .as_ref()
+        .ok_or(FeeError::InvalidFee("Fee proof is missing".to_string()))?;
+    let beneficiary_pubkey = beneficiary_pubkey.ok_or(FeeError::InvalidFee(
+        "Beneficiary pubkey is missing".to_string(),
+    ))?;
 
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server_client,
@@ -56,12 +76,12 @@ pub async fn validate_fee_proof(
 
     // validate collateral fee
     if let Some(collateral_fee) = required_collateral_fee {
-        if fee_proof.collateral_block.is_none() {
-            return Err(FeeError::InvalidFee(
+        let collateral_block = fee_proof
+            .collateral_block
+            .as_ref()
+            .ok_or(FeeError::InvalidFee(
                 "Collateral block is missing".to_string(),
-            ));
-        }
-        let collateral_block = fee_proof.collateral_block.as_ref().unwrap();
+            ))?;
         let sender_proof_set = SenderProofSet {
             spent_proof: collateral_block.spent_proof.clone(),
             prev_balance_proof: sender_proof_set.prev_balance_proof,
@@ -172,4 +192,115 @@ pub fn parse_fee_str(fee: &str) -> Result<HashMap<u32, U256>, FeeError> {
         fee_map.insert(token_index, fee_amount);
     }
     Ok(fee_map)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeeCollection {
+    pub use_fee: bool,
+    pub use_collateral: bool,
+    pub memo: ProposalMemo,
+    pub signatures: Vec<UserSignature>,
+}
+
+pub async fn collect_fee(
+    redis_client: &redis::Client,
+    store_vault_server_client: &StoreVaultServerClient,
+    beneficiary_pubkey: U256,
+    fee_collection: &FeeCollection,
+) -> Result<(), BlockBuilderError> {
+    let mut transfer_data_vec = Vec::new();
+    let memo = &fee_collection.memo;
+    let mut conn = redis_client.get_multiplexed_async_connection().await?;
+    for (request, proposal) in memo.tx_requests.iter().zip(memo.proposals.iter()) {
+        // this already validated in the tx request phase
+        let fee_proof = request
+            .fee_proof
+            .as_ref()
+            .ok_or(BlockBuilderError::FeeError(FeeError::InvalidFee(
+                "Fee proof is missing".to_string(),
+            )))?;
+
+        // check if the sender returned the signature
+        let signature = fee_collection
+            .signatures
+            .iter()
+            .find(|s| s.pubkey == request.pubkey);
+        if signature.is_some() {
+            // fee will be paid
+            let transfer_data = TransferData {
+                sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
+                sender_proof_set: None,
+                sender: request.pubkey,
+                tx: request.tx,
+                tx_index: proposal.tx_index,
+                tx_merkle_proof: proposal.tx_merkle_proof.clone(),
+                tx_tree_root: proposal.tx_tree_root,
+                transfer: fee_proof.fee_transfer_witness.transfer,
+                transfer_index: fee_proof.fee_transfer_witness.transfer_index,
+                transfer_merkle_proof: fee_proof.fee_transfer_witness.transfer_merkle_proof.clone(),
+            };
+            transfer_data_vec.push(transfer_data);
+        } else {
+            if !fee_collection.use_collateral {
+                log::warn!(
+                    "sender {} did not return the signature for the fee but collateral is not enabled",
+                    request.pubkey
+                );
+                continue;
+            }
+            // this is already validated in the tx request phase
+            let collateral_block =
+                fee_proof
+                    .collateral_block
+                    .as_ref()
+                    .ok_or(BlockBuilderError::FeeError(FeeError::InvalidFee(
+                        "Collateral block is missing".to_string(),
+                    )))?;
+            let mut pubkeys = vec![request.pubkey];
+            pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
+            let pubkey_hash = get_pubkey_hash(&pubkeys);
+            let account_ids = request.account_id.map(|id| {
+                let mut account_ids = vec![id];
+                account_ids.resize(NUM_SENDERS_IN_BLOCK, 1);
+                AccountIdPacked::pack(&account_ids)
+            });
+            let signatures = vec![UserSignature {
+                pubkey: request.pubkey,
+                signature: collateral_block.signature.clone(),
+            }];
+            let block_post = BlockPost {
+                is_registration_block: memo.is_registration_block,
+                tx_tree_root: memo.tx_tree_root,
+                expiry: memo.expiry,
+                pubkeys,
+                account_ids,
+                pubkey_hash,
+                signatures,
+            };
+            conn.rpush::<&str, String, ()>(
+                POST_BLOCK_SECONDARY_KEY,
+                serde_json::to_string(&block_post).unwrap(),
+            )
+            .await?;
+        }
+    }
+
+    if transfer_data_vec.is_empty() {
+        // early return if no fee to collect
+        return Ok(());
+    }
+
+    let entries = transfer_data_vec
+        .iter()
+        .map(|transfer_data| SaveDataEntry {
+            data_type: DataType::Transfer,
+            pubkey: beneficiary_pubkey,
+            encrypted_data: transfer_data.encrypt(beneficiary_pubkey),
+        })
+        .collect::<Vec<_>>();
+    let dummy_key = KeySet::rand(&mut rand::thread_rng());
+    let _uuids = store_vault_server_client
+        .save_data_batch(dummy_key, &entries)
+        .await?;
+    Ok(())
 }

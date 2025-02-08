@@ -9,6 +9,7 @@ use intmax2_zkp::{
     constants::{NUM_SENDERS_IN_BLOCK, TX_TREE_HEIGHT},
     ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone)]
 pub enum BuilderState {
@@ -23,12 +24,12 @@ pub struct AcceptingTxState {
     tx_requests: Vec<TxRequest>, // hold in the order the request came
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxRequest {
-    pubkey: U256,
-    account_id: Option<u64>,
-    tx: Tx,
-    fee_proof: Option<FeeProof>,
+    pub pubkey: U256,
+    pub account_id: Option<u64>,
+    pub tx: Tx,
+    pub fee_proof: Option<FeeProof>,
 }
 
 impl Default for TxRequest {
@@ -48,7 +49,7 @@ pub struct ProposingBlockState {
     signatures: Vec<UserSignature>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProposalMemo {
     pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
