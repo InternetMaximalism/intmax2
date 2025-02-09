@@ -1,4 +1,7 @@
-use intmax2_interfaces::{api::error::ServerError, data::encryption::errors::EncryptionError};
+use intmax2_interfaces::{
+    api::error::ServerError,
+    data::{encryption::errors::EncryptionError, proof_compression::ProofCompressionError},
+};
 use thiserror::Error;
 
 use crate::external_api::contract::error::BlockchainError;
@@ -10,6 +13,9 @@ pub enum StrategyError {
 
     #[error("Encryption error: {0}")]
     EncryptionError(#[from] EncryptionError),
+
+    #[error("Proof compression error: {0}")]
+    ProofCompressionError(#[from] ProofCompressionError),
 
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),

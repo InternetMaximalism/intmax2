@@ -279,6 +279,7 @@ where
 
         let fee_proof = if let Some(fee_index) = fee_index {
             let fee_proof = generate_fee_proof(
+                &self.store_vault_server,
                 &self.balance_prover,
                 key,
                 &user_data,

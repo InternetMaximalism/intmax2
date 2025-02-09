@@ -2,8 +2,12 @@ use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
         block_builder::interface::{CollateralBlock, Fee, FeeInfo, FeeProof},
+        store_vault_server::interface::StoreVaultClientInterface,
     },
-    data::{proof_compression::CompressedSpentProof, user_data::UserData},
+    data::{
+        encryption::Encryption, proof_compression::CompressedSpentProof,
+        sender_proof_set::SenderProofSet, user_data::UserData,
+    },
 };
 use intmax2_zkp::{
     common::{
@@ -20,11 +24,13 @@ use intmax2_zkp::{
     constants::{NUM_SENDERS_IN_BLOCK, TRANSFER_TREE_HEIGHT, TX_TREE_HEIGHT},
     ethereum_types::{bytes32::Bytes32, u256::U256},
 };
+use num_bigint::BigUint;
 
 use super::{error::ClientError, sync::utils::generate_spent_witness};
 
 #[allow(clippy::too_many_arguments)]
-pub async fn generate_fee_proof<B: BalanceProverClientInterface>(
+pub async fn generate_fee_proof<S: StoreVaultClientInterface, B: BalanceProverClientInterface>(
+    store_vault_server: &S,
     balance_prover: &B,
     key: KeySet,
     user_data: &UserData,
@@ -55,6 +61,21 @@ pub async fn generate_fee_proof<B: BalanceProverClientInterface>(
             generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers).await?;
         let tx = spent_witness.tx;
         let spent_proof = balance_prover.prove_spent(key, &spent_witness).await?;
+        let compressed_spent_proof = CompressedSpentProof::new(&spent_proof)?;
+        let sender_proof_set = SenderProofSet {
+            spent_proof: compressed_spent_proof,
+            prev_balance_proof: user_data.balance_proof.clone().unwrap(), // unwrap is safe
+        };
+        let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
+        store_vault_server
+            .save_sender_proof_set(
+                ephemeral_key,
+                &sender_proof_set.encrypt(ephemeral_key.pubkey),
+            )
+            .await?;
+        let sender_proof_set_ephemeral_key: U256 =
+            BigUint::from(ephemeral_key.privkey).try_into().unwrap();
+
         let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
         transfer_tree.push(collateral_transfer);
         let transfer_index = 0u32;
@@ -76,7 +97,7 @@ pub async fn generate_fee_proof<B: BalanceProverClientInterface>(
         let signature: FlatG2 =
             sign_to_tx_root_and_expiry(key.privkey, tx_tree_root, expiry, pubkey_hash).into();
         let collateral_block = CollateralBlock {
-            spent_proof: CompressedSpentProof::new(&spent_proof)?,
+            sender_proof_set_ephemeral_key,
             fee_transfer_witness,
             expiry,
             signature,

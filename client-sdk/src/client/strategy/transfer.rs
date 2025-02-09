@@ -11,9 +11,13 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         transfer_data::TransferData,
         user_data::ProcessStatus,
+        validation::Validation,
     },
 };
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{
+    circuits::balance::send::spent_circuit::SpentPublicInputs, common::signature::key_set::KeySet,
+    utils::conversion::ToU64,
+};
 
 #[derive(Debug, Clone)]
 pub struct TransferInfo {
@@ -55,6 +59,24 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
             // return other errors
             Err(e) => return Err(e),
         };
+        // validate sender proof set
+        match sender_proof_set.validate(key) {
+            Ok(_) => {
+                // check tx
+                let spent_proof = sender_proof_set.spent_proof.decompress()?;
+                let spent_pis =
+                    SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec());
+                if spent_pis.tx != transfer_data.tx {
+                    log::error!("tx in sender proof set is different from tx in transfer data");
+                    continue;
+                }
+            }
+            Err(e) => {
+                log::error!("failed to validate sender proof set: {}", e);
+                continue;
+            }
+        }
+
         let mut transfer_data = transfer_data;
         transfer_data.set_sender_proof_set(sender_proof_set);
 

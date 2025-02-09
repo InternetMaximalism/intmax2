@@ -100,11 +100,12 @@ pub async fn validate_fee_proof(
             .map_err(|e| {
                 FeeError::SignatureVerificationError(format!("Failed to verify signature: {}", e))
             })?;
+        let sender_proof_set = fetch_sender_proof_set(
+            store_vault_server_client,
+            collateral_block.sender_proof_set_ephemeral_key,
+        )
+        .await?;
 
-        let sender_proof_set = SenderProofSet {
-            spent_proof: collateral_block.spent_proof.clone(),
-            prev_balance_proof: sender_proof_set.prev_balance_proof,
-        };
         let transfer_witness = &collateral_block.fee_transfer_witness;
         validate_fee_single(
             beneficiary_pubkey,
@@ -312,7 +313,7 @@ pub async fn collect_fee(
 
             // save transfer data
             let transfer_data = TransferData {
-                sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
+                sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
                 sender_proof_set: None,
                 sender: request.pubkey,
                 tx,
@@ -329,7 +330,7 @@ pub async fn collect_fee(
                 force_post: false,
                 is_registration_block: memo.is_registration_block,
                 tx_tree_root,
-                expiry: memo.expiry,
+                expiry,
                 pubkeys,
                 account_ids,
                 pubkey_hash,
