@@ -81,4 +81,7 @@ pub enum FeeError {
 
     #[error("Parse error: {0}")]
     ParseError(String),
+
+    #[error("Signature verification error: {0}")]
+    SignatureVerificationError(String),
 }

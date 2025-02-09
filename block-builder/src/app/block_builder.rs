@@ -271,6 +271,7 @@ impl BlockBuilder {
             self.config.beneficiary_pubkey,
             required_fee,
             required_collateral_fee,
+            pubkey,
             fee_proof,
         )
         .await?;

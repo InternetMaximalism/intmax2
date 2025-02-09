@@ -20,9 +20,10 @@ use intmax2_zkp::{
     common::{
         block_builder::UserSignature,
         signature::{key_set::KeySet, sign::get_pubkey_hash},
+        trees::tx_tree::TxTree,
         witness::transfer_witness::TransferWitness,
     },
-    constants::NUM_SENDERS_IN_BLOCK,
+    constants::{NUM_SENDERS_IN_BLOCK, TX_TREE_HEIGHT},
     ethereum_types::{account_id_packed::AccountIdPacked, u256::U256},
 };
 use num_bigint::BigUint;
@@ -41,6 +42,7 @@ pub async fn validate_fee_proof(
     beneficiary_pubkey: Option<U256>,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
+    sender: U256,
     fee_proof: &Option<FeeProof>,
 ) -> Result<(), FeeError> {
     log::info!(
@@ -82,6 +84,23 @@ pub async fn validate_fee_proof(
             .ok_or(FeeError::InvalidFee(
                 "Collateral block is missing".to_string(),
             ))?;
+        // validate signature
+        let user_signature = UserSignature {
+            pubkey: sender,
+            signature: collateral_block.signature.clone(),
+        };
+        let mut tx_tree = TxTree::new(TX_TREE_HEIGHT);
+        tx_tree.push(collateral_block.fee_transfer_witness.tx);
+        let tx_tree_root = tx_tree.get_root().into();
+        let mut pubkeys = vec![sender];
+        pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
+        let pubkey_hash = get_pubkey_hash(&pubkeys);
+        user_signature
+            .verify(tx_tree_root, collateral_block.expiry, pubkey_hash)
+            .map_err(|e| {
+                FeeError::SignatureVerificationError(format!("Failed to verify signature: {}", e))
+            })?;
+
         let sender_proof_set = SenderProofSet {
             spent_proof: collateral_block.spent_proof.clone(),
             prev_balance_proof: sender_proof_set.prev_balance_proof,
@@ -251,6 +270,20 @@ pub async fn collect_fee(
                 );
                 continue;
             }
+            // let transfer_data = TransferData {
+            //     sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
+            //     sender_proof_set: None,
+            //     sender: request.pubkey,
+            //     tx: request.tx,
+            //     tx_index: proposal.tx_index,
+            //     tx_merkle_proof: proposal.tx_merkle_proof.clone(),
+            //     tx_tree_root: proposal.tx_tree_root,
+            //     transfer: fee_proof.fee_transfer_witness.transfer,
+            //     transfer_index: fee_proof.fee_transfer_witness.transfer_index,
+            //     transfer_merkle_proof: fee_proof.fee_transfer_witness.transfer_merkle_proof.clone(),
+            // };
+            // transfer_data_vec.push(transfer_data);
+
             // this is already validated in the tx request phase
             let collateral_block =
                 fee_proof
