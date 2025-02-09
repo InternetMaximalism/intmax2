@@ -564,9 +564,7 @@ impl BlockBuilder {
         )
         .await
         {
-            Ok(_) => {
-                log::info!("Block posted");
-            }
+            Ok(_) => {}
             Err(e) => {
                 log::error!("Error in posting block: {}", e);
                 conn.rpush::<&str, String, ()>(POST_BLOCK_DLQ_KEY, block_post_str)
