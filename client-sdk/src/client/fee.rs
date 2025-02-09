@@ -125,5 +125,5 @@ fn get_fee(fee_index: u32, fee_list: &[Fee]) -> Result<U256, ClientError> {
     fee_list
         .get(fee_index as usize)
         .map(|fee| fee.amount)
-        .ok_or_else(|| ClientError::FeeTokenIsNotSupported(fee_index))
+        .ok_or_else(|| ClientError::BlockBuilderFeeError("Fee token is not found".to_string()))
 }

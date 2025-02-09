@@ -192,6 +192,18 @@ where
         // get fee info
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
         let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
+        log::info!(
+            "send_tx_request: fee {}, collateral_fee {} for fee_token_index {}",
+            fee,
+            collateral_fee,
+            fee_token_index
+        );
+        if collateral_fee > 0.into() && fee_info.beneficiary.is_none() {
+            return Err(ClientError::BlockBuilderFeeError(
+                "Collateral fee is required but beneficiary is not set".to_string(),
+            ));
+        }
+
         let fee_transfer = fee_info.beneficiary.map(|beneficiary| Transfer {
             recipient: GenericAddress::from_pubkey(beneficiary),
             amount: fee,
@@ -213,8 +225,9 @@ where
             None
         };
         let collateral_transfer = if collateral_fee > 0.into() {
+            let beneficiary = fee_info.beneficiary.unwrap(); // already checked
             Some(Transfer {
-                recipient: GenericAddress::from_pubkey(key.pubkey),
+                recipient: GenericAddress::from_pubkey(beneficiary),
                 amount: collateral_fee,
                 token_index: fee_token_index,
                 salt: generate_salt(),

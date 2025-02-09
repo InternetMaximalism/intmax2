@@ -16,6 +16,7 @@ const EXPIRY_BUFFER: u64 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockPost {
+    pub force_post: bool,
     pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
     pub expiry: u64,
@@ -33,11 +34,18 @@ pub(crate) async fn post_block(
     block_post: BlockPost,
 ) -> Result<(), BlockBuilderError> {
     log::info!(
-        "Posting block: is_registration_block={}, tx_tree_root={}, expiry={}",
+        "Posting block: is_registration_block={}, tx_tree_root={}, expiry={}, num_signatures={}, force_post={}",
         block_post.is_registration_block,
         block_post.tx_tree_root,
         block_post.expiry,
+        block_post.signatures.len(),
+        block_post.force_post
     );
+
+    if block_post.signatures.is_empty() && !block_post.force_post {
+        log::warn!("No signatures in the block. Skipping post.");
+        return Ok(());
+    }
 
     // wait until penalty fee is below allowance
     loop {

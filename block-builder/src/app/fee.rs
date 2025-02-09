@@ -24,7 +24,7 @@ use intmax2_zkp::{
         witness::transfer_witness::TransferWitness,
     },
     constants::{NUM_SENDERS_IN_BLOCK, TX_TREE_HEIGHT},
-    ethereum_types::{account_id_packed::AccountIdPacked, u256::U256},
+    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
 use num_bigint::BigUint;
 use redis::AsyncCommands as _;
@@ -262,6 +262,7 @@ pub async fn collect_fee(
                 transfer_merkle_proof: fee_proof.fee_transfer_witness.transfer_merkle_proof.clone(),
             };
             transfer_data_vec.push(transfer_data);
+            log::info!("sender {}'s fee is collected", request.pubkey);
         } else {
             if !fee_collection.use_collateral {
                 log::warn!(
@@ -270,20 +271,6 @@ pub async fn collect_fee(
                 );
                 continue;
             }
-            // let transfer_data = TransferData {
-            //     sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
-            //     sender_proof_set: None,
-            //     sender: request.pubkey,
-            //     tx: request.tx,
-            //     tx_index: proposal.tx_index,
-            //     tx_merkle_proof: proposal.tx_merkle_proof.clone(),
-            //     tx_tree_root: proposal.tx_tree_root,
-            //     transfer: fee_proof.fee_transfer_witness.transfer,
-            //     transfer_index: fee_proof.fee_transfer_witness.transfer_index,
-            //     transfer_merkle_proof: fee_proof.fee_transfer_witness.transfer_merkle_proof.clone(),
-            // };
-            // transfer_data_vec.push(transfer_data);
-
             // this is already validated in the tx request phase
             let collateral_block =
                 fee_proof
@@ -292,6 +279,13 @@ pub async fn collect_fee(
                     .ok_or(BlockBuilderError::FeeError(FeeError::InvalidFee(
                         "Collateral block is missing".to_string(),
                     )))?;
+            let fee_transfer_witness = &collateral_block.fee_transfer_witness;
+            let tx = fee_transfer_witness.tx;
+            let tx_index = 0;
+            let mut tx_tree = TxTree::new(TX_TREE_HEIGHT);
+            tx_tree.push(tx);
+            let tx_tree_root: Bytes32 = tx_tree.get_root().into();
+            let tx_merkle_proof = tx_tree.prove(tx_index as u64);
             let mut pubkeys = vec![request.pubkey];
             pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
             let pubkey_hash = get_pubkey_hash(&pubkeys);
@@ -300,24 +294,53 @@ pub async fn collect_fee(
                 account_ids.resize(NUM_SENDERS_IN_BLOCK, 1);
                 AccountIdPacked::pack(&account_ids)
             });
-            let signatures = vec![UserSignature {
+            let expiry = collateral_block.expiry;
+            let signature = UserSignature {
                 pubkey: request.pubkey,
                 signature: collateral_block.signature.clone(),
-            }];
+            };
+
+            // validate signature again
+            signature
+                .verify(tx_tree_root, expiry, pubkey_hash)
+                .map_err(|e| {
+                    BlockBuilderError::FeeError(FeeError::SignatureVerificationError(format!(
+                        "Failed to verify signature: {}",
+                        e
+                    )))
+                })?;
+
+            // save transfer data
+            let transfer_data = TransferData {
+                sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
+                sender_proof_set: None,
+                sender: request.pubkey,
+                tx,
+                tx_index,
+                tx_merkle_proof,
+                tx_tree_root,
+                transfer: fee_transfer_witness.transfer,
+                transfer_index: fee_transfer_witness.transfer_index,
+                transfer_merkle_proof: fee_transfer_witness.transfer_merkle_proof.clone(),
+            };
+            transfer_data_vec.push(transfer_data);
+
             let block_post = BlockPost {
+                force_post: false,
                 is_registration_block: memo.is_registration_block,
-                tx_tree_root: memo.tx_tree_root,
+                tx_tree_root,
                 expiry: memo.expiry,
                 pubkeys,
                 account_ids,
                 pubkey_hash,
-                signatures,
+                signatures: vec![signature],
             };
             conn.rpush::<&str, String, ()>(
                 POST_BLOCK_SECONDARY_KEY,
                 serde_json::to_string(&block_post).unwrap(),
             )
             .await?;
+            log::warn!("sender {}'s collateral block is queued", request.pubkey);
         }
     }
 

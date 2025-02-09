@@ -359,7 +359,11 @@ impl BlockBuilder {
     }
 
     // Post the block with the given signatures.
-    pub async fn post_block(&self, is_registration_block: bool) -> Result<(), BlockBuilderError> {
+    pub async fn post_block(
+        &self,
+        is_registration_block: bool,
+        force_post: bool,
+    ) -> Result<(), BlockBuilderError> {
         log::info!(
             "post_block is_registration_block: {}",
             is_registration_block
@@ -374,6 +378,7 @@ impl BlockBuilder {
 
         // queue the block post
         let block_post = BlockPost {
+            force_post,
             is_registration_block,
             tx_tree_root: memo.tx_tree_root,
             expiry: memo.expiry,
@@ -491,7 +496,8 @@ impl BlockBuilder {
 
         tokio::time::sleep(Duration::from_secs(self.config.proposing_block_interval)).await;
 
-        self.post_block(is_registration_block).await?;
+        let force_post = *self.force_post.read().await;
+        self.post_block(is_registration_block, force_post).await?;
 
         let force_post = *self.force_post.read().await;
         if force_post {
