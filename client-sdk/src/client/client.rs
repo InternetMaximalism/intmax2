@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
+        block_builder::interface::{BlockBuilderClientInterface, CollateralBlock},
         store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::{
@@ -20,9 +20,14 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
-        generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer,
-        trees::transfer_tree::TransferTree, tx::Tx, witness::spent_witness::SpentWitness,
+        block_builder::BlockProposal,
+        deposit::get_pubkey_salt_hash,
+        generic_address::GenericAddress,
+        signature::key_set::KeySet,
+        transfer::Transfer,
+        trees::{transfer_tree::TransferTree, tx_tree::TxTree},
+        tx::Tx,
+        witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
@@ -75,6 +80,7 @@ pub struct TxRequestMemo {
     pub transfers: Vec<Transfer>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
+    pub collateral_block: Option<CollateralBlock>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -333,6 +339,7 @@ where
             transfers,
             spent_witness,
             sender_proof_set_ephemeral_key,
+            collateral_block: fee_proof.and_then(|fee_proof| fee_proof.collateral_block),
         };
         Ok(memo)
     }
@@ -418,6 +425,39 @@ where
                 data_type,
                 pubkey,
                 encrypted_data: transfer_data.encrypt(pubkey),
+            });
+        }
+        if let Some(collateral_block) = &memo.collateral_block {
+            let recipient = collateral_block
+                .fee_transfer_witness
+                .transfer
+                .recipient
+                .to_pubkey()
+                .unwrap();
+            let mut tx_tree = TxTree::new(TRANSFER_TREE_HEIGHT);
+            tx_tree.push(collateral_block.fee_transfer_witness.tx);
+            let tx_index = 0u32;
+            let tx_merkle_proof = tx_tree.prove(tx_index as u64);
+            let tx_tree_root: Bytes32 = tx_tree.get_root().into();
+            let transfer_data = TransferData {
+                sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
+                sender_proof_set: None,
+                sender: key.pubkey,
+                tx: collateral_block.fee_transfer_witness.tx,
+                tx_index,
+                tx_merkle_proof,
+                tx_tree_root,
+                transfer: collateral_block.fee_transfer_witness.transfer,
+                transfer_index: collateral_block.fee_transfer_witness.transfer_index,
+                transfer_merkle_proof: collateral_block
+                    .fee_transfer_witness
+                    .transfer_merkle_proof
+                    .clone(),
+            };
+            entries.push(SaveDataEntry {
+                data_type: DataType::Transfer,
+                pubkey: key.pubkey,
+                encrypted_data: transfer_data.encrypt(recipient),
             });
         }
 
