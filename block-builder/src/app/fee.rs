@@ -20,11 +20,10 @@ use intmax2_zkp::{
     common::{
         block_builder::UserSignature,
         signature::{key_set::KeySet, sign::get_pubkey_hash},
-        trees::tx_tree::TxTree,
         witness::transfer_witness::TransferWitness,
     },
-    constants::{NUM_SENDERS_IN_BLOCK, TX_TREE_HEIGHT},
-    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
+    constants::NUM_SENDERS_IN_BLOCK,
+    ethereum_types::{account_id_packed::AccountIdPacked, u256::U256},
 };
 use num_bigint::BigUint;
 use redis::AsyncCommands as _;
@@ -37,6 +36,7 @@ use super::{
     error::{BlockBuilderError, FeeError},
 };
 
+/// Validate fee proof
 pub async fn validate_fee_proof(
     store_vault_server_client: &StoreVaultServerClient,
     beneficiary_pubkey: Option<U256>,
@@ -78,25 +78,39 @@ pub async fn validate_fee_proof(
 
     // validate collateral fee
     if let Some(collateral_fee) = required_collateral_fee {
-        let collateral_block = fee_proof
-            .collateral_block
-            .as_ref()
-            .ok_or(FeeError::InvalidFee(
-                "Collateral block is missing".to_string(),
-            ))?;
+        let collateral_block =
+            fee_proof
+                .collateral_block
+                .as_ref()
+                .ok_or(FeeError::FeeVerificationError(
+                    "Collateral block is missing".to_string(),
+                ))?;
+        // validate transfer data
+        let transfer_data = &collateral_block.fee_transfer_data;
+        match transfer_data.validate(KeySet::dummy()) {
+            Ok(_) => {}
+            Err(e) => {
+                log::error!("Failed to validate transfer data: {}", e);
+                return Err(FeeError::FeeVerificationError(
+                    "Failed to validate transfer data".to_string(),
+                ));
+            }
+        }
+
         // validate signature
         let user_signature = UserSignature {
             pubkey: sender,
             signature: collateral_block.signature.clone(),
         };
-        let mut tx_tree = TxTree::new(TX_TREE_HEIGHT);
-        tx_tree.push(collateral_block.fee_transfer_witness.tx);
-        let tx_tree_root = tx_tree.get_root().into();
         let mut pubkeys = vec![sender];
         pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
         let pubkey_hash = get_pubkey_hash(&pubkeys);
         user_signature
-            .verify(tx_tree_root, collateral_block.expiry, pubkey_hash)
+            .verify(
+                transfer_data.tx_tree_root,
+                collateral_block.expiry,
+                pubkey_hash,
+            )
             .map_err(|e| {
                 FeeError::SignatureVerificationError(format!("Failed to verify signature: {}", e))
             })?;
@@ -106,18 +120,24 @@ pub async fn validate_fee_proof(
         )
         .await?;
 
-        let transfer_witness = &collateral_block.fee_transfer_witness;
+        let transfer_witness = TransferWitness {
+            tx: transfer_data.tx,
+            transfer: transfer_data.transfer,
+            transfer_index: transfer_data.transfer_index,
+            transfer_merkle_proof: transfer_data.transfer_merkle_proof.clone(),
+        };
         validate_fee_single(
             beneficiary_pubkey,
             collateral_fee,
             &sender_proof_set,
-            transfer_witness,
+            &transfer_witness,
         )
         .await?;
     }
     Ok(())
 }
 
+/// common function to validate fee and collateral fee
 async fn validate_fee_single(
     beneficiary_pubkey: U256,
     required_fee: &HashMap<u32, U256>, // token index -> fee amount
@@ -126,14 +146,14 @@ async fn validate_fee_single(
 ) -> Result<(), FeeError> {
     // todo: validate spent proof inside `validate` method
     sender_proof_set.validate(KeySet::dummy()).map_err(|e| {
-        FeeError::ProofVerificationError(format!("Failed to validate sender proof set: {}", e))
+        FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {}", e))
     })?;
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
     let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs);
     if spent_pis.tx != transfer_witness.tx {
-        return Err(FeeError::ProofVerificationError(
+        return Err(FeeError::FeeVerificationError(
             "Tx in spent proof is not the same as transfer witness tx".to_string(),
         ));
     }
@@ -141,7 +161,7 @@ async fn validate_fee_single(
         .insufficient_flags
         .random_access(transfer_witness.transfer_index as usize);
     if insufficient_flag {
-        return Err(FeeError::ProofVerificationError(
+        return Err(FeeError::FeeVerificationError(
             "Insufficient flag is on in spent proof".to_string(),
         ));
     }
@@ -190,7 +210,7 @@ async fn validate_fee_single(
     Ok(())
 }
 
-// Parse fee string into a map of token index -> fee amount
+/// Parse fee string into a map of token index -> fee amount
 // Example: "0:100,1:200" -> {0: 100, 1: 200}
 pub fn parse_fee_str(fee: &str) -> Result<HashMap<u32, U256>, FeeError> {
     let mut fee_map = HashMap::new();
@@ -221,6 +241,7 @@ pub struct FeeCollection {
     pub signatures: Vec<UserSignature>,
 }
 
+/// Collect fee from the senders
 pub async fn collect_fee(
     redis_client: &redis::Client,
     store_vault_server_client: &StoreVaultServerClient,
@@ -280,13 +301,8 @@ pub async fn collect_fee(
                     .ok_or(BlockBuilderError::FeeError(FeeError::InvalidFee(
                         "Collateral block is missing".to_string(),
                     )))?;
-            let fee_transfer_witness = &collateral_block.fee_transfer_witness;
-            let tx = fee_transfer_witness.tx;
-            let tx_index = 0;
-            let mut tx_tree = TxTree::new(TX_TREE_HEIGHT);
-            tx_tree.push(tx);
-            let tx_tree_root: Bytes32 = tx_tree.get_root().into();
-            let tx_merkle_proof = tx_tree.prove(tx_index as u64);
+
+            let transfer_data = &collateral_block.fee_transfer_data;
             let mut pubkeys = vec![request.pubkey];
             pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
             let pubkey_hash = get_pubkey_hash(&pubkeys);
@@ -303,7 +319,7 @@ pub async fn collect_fee(
 
             // validate signature again
             signature
-                .verify(tx_tree_root, expiry, pubkey_hash)
+                .verify(transfer_data.tx_tree_root, expiry, pubkey_hash)
                 .map_err(|e| {
                     BlockBuilderError::FeeError(FeeError::SignatureVerificationError(format!(
                         "Failed to verify signature: {}",
@@ -312,24 +328,12 @@ pub async fn collect_fee(
                 })?;
 
             // save transfer data
-            let transfer_data = TransferData {
-                sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
-                sender_proof_set: None,
-                sender: request.pubkey,
-                tx,
-                tx_index,
-                tx_merkle_proof,
-                tx_tree_root,
-                transfer: fee_transfer_witness.transfer,
-                transfer_index: fee_transfer_witness.transfer_index,
-                transfer_merkle_proof: fee_transfer_witness.transfer_merkle_proof.clone(),
-            };
-            transfer_data_vec.push(transfer_data);
+            transfer_data_vec.push(transfer_data.clone());
 
             let block_post = BlockPost {
                 force_post: false,
                 is_registration_block: memo.is_registration_block,
-                tx_tree_root,
+                tx_tree_root: transfer_data.tx_tree_root,
                 expiry,
                 pubkeys,
                 account_ids,

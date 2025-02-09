@@ -67,8 +67,8 @@ pub enum FeeError {
     #[error("Proof compression error: {0}")]
     ProofCompressionError(#[from] ProofCompressionError),
 
-    #[error("Proof verification error: {0}")]
-    ProofVerificationError(String),
+    #[error("Fee verification error: {0}")]
+    FeeVerificationError(String),
 
     #[error("Merkle tree error: {0}")]
     MerkleTreeError(String),
