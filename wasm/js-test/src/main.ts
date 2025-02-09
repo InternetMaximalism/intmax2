@@ -181,7 +181,7 @@ async function syncBalanceProof(config: Config, privateKey: string) {
 
 async function sendTx(config: Config, block_builder_base_url: string, privateKey: string, transfers: JsTransfer[]) {
   console.log("Sending tx...");
-  let memo: JsTxRequestMemo = await send_tx_request(config, block_builder_base_url, privateKey, transfers);
+  let memo: JsTxRequestMemo = await send_tx_request(config, block_builder_base_url, privateKey, transfers, 0);
   console.log("Transfer root of tx: ", memo.tx().transfer_tree_root);
 
   // wait for the block builder to propose the block
