@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::{BlockBuilderClientInterface, CollateralBlock},
+        block_builder::interface::BlockBuilderClientInterface,
         store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::{
@@ -76,8 +76,6 @@ pub struct TxRequestMemo {
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
     pub fee_index: Option<u32>,
-    pub collateral_block: Option<CollateralBlock>,
-    pub collateral_spent_witness: Option<SpentWitness>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -280,7 +278,7 @@ where
         let sender_proof_set_ephemeral_key: U256 =
             BigUint::from(ephemeral_key.privkey).try_into().unwrap();
 
-        let (fee_proof, collateral_spent_witness) = if let Some(fee_index) = fee_index {
+        let fee_proof = if let Some(fee_index) = fee_index {
             let (fee_proof, collateral_spent_witness) = generate_fee_proof(
                 &self.store_vault_server,
                 &self.balance_prover,
@@ -293,11 +291,29 @@ where
                 collateral_transfer,
             )
             .await?;
-            (Some(fee_proof), collateral_spent_witness)
+            // save tx data for collateral block
+            if let Some(collateral_block) = &fee_proof.collateral_block {
+                let transfer_data = &collateral_block.fee_transfer_data;
+                let tx_data = TxData {
+                    tx_index: transfer_data.tx_index,
+                    tx_merkle_proof: transfer_data.tx_merkle_proof.clone(),
+                    tx_tree_root: transfer_data.tx_tree_root,
+                    spent_witness: collateral_spent_witness.unwrap(),
+                    sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
+                };
+                let entry = SaveDataEntry {
+                    data_type: DataType::Tx,
+                    pubkey: key.pubkey,
+                    encrypted_data: tx_data.encrypt(key.pubkey),
+                };
+                self.store_vault_server
+                    .save_data_batch(key, &[entry])
+                    .await?;
+            }
+            Some(fee_proof)
         } else {
-            (None, None)
+            None
         };
-
         // send tx request
         let mut retries = 0;
         loop {
@@ -337,8 +353,6 @@ where
             spent_witness,
             sender_proof_set_ephemeral_key,
             fee_index,
-            collateral_block: fee_proof.and_then(|fee_proof| fee_proof.collateral_block),
-            collateral_spent_witness,
         };
         Ok(memo)
     }
@@ -385,22 +399,6 @@ where
             pubkey: key.pubkey,
             encrypted_data: tx_data.encrypt(key.pubkey),
         });
-        // save tx data for collateral block
-        if let Some(collateral_block) = &memo.collateral_block {
-            let transfer_data = &collateral_block.fee_transfer_data;
-            let tx_data = TxData {
-                tx_index: transfer_data.tx_index,
-                tx_merkle_proof: transfer_data.tx_merkle_proof.clone(),
-                tx_tree_root: transfer_data.tx_tree_root,
-                spent_witness: memo.collateral_spent_witness.clone().unwrap(),
-                sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
-            };
-            entries.push(SaveDataEntry {
-                data_type: DataType::Tx,
-                pubkey: key.pubkey,
-                encrypted_data: tx_data.encrypt(key.pubkey),
-            });
-        }
 
         // save transfer data
         let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
