@@ -75,6 +75,7 @@ pub struct TxRequestMemo {
     pub transfers: Vec<Transfer>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
+    pub fee_index: Option<u32>,
     pub collateral_block: Option<CollateralBlock>,
     pub collateral_spent_witness: Option<SpentWitness>,
 }
@@ -335,6 +336,7 @@ where
             transfers,
             spent_witness,
             sender_proof_set_ephemeral_key,
+            fee_index,
             collateral_block: fee_proof.and_then(|fee_proof| fee_proof.collateral_block),
             collateral_spent_witness,
         };
@@ -409,6 +411,10 @@ where
         let mut transfer_data_vec = Vec::new();
         let mut withdrawal_data_vec = Vec::new();
         for (i, transfer) in memo.transfers.iter().enumerate() {
+            if Some(i as u32) == memo.fee_index {
+                // ignore fee transfer because it will be saved on block builder side
+                continue;
+            }
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
             let transfer_data = TransferData {
                 sender: key.pubkey,
