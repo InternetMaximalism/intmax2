@@ -283,13 +283,16 @@ mod tests {
 
     #[test]
     fn test_claim() {
-        let (single_claim_proof, _) = generate_claim_and_validity_proof();
+        let (single_claim_proof, validity_proof) = generate_claim_and_validity_proof();
         let circuit_verifiers = CircuitVerifiers::load();
         let single_claim_vd = circuit_verifiers.get_single_claim_vd();
-        println!("single_claim_vd: {:?}", single_claim_vd);
         single_claim_vd
             .verify(single_claim_proof)
             .expect("Verification failed for single claim using verifier data");
-        println!("Verification successful");
+
+        let validity_vd = circuit_verifiers.get_validity_vd();
+        validity_vd
+            .verify(validity_proof)
+            .expect("Verification failed for validity using verifier data");
     }
 }
