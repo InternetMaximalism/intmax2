@@ -364,7 +364,7 @@ impl StoreVaultServer {
         &self,
         pubkey: U256,
         topic: Bytes32,
-        cursor: MetaDataCursor,
+        cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse)> {
         let pubkey_hex = pubkey.to_hex();
         let topic_hex = topic.to_hex();
