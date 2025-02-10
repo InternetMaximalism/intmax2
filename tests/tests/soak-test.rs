@@ -4,6 +4,7 @@ use std::{
 };
 
 use ethers::{types::H256, utils::hex};
+use futures::future::join_all;
 use intmax2_cli::{
     cli::{
         error::CliError,
@@ -15,7 +16,7 @@ use intmax2_zkp::{
     common::signature::key_set::KeySet, ethereum_types::u32limb_trait::U32LimbTrait,
 };
 use serde::Deserialize;
-use tests::{derive_intmax_keys, wait_for_balance_synchronization};
+use tests::{derive_intmax_keys, transfer_with_error_handling, wait_for_balance_synchronization};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
@@ -31,17 +32,11 @@ pub struct EnvVar {
 const ETH_TOKEN_INDEX: u32 = 0;
 
 // async fn process_account(key: KeySet, transfers: &[TransferInput]) -> Result<(), CliError> {
-async fn process_account(
-    key: KeySet,
-    transfers: &[TransferInput],
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    transfer(key, transfers, ETH_TOKEN_INDEX)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+pub async fn process_account(key: KeySet, transfers: &[TransferInput]) -> Result<(), CliError> {
+    wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
+    transfer(key, transfers, ETH_TOKEN_INDEX).await?;
     tokio::time::sleep(Duration::from_secs(20)).await;
-    wait_for_balance_synchronization(key, Duration::from_secs(5))
-        .await
-        .map_err(|e| e.into())
+    wait_for_balance_synchronization(key, Duration::from_secs(5)).await
 }
 
 #[tokio::test]
@@ -145,29 +140,33 @@ impl TestSystem {
         while std::time::Instant::now() < end_time {
             let concurrent_accounts = get_config().await?.concurrent_limit;
 
-            let mut handles = vec![];
+            let intmax_senders = self.accounts.lock().unwrap()[0..concurrent_accounts].to_vec();
+            let transfers = [TransferInput {
+                recipient: self.admin_key.pubkey.to_hex(),
+                amount: 10u128,
+                token_index: ETH_TOKEN_INDEX,
+            }];
+            let futures = intmax_senders.iter().map(|sender| async {
+                transfer_with_error_handling(*sender, &transfers, 1)
+                    .await
+                    .err()
+            });
 
-            // Spawn concurrent transactions
-            for i in 0..concurrent_accounts {
-                let system = Arc::new(self.clone());
-                let account = system.accounts.lock().unwrap()[i];
-                let handle = tokio::task::spawn_local(async move {
-                    let transfers = [TransferInput {
-                        recipient: system.admin_key.pubkey.to_hex(),
-                        amount: 10u128,
-                        token_index: ETH_TOKEN_INDEX,
-                    }];
-                    if let Err(e) = process_account(account, &transfers).await {
-                        eprintln!("Transaction error: {}", e);
-                    }
-                });
-                handles.push(handle);
+            let errors = join_all(futures).await;
+            for (i, error) in errors.iter().enumerate() {
+                if let Some(e) = error {
+                    log::error!(
+                        "Recipient ({}/{}) failed: {:?}",
+                        i + 1,
+                        concurrent_accounts,
+                        e
+                    );
+                } else {
+                    log::info!("Recipient ({}/{}) succeeded", i + 1, concurrent_accounts);
+                }
             }
 
-            // Wait for all transactions to complete
-            for handle in handles {
-                handle.await?;
-            }
+            println!("Completed transactions");
         }
 
         Ok(())
