@@ -15,7 +15,7 @@ const PENALTY_FEE_POLLING_INTERVAL: u64 = 2;
 const EXPIRY_BUFFER: u64 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlockPost {
+pub struct BlockPostTask {
     pub force_post: bool,
     pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
@@ -31,7 +31,7 @@ pub(crate) async fn post_block(
     eth_allowance_for_block: U256,
     rollup_contract: &RollupContract,
     validity_prover_client: &ValidityProverClient,
-    block_post: BlockPost,
+    block_post: BlockPostTask,
 ) -> Result<(), BlockBuilderError> {
     log::info!(
         "Posting block: is_registration_block={}, tx_tree_root={}, expiry={}, num_signatures={}, force_post={}",
