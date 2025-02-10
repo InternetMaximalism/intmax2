@@ -23,6 +23,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 pub mod client;
 pub mod js_types;
 pub mod native;
+pub mod temp;
 pub mod utils;
 
 #[derive(Debug, Clone)]
