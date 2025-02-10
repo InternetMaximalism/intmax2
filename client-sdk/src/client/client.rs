@@ -570,29 +570,17 @@ where
         let account_info = self.validity_prover.get_account_info(pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
-        let (fee_amount, collateral_fee_amount) =
-            quote_fee(is_registration_block, fee_token_index, &fee_info)?;
-        if fee_info.beneficiary.is_some() && fee_amount > 0.into() {
+        let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
+        if fee_info.beneficiary.is_none() && fee.is_some() {
             return Err(ClientError::BlockBuilderFeeError(
-                "fee_beneficiary is required".to_string(),
+                "beneficiary is required".to_string(),
             ));
         }
-        let fee = if fee_amount > 0.into() {
-            Some(Fee {
-                token_index: fee_token_index,
-                amount: fee_amount,
-            })
-        } else {
-            None
-        };
-        let collateral_fee = if collateral_fee_amount > 0.into() {
-            Some(Fee {
-                token_index: fee_token_index,
-                amount: collateral_fee_amount,
-            })
-        } else {
-            None
-        };
+        if fee.is_none() && collateral_fee.is_some() {
+            return Err(ClientError::BlockBuilderFeeError(
+                "collateral fee is required but fee is not found".to_string(),
+            ));
+        }
         Ok(FeeQuote {
             beneficiary: fee_info.beneficiary,
             fee,
