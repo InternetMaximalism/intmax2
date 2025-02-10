@@ -52,7 +52,7 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
             token_index: ETH_TOKEN_INDEX,
         })
         .collect::<Vec<_>>();
-    transfer(intmax_sender, &transfers).await?;
+    transfer(intmax_sender, &transfers, ETH_TOKEN_INDEX).await?;
 
     Ok(())
 }

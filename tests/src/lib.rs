@@ -105,7 +105,7 @@ pub async fn transfer_with_error_handling(
             i + 1,
             num_loops
         );
-        transfer(key, transfer_inputs).await?;
+        transfer(key, transfer_inputs, 0).await?;
         tokio::time::sleep(Duration::from_secs(20)).await;
         wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
     }

@@ -15,13 +15,14 @@ use intmax2_interfaces::{
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
         tx_data::TxData,
+        user_data::{Balances, ProcessStatus},
     },
 };
 use intmax2_zkp::{
     common::{
-        block_builder::BlockProposal, deposit::get_pubkey_salt_hash, signature::key_set::KeySet,
-        transfer::Transfer, trees::transfer_tree::TransferTree, tx::Tx,
-        witness::spent_witness::SpentWitness,
+        block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
+        generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer,
+        trees::transfer_tree::TransferTree, tx::Tx, witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
@@ -41,6 +42,7 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
+    fee::{generate_fee_proof, quote_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     strategy::mining::{fetch_mining_info, Mining},
     sync::utils::{generate_spent_witness, get_balance_proof},
@@ -73,6 +75,7 @@ pub struct TxRequestMemo {
     pub transfers: Vec<Transfer>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
+    pub fee_index: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -170,6 +173,7 @@ where
         block_builder_url: &str,
         key: KeySet,
         transfers: Vec<Transfer>,
+        fee_token_index: u32,
     ) -> Result<TxRequestMemo, ClientError> {
         // input validation
         if transfers.is_empty() {
@@ -177,11 +181,61 @@ where
                 "transfers is empty".to_string(),
             ));
         }
-        if transfers.len() > NUM_TRANSFERS_IN_TX {
+        if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
             return Err(ClientError::TransferLenError(
-                "transfers is too long".to_string(),
+                "transfers is too many".to_string(),
             ));
         }
+        // fetch if this is first time tx
+        let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
+        let is_registration_block = account_info.account_id.is_none();
+
+        // get fee info
+        let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
+        let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
+        log::info!(
+            "send_tx_request: fee {}, collateral_fee {} for fee_token_index {}",
+            fee,
+            collateral_fee,
+            fee_token_index
+        );
+        if collateral_fee > 0.into() && fee_info.beneficiary.is_none() {
+            return Err(ClientError::BlockBuilderFeeError(
+                "Collateral fee is required but beneficiary is not set".to_string(),
+            ));
+        }
+
+        let fee_transfer = fee_info.beneficiary.map(|beneficiary| Transfer {
+            recipient: GenericAddress::from_pubkey(beneficiary),
+            amount: fee,
+            token_index: fee_token_index,
+            salt: generate_salt(),
+        });
+        // add fee transfer to the end
+        let transfers = if let Some(fee_transfer) = fee_transfer {
+            transfers
+                .into_iter()
+                .chain(std::iter::once(fee_transfer))
+                .collect()
+        } else {
+            transfers
+        };
+        let fee_index = if fee_transfer.is_some() {
+            Some(transfers.len() as u32 - 1)
+        } else {
+            None
+        };
+        let collateral_transfer = if collateral_fee > 0.into() {
+            let beneficiary = fee_info.beneficiary.unwrap(); // already checked
+            Some(Transfer {
+                recipient: GenericAddress::from_pubkey(beneficiary),
+                amount: collateral_fee,
+                token_index: fee_token_index,
+                salt: generate_salt(),
+            })
+        } else {
+            None
+        };
 
         // sync balance proof
         self.sync(key).await?;
@@ -193,24 +247,11 @@ where
 
         // balance check
         let balances = user_data.balances();
-        for transfer in &transfers {
-            let balance = balances
-                .0
-                .get(&transfer.token_index)
-                .cloned()
-                .unwrap_or_default();
-            if balance.is_insufficient {
-                return Err(ClientError::BalanceError(format!(
-                    "Already insufficient: token index {}",
-                    transfer.token_index
-                )));
-            }
-            if balance.amount < transfer.amount {
-                return Err(ClientError::BalanceError(format!(
-                    "Insufficient balance: {} < {} for token #{}",
-                    balance.amount, transfer.amount, transfer.token_index
-                )));
-            }
+        balance_check(&balances, &transfers)?;
+
+        // balance check for collateral transfer
+        if let Some(collateral_transfer) = collateral_transfer.as_ref() {
+            balance_check(&balances, &[*collateral_transfer])?;
         }
 
         // generate spent proof
@@ -237,10 +278,42 @@ where
         let sender_proof_set_ephemeral_key: U256 =
             BigUint::from(ephemeral_key.privkey).try_into().unwrap();
 
-        // fetch if this is first time tx
-        let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
-        let is_registration_block = account_info.account_id.is_none();
-
+        let fee_proof = if let Some(fee_index) = fee_index {
+            let (fee_proof, collateral_spent_witness) = generate_fee_proof(
+                &self.store_vault_server,
+                &self.balance_prover,
+                key,
+                &user_data,
+                sender_proof_set_ephemeral_key,
+                tx_nonce,
+                fee_index,
+                &transfers,
+                collateral_transfer,
+            )
+            .await?;
+            // save tx data for collateral block
+            if let Some(collateral_block) = &fee_proof.collateral_block {
+                let transfer_data = &collateral_block.fee_transfer_data;
+                let tx_data = TxData {
+                    tx_index: transfer_data.tx_index,
+                    tx_merkle_proof: transfer_data.tx_merkle_proof.clone(),
+                    tx_tree_root: transfer_data.tx_tree_root,
+                    spent_witness: collateral_spent_witness.unwrap(),
+                    sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
+                };
+                let entry = SaveDataEntry {
+                    data_type: DataType::Tx,
+                    pubkey: key.pubkey,
+                    encrypted_data: tx_data.encrypt(key.pubkey),
+                };
+                self.store_vault_server
+                    .save_data_batch(key, &[entry])
+                    .await?;
+            }
+            Some(fee_proof)
+        } else {
+            None
+        };
         // send tx request
         let mut retries = 0;
         loop {
@@ -251,7 +324,7 @@ where
                     is_registration_block,
                     key.pubkey,
                     tx,
-                    None,
+                    fee_proof.clone(),
                 )
                 .await;
             match result {
@@ -279,6 +352,7 @@ where
             transfers,
             spent_witness,
             sender_proof_set_ephemeral_key,
+            fee_index,
         };
         Ok(memo)
     }
@@ -335,6 +409,10 @@ where
         let mut transfer_data_vec = Vec::new();
         let mut withdrawal_data_vec = Vec::new();
         for (i, transfer) in memo.transfers.iter().enumerate() {
+            if Some(i as u32) == memo.fee_index {
+                // ignore fee transfer because it will be saved on block builder side
+                continue;
+            }
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
             let transfer_data = TransferData {
                 sender: key.pubkey,
@@ -443,6 +521,8 @@ where
             &self.validity_prover,
             &self.liquidity_contract,
             key,
+            &ProcessStatus::default(),
+            self.config.tx_timeout,
             self.config.deposit_timeout,
         )
         .await?;
@@ -474,4 +554,19 @@ where
     ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
         fetch_tx_history(self, key).await
     }
+}
+
+fn balance_check(balances: &Balances, transfers: &[Transfer]) -> Result<(), ClientError> {
+    let mut balances = balances.clone();
+    for transfer in transfers {
+        let prev_balance = balances.get(transfer.token_index);
+        let is_insufficient = balances.sub_transfer(transfer);
+        if is_insufficient {
+            return Err(ClientError::BalanceError(format!(
+                "Insufficient balance: {} < {} for token #{}",
+                prev_balance, transfer.amount, transfer.token_index
+            )));
+        }
+    }
+    Ok(())
 }

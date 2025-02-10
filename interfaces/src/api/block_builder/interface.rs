@@ -6,24 +6,25 @@ use intmax2_zkp::{
     },
     ethereum_types::u256::U256,
 };
-use plonky2::{
-    field::goldilocks_field::GoldilocksField,
-    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
-};
 use serde::{Deserialize, Serialize};
 
-use crate::api::error::ServerError;
-
-type F = GoldilocksField;
-type C = PoseidonGoldilocksConfig;
-const D: usize = 2;
+use crate::{api::error::ServerError, data::transfer_data::TransferData};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeProof {
-    pub spent_proof: ProofWithPublicInputs<F, C, D>,
-    pub prev_balance_proof: ProofWithPublicInputs<F, C, D>,
-    pub transfer_witness: TransferWitness,
+    pub sender_proof_set_ephemeral_key: U256,
+    pub fee_transfer_witness: TransferWitness,
+    pub collateral_block: Option<CollateralBlock>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollateralBlock {
+    pub sender_proof_set_ephemeral_key: U256,
+    pub fee_transfer_data: TransferData,
+    pub expiry: u64,
+    pub signature: FlatG2,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -34,8 +35,26 @@ pub enum BlockBuilderStatus {
     ProposingBlock, // after constructed the block, accepting signatures for the block
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Fee {
+    pub token_index: u32,
+    pub amount: U256,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeeInfo {
+    pub beneficiary: Option<U256>,
+    pub registration_fee: Option<Vec<Fee>>,
+    pub non_registration_fee: Option<Vec<Fee>>,
+    pub registration_collateral_fee: Option<Vec<Fee>>,
+    pub non_registration_collateral_fee: Option<Vec<Fee>>,
+}
+
 #[async_trait(?Send)]
 pub trait BlockBuilderClientInterface {
+    async fn get_fee_info(&self, block_builder_url: &str) -> Result<FeeInfo, ServerError>;
+
     // Get the status of the block builder
     async fn get_status(
         &self,

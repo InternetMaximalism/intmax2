@@ -35,7 +35,7 @@ async fn process_account(
     key: KeySet,
     transfers: &[TransferInput],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    transfer(key, transfers)
+    transfer(key, transfers, ETH_TOKEN_INDEX)
         .await
         .map_err(|e| anyhow::anyhow!("{e:?}"))?;
     tokio::time::sleep(Duration::from_secs(20)).await;
@@ -101,7 +101,7 @@ impl TestSystem {
                 token_index: ETH_TOKEN_INDEX,
             })
             .collect::<Vec<_>>();
-        transfer(self.admin_key, &transfers).await
+        transfer(self.admin_key, &transfers, ETH_TOKEN_INDEX).await
     }
 
     async fn ensure_accounts(

@@ -5,6 +5,7 @@ use intmax2_zkp::{
     circuits::balance::balance_processor::get_prev_balance_pis,
     common::{
         private_state::{FullPrivateState, PrivateState},
+        transfer::Transfer,
         trees::asset_tree::AssetLeaf,
     },
     ethereum_types::u256::U256,
@@ -97,6 +98,7 @@ impl UserData {
 impl Encryption for UserData {}
 
 /// Token index -> AssetLeaf
+#[derive(Debug, Clone)]
 pub struct Balances(pub HashMap<u32, AssetLeaf>);
 
 impl Balances {
@@ -130,12 +132,23 @@ impl Balances {
         let transfers = &tx_data.spent_witness.transfers;
         let mut is_insufficient = false;
         for transfer in transfers.iter() {
-            let token_index = transfer.token_index;
-            let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
-            let new_asset_leaf = prev_asset_leaf.sub(transfer.amount);
-            is_insufficient = is_insufficient || new_asset_leaf.is_insufficient;
-            self.0.insert(token_index, new_asset_leaf);
+            is_insufficient = is_insufficient || self.sub_transfer(transfer);
         }
         is_insufficient
+    }
+
+    pub fn sub_transfer(&mut self, transfer: &Transfer) -> bool {
+        let token_index = transfer.token_index;
+        let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
+        let new_asset_leaf = prev_asset_leaf.sub(transfer.amount);
+        self.0.insert(token_index, new_asset_leaf);
+        new_asset_leaf.is_insufficient
+    }
+
+    pub fn get(&self, token_index: u32) -> U256 {
+        self.0
+            .get(&token_index)
+            .map(|leaf| leaf.amount)
+            .unwrap_or_default()
     }
 }

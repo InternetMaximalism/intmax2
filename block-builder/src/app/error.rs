@@ -1,6 +1,9 @@
-use intmax2_client_sdk::external_api::contract::error::BlockchainError;
-use intmax2_interfaces::api::error::ServerError;
+use intmax2_client_sdk::{
+    client::strategy::error::StrategyError, external_api::contract::error::BlockchainError,
+};
+use intmax2_interfaces::{api::error::ServerError, data::proof_compression::ProofCompressionError};
 use intmax2_zkp::ethereum_types::u256::U256;
+use redis::RedisError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BlockBuilderError {
@@ -9,6 +12,12 @@ pub enum BlockBuilderError {
 
     #[error("Server error: {0}")]
     ServerError(#[from] ServerError),
+
+    #[error("Redis error: {0}")]
+    RedisError(#[from] RedisError),
+
+    #[error("Fee error: {0}")]
+    FeeError(#[from] FeeError),
 
     #[error("Not accepting transactions")]
     NotAcceptingTx,
@@ -43,6 +52,36 @@ pub enum BlockBuilderError {
     #[error("Block builder should be pausing")]
     ShouldBePausing,
 
+    #[error("Block already expired")]
+    AlreadyExpired,
+
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FeeError {
+    #[error("Fetch error: {0}")]
+    FetchError(#[from] StrategyError),
+
+    #[error("Proof compression error: {0}")]
+    ProofCompressionError(#[from] ProofCompressionError),
+
+    #[error("Fee verification error: {0}")]
+    FeeVerificationError(String),
+
+    #[error("Merkle tree error: {0}")]
+    MerkleTreeError(String),
+
+    #[error("Invalid recipient: {0}")]
+    InvalidRecipient(String),
+
+    #[error("Invalid fee: {0}")]
+    InvalidFee(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+
+    #[error("Signature verification error: {0}")]
+    SignatureVerificationError(String),
 }

@@ -29,7 +29,5 @@ actix-web = { workspace = true }
 actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
 serde_qs = { workspace = true }
-num = "0.4.3"
-num-bigint = "0.4.5"
-ark-bn254 = { workspace = true }
-ark-ec = { workspace = true }
+redis = { version = "0.28.2", features = ["tokio-comp"] }
+num-bigint = "0.4.6"

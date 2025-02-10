@@ -27,9 +27,13 @@ pub struct TransferInput {
     pub token_index: u32,
 }
 
-pub async fn transfer(key: KeySet, transfer_inputs: &[TransferInput]) -> Result<(), CliError> {
+pub async fn transfer(
+    key: KeySet,
+    transfer_inputs: &[TransferInput],
+    fee_token_index: u32,
+) -> Result<(), CliError> {
     let mut rng = rand::thread_rng();
-    if transfer_inputs.len() > NUM_TRANSFERS_IN_TX {
+    if transfer_inputs.len() > NUM_TRANSFERS_IN_TX - 1 {
         return Err(CliError::TooManyTransfer(transfer_inputs.len()));
     }
 
@@ -69,7 +73,7 @@ pub async fn transfer(key: KeySet, transfer_inputs: &[TransferInput]) -> Result<
     };
 
     let memo = client
-        .send_tx_request(&block_builder_url, key, transfers)
+        .send_tx_request(&block_builder_url, key, transfers, fee_token_index)
         .await?;
 
     let is_registration_block = memo.is_registration_block;

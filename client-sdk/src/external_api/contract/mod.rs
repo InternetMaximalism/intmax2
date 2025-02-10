@@ -1,3 +1,4 @@
+pub mod block_builder_registry;
 pub mod data_decoder;
 pub mod erc1155_contract;
 pub mod erc20_contract;

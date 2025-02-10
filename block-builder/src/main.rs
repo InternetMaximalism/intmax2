@@ -1,7 +1,7 @@
 use actix_cors::Cors;
 use actix_web::{web::Data, App, HttpServer};
 use block_builder::{
-    api::{api::block_builder_scope, state::State},
+    api::{routes::block_builder_scope, state::State},
     EnvVar,
 };
 use intmax2_client_sdk::external_api::contract::utils::get_address;
@@ -26,7 +26,8 @@ async fn main() -> std::io::Result<()> {
         get_address(env.l2_chain_id, env.block_builder_private_key)
     );
 
-    let state = State::new(&env);
+    let state = State::new(&env)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("state error: {}", e)))?;
     state.run();
 
     let data = Data::new(state);

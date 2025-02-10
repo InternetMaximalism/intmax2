@@ -39,6 +39,9 @@ pub enum ClientError {
     #[error("Invalid mining deposit criteria")]
     InvalidMiningDepositCriteria,
 
+    #[error("Block builder fee error: {0}")]
+    BlockBuilderFeeError(String),
+
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
 }

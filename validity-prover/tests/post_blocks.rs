@@ -1,3 +1,4 @@
+use bigdecimal::num_bigint::BigUint;
 use ethers::{core::utils::Anvil, types::H256};
 use intmax2_client_sdk::external_api::contract::{
     rollup_contract::RollupContract, utils::get_latest_block_number,
@@ -34,7 +35,7 @@ async fn post_blocks() -> anyhow::Result<()> {
     rollup_contract
         .post_registration_block(
             block_builder_private_key,
-            ethers::utils::parse_ether("0.3").unwrap(),
+            BigUint::from(10u32).pow(18).try_into().unwrap(),
             signature.tx_tree_root,
             signature.expiry.into(),
             signature.sender_flag,

@@ -1,19 +1,23 @@
-use super::{common::fetch_decrypt_validate, error::StrategyError};
+use super::{
+    common::{fetch_decrypt_validate, fetch_sender_proof_set},
+    error::StrategyError,
+};
 use intmax2_interfaces::{
     api::{
         store_vault_server::interface::{DataType, StoreVaultClientInterface},
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
-        encryption::Encryption as _,
         meta_data::{MetaData, MetaDataWithBlockNumber},
-        sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
         user_data::ProcessStatus,
+        validation::Validation,
     },
 };
-use intmax2_zkp::common::signature::key_set::KeySet;
-use num_bigint::BigUint;
+use intmax2_zkp::{
+    circuits::balance::send::spent_circuit::SpentPublicInputs, common::signature::key_set::KeySet,
+    utils::conversion::ToU64,
+};
 
 #[derive(Debug, Clone)]
 pub struct TransferInfo {
@@ -40,19 +44,39 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
     )
     .await?;
     for (meta, transfer_data) in data_with_meta {
-        let ephemeral_key =
-            KeySet::new(BigUint::from(transfer_data.sender_proof_set_ephemeral_key).into());
-        let encrypted_sender_proof_set = store_vault_server
-            .get_sender_proof_set(ephemeral_key)
-            .await?;
-        let sender_proof_set =
-            match SenderProofSet::decrypt(&encrypted_sender_proof_set, ephemeral_key) {
-                Ok(data) => data,
-                Err(e) => {
-                    log::error!("failed to decrypt sender proof set: {}", e);
+        let sender_proof_set = match fetch_sender_proof_set(
+            store_vault_server,
+            transfer_data.sender_proof_set_ephemeral_key,
+        )
+        .await
+        {
+            Ok(sender_proof_set) => sender_proof_set,
+            // ignore encryption error
+            Err(StrategyError::EncryptionError(e)) => {
+                log::error!("failed to decrypt sender proof set: {}", e);
+                continue;
+            }
+            // return other errors
+            Err(e) => return Err(e),
+        };
+        // validate sender proof set
+        match sender_proof_set.validate(key) {
+            Ok(_) => {
+                // check tx
+                let spent_proof = sender_proof_set.spent_proof.decompress()?;
+                let spent_pis =
+                    SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec());
+                if spent_pis.tx != transfer_data.tx {
+                    log::error!("tx in sender proof set is different from tx in transfer data");
                     continue;
                 }
-            };
+            }
+            Err(e) => {
+                log::error!("failed to validate sender proof set: {}", e);
+                continue;
+            }
+        }
+
         let mut transfer_data = transfer_data;
         transfer_data.set_sender_proof_set(sender_proof_set);
 

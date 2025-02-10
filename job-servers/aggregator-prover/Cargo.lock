@@ -730,9 +730,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "async-trait"
-version = "0.1.83"
+version = "0.1.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "721cae7de5c34fbb2acd27e21e6d2cf7b886dce0c27388d46c4e6c47ea4318dd"
+checksum = "644dd749086bf3771a2fbc5f256fdb982d53f011c7d5d560304eafeecebce79d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -2055,7 +2055,7 @@ dependencies = [
 [[package]]
 name = "intmax2-zkp"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#7f79b940a397c7f5c27e3db3893fcb3a2b0476ee"
+source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#b82c0c4b6874c6f841d51a83d7306ce5648ce7bb"
 dependencies = [
  "anyhow",
  "ark-bn254",

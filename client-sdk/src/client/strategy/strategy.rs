@@ -4,12 +4,8 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
-        deposit_data::DepositData,
-        encryption::Encryption as _,
-        meta_data::MetaDataWithBlockNumber,
-        transfer_data::TransferData,
-        tx_data::TxData,
-        user_data::{Balances, UserData},
+        deposit_data::DepositData, meta_data::MetaDataWithBlockNumber, transfer_data::TransferData,
+        tx_data::TxData, user_data::Balances,
     },
 };
 use itertools::Itertools;
@@ -18,6 +14,7 @@ use intmax2_zkp::common::signature::key_set::KeySet;
 
 use crate::{
     client::strategy::{
+        common::fetch_user_data,
         mining::{fetch_mining_info, MiningStatus},
         withdrawal::fetch_withdrawal_info,
     },
@@ -78,7 +75,7 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
     tx_timeout: u64,
 ) -> Result<(Vec<Action>, PendingInfo), StrategyError> {
     log::info!("determine_sequence");
-    let user_data = get_user_data(store_vault_server, key).await?;
+    let user_data = fetch_user_data(store_vault_server, key).await?;
     let mut balances = user_data.balances();
     if balances.is_insufficient() {
         return Err(StrategyError::BalanceInsufficientBeforeSync);
@@ -255,7 +252,7 @@ pub async fn determine_withdrawals<
     StrategyError,
 > {
     log::info!("determine_withdrawals");
-    let user_data = get_user_data(store_vault_server, key).await?;
+    let user_data = fetch_user_data(store_vault_server, key).await?;
     let withdrawal_info = fetch_withdrawal_info(
         store_vault_server,
         validity_prover,
@@ -273,40 +270,30 @@ pub async fn determine_withdrawals<
 }
 
 /// Determine the
-pub async fn determine_claim<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
+pub async fn determine_claims<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
     store_vault_server: &S,
     validity_prover: &V,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
+    tx_timeout: u64,
     deposit_timeout: u64,
-) -> Result<Option<Mining>, StrategyError> {
+) -> Result<Vec<Mining>, StrategyError> {
     log::info!("determine_claims");
+    let user_data = fetch_user_data(store_vault_server, key).await?;
     let minings = fetch_mining_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
         key,
+        &user_data.claim_status,
+        tx_timeout,
         deposit_timeout,
     )
     .await?;
     // pickup the largest deposit
-    let claim_data = minings
+    let claims = minings
         .into_iter()
-        .filter(|mining| mining.status == MiningStatus::Claimable)
-        .max_by_key(|mining| mining.deposit_data.amount);
-    Ok(claim_data)
-}
-
-async fn get_user_data<S: StoreVaultClientInterface>(
-    store_vault_server: &S,
-    key: KeySet,
-) -> Result<UserData, StrategyError> {
-    let user_data = store_vault_server
-        .get_user_data(key)
-        .await?
-        .map(|encrypted| UserData::decrypt(&encrypted, key))
-        .transpose()
-        .map_err(|e| StrategyError::UserDataDecryptionError(e.to_string()))?
-        .unwrap_or(UserData::new(key.pubkey));
-    Ok(user_data)
+        .filter(|mining| matches!(mining.status, MiningStatus::Claimable(_)))
+        .collect();
+    Ok(claims)
 }

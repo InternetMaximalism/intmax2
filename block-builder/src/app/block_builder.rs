@@ -1,53 +1,78 @@
-use std::{sync::Arc, time::Duration};
-
-use ark_bn254::{Bn254, Fr, G1Affine, G2Affine};
-use ark_ec::{pairing::Pairing as _, AffineRepr as _};
 use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
-    contract::rollup_contract::RollupContract, validity_prover::ValidityProverClient,
+    contract::{
+        block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
+    },
+    store_vault_server::StoreVaultServerClient,
+    validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
-    block_builder::interface::BlockBuilderStatus,
+    block_builder::interface::{BlockBuilderStatus, FeeInfo, FeeProof},
     validity_prover::interface::ValidityProverClientInterface,
 };
 use intmax2_zkp::{
     common::{
         block_builder::{BlockProposal, UserSignature},
-        signature::{
-            flatten::FlatG2,
-            sign::{hash_to_weight, tx_tree_root_and_expiry_to_message_point},
-            SignatureContent,
-        },
         tx::Tx,
     },
     constants::NUM_SENDERS_IN_BLOCK,
-    ethereum_types::{
-        account_id_packed::AccountIdPacked, bytes16::Bytes16, bytes32::Bytes32, u256::U256,
-        u32limb_trait::U32LimbTrait,
-    },
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
-use num::BigUint;
-use plonky2_bn254::fields::recover::RecoverFromX as _;
+use redis::AsyncCommands as _;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::sleep};
 
-use crate::EnvVar;
+use crate::{
+    app::{
+        block_post::BlockPost,
+        fee::{collect_fee, validate_fee_proof, FeeCollection},
+    },
+    EnvVar,
+};
 
-use super::{builder_state::BuilderState, error::BlockBuilderError};
+use super::{
+    block_post::post_block,
+    builder_state::BuilderState,
+    error::BlockBuilderError,
+    fee::{convert_fee_vec, parse_fee_str},
+};
+
+// key for post_block
+pub const POST_BLOCK_KEY: &str = "block_builder::post_block";
+
+// secondary key for post_block
+pub const POST_BLOCK_SECONDARY_KEY: &str = "block_builder::post_block_secondary";
+
+// dead letter queue for post_block
+pub const POST_BLOCK_DLQ_KEY: &str = "block_builder::post_block_dlq";
 
 #[derive(Debug, Clone)]
 struct Config {
+    block_builder_url: String,
     block_builder_private_key: H256,
-    eth_allowance_for_block: ethers::types::U256,
+    eth_allowance_for_block: U256,
     deposit_check_interval: Option<u64>,
     accepting_tx_interval: u64,
     proposing_block_interval: u64,
+    initial_heart_beat_delay: u64,
+    heart_beat_interval: u64,
+
+    // fees
+    beneficiary_pubkey: Option<U256>,
+    registration_fee: Option<HashMap<u32, U256>>,
+    non_registration_fee: Option<HashMap<u32, U256>>,
+    registration_collateral_fee: Option<HashMap<u32, U256>>,
+    non_registration_collateral_fee: Option<HashMap<u32, U256>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct BlockBuilder {
     config: Config,
+    store_vault_server_client: StoreVaultServerClient,
     validity_prover_client: ValidityProverClient,
     rollup_contract: RollupContract,
+    registry_contract: BlockBuilderRegistryContract,
+    redis_client: redis::Client,
 
     force_post: Arc<RwLock<bool>>,
     next_deposit_index: Arc<RwLock<u32>>,
@@ -56,7 +81,9 @@ pub struct BlockBuilder {
 }
 
 impl BlockBuilder {
-    pub fn new(env: &EnvVar) -> Self {
+    pub fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
+        let store_vault_server_client =
+            StoreVaultServerClient::new(&env.store_vault_server_base_url);
         let validity_prover_client = ValidityProverClient::new(&env.validity_prover_base_url);
         let rollup_contract = RollupContract::new(
             &env.l2_rpc_url,
@@ -64,26 +91,87 @@ impl BlockBuilder {
             env.rollup_contract_address,
             env.rollup_contract_deployed_block_number,
         );
-        let eth_allowance_for_block =
-            ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
+        let registry_contract = BlockBuilderRegistryContract::new(
+            &env.l2_rpc_url,
+            env.l2_chain_id,
+            env.block_builder_registry_contract_address,
+        );
+        let eth_allowance_for_block = {
+            let u = ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
+            let mut buf = [0u8; 32];
+            u.to_big_endian(&mut buf);
+            U256::from_bytes_be(&buf)
+        };
+
+        let redis_client = redis::Client::open(env.redis_url.clone()).unwrap();
+        let registration_fee = env
+            .registration_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let non_registration_fee = env
+            .non_registration_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let registration_collateral_fee = env
+            .registration_collateral_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let non_registration_collateral_fee = env
+            .non_registration_collateral_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+
+        let beneficiary_pubkey = env
+            .beneficiary_pubkey
+            .map(|pubkey| U256::from_bytes_be(pubkey.as_bytes()));
+
         let config = Config {
+            block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
             eth_allowance_for_block,
             deposit_check_interval: env.deposit_check_interval,
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
+            initial_heart_beat_delay: env.initial_heart_beat_delay,
+            heart_beat_interval: env.heart_beat_interval,
+            beneficiary_pubkey,
+            registration_fee,
+            non_registration_fee,
+            registration_collateral_fee,
+            non_registration_collateral_fee,
         };
-        Self {
+        Ok(Self {
             config,
+            store_vault_server_client,
             validity_prover_client,
             rollup_contract,
+            registry_contract,
+            redis_client,
+
             force_post: Arc::new(RwLock::new(false)),
             next_deposit_index: Arc::new(RwLock::new(0)),
             registration_state: Arc::new(RwLock::new(BuilderState::default())),
             non_registration_state: Arc::new(RwLock::new(BuilderState::default())),
+        })
+    }
+
+    pub fn get_fee_info(&self) -> FeeInfo {
+        FeeInfo {
+            beneficiary: self.config.beneficiary_pubkey,
+            registration_fee: convert_fee_vec(&self.config.registration_fee),
+            non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
+            registration_collateral_fee: convert_fee_vec(&self.config.registration_collateral_fee),
+            non_registration_collateral_fee: convert_fee_vec(
+                &self.config.non_registration_collateral_fee,
+            ),
         }
     }
 
+    // utility functions
     async fn state_read(
         &self,
         is_registration_block: bool,
@@ -114,12 +202,25 @@ impl BlockBuilder {
         }
     }
 
+    async fn num_tx_requests(
+        &self,
+        is_registration_block: bool,
+    ) -> Result<usize, BlockBuilderError> {
+        log::info!(
+            "num_tx_requests is_registration_block: {}",
+            is_registration_block
+        );
+        let state = self.state_read(is_registration_block).await;
+        Ok(state.count_tx_requests())
+    }
+
     // Send a tx request by the user.
     pub async fn send_tx_request(
         &self,
         is_registration_block: bool,
         pubkey: U256,
         tx: Tx,
+        fee_proof: &Option<FeeProof>,
     ) -> Result<(), BlockBuilderError> {
         log::info!(
             "send_tx_request is_registration_block: {}",
@@ -142,28 +243,40 @@ impl BlockBuilder {
         }
 
         // registration check
-        let block_number = self.rollup_contract.get_latest_block_number().await?;
         let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
-        if block_number != account_info.block_number {
-            // todo: better error handling, maybe wait for the validity prover to sync
-            return Err(BlockBuilderError::ValidityProverIsNotSynced(
-                block_number,
-                account_info.block_number,
-            ));
-        }
-
+        let account_id = account_info.account_id;
         if is_registration_block {
-            if let Some(account_id) = account_info.account_id {
+            if let Some(account_id) = account_id {
                 return Err(BlockBuilderError::AccountAlreadyRegistered(
                     pubkey, account_id,
                 ));
             }
-        } else if account_info.account_id.is_none() {
+        } else if account_id.is_none() {
             return Err(BlockBuilderError::AccountNotFound(pubkey));
         }
 
-        let mut state = self.state_write(is_registration_block).await;
+        // fee check
+        let required_fee = if is_registration_block {
+            self.config.registration_fee.as_ref()
+        } else {
+            self.config.non_registration_fee.as_ref()
+        };
+        let required_collateral_fee = if is_registration_block {
+            self.config.registration_collateral_fee.as_ref()
+        } else {
+            self.config.non_registration_collateral_fee.as_ref()
+        };
+        validate_fee_proof(
+            &self.store_vault_server_client,
+            self.config.beneficiary_pubkey,
+            required_fee,
+            required_collateral_fee,
+            pubkey,
+            fee_proof,
+        )
+        .await?;
 
+        let mut state = self.state_write(is_registration_block).await;
         // check again after the async call
         if !state.is_accepting_txs() {
             return Err(BlockBuilderError::NotAcceptingTx);
@@ -174,9 +287,8 @@ impl BlockBuilder {
         if state.is_pubkey_contained(pubkey) {
             return Err(BlockBuilderError::OnlyOneSenderAllowed);
         }
-
         // update state
-        state.append_tx_request(pubkey, tx);
+        state.append_tx_request(pubkey, account_id, tx, fee_proof.clone());
 
         Ok(())
     }
@@ -194,7 +306,7 @@ impl BlockBuilder {
         if !state.is_accepting_txs() {
             return Err(BlockBuilderError::NotAcceptingTx);
         }
-        state.propose_block();
+        state.propose_block(is_registration_block);
         Ok(())
     }
 
@@ -246,20 +358,12 @@ impl BlockBuilder {
         Ok(())
     }
 
-    pub async fn num_tx_requests(
+    // Post the block with the given signatures.
+    pub async fn post_block(
         &self,
         is_registration_block: bool,
-    ) -> Result<usize, BlockBuilderError> {
-        log::info!(
-            "num_tx_requests is_registration_block: {}",
-            is_registration_block
-        );
-        let state = self.state_read(is_registration_block).await;
-        Ok(state.count_tx_requests())
-    }
-
-    // Post the block with the given signatures.
-    pub async fn post_block(&self, is_registration_block: bool) -> Result<(), BlockBuilderError> {
+        force_post: bool,
+    ) -> Result<(), BlockBuilderError> {
         log::info!(
             "post_block is_registration_block: {}",
             is_registration_block
@@ -272,108 +376,53 @@ impl BlockBuilder {
         let signatures = state.get_signatures().unwrap();
         drop(state); // release the lock
 
-        let mut account_id_packed = None;
-        if is_registration_block {
-            for pubkey in memo.pubkeys.iter() {
-                if pubkey.is_dummy_pubkey() {
-                    // ignore dummy pubkey
-                    continue;
-                }
-                let account_info = self
-                    .validity_prover_client
-                    .get_account_info(*pubkey)
-                    .await?;
-                if account_info.account_id.is_some() {
-                    // This is unrecoverable so abandon the block
-                    self.reset(is_registration_block).await;
-                    return Err(BlockBuilderError::AccountAlreadyRegistered(
-                        *pubkey,
-                        account_info.account_id.unwrap(),
-                    ));
-                }
-            }
-        } else {
-            let mut account_ids = Vec::new();
-            for pubkey in memo.pubkeys.iter() {
-                if pubkey.is_dummy_pubkey() {
-                    account_ids.push(1); // dummy account id
-                    continue;
-                }
-                let account_info = self
-                    .validity_prover_client
-                    .get_account_info(*pubkey)
-                    .await?;
-                if account_info.account_id.is_none() {
-                    // This is unrecoverable so abandon the block
-                    self.reset(is_registration_block).await;
-                    return Err(BlockBuilderError::AccountNotFound(*pubkey));
-                }
-                account_ids.push(account_info.account_id.unwrap());
-            }
-            account_id_packed = Some(AccountIdPacked::pack(&account_ids));
-        }
-        let account_id_hash = account_id_packed.map_or(Bytes32::default(), |ids| ids.hash());
-        let mut sender_with_signatures = memo
-            .pubkeys
-            .iter()
-            .map(|pubkey| SenderWithSignature {
-                sender: *pubkey,
-                signature: None,
-            })
-            .collect::<Vec<_>>();
-        for signature in signatures.iter() {
-            let tx_index = memo
-                .pubkeys
-                .iter()
-                .position(|pubkey| pubkey == &signature.pubkey)
-                .unwrap(); // safe
-            sender_with_signatures[tx_index].signature = Some(signature.signature.clone());
-        }
-        let signature = construct_signature(
-            memo.tx_tree_root,
-            memo.expiry,
-            memo.pubkey_hash,
-            account_id_hash,
+        // queue the block post
+        let block_post = BlockPost {
+            force_post,
             is_registration_block,
-            &sender_with_signatures,
-        );
-
-        // call contract
-        if is_registration_block {
-            let trimmed_pubkeys = memo
-                .pubkeys
-                .into_iter()
-                .filter(|pubkey| !pubkey.is_dummy_pubkey())
-                .collect::<Vec<_>>();
-            self.rollup_contract
-                .post_registration_block(
-                    self.config.block_builder_private_key,
-                    self.config.eth_allowance_for_block,
-                    memo.tx_tree_root,
-                    memo.expiry,
-                    signature.sender_flag,
-                    signature.agg_pubkey,
-                    signature.agg_signature,
-                    signature.message_point,
-                    trimmed_pubkeys,
-                )
-                .await?;
-        } else {
-            self.rollup_contract
-                .post_non_registration_block(
-                    self.config.block_builder_private_key,
-                    self.config.eth_allowance_for_block,
-                    memo.tx_tree_root,
-                    memo.expiry,
-                    signature.sender_flag,
-                    signature.agg_pubkey,
-                    signature.agg_signature,
-                    signature.message_point,
-                    memo.pubkey_hash,
-                    account_id_packed.unwrap().to_trimmed_bytes(),
-                )
-                .await?;
+            tx_tree_root: memo.tx_tree_root,
+            expiry: memo.expiry,
+            pubkeys: memo.pubkeys.clone(),
+            account_ids: memo.get_account_ids(),
+            pubkey_hash: memo.pubkey_hash,
+            signatures: signatures.clone(),
         };
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        conn.rpush::<&str, String, ()>(POST_BLOCK_KEY, serde_json::to_string(&block_post).unwrap())
+            .await?;
+
+        // queue fee transfer
+        let use_fee = if is_registration_block {
+            self.config.registration_fee.is_some()
+        } else {
+            self.config.non_registration_fee.is_some()
+        };
+        if use_fee {
+            let beneficiary_pubkey =
+                self.config
+                    .beneficiary_pubkey
+                    .ok_or(BlockBuilderError::UnexpectedError(
+                        "Beneficiary pubkey is not set".to_string(),
+                    ))?;
+            let use_collateral = if is_registration_block {
+                self.config.registration_collateral_fee.is_some()
+            } else {
+                self.config.non_registration_collateral_fee.is_some()
+            };
+            let fee_collection = FeeCollection {
+                use_collateral,
+                memo,
+                signatures,
+            };
+            collect_fee(
+                &self.redis_client,
+                &self.store_vault_server_client,
+                beneficiary_pubkey,
+                &fee_collection,
+            )
+            .await?;
+        }
+
         // update state
         self.state_write(is_registration_block)
             .await
@@ -381,6 +430,7 @@ impl BlockBuilder {
         Ok(())
     }
 
+    // cycle functions
     async fn start_accepting_txs(
         &self,
         is_registration_block: bool,
@@ -446,7 +496,8 @@ impl BlockBuilder {
 
         tokio::time::sleep(Duration::from_secs(self.config.proposing_block_interval)).await;
 
-        self.post_block(is_registration_block).await?;
+        let force_post = *self.force_post.read().await;
+        self.post_block(is_registration_block, force_post).await?;
 
         let force_post = *self.force_post.read().await;
         if force_post {
@@ -456,12 +507,87 @@ impl BlockBuilder {
         Ok(())
     }
 
-    pub async fn evoke_force_post(&self) -> Result<(), BlockBuilderError> {
-        *self.force_post.write().await = true;
+    // job
+    async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
+        self.registry_contract
+            .emit_heart_beat(
+                self.config.block_builder_private_key,
+                &self.config.block_builder_url,
+            )
+            .await?;
         Ok(())
     }
 
-    // job
+    fn emit_heart_beat_job(self) {
+        let start_time = chrono::Utc::now().timestamp() as u64;
+        actix_web::rt::spawn(async move {
+            let now = chrono::Utc::now().timestamp() as u64;
+            let initial_heartbeat_time = start_time + self.config.initial_heart_beat_delay;
+            let delay_secs = if initial_heartbeat_time > now {
+                initial_heartbeat_time - now
+            } else {
+                0
+            };
+
+            // wait for the initial heart beat
+            tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+
+            // emit initial heart beat
+            match self.emit_heart_beat().await {
+                Ok(_) => log::info!("Initial heart beat emitted"),
+                Err(e) => log::error!("Error in emitting initial heart beat: {}", e),
+            }
+
+            // emit heart beat periodically
+            loop {
+                tokio::time::sleep(Duration::from_secs(self.config.heart_beat_interval)).await;
+                match self.emit_heart_beat().await {
+                    Ok(_) => log::info!("Heart beat emitted"),
+                    Err(e) => log::error!("Error in emitting heart beat: {}", e),
+                }
+            }
+        });
+    }
+
+    async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let (_key, block_post_str): (String, String) = conn
+            .blpop(&[POST_BLOCK_KEY, POST_BLOCK_SECONDARY_KEY], 0.)
+            .await?;
+        let block_post: BlockPost = serde_json::from_str(&block_post_str).unwrap();
+        match post_block(
+            self.config.block_builder_private_key,
+            self.config.eth_allowance_for_block,
+            &self.rollup_contract,
+            &self.validity_prover_client,
+            block_post,
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                log::error!("Error in posting block: {}", e);
+                conn.rpush::<&str, String, ()>(POST_BLOCK_DLQ_KEY, block_post_str)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    fn post_block_job(self) {
+        actix_web::rt::spawn(async move {
+            loop {
+                match self.post_block_inner().await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("Error in post block job: {}", e);
+                    }
+                }
+                sleep(Duration::from_secs(10)).await;
+            }
+        });
+    }
+
     fn post_empty_block_job(self, deposit_check_interval: u64) {
         actix_web::rt::spawn(async move {
             loop {
@@ -469,7 +595,7 @@ impl BlockBuilder {
                 match self.check_new_deposits().await {
                     Ok(new_deposits_exist) => {
                         if new_deposits_exist {
-                            self.evoke_force_post().await.unwrap();
+                            *self.force_post.write().await = true;
                         }
                     }
                     Err(e) => {
@@ -505,71 +631,9 @@ impl BlockBuilder {
         if let Some(deposit_check_interval) = self.config.deposit_check_interval {
             self.clone().post_empty_block_job(deposit_check_interval);
         }
+        self.clone().post_block_job();
         self.clone().cycle_job(true);
         self.clone().cycle_job(false);
-    }
-}
-
-struct SenderWithSignature {
-    sender: U256,
-    signature: Option<FlatG2>,
-}
-
-fn construct_signature(
-    tx_tree_root: Bytes32,
-    expiry: u64,
-    pubkey_hash: Bytes32,
-    account_id_hash: Bytes32,
-    is_registration_block: bool,
-    sender_with_signatures: &[SenderWithSignature],
-) -> SignatureContent {
-    assert_eq!(sender_with_signatures.len(), NUM_SENDERS_IN_BLOCK);
-    let sender_flag_bits = sender_with_signatures
-        .iter()
-        .map(|s| s.signature.is_some())
-        .collect::<Vec<_>>();
-    let sender_flag = Bytes16::from_bits_be(&sender_flag_bits);
-    let agg_pubkey = sender_with_signatures
-        .iter()
-        .map(|s| {
-            let weight = hash_to_weight(s.sender, pubkey_hash);
-            if s.signature.is_some() {
-                let pubkey_g1: G1Affine = G1Affine::recover_from_x(s.sender.into());
-                (pubkey_g1 * Fr::from(BigUint::from(weight))).into()
-            } else {
-                G1Affine::zero()
-            }
-        })
-        .fold(G1Affine::zero(), |acc: G1Affine, x: G1Affine| {
-            (acc + x).into()
-        });
-    let agg_signature = sender_with_signatures
-        .iter()
-        .map(|s| {
-            if let Some(signature) = s.signature.clone() {
-                signature.into()
-            } else {
-                G2Affine::zero()
-            }
-        })
-        .fold(G2Affine::zero(), |acc: G2Affine, x: G2Affine| {
-            (acc + x).into()
-        });
-    // message point
-    let message_point = tx_tree_root_and_expiry_to_message_point(tx_tree_root, expiry.into());
-    assert!(
-        Bn254::pairing(agg_pubkey, message_point)
-            == Bn254::pairing(G1Affine::generator(), agg_signature)
-    );
-    SignatureContent {
-        tx_tree_root,
-        expiry: expiry.into(),
-        is_registration_block,
-        sender_flag,
-        pubkey_hash,
-        account_id_hash,
-        agg_pubkey: agg_pubkey.into(),
-        agg_signature: agg_signature.into(),
-        message_point: message_point.into(),
+        self.clone().emit_heart_beat_job();
     }
 }

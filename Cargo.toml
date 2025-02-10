@@ -18,7 +18,7 @@ exclude = ["job-servers/aggregator-prover"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 
 [workspace.dependencies]
@@ -37,7 +37,7 @@ tokio = { version = "1", features = [
     "time",
 ] }
 reqwest = { version = "0.12.12", features = ["json"] }
-serde_json = "1.0.137"
+serde_json = "1.0.138"
 serde = { version = "1.0.215", features = ["derive"] }
 ethers = "2.0"
 anyhow = "1.0.88"
@@ -46,6 +46,7 @@ sqlx = { version = "0.8.2", features = [
     "postgres",
     "runtime-tokio-native-tls",
     "uuid",
+    "bigdecimal",
 ] }
 chrono = "0.4.39"
 log = "0.4.25"

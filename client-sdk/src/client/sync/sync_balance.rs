@@ -15,7 +15,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     circuits::balance::balance_pis::BalancePublicInputs, common::signature::key_set::KeySet,
-    ethereum_types::bytes32::Bytes32,
+    ethereum_types::bytes32::Bytes32, utils::leafable::Leafable,
 };
 
 use crate::client::{
@@ -117,6 +117,20 @@ where
     ) -> Result<(), SyncError> {
         log::info!("sync_deposit: {:?}", meta);
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let nullifier = deposit_data.deposit().unwrap().hash();
+        if user_data
+            .full_private_state
+            .nullifier_tree
+            .nullifiers()
+            .contains(&nullifier)
+        {
+            log::error!(
+                "Ignore deposit: {} because of nullifier: {} already exists",
+                meta.meta.uuid,
+                nullifier
+            );
+            return Ok(());
+        }
         // user's balance proof before applying the tx
         let prev_balance_proof = get_balance_proof(&user_data)?;
         let new_salt = generate_salt();
@@ -157,6 +171,22 @@ where
     ) -> Result<(), SyncError> {
         log::info!("sync_transfer: {:?}", meta);
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        // nullifier check
+        let nullifier: Bytes32 = transfer_data.transfer.commitment().into();
+        if user_data
+            .full_private_state
+            .nullifier_tree
+            .nullifiers()
+            .contains(&nullifier)
+        {
+            log::error!(
+                "Ignore tx: {} because of nullifier: {} already exists",
+                meta.meta.uuid,
+                nullifier
+            );
+            return Ok(());
+        }
+
         // user's balance proof before applying the tx
         let prev_balance_proof = get_balance_proof(&user_data)?;
 

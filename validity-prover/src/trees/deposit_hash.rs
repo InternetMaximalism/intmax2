@@ -5,8 +5,6 @@ use intmax2_zkp::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::trees::incremental_merkle_tree::HistoricalIncrementalMerkleTree;
-
 #[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DepositHash(pub Bytes32);
 
@@ -21,5 +19,3 @@ impl Leafable for DepositHash {
         self.0
     }
 }
-
-pub type HistoricalDepositHashTree<DB> = HistoricalIncrementalMerkleTree<DepositHash, DB>;

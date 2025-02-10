@@ -19,11 +19,10 @@ use intmax2_zkp::{
     },
     constants::{ACCOUNT_TREE_HEIGHT, BLOCK_HASH_TREE_HEIGHT, DEPOSIT_TREE_HEIGHT},
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _},
-    utils::trees::{
-        incremental_merkle_tree::IncrementalMerkleProof,
-        indexed_merkle_tree::leaf::IndexedMerkleLeaf, merkle_tree::MerkleProof,
-    },
+    utils::trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
 };
+
+use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
 
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
@@ -36,10 +35,11 @@ use tokio::time::interval;
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
     trees::{
-        account_tree::HistoricalAccountTree,
-        block_tree::HistoricalBlockHashTree,
-        deposit_hash_tree::{DepositHash, HistoricalDepositHashTree},
-        merkle_tree::sql_merkle_tree::SqlMerkleTree,
+        deposit_hash::DepositHash,
+        merkle_tree::{
+            sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
+            sql_indexed_merkle_tree::SqlIndexedMerkleTree, IndexedMerkleTreeClient,
+        },
         update::{to_block_witness, update_trees},
     },
     Env,
@@ -48,13 +48,6 @@ use crate::{
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
-
-#[allow(clippy::upper_case_acronyms)]
-type ADB = SqlMerkleTree<IndexedMerkleLeaf>;
-#[allow(clippy::upper_case_acronyms)]
-type BDB = SqlMerkleTree<Bytes32>;
-#[allow(clippy::upper_case_acronyms)]
-type DDB = SqlMerkleTree<DepositHash>;
 
 const ACCOUNT_DB_TAG: u32 = 1;
 const BLOCK_DB_TAG: u32 = 2;
@@ -69,9 +62,9 @@ pub struct Config {
 pub struct WitnessGenerator {
     config: Config,
     observer: Observer,
-    account_tree: HistoricalAccountTree<ADB>,
-    block_tree: HistoricalBlockHashTree<BDB>,
-    deposit_hash_tree: HistoricalDepositHashTree<DDB>,
+    account_tree: SqlIndexedMerkleTree,
+    block_tree: SqlIncrementalMerkleTree<Bytes32>,
+    deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
     pool: DbPool,
 }
 
@@ -95,18 +88,16 @@ impl WitnessGenerator {
         )
         .await?;
 
-        let pool = DbPool::from_config(&DbPoolConfig {
-            max_connections: env.database_max_connections,
-            idle_timeout: env.database_timeout,
-            url: env.database_url.clone(),
-        })
-        .await?;
+        let pool = sqlx::Pool::connect(&env.database_url).await?;
 
-        let account_db = SqlMerkleTree::new(&env.database_url, ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
-        let account_tree = HistoricalAccountTree::initialize(account_db).await?;
-
-        let block_db = SqlMerkleTree::new(&env.database_url, BLOCK_DB_TAG, BLOCK_HASH_TREE_HEIGHT);
-        let block_tree = HistoricalBlockHashTree::new(block_db);
+        let account_tree =
+            SqlIndexedMerkleTree::new(pool.clone(), ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
+        account_tree.initialize().await?;
+        let block_tree = SqlIncrementalMerkleTree::<Bytes32>::new(
+            pool.clone(),
+            BLOCK_DB_TAG,
+            BLOCK_HASH_TREE_HEIGHT,
+        );
         let last_timestamp = block_tree.get_last_timestamp().await?;
         if last_timestamp == 0 {
             let len = block_tree.len(last_timestamp).await?;
@@ -116,10 +107,11 @@ impl WitnessGenerator {
                     .await?;
             }
         }
-
-        let deposit_db = SqlMerkleTree::new(&env.database_url, DEPOSIT_DB_TAG, DEPOSIT_TREE_HEIGHT);
-        let deposit_hash_tree = HistoricalDepositHashTree::new(deposit_db);
-
+        let deposit_hash_tree = SqlIncrementalMerkleTree::<DepositHash>::new(
+            pool.clone(),
+            DEPOSIT_DB_TAG,
+            DEPOSIT_TREE_HEIGHT,
+        );
         log::info!("block tree len: {}", block_tree.len(last_timestamp).await?);
         log::info!(
             "deposit tree len: {}",
@@ -129,6 +121,13 @@ impl WitnessGenerator {
             "account tree len: {}",
             account_tree.len(last_timestamp).await?
         );
+
+        let pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: env.database_url.clone(),
+        })
+        .await?;
 
         Ok(Self {
             config,
@@ -446,29 +445,9 @@ impl WitnessGenerator {
 
     async fn reset_merkle_tree(&self, block_number: u32) -> Result<(), ValidityProverError> {
         log::warn!("Reset merkle tree from block number {}", block_number);
-        // delete all records which timestamp_value is equal or greater than block_number.
-        let mut tx = self.pool.begin().await?;
-        sqlx::query!(
-            "DELETE FROM hash_nodes WHERE timestamp_value >= $1",
-            block_number as i64
-        )
-        .execute(tx.as_mut())
-        .await?;
-
-        sqlx::query!(
-            "DELETE FROM leaves WHERE timestamp_value >= $1",
-            block_number as i64
-        )
-        .execute(tx.as_mut())
-        .await?;
-
-        sqlx::query!(
-            "DELETE FROM leaves_len WHERE timestamp_value >= $1",
-            block_number as i64
-        )
-        .execute(tx.as_mut())
-        .await?;
-        tx.commit().await?;
+        self.account_tree.reset(block_number as u64).await?;
+        self.block_tree.reset(block_number as u64).await?;
+        self.deposit_hash_tree.reset(block_number as u64).await?;
         Ok(())
     }
 
