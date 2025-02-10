@@ -129,7 +129,7 @@ pub async fn generate_fee_proof<S: StoreVaultClientInterface, B: BalanceProverCl
 
 pub fn quote_fee(
     is_registration_block: bool,
-    fee_index: u32,
+    fee_token_index: u32,
     fee_info: &FeeInfo,
 ) -> Result<(U256, U256), ClientError> {
     let fee_list = if is_registration_block {
@@ -138,7 +138,7 @@ pub fn quote_fee(
         &fee_info.non_registration_fee
     };
     let fee = if fee_list.is_some() {
-        get_fee(fee_index, fee_list.as_ref().unwrap())?
+        get_fee(fee_token_index, fee_list.as_ref().unwrap())?
     } else {
         U256::default()
     };
@@ -148,16 +148,18 @@ pub fn quote_fee(
         &fee_info.non_registration_collateral_fee
     };
     let collateral_fee = if collateral_fee_list.is_some() {
-        get_fee(fee_index, collateral_fee_list.as_ref().unwrap())?
+        get_fee(fee_token_index, collateral_fee_list.as_ref().unwrap())?
     } else {
         U256::default()
     };
     Ok((fee, collateral_fee))
 }
 
-fn get_fee(fee_index: u32, fee_list: &[Fee]) -> Result<U256, ClientError> {
+fn get_fee(fee_token_index: u32, fee_list: &[Fee]) -> Result<U256, ClientError> {
     fee_list
-        .get(fee_index as usize)
+        .get(fee_token_index as usize)
         .map(|fee| fee.amount)
-        .ok_or_else(|| ClientError::BlockBuilderFeeError("Fee token is not found".to_string()))
+        .ok_or_else(|| {
+            ClientError::BlockBuilderFeeError("Fee token index is not found".to_string())
+        })
 }

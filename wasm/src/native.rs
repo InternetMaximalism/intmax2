@@ -2,15 +2,19 @@ use crate::{
     client::{get_client, Config},
     init_logger,
     js_types::{
+        account::JsAccountInfo,
         auth::{JsAuth, JsFlatG2},
         data::{JsDepositData, JsTransferData, JsTxData},
         encrypted_data::JsEncryptedData,
     },
-    utils::str_privkey_to_keyset,
+    utils::{parse_h256_as_u256, str_privkey_to_keyset},
 };
 use intmax2_client_sdk::external_api::store_vault_server::generate_auth_for_get_data_sequence;
 use intmax2_interfaces::{
-    api::store_vault_server::{interface::DataType, types::CursorOrder},
+    api::{
+        store_vault_server::{interface::DataType, types::CursorOrder},
+        validity_prover::interface::ValidityProverClientInterface as _,
+    },
     data::{
         deposit_data::DepositData, encryption::Encryption as _, meta_data::MetaData,
         transfer_data::TransferData, tx_data::TxData,
@@ -152,4 +156,13 @@ pub async fn verify_signature(
     let result = signature::sign::verify_signature(signature.into(), public_key, message);
 
     Ok(result.is_ok())
+}
+
+#[wasm_bindgen]
+pub async fn get_account_info(config: &Config, public_key: &str) -> Result<JsAccountInfo, JsError> {
+    init_logger();
+    let pubkey = parse_h256_as_u256(public_key)?;
+    let client = get_client(config);
+    let account_info = client.validity_prover.get_account_info(pubkey).await?;
+    Ok(account_info.into())
 }
