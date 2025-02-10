@@ -10,7 +10,7 @@ use crate::{
 };
 use intmax2_interfaces::{
     api::store_vault_server::interface::StoreVaultClientInterface as _,
-    data::{encryption::Encryption as _, generic_temp_data::GenericTempData},
+    data::{encryption::Encryption as _, generic_misc_data::GenericMiscData},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,13 +45,13 @@ pub async fn save_derive_path(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
-    let generic_temp_data = GenericTempData {
+    let generic_misc_data = GenericMiscData {
         data: bincode::serialize(derive).unwrap(),
     };
-    let encrypted_data = generic_temp_data.encrypt(key.pubkey);
+    let encrypted_data = generic_misc_data.encrypt(key.pubkey);
     let uuid = client
         .store_vault_server
-        .save_temp(key, derive_topic(), &encrypted_data)
+        .save_misc(key, derive_topic(), &encrypted_data)
         .await?;
     Ok(uuid)
 }
@@ -66,12 +66,12 @@ pub async fn get_derive_path_list(
     let client = get_client(config);
     let encrypted_data = client
         .store_vault_server
-        .get_temp_sequence(key, derive_topic(), &None)
+        .get_misc_sequence(key, derive_topic(), &None)
         .await?;
     let mut derive_list: Vec<JsDerive> = Vec::new();
     for data in encrypted_data {
-        let generic_temp_data = GenericTempData::decrypt(&data.data, key)?;
-        derive_list.push(bincode::deserialize(&generic_temp_data.data).unwrap());
+        let generic_misc_data = GenericMiscData::decrypt(&data.data, key)?;
+        derive_list.push(bincode::deserialize(&generic_misc_data.data).unwrap());
     }
     Ok(derive_list)
 }

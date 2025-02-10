@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT uuid, timestamp, encrypted_data\n            FROM encrypted_temp\n            WHERE topic = $1\n            AND pubkey = $2\n            AND (timestamp, uuid) < ($3, $4)\n            ORDER BY timestamp DESC, uuid DESC\n            LIMIT $5\n        ",
+  "query": "\n            SELECT uuid, timestamp, encrypted_data\n            FROM encrypted_misc\n            WHERE topic = $1 \n            AND pubkey = $2 \n            AND (timestamp, uuid) > ($3, $4)\n            ORDER BY timestamp ASC, uuid ASC\n            LIMIT $5\n        ",
   "describe": {
     "columns": [
       {
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "b6eb93d15b2483d3b94568081f2fea8e1cb3890b4a3f9dda9a5f760100bdf667"
+  "hash": "3030c0edaa54d2aff3da717b85bcc12317d68325d70ccf1dedf218ffa23945db"
 }

@@ -334,7 +334,7 @@ impl StoreVaultServer {
         Ok((result, response_cursor))
     }
 
-    pub async fn save_temp(
+    pub async fn save_misc(
         &self,
         pubkey: U256,
         topic: Bytes32,
@@ -345,7 +345,7 @@ impl StoreVaultServer {
         let uuid = Uuid::new_v4().to_string();
         sqlx::query!(
             r#"
-            INSERT INTO encrypted_temp (uuid, topic, pubkey, encrypted_data, timestamp)
+            INSERT INTO encrypted_misc (uuid, topic, pubkey, encrypted_data, timestamp)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (uuid) DO NOTHING
             "#,
@@ -360,7 +360,7 @@ impl StoreVaultServer {
         Ok(uuid)
     }
 
-    pub async fn get_temp_sequence(
+    pub async fn get_misc_sequence(
         &self,
         pubkey: U256,
         topic: Bytes32,
@@ -376,7 +376,7 @@ impl StoreVaultServer {
                 sqlx::query!(
                     r#"
             SELECT uuid, timestamp, encrypted_data
-            FROM encrypted_temp
+            FROM encrypted_misc
             WHERE topic = $1 
             AND pubkey = $2 
             AND (timestamp, uuid) > ($3, $4)
@@ -418,7 +418,7 @@ impl StoreVaultServer {
                 sqlx::query!(
                     r#"
             SELECT uuid, timestamp, encrypted_data
-            FROM encrypted_temp
+            FROM encrypted_misc
             WHERE topic = $1
             AND pubkey = $2
             AND (timestamp, uuid) < ($3, $4)
@@ -455,7 +455,7 @@ impl StoreVaultServer {
         let next_cursor = result.last().map(|r| r.meta.clone());
         let total_count = sqlx::query_scalar!(
             r#"
-            SELECT COUNT(*) FROM encrypted_temp
+            SELECT COUNT(*) FROM encrypted_misc
             WHERE topic = $1 AND pubkey = $2
             "#,
             topic_hex,

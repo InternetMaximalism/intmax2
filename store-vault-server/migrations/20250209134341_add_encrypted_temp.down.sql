@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS encrypted_temp;
+DROP TABLE IF EXISTS encrypted_misc;
