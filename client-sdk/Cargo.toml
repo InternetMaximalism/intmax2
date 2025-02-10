@@ -27,7 +27,7 @@ simplelog = "0.12.2"
 log = "0.4.25"
 chrono = "0.4.39"
 regex = "1.10.6"
-clap = { version = "4.5.27", features = ["derive"] }
+clap = { version = "4.5.28", features = ["derive"] }
 dotenv = "0.15.0"
 hex = "0.4.3"
 thiserror = "2.0.3"
