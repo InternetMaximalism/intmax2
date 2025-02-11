@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT uuid, timestamp, encrypted_data\n            FROM encrypted_data\n            WHERE data_type = $1 AND pubkey = $2 AND uuid = ANY($3)\n            ",
+  "query": "\n            SELECT uuid, encrypted_data\n            FROM encrypted_data\n            WHERE data_type = $1 \n            AND pubkey = $2 \n            AND uuid < $3\n            ORDER BY uuid DESC\n            LIMIT $4\n        ",
   "describe": {
     "columns": [
       {
@@ -10,11 +10,6 @@
       },
       {
         "ordinal": 1,
-        "name": "timestamp",
-        "type_info": "Int8"
-      },
-      {
-        "ordinal": 2,
         "name": "encrypted_data",
         "type_info": "Bytea"
       }
@@ -23,14 +18,14 @@
       "Left": [
         "Int4",
         "Text",
-        "TextArray"
+        "Text",
+        "Int8"
       ]
     },
     "nullable": [
       false,
-      false,
       false
     ]
   },
-  "hash": "e4fe83e3f3ebb8556376e33dcf712037d681492e20e1bb76b013b5d47dcb18cd"
+  "hash": "347d5809447a583c17b21b0602e2284f774677c39e205c427364cf7b86abfb86"
 }
