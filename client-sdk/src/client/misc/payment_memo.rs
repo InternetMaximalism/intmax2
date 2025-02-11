@@ -5,27 +5,28 @@ use intmax2_interfaces::{
     data::encryption::Encryption,
 };
 
-use intmax2_zkp::{
-    common::{
-        claim::Claim, signature::key_set::KeySet, transfer::Transfer, withdrawal::Withdrawal,
-    },
-    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
+use intmax2_zkp::common::{
+    claim::Claim, signature::key_set::KeySet, transfer::Transfer, withdrawal::Withdrawal,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sha2::Digest as _;
 
 use crate::client::error::ClientError;
 
+use super::get_topic;
+
+pub const WITHDRAWAL_FEE_MEMO: &str = "withdrawal_fee_memo";
+pub const CLAIM_FEE_MEMO: &str = "claim_fee_memo";
+pub const USED_OR_INVALID_MEMO: &str = "used_or_invalid_memo";
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", bound(deserialize = ""))]
-pub struct PaymentMemo<M: Clone + Serialize + DeserializeOwned> {
+pub struct PaymentMemo {
     pub transfer_uuid: String,
-    pub sender: U256,
     pub transfer: Transfer,
-    pub memo: M,
+    pub memo: String,
 }
 
-impl<M: Clone + Serialize + DeserializeOwned> Encryption for PaymentMemo<M> {}
+impl Encryption for PaymentMemo {}
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,23 +54,22 @@ pub async fn save_payment_memo<
 >(
     store_vault_server: &S,
     key: KeySet,
-    payment_memo: &PaymentMemo<M>,
+    memo_name: &str,
+    payment_memo: &PaymentMemo,
 ) -> Result<String, ClientError> {
-    let topic = get_topic(payment_memo);
+    let topic = get_topic(memo_name);
     let uuid = store_vault_server
         .save_misc(key, topic, &payment_memo.encrypt(key.pubkey))
         .await?;
     Ok(uuid)
 }
 
-pub async fn get_payment_memos<
-    S: StoreVaultClientInterface,
-    M: Default + Clone + Serialize + DeserializeOwned,
->(
+pub async fn get_payment_memos<S: StoreVaultClientInterface>(
     store_vault_server: &S,
     key: KeySet,
-) -> Result<Vec<PaymentMemo<M>>, ClientError> {
-    let topic = get_topic::<M>(&PaymentMemo::<M>::default());
+    memo_name: &str,
+) -> Result<Vec<PaymentMemo>, ClientError> {
+    let topic = get_topic(memo_name);
     let encrypted_memos = store_vault_server
         .get_misc_sequence(key, topic, &None)
         .await?;
@@ -79,27 +79,4 @@ pub async fn get_payment_memos<
         memos.push(memo);
     }
     Ok(memos)
-}
-
-fn get_topic<M: Clone + Serialize + DeserializeOwned>(_payment_memo: &PaymentMemo<M>) -> Bytes32 {
-    let path_independent_type_name = match std::any::type_name::<M>().rfind(':') {
-        Some(index) => &std::any::type_name::<M>()[index + 1..],
-        None => std::any::type_name::<M>(),
-    };
-    let topic_str = format!("PaymentMemo<{}>", path_independent_type_name);
-    dbg!(&topic_str);
-    let digest: [u8; 32] = sha2::Sha256::digest(topic_str).into();
-    Bytes32::from_bytes_be(&digest)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::client::misc::payment_memo::WithdrawalFeeMemo;
-
-    #[test]
-    fn test_get_topic() {
-        let payment_memo = PaymentMemo::<WithdrawalFeeMemo>::default();
-        let _topic = get_topic(&payment_memo);
-    }
 }

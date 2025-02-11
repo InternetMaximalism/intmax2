@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::{bail, ensure};
 use intmax2_client_sdk::external_api::indexer::IndexerClient;
 use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
@@ -91,6 +93,7 @@ pub async fn transfer(
             &block_builder_url,
             key,
             transfers,
+            HashMap::new(),
             fee_quote.beneficiary,
             fee_quote.fee,
             fee_quote.collateral_fee,

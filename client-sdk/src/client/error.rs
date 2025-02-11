@@ -27,6 +27,9 @@ pub enum ClientError {
     #[error("Encryption error: {0}")]
     EncryptionError(#[from] EncryptionError),
 
+    #[error("Payment memo error: {0}")]
+    PaymentMemoError(String),
+
     #[error("Send tx request error: {0}")]
     SendTxRequestError(String),
 

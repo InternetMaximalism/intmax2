@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
@@ -44,6 +46,7 @@ use super::{
     error::ClientError,
     fee::{generate_fee_proof, quote_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
+    misc::payment_memo::PaymentMemo,
     strategy::mining::{fetch_mining_info, Mining},
     sync::utils::{generate_spent_witness, get_balance_proof},
 };
@@ -68,6 +71,12 @@ pub struct Client<
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct PaymentMemoEntry {
+    pub topic: Bytes32,
+    pub memo: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxRequestMemo {
     pub is_registration_block: bool,
@@ -75,6 +84,7 @@ pub struct TxRequestMemo {
     pub transfers: Vec<Transfer>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
+    pub payment_memo: HashMap<u32, PaymentMemoEntry>,
     pub fee_index: Option<u32>,
 }
 
@@ -176,11 +186,13 @@ where
     }
 
     /// Send a transaction request to the block builder
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_tx_request(
         &self,
         block_builder_url: &str,
         key: KeySet,
         transfers: Vec<Transfer>,
+        payment_memo: HashMap<u32, PaymentMemoEntry>,
         fee_beneficiary: Option<U256>,
         fee: Option<Fee>,
         collateral_fee: Option<Fee>,
@@ -209,6 +221,13 @@ where
             return Err(ClientError::BlockBuilderFeeError(
                 "fee_beneficiary is required".to_string(),
             ));
+        }
+        for memo_index in payment_memo.keys() {
+            if *memo_index as usize >= transfers.len() {
+                return Err(ClientError::PaymentMemoError(
+                    "memo_index is out of range".to_string(),
+                ));
+            }
         }
 
         // fetch if this is first time tx
@@ -359,6 +378,7 @@ where
             spent_witness,
             sender_proof_set_ephemeral_key,
             fee_index,
+            payment_memo,
         };
         Ok(memo)
     }
@@ -468,7 +488,7 @@ where
             )
             .await?;
 
-        let transfer_uuids = uuids
+        let transfer_uuids: Vec<String> = uuids
             .iter()
             .zip(entries.iter())
             .filter_map(|(uuid, entry)| {
@@ -490,6 +510,28 @@ where
                 }
             })
             .collect();
+
+        // Save payment memo after posting signature because it's not critical data,
+        // and we should reduce the time before posting the signature.
+        for (transfer_index, memo_entry) in memo.payment_memo.iter() {
+            let (position, transfer_data) = transfer_data_vec
+                .iter()
+                .enumerate()
+                .find(|(_position, transfer_data)| transfer_data.transfer_index == *transfer_index)
+                .ok_or(ClientError::UnexpectedError(
+                    "transfer_data not found".to_string(),
+                ))?;
+            let transfer_uuid = transfer_uuids[position].clone();
+            let payment_memo = PaymentMemo {
+                transfer_uuid,
+                transfer: transfer_data.transfer,
+                memo: memo_entry.memo.clone(),
+            };
+            // todo: batch save
+            self.store_vault_server
+                .save_misc(key, memo_entry.topic, &payment_memo.encrypt(key.pubkey))
+                .await?;
+        }
 
         let result = TxResult {
             tx_tree_root: proposal.tx_tree_root,

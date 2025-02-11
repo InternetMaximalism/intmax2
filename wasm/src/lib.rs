@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use client::{get_client, Config};
 use intmax2_client_sdk::{
     client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key,
@@ -112,6 +114,7 @@ pub async fn send_tx_request(
             block_builder_url,
             key,
             transfers,
+            HashMap::new(),
             beneficiary,
             fee,
             collateral_fee,
