@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
@@ -72,6 +70,7 @@ pub struct Client<
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PaymentMemoEntry {
+    pub transfer_index: u32,
     pub topic: Bytes32,
     pub memo: String,
 }
@@ -84,7 +83,7 @@ pub struct TxRequestMemo {
     pub transfers: Vec<Transfer>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
-    pub payment_memo: HashMap<u32, PaymentMemoEntry>,
+    pub payment_memos: Vec<PaymentMemoEntry>,
     pub fee_index: Option<u32>,
 }
 
@@ -192,7 +191,7 @@ where
         block_builder_url: &str,
         key: KeySet,
         transfers: Vec<Transfer>,
-        payment_memo: HashMap<u32, PaymentMemoEntry>,
+        payment_memos: Vec<PaymentMemoEntry>,
         fee_beneficiary: Option<U256>,
         fee: Option<Fee>,
         collateral_fee: Option<Fee>,
@@ -222,10 +221,10 @@ where
                 "fee_beneficiary is required".to_string(),
             ));
         }
-        for memo_index in payment_memo.keys() {
-            if *memo_index as usize >= transfers.len() {
+        for e in &payment_memos {
+            if e.transfer_index as usize >= transfers.len() {
                 return Err(ClientError::PaymentMemoError(
-                    "memo_index is out of range".to_string(),
+                    "memo.transfer_index is out of range".to_string(),
                 ));
             }
         }
@@ -378,7 +377,7 @@ where
             spent_witness,
             sender_proof_set_ephemeral_key,
             fee_index,
-            payment_memo,
+            payment_memos,
         };
         Ok(memo)
     }
@@ -530,11 +529,13 @@ where
 
         // Save payment memo after posting signature because it's not critical data,
         // and we should reduce the time before posting the signature.
-        for (transfer_index, memo_entry) in memo.payment_memo.iter() {
+        for memo_entry in memo.payment_memos.iter() {
             let (position, transfer_data) = transfer_data_vec
                 .iter()
                 .enumerate()
-                .find(|(_position, transfer_data)| transfer_data.transfer_index == *transfer_index)
+                .find(|(_position, transfer_data)| {
+                    transfer_data.transfer_index == memo_entry.transfer_index
+                })
                 .ok_or(ClientError::UnexpectedError(
                     "transfer_data not found".to_string(),
                 ))?;

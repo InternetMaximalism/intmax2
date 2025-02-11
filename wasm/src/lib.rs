@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use client::{get_client, Config};
 use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
 use intmax2_interfaces::data::deposit_data::TokenType;
@@ -12,6 +10,7 @@ use js_types::{
     data::{JsDepositResult, JsTxResult, JsUserData},
     fee::{JsFee, JsFeeQuote},
     history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
+    payment_memo::JsPaymentMemoEntry,
     utils::{parse_address, parse_u256},
     wrapper::JsTxRequestMemo,
 };
@@ -86,11 +85,13 @@ pub async fn prepare_deposit(
 
 /// Function to send a tx request to the block builder. The return value contains information to take a backup.
 #[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
 pub async fn send_tx_request(
     config: &Config,
     block_builder_url: &str,
     private_key: &str,
     transfers: Vec<JsTransfer>,
+    payment_memos: Vec<JsPaymentMemoEntry>,
     beneficiary: Option<String>,
     fee: Option<JsFee>,
     collateral_fee: Option<JsFee>,
@@ -100,6 +101,10 @@ pub async fn send_tx_request(
     let transfers: Vec<Transfer> = transfers
         .iter()
         .map(|transfer| transfer.clone().try_into())
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let payment_memos = payment_memos
+        .iter()
+        .map(|e| e.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
     let beneficiary = beneficiary.map(|b| parse_h256_as_u256(&b)).transpose()?;
     let fee = fee.map(|f| f.try_into()).transpose()?;
@@ -111,7 +116,7 @@ pub async fn send_tx_request(
             block_builder_url,
             key,
             transfers,
-            HashMap::new(),
+            payment_memos,
             beneficiary,
             fee,
             collateral_fee,
