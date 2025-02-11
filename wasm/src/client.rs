@@ -140,6 +140,9 @@ pub fn get_client(config: &Config) -> Client<BB, S, V, B, W> {
         tx_timeout: config.tx_timeout,
         block_builder_request_interval: config.block_builder_request_interval,
         block_builder_request_limit: config.block_builder_request_limit,
+        block_builder_query_wait_time: config.block_builder_query_wait_time,
+        block_builder_query_interval: config.block_builder_query_interval,
+        block_builder_query_limit: config.block_builder_query_limit,
     };
 
     let liquidity_contract = LiquidityContract::new(

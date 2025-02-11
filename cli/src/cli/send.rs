@@ -109,27 +109,9 @@ pub async fn transfer(
     ))
     .await;
 
-    let mut tries = 0;
-    let proposal = loop {
-        let proposal = client
-            .query_proposal(&block_builder_url, key, is_registration_block, tx)
-            .await?;
-        if let Some(p) = proposal {
-            break p;
-        }
-        if tries > env.block_builder_query_limit {
-            return Err(CliError::FailedToGetProposal);
-        }
-        tries += 1;
-        log::info!(
-            "Failed to get proposal, retrying in {} seconds",
-            env.block_builder_query_interval
-        );
-        tokio::time::sleep(std::time::Duration::from_secs(
-            env.block_builder_query_interval,
-        ))
-        .await;
-    };
+    let proposal = client
+        .query_proposal(&block_builder_url, key, is_registration_block, tx)
+        .await?;
 
     log::info!("Finalizing tx");
     client

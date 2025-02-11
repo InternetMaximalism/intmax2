@@ -33,6 +33,9 @@ pub enum ClientError {
     #[error("Send tx request error: {0}")]
     SendTxRequestError(String),
 
+    #[error("Failed to get proposal: {0}")]
+    FailedToGetProposal(String),
+
     #[error("Balance error: {0}")]
     BalanceError(String),
 

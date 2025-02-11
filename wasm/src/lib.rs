@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use client::{get_client, Config};
-use intmax2_client_sdk::{
-    client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key,
-    external_api::utils::time::sleep_for,
-};
+use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::transfer::Transfer,
@@ -140,20 +137,9 @@ pub async fn query_and_finalize(
     let tx_request_memo = tx_request_memo.to_tx_request_memo()?;
     let is_registration_block = tx_request_memo.is_registration_block;
     let tx = tx_request_memo.tx;
-    let mut tries = 0;
-    let proposal = loop {
-        let proposal = client
-            .query_proposal(block_builder_url, key, is_registration_block, tx)
-            .await?;
-        if let Some(p) = proposal {
-            break p;
-        }
-        if tries > config.block_builder_query_limit {
-            return Err(JsError::new("Failed to get proposal"));
-        }
-        tries += 1;
-        sleep_for(config.block_builder_query_interval).await;
-    };
+    let proposal = client
+        .query_proposal(block_builder_url, key, is_registration_block, tx)
+        .await?;
     let tx_result = client
         .finalize_tx(block_builder_url, key, &tx_request_memo, &proposal)
         .await?;

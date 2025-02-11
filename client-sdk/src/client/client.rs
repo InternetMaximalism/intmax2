@@ -389,11 +389,28 @@ where
         key: KeySet,
         is_registration_block: bool,
         tx: Tx,
-    ) -> Result<Option<BlockProposal>, ClientError> {
-        let proposal = self
-            .block_builder
-            .query_proposal(block_builder_url, is_registration_block, key.pubkey, tx)
-            .await?;
+    ) -> Result<BlockProposal, ClientError> {
+        let mut tries = 0;
+        let proposal = loop {
+            let proposal = self
+                .block_builder
+                .query_proposal(block_builder_url, is_registration_block, key.pubkey, tx)
+                .await?;
+            if let Some(proposal) = proposal {
+                break proposal;
+            }
+            if tries > self.config.block_builder_query_limit {
+                return Err(ClientError::FailedToGetProposal(
+                    "block builder query limit exceeded".to_string(),
+                ));
+            }
+            tries += 1;
+            log::info!(
+                "Failed to get proposal, retrying in {} seconds",
+                self.config.block_builder_query_interval
+            );
+            sleep_for(self.config.block_builder_query_interval).await;
+        };
         Ok(proposal)
     }
 
