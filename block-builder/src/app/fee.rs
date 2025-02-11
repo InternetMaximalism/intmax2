@@ -26,12 +26,11 @@ use intmax2_zkp::{
     ethereum_types::{account_id_packed::AccountIdPacked, u256::U256},
 };
 use num_bigint::BigUint;
-use redis::AsyncCommands as _;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 use super::{
-    block_builder::POST_BLOCK_SECONDARY_KEY,
-    block_post::BlockPost,
+    block_post::BlockPostTask,
     builder_state::ProposalMemo,
     error::{BlockBuilderError, FeeError},
 };
@@ -243,7 +242,7 @@ pub struct FeeCollection {
 
 /// Collect fee from the senders
 pub async fn collect_fee(
-    redis_client: &redis::Client,
+    tx: &mpsc::Sender<BlockPostTask>,
     store_vault_server_client: &StoreVaultServerClient,
     beneficiary_pubkey: U256,
     fee_collection: &FeeCollection,
@@ -254,7 +253,6 @@ pub async fn collect_fee(
     );
     let mut transfer_data_vec = Vec::new();
     let memo = &fee_collection.memo;
-    let mut conn = redis_client.get_multiplexed_async_connection().await?;
     for (request, proposal) in memo.tx_requests.iter().zip(memo.proposals.iter()) {
         // this already validated in the tx request phase
         let fee_proof = request
@@ -330,7 +328,7 @@ pub async fn collect_fee(
             // save transfer data
             transfer_data_vec.push(transfer_data.clone());
 
-            let block_post = BlockPost {
+            let block_post = BlockPostTask {
                 force_post: false,
                 is_registration_block: memo.is_registration_block,
                 tx_tree_root: transfer_data.tx_tree_root,
@@ -340,11 +338,9 @@ pub async fn collect_fee(
                 pubkey_hash,
                 signatures: vec![signature],
             };
-            conn.rpush::<&str, String, ()>(
-                POST_BLOCK_SECONDARY_KEY,
-                serde_json::to_string(&block_post).unwrap(),
-            )
-            .await?;
+            tx.send(block_post).await.map_err(|e| {
+                BlockBuilderError::UnexpectedError(format!("Failed to send block post task: {}", e))
+            })?;
             log::warn!("sender {}'s collateral block is queued", request.pubkey);
         }
     }
