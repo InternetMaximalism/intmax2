@@ -94,27 +94,12 @@ fn get_topic<M: Clone + Serialize + DeserializeOwned>(_payment_memo: &PaymentMem
 
 #[cfg(test)]
 mod tests {
-    use intmax2_interfaces::api::block_builder::interface::Fee;
-    use intmax2_zkp::{common::withdrawal::Withdrawal, ethereum_types::u256::U256};
-
-    use crate::client::misc::payment_memo::WithdrawalFeeMemo;
-
     use super::*;
+    use crate::client::misc::payment_memo::WithdrawalFeeMemo;
 
     #[test]
     fn test_get_topic() {
-        let payment_memo = PaymentMemo {
-            transfer_uuid: "uuid".to_string(),
-            sender: U256::from(0),
-            transfer: Default::default(),
-            memo: WithdrawalFeeMemo {
-                withdrawal: Withdrawal::rand(&mut rand::thread_rng()),
-                fee: Fee {
-                    token_index: 0,
-                    amount: 0.into(),
-                },
-            },
-        };
+        let payment_memo = PaymentMemo::<WithdrawalFeeMemo>::default();
         let _topic = get_topic(&payment_memo);
     }
 }
