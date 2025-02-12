@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
+        block_builder::interface::{BlockBuilderClientInterface, Fee},
         store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::{
@@ -83,6 +83,14 @@ pub struct TxRequestMemo {
 pub struct DepositResult {
     pub deposit_data: DepositData,
     pub deposit_uuid: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeeQuote {
+    pub beneficiary: Option<U256>,
+    pub fee: Option<Fee>,
+    pub collateral_fee: Option<Fee>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -173,8 +181,19 @@ where
         block_builder_url: &str,
         key: KeySet,
         transfers: Vec<Transfer>,
-        fee_token_index: u32,
+        fee_beneficiary: Option<U256>,
+        fee: Option<Fee>,
+        collateral_fee: Option<Fee>,
     ) -> Result<TxRequestMemo, ClientError> {
+        log::info!(
+            "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {:?}, fee {:?}, collateral_fee {:?}",
+            key.pubkey,
+            transfers.len(),
+            fee_beneficiary,
+            fee,
+            collateral_fee
+        );
+
         // input validation
         if transfers.is_empty() {
             return Err(ClientError::TransferLenError(
@@ -186,31 +205,29 @@ where
                 "transfers is too many".to_string(),
             ));
         }
+        if fee.is_some() && fee_beneficiary.is_none() {
+            return Err(ClientError::BlockBuilderFeeError(
+                "fee_beneficiary is required".to_string(),
+            ));
+        }
+
         // fetch if this is first time tx
         let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
 
-        // get fee info
-        let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
-        let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
-        log::info!(
-            "send_tx_request: fee {}, collateral_fee {} for fee_token_index {}",
-            fee,
-            collateral_fee,
-            fee_token_index
-        );
-        if collateral_fee > 0.into() && fee_info.beneficiary.is_none() {
-            return Err(ClientError::BlockBuilderFeeError(
-                "Collateral fee is required but beneficiary is not set".to_string(),
-            ));
-        }
-
-        let fee_transfer = fee_info.beneficiary.map(|beneficiary| Transfer {
-            recipient: GenericAddress::from_pubkey(beneficiary),
-            amount: fee,
-            token_index: fee_token_index,
+        let fee_transfer = fee.map(|fee| Transfer {
+            recipient: GenericAddress::from_pubkey(fee_beneficiary.unwrap()),
+            amount: fee.amount,
+            token_index: fee.token_index,
             salt: generate_salt(),
         });
+        let collateral_transfer = collateral_fee.map(|fee| Transfer {
+            recipient: GenericAddress::from_pubkey(fee_beneficiary.unwrap()),
+            amount: fee.amount,
+            token_index: fee.token_index,
+            salt: generate_salt(),
+        });
+
         // add fee transfer to the end
         let transfers = if let Some(fee_transfer) = fee_transfer {
             transfers
@@ -222,17 +239,6 @@ where
         };
         let fee_index = if fee_transfer.is_some() {
             Some(transfers.len() as u32 - 1)
-        } else {
-            None
-        };
-        let collateral_transfer = if collateral_fee > 0.into() {
-            let beneficiary = fee_info.beneficiary.unwrap(); // already checked
-            Some(Transfer {
-                recipient: GenericAddress::from_pubkey(beneficiary),
-                amount: collateral_fee,
-                token_index: fee_token_index,
-                salt: generate_salt(),
-            })
         } else {
             None
         };
@@ -553,6 +559,33 @@ where
         key: KeySet,
     ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
         fetch_tx_history(self, key).await
+    }
+
+    pub async fn quote_fee(
+        &self,
+        block_builder_url: &str,
+        pubkey: U256,
+        fee_token_index: u32,
+    ) -> Result<FeeQuote, ClientError> {
+        let account_info = self.validity_prover.get_account_info(pubkey).await?;
+        let is_registration_block = account_info.account_id.is_none();
+        let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
+        let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
+        if fee_info.beneficiary.is_none() && fee.is_some() {
+            return Err(ClientError::BlockBuilderFeeError(
+                "beneficiary is required".to_string(),
+            ));
+        }
+        if fee.is_none() && collateral_fee.is_some() {
+            return Err(ClientError::BlockBuilderFeeError(
+                "collateral fee is required but fee is not found".to_string(),
+            ));
+        }
+        Ok(FeeQuote {
+            beneficiary: fee_info.beneficiary,
+            fee,
+            collateral_fee,
+        })
     }
 }
 

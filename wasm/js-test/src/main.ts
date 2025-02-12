@@ -1,67 +1,10 @@
-import { cleanEnv, num, str, url } from 'envalid';
-import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_intmax_account_from_eth_key, get_user_data, get_withdrawal_info, JsGenericAddress, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, send_tx_request, sync, sync_withdrawals, } from '../pkg';
+import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_intmax_account_from_eth_key, get_user_data, get_withdrawal_info, JsGenericAddress, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
 import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
-import * as dotenv from 'dotenv';
 import { ethers } from 'ethers';
-dotenv.config();
-
-const env = cleanEnv(process.env, {
-  USER_ETH_PRIVATE_KEY: str(),
-  ENV: str(),
-
-  // Base URLs
-  STORE_VAULT_SERVER_BASE_URL: url(),
-  BALANCE_PROVER_BASE_URL: url(),
-  VALIDITY_PROVER_BASE_URL: url(),
-  WITHDRAWAL_SERVER_BASE_URL: url(),
-  BLOCK_BUILDER_BASE_URL: url(),
-
-  // Timeout configurations
-  DEPOSIT_TIMEOUT: num(),
-  TX_TIMEOUT: num(),
-
-  // Block builder client configurations
-  BLOCK_BUILDER_REQUEST_INTERVAL: num(),
-  BLOCK_BUILDER_REQUEST_LIMIT: num(),
-  BLOCK_BUILDER_QUERY_WAIT_TIME: num(),
-  BLOCK_BUILDER_QUERY_INTERVAL: num(),
-  BLOCK_BUILDER_QUERY_LIMIT: num(),
-
-  // L1 configurations
-  L1_RPC_URL: url(),
-  L1_CHAIN_ID: num(),
-  LIQUIDITY_CONTRACT_ADDRESS: str(),
-
-  // L2 configurations
-  L2_RPC_URL: url(),
-  L2_CHAIN_ID: num(),
-  ROLLUP_CONTRACT_ADDRESS: str(),
-  ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER: num(),
-});
+import { env, config } from './setup';
 
 async function main() {
-  const config = new Config(
-    env.STORE_VAULT_SERVER_BASE_URL,
-    env.BALANCE_PROVER_BASE_URL,
-    env.VALIDITY_PROVER_BASE_URL,
-    env.WITHDRAWAL_SERVER_BASE_URL,
-    BigInt(env.DEPOSIT_TIMEOUT),
-    BigInt(env.TX_TIMEOUT),
-    BigInt(env.BLOCK_BUILDER_REQUEST_INTERVAL),
-    BigInt(env.BLOCK_BUILDER_REQUEST_LIMIT),
-    BigInt(env.BLOCK_BUILDER_QUERY_WAIT_TIME),
-    BigInt(env.BLOCK_BUILDER_QUERY_INTERVAL),
-    BigInt(env.BLOCK_BUILDER_QUERY_LIMIT),
-    env.L1_RPC_URL,
-    BigInt(env.L1_CHAIN_ID),
-    env.LIQUIDITY_CONTRACT_ADDRESS,
-    env.L2_RPC_URL,
-    BigInt(env.L2_CHAIN_ID),
-    env.ROLLUP_CONTRACT_ADDRESS,
-    BigInt(env.ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER),
-  );
-
   const ethKey = env.USER_ETH_PRIVATE_KEY;
   const ethAddress = new ethers.Wallet(ethKey).address;
   console.log("ethAddress: ", ethAddress);
@@ -77,7 +20,7 @@ async function main() {
   const tokenType = 0; // 0: native token, 1: ERC20, 2: ERC721, 3: ERC1155
   const tokenAddress = "0x0000000000000000000000000000000000000000";
   const tokenId = "0"; // Use "0" for fungible tokens
-  const amount = "123"; // in wei
+  const amount = "1000000000000000"; // in wei
 
   const balance = await getEthBalance(ethKey, env.L1_RPC_URL);
   console.log("balance: ", balance);
@@ -109,10 +52,10 @@ async function main() {
   const salt = generateRandomHex(32);
   const transfer = new JsTransfer(genericAddress, 0, "1", salt);
 
-  await sendTx(config, env.BLOCK_BUILDER_BASE_URL, privateKey, [transfer]);
+  await sendTx(config, env.BLOCK_BUILDER_BASE_URL, publicKey, privateKey, [transfer]);
 
   // wait for the validity prover syncs
-  await sleep(40);
+  await sleep(80);
 
   // get the receiver's balance
   await syncBalanceProof(config, privateKey);
@@ -129,10 +72,10 @@ async function main() {
   const withdrawalAmount = "1";
   const withdrawalSalt = generateRandomHex(32);
   const withdrawalTransfer = new JsTransfer(new JsGenericAddress(false, withdrawalEthAddress), withdrawalTokenIndex, withdrawalAmount, withdrawalSalt);
-  await sendTx(config, env.BLOCK_BUILDER_BASE_URL, privateKey, [withdrawalTransfer]);
+  await sendTx(config, env.BLOCK_BUILDER_BASE_URL, publicKey, privateKey, [withdrawalTransfer]);
 
   // wait for the validity prover syncs
-  await sleep(40);
+  await sleep(80);
 
   // sync withdrawals 
   await sync_withdrawals(config, privateKey);
@@ -179,9 +122,15 @@ async function syncBalanceProof(config: Config, privateKey: string) {
   console.log("balance proof synced");
 }
 
-async function sendTx(config: Config, block_builder_base_url: string, privateKey: string, transfers: JsTransfer[]) {
+async function sendTx(config: Config, block_builder_base_url: string, publicKey: string, privateKey: string, transfers: JsTransfer[]) {
   console.log("Sending tx...");
-  let memo: JsTxRequestMemo = await send_tx_request(config, block_builder_base_url, privateKey, transfers, 0);
+  const fee_token_index = 0; // use native token for fee
+  const fee_quote = await quote_fee(config, block_builder_base_url, publicKey, fee_token_index);
+  console.log("Fee beneficiary: ", fee_quote.beneficiary);
+  console.log("Fee: ", fee_quote.fee?.amount);
+  console.log("Collateral fee: ", fee_quote.collateral_fee?.amount);
+
+  let memo: JsTxRequestMemo = await send_tx_request(config, block_builder_base_url, privateKey, transfers, fee_quote.beneficiary, fee_quote.fee, fee_quote.collateral_fee);
   console.log("Transfer root of tx: ", memo.tx().transfer_tree_root);
 
   // wait for the block builder to propose the block

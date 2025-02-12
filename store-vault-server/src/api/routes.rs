@@ -8,9 +8,10 @@ use actix_web::{
 use intmax2_interfaces::{
     api::store_vault_server::types::{
         GetDataBatchRequest, GetDataBatchResponse, GetDataSequenceRequest, GetDataSequenceResponse,
-        GetSenderProofSetRequest, GetSenderProofSetResponse, GetUserDataRequest,
-        GetUserDataResponse, SaveDataBatchRequest, SaveDataBatchResponse,
-        SaveSenderProofSetRequest, SaveUserDataRequest,
+        GetMiscSequenceRequest, GetMiscSequenceResponse, GetSenderProofSetRequest,
+        GetSenderProofSetResponse, GetUserDataRequest, GetUserDataResponse, SaveDataBatchRequest,
+        SaveDataBatchResponse, SaveMiscRequest, SaveMiscResponse, SaveSenderProofSetRequest,
+        SaveUserDataRequest,
     },
     utils::signature::{Signable, WithAuth},
 };
@@ -167,6 +168,48 @@ pub async fn get_data_sequence(
     Ok(Json(res))
 }
 
+#[post("/save-misc")]
+pub async fn save_misc(
+    state: Data<State>,
+    request: Json<WithAuth<SaveMiscRequest>>,
+) -> Result<Json<SaveMiscResponse>, Error> {
+    request
+        .inner
+        .verify(&request.auth)
+        .map_err(ErrorUnauthorized)?;
+    let pubkey = request.auth.pubkey;
+    let request = &request.inner;
+    let uuid = state
+        .store_vault_server
+        .save_misc(pubkey, request.topic, &request.data)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(SaveMiscResponse { uuid }))
+}
+
+#[post("/get-misc-sequence")]
+pub async fn get_misc_sequence(
+    state: Data<State>,
+    request: Json<WithAuth<GetMiscSequenceRequest>>,
+) -> Result<Json<GetMiscSequenceResponse>, Error> {
+    request
+        .inner
+        .verify(&request.auth)
+        .map_err(ErrorUnauthorized)?;
+    let pubkey = request.auth.pubkey;
+    let request = &request.inner;
+    let (data, cursor_response) = state
+        .store_vault_server
+        .get_misc_sequence(pubkey, request.topic, &request.cursor)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let res = GetMiscSequenceResponse {
+        data,
+        cursor_response,
+    };
+    Ok(Json(res))
+}
+
 pub fn store_vault_server_scope() -> actix_web::Scope {
     actix_web::web::scope("/store-vault-server")
         .service(save_user_data)
@@ -176,4 +219,6 @@ pub fn store_vault_server_scope() -> actix_web::Scope {
         .service(save_data_batch)
         .service(get_data_batch)
         .service(get_data_sequence)
+        .service(save_misc)
+        .service(get_misc_sequence)
 }

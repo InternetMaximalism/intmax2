@@ -18,13 +18,15 @@ use intmax2_zkp::{
     constants::NUM_SENDERS_IN_BLOCK,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
-use redis::AsyncCommands as _;
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::{sync::RwLock, time::sleep};
+use tokio::{
+    sync::{mpsc, Mutex, RwLock},
+    time::sleep,
+};
 
 use crate::{
     app::{
-        block_post::BlockPost,
+        block_post::BlockPostTask,
         fee::{collect_fee, validate_fee_proof, FeeCollection},
     },
     EnvVar,
@@ -37,14 +39,7 @@ use super::{
     fee::{convert_fee_vec, parse_fee_str},
 };
 
-// key for post_block
-pub const POST_BLOCK_KEY: &str = "block_builder::post_block";
-
-// secondary key for post_block
-pub const POST_BLOCK_SECONDARY_KEY: &str = "block_builder::post_block_secondary";
-
-// dead letter queue for post_block
-pub const POST_BLOCK_DLQ_KEY: &str = "block_builder::post_block_dlq";
+pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 10;
 
 #[derive(Debug, Clone)]
 struct Config {
@@ -72,7 +67,10 @@ pub struct BlockBuilder {
     validity_prover_client: ValidityProverClient,
     rollup_contract: RollupContract,
     registry_contract: BlockBuilderRegistryContract,
-    redis_client: redis::Client,
+    tx_high: mpsc::Sender<BlockPostTask>,
+    rx_high: Arc<Mutex<mpsc::Receiver<BlockPostTask>>>,
+    tx_low: mpsc::Sender<BlockPostTask>,
+    rx_low: Arc<Mutex<mpsc::Receiver<BlockPostTask>>>,
 
     force_post: Arc<RwLock<bool>>,
     next_deposit_index: Arc<RwLock<u32>>,
@@ -103,7 +101,12 @@ impl BlockBuilder {
             U256::from_bytes_be(&buf)
         };
 
-        let redis_client = redis::Client::open(env.redis_url.clone()).unwrap();
+        let buf = env
+            .num_block_post_channel
+            .unwrap_or(DEFAULT_POST_BLOCK_CHANNEL) as usize;
+        let (tx_high, rx_high) = mpsc::channel(buf);
+        let (tx_low, rx_low) = mpsc::channel(buf);
+
         let registration_fee = env
             .registration_fee
             .as_ref()
@@ -150,8 +153,10 @@ impl BlockBuilder {
             validity_prover_client,
             rollup_contract,
             registry_contract,
-            redis_client,
-
+            tx_high,
+            rx_high: Arc::new(Mutex::new(rx_high)),
+            tx_low,
+            rx_low: Arc::new(Mutex::new(rx_low)),
             force_post: Arc::new(RwLock::new(false)),
             next_deposit_index: Arc::new(RwLock::new(0)),
             registration_state: Arc::new(RwLock::new(BuilderState::default())),
@@ -377,7 +382,7 @@ impl BlockBuilder {
         drop(state); // release the lock
 
         // queue the block post
-        let block_post = BlockPost {
+        let block_post = BlockPostTask {
             force_post,
             is_registration_block,
             tx_tree_root: memo.tx_tree_root,
@@ -387,9 +392,10 @@ impl BlockBuilder {
             pubkey_hash: memo.pubkey_hash,
             signatures: signatures.clone(),
         };
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        conn.rpush::<&str, String, ()>(POST_BLOCK_KEY, serde_json::to_string(&block_post).unwrap())
-            .await?;
+
+        self.tx_high.send(block_post).await.map_err(|e| {
+            BlockBuilderError::QueueError(format!("Error in sending block post: {}", e))
+        })?;
 
         // queue fee transfer
         let use_fee = if is_registration_block {
@@ -415,7 +421,7 @@ impl BlockBuilder {
                 signatures,
             };
             collect_fee(
-                &self.redis_client,
+                &self.tx_low,
                 &self.store_vault_server_client,
                 beneficiary_pubkey,
                 &fee_collection,
@@ -550,25 +556,32 @@ impl BlockBuilder {
     }
 
     async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        let (_key, block_post_str): (String, String) = conn
-            .blpop(&[POST_BLOCK_KEY, POST_BLOCK_SECONDARY_KEY], 0.)
-            .await?;
-        let block_post: BlockPost = serde_json::from_str(&block_post_str).unwrap();
+        let mut rx_high = self.rx_high.lock().await;
+        let mut rx_low = self.rx_low.lock().await;
+        let block_post_task = tokio::select! {
+            Some(t) =  rx_high.recv() => {
+                t
+            }
+            Some(t) = rx_low.recv()  => {
+                t
+            }
+            else => {
+                return Err(BlockBuilderError::QueueError("No block post task".to_string()));
+            }
+        };
+
         match post_block(
             self.config.block_builder_private_key,
             self.config.eth_allowance_for_block,
             &self.rollup_contract,
             &self.validity_prover_client,
-            block_post,
+            block_post_task,
         )
         .await
         {
             Ok(_) => {}
             Err(e) => {
                 log::error!("Error in posting block: {}", e);
-                conn.rpush::<&str, String, ()>(POST_BLOCK_DLQ_KEY, block_post_str)
-                    .await?;
             }
         }
         Ok(())

@@ -333,6 +333,144 @@ impl StoreVaultServer {
         };
         Ok((result, response_cursor))
     }
+
+    pub async fn save_misc(
+        &self,
+        pubkey: U256,
+        topic: Bytes32,
+        encrypted_data: &[u8],
+    ) -> Result<String> {
+        let pubkey_hex = pubkey.to_hex();
+        let topic_hex = topic.to_hex();
+        let uuid = Uuid::new_v4().to_string();
+        sqlx::query!(
+            r#"
+            INSERT INTO encrypted_misc (uuid, topic, pubkey, encrypted_data, timestamp)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (uuid) DO NOTHING
+            "#,
+            uuid,
+            topic_hex,
+            pubkey_hex,
+            encrypted_data,
+            chrono::Utc::now().timestamp() as i64
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(uuid)
+    }
+
+    pub async fn get_misc_sequence(
+        &self,
+        pubkey: U256,
+        topic: Bytes32,
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse)> {
+        let pubkey_hex = pubkey.to_hex();
+        let topic_hex = topic.to_hex();
+        let actual_limit = cursor.limit.unwrap_or(self.config.max_pagination_limit) as i64;
+
+        let result: Vec<DataWithMetaData> = match cursor.order {
+            CursorOrder::Asc => {
+                let cursor_meta = cursor.cursor.clone().unwrap_or_default();
+                sqlx::query!(
+                    r#"
+            SELECT uuid, timestamp, encrypted_data
+            FROM encrypted_misc
+            WHERE topic = $1 
+            AND pubkey = $2 
+            AND (timestamp, uuid) > ($3, $4)
+            ORDER BY timestamp ASC, uuid ASC
+            LIMIT $5
+        "#,
+                    topic_hex,
+                    pubkey_hex,
+                    cursor_meta.timestamp as i64,
+                    cursor_meta.uuid,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|r| {
+                    let meta = MetaData {
+                        uuid: r.uuid,
+                        timestamp: r.timestamp as u64,
+                    };
+                    DataWithMetaData {
+                        meta,
+                        data: r.encrypted_data,
+                    }
+                })
+                .collect()
+            }
+            CursorOrder::Desc => {
+                let timestamp = cursor
+                    .cursor
+                    .as_ref()
+                    .map(|c| c.timestamp as i64)
+                    .unwrap_or_else(|| i64::MAX);
+                let uuid = cursor
+                    .cursor
+                    .as_ref()
+                    .map(|c| c.uuid.clone())
+                    .unwrap_or_default();
+                sqlx::query!(
+                    r#"
+            SELECT uuid, timestamp, encrypted_data
+            FROM encrypted_misc
+            WHERE topic = $1
+            AND pubkey = $2
+            AND (timestamp, uuid) < ($3, $4)
+            ORDER BY timestamp DESC, uuid DESC
+            LIMIT $5
+        "#,
+                    topic_hex,
+                    pubkey_hex,
+                    timestamp,
+                    uuid,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|r| {
+                    let meta = MetaData {
+                        uuid: r.uuid,
+                        timestamp: r.timestamp as u64,
+                    };
+                    DataWithMetaData {
+                        meta,
+                        data: r.encrypted_data,
+                    }
+                })
+                .collect()
+            }
+        };
+        let has_more = result.len() > actual_limit as usize;
+        let result = result
+            .into_iter()
+            .take(actual_limit as usize)
+            .collect::<Vec<DataWithMetaData>>();
+        let next_cursor = result.last().map(|r| r.meta.clone());
+        let total_count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) FROM encrypted_misc
+            WHERE topic = $1 AND pubkey = $2
+            "#,
+            topic_hex,
+            pubkey_hex
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0) as u32;
+        let response_cursor = MetaDataCursorResponse {
+            next_cursor,
+            has_more,
+            total_count,
+        };
+        Ok((result, response_cursor))
+    }
 }
 
 #[cfg(test)]

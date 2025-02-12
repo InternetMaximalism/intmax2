@@ -461,12 +461,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
-name = "arc-swap"
-version = "1.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
-
-[[package]]
 name = "ark-bn254"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -885,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "balance-prover"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1040,7 +1034,7 @@ dependencies = [
 
 [[package]]
 name = "block-builder"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1059,7 +1053,6 @@ dependencies = [
  "num-bigint 0.4.6",
  "plonky2",
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
- "redis",
  "reqwest 0.12.12",
  "serde",
  "serde_json",
@@ -1380,22 +1373,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "combine"
-version = "4.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
-dependencies = [
- "bytes",
- "futures-core",
- "memchr",
- "pin-project-lite",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "common"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "dotenv",
  "envy",
@@ -2298,7 +2277,7 @@ dependencies = [
  "rlp",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.26.3",
  "syn 2.0.98",
  "tempfile",
  "thiserror 1.0.69",
@@ -3490,7 +3469,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-cli"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3522,7 +3501,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-client-sdk"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3564,15 +3543,15 @@ dependencies = [
  "sha2 0.10.8",
  "sha3",
  "simplelog",
- "strum",
- "strum_macros",
+ "strum 0.27.0",
+ "strum_macros 0.27.0",
  "thiserror 2.0.11",
  "tokio",
 ]
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -3608,9 +3587,10 @@ dependencies = [
 
 [[package]]
 name = "intmax2-wasm-lib"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
+ "bincode",
  "console_error_panic_hook",
  "ethers",
  "getrandom 0.2.15",
@@ -5124,28 +5104,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redis"
-version = "0.28.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e37ec3fd44bea2ec947ba6cc7634d7999a6590aca7c35827c250bc0de502bda6"
-dependencies = [
- "arc-swap",
- "bytes",
- "combine",
- "futures-util",
- "itoa",
- "num-bigint 0.4.6",
- "percent-encoding",
- "pin-project-lite",
- "ryu",
- "sha1_smol",
- "socket2",
- "tokio",
- "tokio-util",
- "url",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5854,7 +5812,7 @@ dependencies = [
 
 [[package]]
 name = "server-common"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -5889,12 +5847,6 @@ dependencies = [
  "cpufeatures",
  "digest 0.10.7",
 ]
-
-[[package]]
-name = "sha1_smol"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
 
 [[package]]
 name = "sha2"
@@ -6311,7 +6263,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "store-vault-server"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6376,14 +6328,33 @@ version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.26.4",
 ]
+
+[[package]]
+name = "strum"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce1475c515a4f03a8a7129bb5228b81a781a86cb0b3fbbc19e1c556d491a401f"
 
 [[package]]
 name = "strum_macros"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.98",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9688894b43459159c82bfa5a5fa0435c19cbe3c9b427fa1dd7b1ce0c279b18a7"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -6556,7 +6527,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix",
  "actix-cors",
@@ -7238,7 +7209,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7273,7 +7244,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover-worker"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7770,7 +7741,7 @@ dependencies = [
 
 [[package]]
 name = "withdrawal-server"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actix-cors",
  "actix-web",

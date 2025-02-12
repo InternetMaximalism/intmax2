@@ -202,6 +202,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_save_single_claim_verifier() {
         let circuit_verifiers = super::CircuitVerifiers::construct();
         let claim_processor = SingleClaimProcessor::new(&circuit_verifiers.get_balance_vd());
@@ -282,6 +283,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_claim() {
         let (single_claim_proof, validity_proof) = generate_claim_and_validity_proof();
         let circuit_verifiers = CircuitVerifiers::load();

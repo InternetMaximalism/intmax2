@@ -6,9 +6,10 @@ use intmax2_interfaces::{
             interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
             types::{
                 CursorOrder, DataWithMetaData, GetDataBatchRequest, GetDataBatchResponse,
-                GetDataSequenceRequest, GetDataSequenceResponse, GetSenderProofSetRequest,
-                GetSenderProofSetResponse, GetUserDataRequest, GetUserDataResponse, MetaDataCursor,
-                MetaDataCursorResponse, SaveDataBatchRequest, SaveDataBatchResponse,
+                GetDataSequenceRequest, GetDataSequenceResponse, GetMiscSequenceRequest,
+                GetMiscSequenceResponse, GetSenderProofSetRequest, GetSenderProofSetResponse,
+                GetUserDataRequest, GetUserDataResponse, MetaDataCursor, MetaDataCursorResponse,
+                SaveDataBatchRequest, SaveDataBatchResponse, SaveMiscRequest, SaveMiscResponse,
                 SaveSenderProofSetRequest, SaveUserDataRequest,
             },
         },
@@ -165,6 +166,47 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         }
         Ok(data_array)
     }
+
+    async fn save_misc(
+        &self,
+        key: KeySet,
+        topic: Bytes32,
+        encrypted_data: &[u8],
+    ) -> Result<String, ServerError> {
+        let request = SaveMiscRequest {
+            data: encrypted_data.to_vec(),
+            topic,
+        };
+        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let response: SaveMiscResponse = post_request(
+            &self.base_url,
+            "/store-vault-server/save-misc",
+            Some(&request_with_auth),
+        )
+        .await?;
+        Ok(response.uuid)
+    }
+
+    async fn get_misc_sequence(
+        &self,
+        key: KeySet,
+        topic: Bytes32,
+        meta_cursor: &Option<MetaData>,
+    ) -> Result<Vec<DataWithMetaData>, ServerError> {
+        let mut data_array = vec![];
+        let mut has_more = true;
+        let mut metadata_cursor = meta_cursor.clone();
+        let auth = generate_auth_for_get_misc_sequence(key, topic);
+        while has_more {
+            let (data, cursor) = self
+                .get_misc_sequence_native(topic, &metadata_cursor, &None, &CursorOrder::Asc, &auth)
+                .await?;
+            has_more = cursor.has_more;
+            metadata_cursor = cursor.next_cursor;
+            data_array.extend(data);
+        }
+        Ok(data_array)
+    }
 }
 
 impl StoreVaultServerClient {
@@ -209,12 +251,54 @@ impl StoreVaultServerClient {
         .await?;
         Ok((response.data, response.cursor_response))
     }
+
+    pub async fn get_misc_sequence_native(
+        &self,
+        topic: Bytes32,
+        metadata_cursor: &Option<MetaData>,
+        limit: &Option<u32>,
+        order: &CursorOrder,
+        auth: &Auth,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        let request_with_auth = WithAuth {
+            inner: GetMiscSequenceRequest {
+                topic,
+                cursor: MetaDataCursor {
+                    cursor: metadata_cursor.clone(),
+                    order: order.clone(),
+                    limit: *limit,
+                },
+            },
+            auth: auth.clone(),
+        };
+        let response: GetMiscSequenceResponse = post_request(
+            &self.base_url,
+            "/store-vault-server/get-misc-sequence",
+            Some(&request_with_auth),
+        )
+        .await?;
+        Ok((response.data, response.cursor_response))
+    }
 }
 
 pub fn generate_auth_for_get_data_sequence(key: KeySet) -> Auth {
     // because auth is not dependent on the datatype and cursor, we can use a dummy request
     let dummy_request = GetDataSequenceRequest {
         data_type: DataType::Deposit,
+        cursor: MetaDataCursor {
+            cursor: None,
+            order: CursorOrder::Asc,
+            limit: None,
+        },
+    };
+    let dummy_request_with_auth = dummy_request.sign(key, TIME_TO_EXPIRY_READONLY);
+    dummy_request_with_auth.auth
+}
+
+pub fn generate_auth_for_get_misc_sequence(key: KeySet, topic: Bytes32) -> Auth {
+    // because auth is not dependent on the topic and cursor, we can use a dummy request
+    let dummy_request = GetMiscSequenceRequest {
+        topic,
         cursor: MetaDataCursor {
             cursor: None,
             order: CursorOrder::Asc,

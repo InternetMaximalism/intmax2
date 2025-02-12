@@ -204,3 +204,53 @@ pub struct DataWithMetaData {
     #[serde_as(as = "Base64")]
     pub data: Vec<u8>,
 }
+
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveMiscRequest {
+    #[serde_as(as = "Base64")]
+    pub data: Vec<u8>,
+    pub topic: Bytes32,
+}
+
+impl Signable for SaveMiscRequest {
+    fn content(&self) -> Vec<u8> {
+        [
+            content_prefix("save_misc"),
+            bincode::serialize(&self.data).unwrap(),
+        ]
+        .concat()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveMiscResponse {
+    pub uuid: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMiscSequenceRequest {
+    pub topic: Bytes32,
+    pub cursor: MetaDataCursor,
+}
+
+impl Signable for GetMiscSequenceRequest {
+    fn content(&self) -> Vec<u8> {
+        // to reuse the signature, we exclude cursor from the content intentionally
+        [
+            content_prefix("get_misc_sequence"),
+            bincode::serialize(&self.topic.clone()).unwrap(),
+        ]
+        .concat()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMiscSequenceResponse {
+    pub data: Vec<DataWithMetaData>,
+    pub cursor_response: MetaDataCursorResponse,
+}

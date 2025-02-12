@@ -6,12 +6,12 @@ use intmax2_client_sdk::{
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::transfer::Transfer,
-    constants::NUM_TRANSFERS_IN_TX,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
     data::{JsDepositResult, JsTxResult, JsUserData},
+    fee::{JsFee, JsFeeQuote},
     history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     utils::{parse_address, parse_u256},
     wrapper::JsTxRequestMemo,
@@ -22,6 +22,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 pub mod client;
 pub mod js_types;
+pub mod misc;
 pub mod native;
 pub mod utils;
 
@@ -91,24 +92,30 @@ pub async fn send_tx_request(
     block_builder_url: &str,
     private_key: &str,
     transfers: Vec<JsTransfer>,
-    fee_token_index: u32,
+    beneficiary: Option<String>,
+    fee: Option<JsFee>,
+    collateral_fee: Option<JsFee>,
 ) -> Result<JsTxRequestMemo, JsError> {
     init_logger();
-    if transfers.len() > NUM_TRANSFERS_IN_TX {
-        return Err(JsError::new(&format!(
-            "Number of transfers in a tx must be less than or equal to {}",
-            NUM_TRANSFERS_IN_TX
-        )));
-    }
     let key = str_privkey_to_keyset(private_key)?;
     let transfers: Vec<Transfer> = transfers
         .iter()
         .map(|transfer| transfer.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
+    let beneficiary = beneficiary.map(|b| parse_h256_as_u256(&b)).transpose()?;
+    let fee = fee.map(|f| f.try_into()).transpose()?;
+    let collateral_fee = collateral_fee.map(|f| f.try_into()).transpose()?;
 
     let client = get_client(config);
     let memo = client
-        .send_tx_request(block_builder_url, key, transfers, fee_token_index)
+        .send_tx_request(
+            block_builder_url,
+            key,
+            transfers,
+            beneficiary,
+            fee,
+            collateral_fee,
+        )
         .await
         .map_err(|e| JsError::new(&format!("failed to send tx request {}", e)))?;
 
@@ -283,6 +290,22 @@ pub async fn fetch_tx_history(
     let history = client.fetch_tx_history(key).await?;
     let js_history = history.into_iter().map(JsTxEntry::from).collect();
     Ok(js_history)
+}
+
+#[wasm_bindgen]
+pub async fn quote_fee(
+    config: &Config,
+    block_builder_url: &str,
+    pubkey: &str,
+    fee_token_index: u32,
+) -> Result<JsFeeQuote, JsError> {
+    init_logger();
+    let pubkey = parse_h256_as_u256(pubkey)?;
+    let client = get_client(config);
+    let fee_quote = client
+        .quote_fee(block_builder_url, pubkey, fee_token_index)
+        .await?;
+    Ok(fee_quote.into())
 }
 
 fn init_logger() {

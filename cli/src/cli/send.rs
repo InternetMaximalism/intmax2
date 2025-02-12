@@ -72,8 +72,29 @@ pub async fn transfer(
         block_builder_info.first().unwrap().url.clone()
     };
 
+    let fee_quote = client
+        .quote_fee(&block_builder_url, key.pubkey, fee_token_index)
+        .await?;
+    if let Some(fee) = &fee_quote.fee {
+        log::info!("beneficiary: {}", fee_quote.beneficiary.unwrap().to_hex());
+        log::info!("Fee: {} (token# {})", fee.amount, fee.token_index);
+    }
+    if let Some(collateral_fee) = &fee_quote.collateral_fee {
+        log::info!(
+            "Collateral Fee: {} (token# {})",
+            collateral_fee.amount,
+            collateral_fee.token_index
+        );
+    }
     let memo = client
-        .send_tx_request(&block_builder_url, key, transfers, fee_token_index)
+        .send_tx_request(
+            &block_builder_url,
+            key,
+            transfers,
+            fee_quote.beneficiary,
+            fee_quote.fee,
+            fee_quote.collateral_fee,
+        )
         .await?;
 
     let is_registration_block = memo.is_registration_block;

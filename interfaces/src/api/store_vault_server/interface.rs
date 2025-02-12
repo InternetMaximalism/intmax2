@@ -107,6 +107,20 @@ pub trait StoreVaultClientInterface {
         data_type: DataType,
         meta_cursor: &Option<MetaData>,
     ) -> Result<Vec<DataWithMetaData>, ServerError>;
+
+    async fn save_misc(
+        &self,
+        key: KeySet,
+        topic: Bytes32,
+        encrypted_data: &[u8],
+    ) -> Result<String, ServerError>;
+
+    async fn get_misc_sequence(
+        &self,
+        key: KeySet,
+        topic: Bytes32,
+        meta_cursor: &Option<MetaData>,
+    ) -> Result<Vec<DataWithMetaData>, ServerError>;
 }
 
 #[cfg(test)]
