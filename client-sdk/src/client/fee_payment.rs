@@ -1,14 +1,20 @@
-use intmax2_interfaces::api::{
-    block_builder::interface::Fee, store_vault_server::interface::StoreVaultClientInterface,
-    validity_prover::interface::ValidityProverClientInterface,
+use intmax2_interfaces::{
+    api::{
+        block_builder::interface::Fee, store_vault_server::interface::StoreVaultClientInterface,
+        validity_prover::interface::ValidityProverClientInterface,
+    },
+    data::encryption::Encryption,
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
     ethereum_types::{address::Address, u256::U256},
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::client::{misc::get_topic, sync::utils::generate_salt};
+use crate::client::{
+    misc::{get_topic, payment_memo::PaymentMemo},
+    sync::utils::generate_salt,
+};
 
 use super::{client::PaymentMemoEntry, error::ClientError};
 
@@ -142,12 +148,15 @@ pub enum FeeType {
     Claim,
 }
 
-pub async fn get_unused_fee<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
+pub async fn get_unused_payments<
+    S: StoreVaultClientInterface,
+    V: ValidityProverClientInterface,
+    M: DeserializeOwned,
+>(
     store_vault_server: &S,
-    _validity_prover: &V,
     key: KeySet,
     fee_type: FeeType,
-) -> Result<Option<UsedOrInvalidMemo>, ClientError> {
+) -> Result<Vec<PaymentMemo>, ClientError> {
     let topic = match fee_type {
         FeeType::Withdrawal => get_topic(WITHDRAWAL_FEE_MEMO),
         FeeType::Claim => get_topic(CLAIM_FEE_MEMO),
@@ -155,13 +164,30 @@ pub async fn get_unused_fee<S: StoreVaultClientInterface, V: ValidityProverClien
     let encrypted_memos = store_vault_server
         .get_misc_sequence(key, topic, &None)
         .await?;
-
     if encrypted_memos.is_empty() {
-        return Ok(None);
+        // early return if no memos
+        return Ok(vec![]);
     }
 
-    // let memo = UsedOrInvalidMemo::decrypt(&encrypted_memos[0].data, key)?;
-    // Ok(Some(memo))
-
-    todo!()
+    let memos = encrypted_memos
+        .iter()
+        .map(|data| PaymentMemo::decrypt(&data.data, key))
+        .collect::<Result<Vec<PaymentMemo>, _>>()?;
+    let used_topic = get_topic(USED_OR_INVALID_MEMO);
+    let encrypted_used_memos = store_vault_server
+        .get_misc_sequence(key, used_topic, &None)
+        .await?;
+    let used_memos = encrypted_used_memos
+        .iter()
+        .map(|data| PaymentMemo::decrypt(&data.data, key))
+        .collect::<Result<Vec<PaymentMemo>, _>>()?;
+    let unused_memos = memos
+        .into_iter()
+        .filter(|memo| {
+            !used_memos
+                .iter()
+                .any(|used_memo| used_memo.transfer_uuid == memo.transfer_uuid)
+        })
+        .collect::<Vec<PaymentMemo>>();
+    Ok(unused_memos)
 }
