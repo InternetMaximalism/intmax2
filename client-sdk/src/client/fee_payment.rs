@@ -1,13 +1,16 @@
-use intmax2_interfaces::api::block_builder::interface::Fee;
+use intmax2_interfaces::api::{
+    block_builder::interface::Fee, store_vault_server::interface::StoreVaultClientInterface,
+    validity_prover::interface::ValidityProverClientInterface,
+};
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, transfer::Transfer},
+    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
     ethereum_types::{address::Address, u256::U256},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::client::{misc::get_topic, sync::utils::generate_salt};
 
-use super::client::PaymentMemoEntry;
+use super::{client::PaymentMemoEntry, error::ClientError};
 
 pub const WITHDRAWAL_FEE_MEMO: &str = "withdrawal_fee_memo";
 pub const CLAIM_FEE_MEMO: &str = "claim_fee_memo";
@@ -132,4 +135,33 @@ impl TransfersWithMemo {
             payment_memos,
         }
     }
+}
+
+pub enum FeeType {
+    Withdrawal,
+    Claim,
+}
+
+pub async fn get_unused_fee<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
+    store_vault_server: &S,
+    _validity_prover: &V,
+    key: KeySet,
+    fee_type: FeeType,
+) -> Result<Option<UsedOrInvalidMemo>, ClientError> {
+    let topic = match fee_type {
+        FeeType::Withdrawal => get_topic(WITHDRAWAL_FEE_MEMO),
+        FeeType::Claim => get_topic(CLAIM_FEE_MEMO),
+    };
+    let encrypted_memos = store_vault_server
+        .get_misc_sequence(key, topic, &None)
+        .await?;
+
+    if encrypted_memos.is_empty() {
+        return Ok(None);
+    }
+
+    // let memo = UsedOrInvalidMemo::decrypt(&encrypted_memos[0].data, key)?;
+    // Ok(Some(memo))
+
+    todo!()
 }
