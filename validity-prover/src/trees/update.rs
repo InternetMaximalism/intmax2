@@ -46,7 +46,7 @@ pub async fn to_block_witness<
                     continue;
                 }
                 let is_dummy = pubkey.is_dummy_pubkey();
-                if account_tree.index(timestamp, *pubkey).await?.is_none() || is_dummy {
+                if !(account_tree.index(timestamp, *pubkey).await?.is_none() || is_dummy) {
                     log::warn!(
                         "Invalid block {}: account already exists",
                         full_block.block.block_number
