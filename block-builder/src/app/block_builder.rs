@@ -39,7 +39,7 @@ use super::{
     fee::{convert_fee_vec, parse_fee_str},
 };
 
-pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 10;
+pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
 
 #[derive(Debug, Clone)]
 struct Config {
