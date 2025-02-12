@@ -3,19 +3,34 @@ use intmax2_zkp::{
     common::{generic_address::GenericAddress, transfer::Transfer},
     ethereum_types::{address::Address, u256::U256},
 };
+use serde::{Deserialize, Serialize};
 
-use crate::client::{
-    misc::{
-        get_topic,
-        payment_memo::{WithdrawalFeeMemo, WITHDRAWAL_FEE_MEMO},
-    },
-    sync::utils::generate_salt,
-};
+use crate::client::{misc::get_topic, sync::utils::generate_salt};
 
-use super::{
-    client::PaymentMemoEntry,
-    misc::payment_memo::{ClaimFeeMemo, CLAIM_FEE_MEMO},
-};
+use super::client::PaymentMemoEntry;
+
+pub const WITHDRAWAL_FEE_MEMO: &str = "withdrawal_fee_memo";
+pub const CLAIM_FEE_MEMO: &str = "claim_fee_memo";
+pub const USED_OR_INVALID_MEMO: &str = "used_or_invalid_memo";
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawalFeeMemo {
+    pub withdrawal_transfer: Transfer,
+    pub fee: Fee,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimFeeMemo {
+    pub fee: Fee,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsedOrInvalidMemo {
+    pub reason: String,
+}
 
 // Structure for transfer and payment memos used as input for send_tx_request
 #[derive(Debug, Clone)]
