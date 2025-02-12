@@ -30,3 +30,5 @@ num-bigint = "0.4.6"
 tiny-hderive = "0.3.0"
 futures = "0.3.31"
 env_logger.workspace = true
+itertools = "0.14.0"
+chrono.workspace = true

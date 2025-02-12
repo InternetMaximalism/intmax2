@@ -96,8 +96,9 @@ impl TestSystem {
         }
     }
 
-    async fn transfer_from_admin(
+    async fn transfer_from(
         &self,
+        sender: KeySet,
         intmax_recipients: &[KeySet],
         amount: u128,
     ) -> Result<(), CliError> {
@@ -109,7 +110,7 @@ impl TestSystem {
                 token_index: ETH_TOKEN_INDEX,
             })
             .collect::<Vec<_>>();
-        transfer(self.admin_key, &transfers, ETH_TOKEN_INDEX).await
+        transfer(sender, &transfers, ETH_TOKEN_INDEX).await
     }
 
     async fn ensure_accounts(
@@ -131,9 +132,11 @@ impl TestSystem {
             accounts_len as u32,
         )?;
 
+        // TODO: Make it so that each of the 63 addresses that received ETH sends it to the other 63 addresses.
         let chunk_size = 63;
         for chunk in new_accounts.chunks(chunk_size) {
-            self.transfer_from_admin(chunk, 1000000000u128).await?;
+            self.transfer_from(self.admin_key, chunk, 1000000000u128)
+                .await?;
             self.accounts.lock().unwrap().extend(chunk.iter());
         }
 
@@ -164,7 +167,7 @@ impl TestSystem {
                         amount: 10u128,
                         token_index: ETH_TOKEN_INDEX,
                     }];
-                    let res = transfer_with_error_handling(*sender, &transfers, 1)
+                    let res = transfer_with_error_handling(*sender, &transfers, 2)
                         .await
                         .err();
                     log::info!("Transfer completed from {} (No.{})", sender.pubkey, i);
@@ -173,7 +176,7 @@ impl TestSystem {
 
             println!("Starting transactions");
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(600)) => log::info!("transaction timeout"),
+                _ = tokio::time::sleep(Duration::from_secs(900)) => log::info!("transaction timeout"),
                 errors = join_all(futures) => {
                     for (i, error) in errors.iter().enumerate() {
                         if let Some(e) = error {

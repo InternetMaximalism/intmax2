@@ -22,6 +22,11 @@ struct EnvVar {
     end: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Response {
+    message: String,
+}
+
 fn default_url() -> String {
     "0.0.0.0:8080".to_string()
 }
@@ -40,7 +45,9 @@ async fn update_config(
     let mut config = data.config.lock().unwrap();
     *config = new_config.into_inner();
     log::info!("Config updated: {:?}", *config);
-    HttpResponse::Ok().body("Config updated")
+    HttpResponse::Ok().json(Response {
+        message: "Config updated".to_string(),
+    })
 }
 
 #[actix_web::main]
