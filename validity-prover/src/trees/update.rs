@@ -46,10 +46,12 @@ pub async fn to_block_witness<
                     continue;
                 }
                 let is_dummy = pubkey.is_dummy_pubkey();
-                ensure!(
-                    account_tree.index(timestamp, *pubkey).await?.is_none() || is_dummy,
-                    "account already exists"
-                );
+                if !(account_tree.index(timestamp, *pubkey).await?.is_none() || is_dummy) {
+                    log::warn!(
+                        "Invalid block {}: account already exists",
+                        full_block.block.block_number
+                    );
+                }
                 let proof = account_tree.prove_membership(timestamp, *pubkey).await?;
                 account_membership_proofs.push(proof.clone());
                 cached_proofs.insert(*pubkey, proof);
