@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use crate::Env;
-
-use super::withdrawal_server::WithdrawalServer;
+use crate::{app::withdrawal_server::WithdrawalServer, Env};
 
 #[derive(Clone)]
 pub struct State {

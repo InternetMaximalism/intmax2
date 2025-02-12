@@ -1,5 +1,6 @@
+use crate::app::status::{SqlClaimStatus, SqlWithdrawalStatus};
+
 use super::error::WithdrawalServerError;
-use crate::api::status::{SqlClaimStatus, SqlWithdrawalStatus};
 use intmax2_interfaces::{
     api::withdrawal_server::interface::{ClaimInfo, ContractWithdrawal, WithdrawalInfo},
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},

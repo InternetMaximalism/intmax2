@@ -18,7 +18,7 @@ use intmax2_interfaces::{
 };
 use serde_qs::actix::QsQuery;
 
-#[get("/fee")]
+#[get("/withdrawal-fee")]
 pub async fn get_fee() -> Result<Json<GetFeeResponse>, Error> {
     let fees = vec![Fee {
         token_index: 0,

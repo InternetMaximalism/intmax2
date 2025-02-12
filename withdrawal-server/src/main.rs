@@ -8,7 +8,7 @@ use server_common::{
 };
 use tracing_actix_web::TracingLogger;
 use withdrawal_server::{
-    api::{api::withdrawal_server_scope, state::State},
+    api::{routes::withdrawal_server_scope, state::State},
     Env,
 };
 
