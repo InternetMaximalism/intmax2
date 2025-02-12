@@ -2,7 +2,7 @@
 pub mod client;
 pub mod config;
 pub mod error;
-pub mod fee;
+pub mod fee_proof;
 pub mod history;
 pub mod key_from_eth;
 pub mod misc;

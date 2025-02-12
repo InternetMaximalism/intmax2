@@ -42,7 +42,7 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
-    fee::{generate_fee_proof, quote_fee},
+    fee_proof::{generate_fee_proof, quote_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     misc::payment_memo::PaymentMemo,
     strategy::mining::{fetch_mining_info, Mining},
