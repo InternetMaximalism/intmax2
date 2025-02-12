@@ -68,7 +68,7 @@ pub struct Client<
     pub rollup_contract: RollupContract,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentMemoEntry {
     pub transfer_index: u32,
     pub topic: Bytes32,

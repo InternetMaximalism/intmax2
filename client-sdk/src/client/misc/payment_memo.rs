@@ -5,9 +5,7 @@ use intmax2_interfaces::{
     data::encryption::Encryption,
 };
 
-use intmax2_zkp::common::{
-    claim::Claim, signature::key_set::KeySet, transfer::Transfer, withdrawal::Withdrawal,
-};
+use intmax2_zkp::common::{claim::Claim, signature::key_set::KeySet, transfer::Transfer};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::client::error::ClientError;
@@ -31,7 +29,7 @@ impl Encryption for PaymentMemo {}
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalFeeMemo {
-    pub withdrawal: Withdrawal,
+    pub withdrawal_transfer: Transfer,
     pub fee: Fee,
 }
 

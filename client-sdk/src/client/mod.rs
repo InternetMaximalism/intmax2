@@ -8,3 +8,4 @@ pub mod key_from_eth;
 pub mod misc;
 pub mod strategy;
 pub mod sync;
+pub mod transfers_with_memo;
