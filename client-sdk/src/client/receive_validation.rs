@@ -13,7 +13,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
-    common::{signature::key_set::KeySet, transfer::Transfer},
+    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
 };
 use thiserror::Error;
 
@@ -43,6 +43,7 @@ pub enum ReceiveValidationError {
     GeneralError(String),
 }
 
+/// Validate the Transfer corresponding to the given transfer_uuid.
 pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
     store_vault_server: &S,
     validity_prover: &V,
@@ -58,6 +59,12 @@ pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverCli
         .validate(key)
         .map_err(|e| StrategyError::ValidationError(e.to_string()))?;
 
+    let recipient = transfer_data.transfer.recipient;
+    if recipient != GenericAddress::from_pubkey(key.pubkey) {
+        return Err(ReceiveValidationError::GeneralError(
+            "Recipient is not the same as the key".to_string(),
+        ));
+    }
     // check if tx_tree_root included on the block
     let block_number = validity_prover
         .get_block_number_by_tx_tree_root(transfer_data.tx_tree_root)
@@ -67,7 +74,6 @@ pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverCli
             "Tx tree root is not included on any block".to_string(),
         ));
     }
-
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server,
         transfer_data.sender_proof_set_ephemeral_key,
