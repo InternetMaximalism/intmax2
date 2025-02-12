@@ -6,7 +6,7 @@ use ethers::{
 };
 use intmax2_cli::cli::{
     error::CliError,
-    get::balance,
+    get::{balance, BalanceInfo},
     send::{transfer, TransferInput},
 };
 use intmax2_client_sdk::client::{
@@ -52,20 +52,35 @@ pub fn mnemonic_to_private_key(
 }
 
 pub async fn wait_for_balance_synchronization(
-    intmax_sender: KeySet,
+    key: KeySet,
     retry_interval: Duration,
-) -> Result<(), CliError> {
+) -> Result<Vec<BalanceInfo>, CliError> {
     loop {
-        let result = balance(intmax_sender).await;
+        let timer = std::time::Instant::now();
+        let result = balance(key).await;
         match result {
-            Ok(_) => return Ok(()),
+            Ok(balances) => {
+                log::info!(
+                    "Sync balance from {} ({} s)",
+                    key.pubkey,
+                    timer.elapsed().as_secs()
+                );
+                return Ok(balances);
+            }
+            Err(CliError::ClientError(ClientError::StrategyError(
+                StrategyError::PendingTxError(_),
+            ))) => {
+                log::warn!("Pending transaction. Waiting for the balance to be updated...");
+            }
             Err(CliError::SyncError(SyncError::StrategyError(StrategyError::PendingTxError(
                 _,
             )))) => {
-                println!("Pending transaction. Waiting for the balance to be updated...");
+                log::warn!("Pending transaction. Waiting for the balance to be updated...");
             }
             Err(CliError::SyncError(SyncError::ValidityProverIsNotSynced(_))) => {
-                println!("Validity prover is not synced. Waiting for the balance to be updated...");
+                log::warn!(
+                    "Validity prover is not synced. Waiting for the balance to be updated..."
+                );
             }
             Err(CliError::SyncError(SyncError::ServerError(ServerError::ServerError(
                 500,
@@ -73,7 +88,7 @@ pub async fn wait_for_balance_synchronization(
                 _,
                 _,
             )))) => {
-                println!("{message}. Waiting for the balance to be updated...");
+                log::warn!("{message}. Waiting for the balance to be updated...");
             }
             Err(CliError::ClientError(ClientError::ServerError(ServerError::ServerError(
                 status,
@@ -81,8 +96,8 @@ pub async fn wait_for_balance_synchronization(
                 url,
                 query,
             )))) => {
-                println!("Server error status={status}, url={url}, query={query}");
-                println!("{message}. Waiting for the balance to be updated...");
+                log::error!("Server error status={status}, url={url}, query={query}");
+                log::error!("{message}. Waiting for the balance to be updated...");
             }
             Err(e) => {
                 return Err(e);
@@ -99,15 +114,26 @@ pub async fn transfer_with_error_handling(
     num_loops: usize,
 ) -> Result<(), CliError> {
     for i in 0..num_loops {
-        log::trace!(
+        log::info!(
             "Starting transfer from {} (iteration {}/{})",
             key.pubkey,
             i + 1,
             num_loops
         );
+        let timer = std::time::Instant::now();
         transfer(key, transfer_inputs, 0).await?;
+        log::info!(
+            "Complete transfer from {} ({} s)",
+            key.pubkey,
+            timer.elapsed().as_secs()
+        );
         tokio::time::sleep(Duration::from_secs(20)).await;
-        wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
+        wait_for_balance_synchronization(key, Duration::from_secs(5))
+            .await
+            .map_err(|err| {
+                println!("transfer_with_error_handling Error: {:?}", err);
+                err
+            })?;
     }
 
     Ok(())

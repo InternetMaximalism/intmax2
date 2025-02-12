@@ -4,11 +4,8 @@ use std::sync::Mutex;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct LoadConfig {
-    num_senders: u32,
-
-    tps: u32,
-    concurrency: u32,
-    duration: u32,
+    concurrent_limit: u32,
+    end: String,
 }
 
 #[derive(Debug)]
@@ -21,10 +18,8 @@ struct EnvVar {
     #[serde(default = "default_url")]
     server_url: String,
 
-    num_senders: u32,
-    tps: Option<u32>,
-    concurrency: Option<u32>,
-    duration_seconds: Option<u32>,
+    concurrent_limit: u32,
+    end: Option<String>,
 }
 
 fn default_url() -> String {
@@ -57,10 +52,8 @@ async fn main() -> std::io::Result<()> {
         .init();
 
     let initial_config = LoadConfig {
-        num_senders: config.num_senders,
-        tps: config.tps.unwrap_or(10),
-        concurrency: config.concurrency.unwrap_or(5),
-        duration: config.duration_seconds.unwrap_or(30),
+        concurrent_limit: config.concurrent_limit,
+        end: config.end.unwrap_or("false".to_string()),
     };
 
     let app_state = web::Data::new(AppState {
