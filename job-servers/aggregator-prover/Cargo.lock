@@ -368,9 +368,9 @@ checksum = "45862d1c77f2228b9e10bc609d5bc203d86ebc9b87ad8d5d5167a6c9abf739d9"
 
 [[package]]
 name = "alloy-primitives"
-version = "0.8.19"
+version = "0.8.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec878088ec6283ce1e90d280316aadd3d6ce3de06ff63d68953c855e7e447e92"
+checksum = "478bedf4d24e71ea48428d1bc278553bd7c6ae07c30ca063beb0b09fe58a9e74"
 dependencies = [
  "alloy-rlp",
  "bytes",
@@ -1407,7 +1407,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "aes",
  "alloy-primitives",
@@ -2038,10 +2038,12 @@ dependencies = [
  "hmac",
  "intmax2-zkp",
  "js-sys",
+ "log",
  "num-traits",
  "plonky2",
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
  "plonky2_keccak",
+ "plonky2_u32",
  "rand",
  "serde",
  "serde_bytes",
@@ -2055,7 +2057,7 @@ dependencies = [
 [[package]]
 name = "intmax2-zkp"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#b82c0c4b6874c6f841d51a83d7306ce5648ce7bb"
+source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#8f511d8ee5f2f3286ecb1d6854f31b056872a57a"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3099,7 +3101,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3463,7 +3465,7 @@ dependencies = [
  "getrandom 0.3.1",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
