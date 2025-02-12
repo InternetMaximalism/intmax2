@@ -191,3 +191,28 @@ pub async fn get_unused_payments<
         .collect::<Vec<PaymentMemo>>();
     Ok(unused_memos)
 }
+
+pub async fn consume_payment<
+    S: StoreVaultClientInterface,
+    V: ValidityProverClientInterface,
+    M: DeserializeOwned,
+>(
+    store_vault_server: &S,
+    key: KeySet,
+    payment_memo: &PaymentMemo,
+    reason: &str,
+) -> Result<(), ClientError> {
+    let topic = get_topic(USED_OR_INVALID_MEMO);
+    let memo = UsedOrInvalidMemo {
+        reason: reason.to_string(),
+    };
+    let payment_memo = PaymentMemo {
+        transfer_uuid: payment_memo.transfer_uuid.clone(),
+        transfer: payment_memo.transfer,
+        memo: serde_json::to_string(&memo).unwrap(),
+    };
+    store_vault_server
+        .save_misc(key, topic, &payment_memo.encrypt(key.pubkey))
+        .await?;
+    Ok(())
+}
