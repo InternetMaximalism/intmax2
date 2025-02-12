@@ -5,7 +5,7 @@ use intmax2_interfaces::{
     data::encryption::Encryption,
 };
 
-use intmax2_zkp::common::{claim::Claim, signature::key_set::KeySet, transfer::Transfer};
+use intmax2_zkp::common::{signature::key_set::KeySet, transfer::Transfer};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::client::error::ClientError;
@@ -36,7 +36,6 @@ pub struct WithdrawalFeeMemo {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaimFeeMemo {
-    pub claim: Claim,
     pub fee: Fee,
 }
 

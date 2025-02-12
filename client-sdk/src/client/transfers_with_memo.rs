@@ -1,6 +1,6 @@
 use intmax2_interfaces::api::block_builder::interface::Fee;
 use intmax2_zkp::{
-    common::{claim::Claim, generic_address::GenericAddress, transfer::Transfer},
+    common::{generic_address::GenericAddress, transfer::Transfer},
     ethereum_types::{address::Address, u256::U256},
 };
 
@@ -67,7 +67,6 @@ impl TransfersWithMemo {
         recipient: Address,
         token_index: u32,
         amount: U256,
-        claim: Claim,
         withdrawal_fee_beneficiary: U256,
         withdrawal_fee: Fee,
         claim_fee_beneficiary: U256,
@@ -91,7 +90,6 @@ impl TransfersWithMemo {
             amount: claim_fee.amount,
             salt: generate_salt(),
         };
-
         let transfers = vec![
             withdrawal_transfer,
             withdrawal_fee_transfer,
@@ -101,10 +99,7 @@ impl TransfersWithMemo {
             withdrawal_transfer,
             fee: withdrawal_fee,
         };
-        let claim_fee_memo = ClaimFeeMemo {
-            claim,
-            fee: claim_fee,
-        };
+        let claim_fee_memo = ClaimFeeMemo { fee: claim_fee };
         let payment_memos = vec![
             PaymentMemoEntry {
                 transfer_index: 1, // fee transfer index
