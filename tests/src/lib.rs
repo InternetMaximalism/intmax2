@@ -1,22 +1,17 @@
-use std::time::Duration;
-
-use ethers::{
-    signers::coins_bip39::{English, Mnemonic},
-    types::H256,
-};
 use intmax2_cli::cli::{
     error::CliError,
     get::{balance, BalanceInfo},
     send::{transfer, TransferInput},
 };
 use intmax2_client_sdk::client::{
-    error::ClientError, key_from_eth::generate_intmax_account_from_eth_key,
-    strategy::error::StrategyError, sync::error::SyncError,
+    error::ClientError, strategy::error::StrategyError, sync::error::SyncError,
 };
 use intmax2_interfaces::api::error::ServerError;
 use intmax2_zkp::common::signature::key_set::KeySet;
 use serde::Deserialize;
-use tiny_hderive::bip32::ExtendedPrivKey;
+use std::time::Duration;
+
+pub mod accounts;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
@@ -25,30 +20,6 @@ pub struct EnvVar {
     pub num_of_recipients: Option<u32>,
     pub recipient_offset: Option<u32>,
     pub balance_prover_base_url: String,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct MnemonicToPrivateKeyOptions {
-    pub account_index: u32,
-    pub address_index: u32,
-}
-
-pub fn mnemonic_to_private_key(
-    mnemonic_phrase: &str,
-    options: MnemonicToPrivateKeyOptions,
-) -> Result<H256, Box<dyn std::error::Error>> {
-    let mnemonic = Mnemonic::<English>::new_from_phrase(mnemonic_phrase)?;
-    let seed = mnemonic.to_seed(None)?;
-
-    let account_index = options.account_index;
-    let address_index = options.address_index;
-    let hd_path = format!("m/44'/60'/{account_index}'/0/{address_index}");
-
-    let master_key = ExtendedPrivKey::derive(&seed, hd_path.as_str())
-        .map_err(|e| format!("Failed to derive private key: {e:?}"))?;
-    let private_key_bytes = master_key.secret();
-
-    Ok(H256(private_key_bytes))
 }
 
 pub async fn wait_for_balance_synchronization(
@@ -139,23 +110,35 @@ pub async fn transfer_with_error_handling(
     Ok(())
 }
 
-pub fn derive_intmax_keys(
-    master_mnemonic_phrase: &str,
-    num_of_keys: u32,
-    offset: u32,
-) -> Result<Vec<KeySet>, Box<dyn std::error::Error>> {
-    let mut intmax_senders = vec![];
-    for address_index in 0..num_of_keys {
-        let options = MnemonicToPrivateKeyOptions {
-            account_index: 0,
-            address_index: offset + address_index,
-        };
-        let private_key = mnemonic_to_private_key(master_mnemonic_phrase, options)?;
-        let key = generate_intmax_account_from_eth_key(private_key);
-        intmax_senders.push(key);
+pub async fn withdraw_with_error_handling(
+    key: KeySet,
+    transfer_inputs: &[TransferInput],
+    num_loops: usize,
+) -> Result<(), CliError> {
+    for i in 0..num_loops {
+        log::info!(
+            "Starting transfer from {} (iteration {}/{})",
+            key.pubkey,
+            i + 1,
+            num_loops
+        );
+        let timer = std::time::Instant::now();
+        transfer(key, transfer_inputs, 0).await?;
+        log::info!(
+            "Complete transfer from {} ({} s)",
+            key.pubkey,
+            timer.elapsed().as_secs()
+        );
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        wait_for_balance_synchronization(key, Duration::from_secs(5))
+            .await
+            .map_err(|err| {
+                println!("transfer_with_error_handling Error: {:?}", err);
+                err
+            })?;
     }
 
-    Ok(intmax_senders)
+    Ok(())
 }
 
 // const NUM_TRANSFER_LOOPS: usize = 2;

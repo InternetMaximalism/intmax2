@@ -6,11 +6,10 @@ use intmax2_cli::{
     cli::send::{transfer, TransferInput},
     format::privkey_to_keyset,
 };
-use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key;
 use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
 use tests::{
-    derive_intmax_keys, mnemonic_to_private_key, transfer_with_error_handling,
-    wait_for_balance_synchronization, EnvVar, MnemonicToPrivateKeyOptions,
+    accounts::{derive_intmax_keys, mnemonic_to_account},
+    transfer_with_error_handling, wait_for_balance_synchronization, EnvVar,
 };
 
 const ETH_TOKEN_INDEX: u32 = 0;
@@ -88,15 +87,8 @@ async fn test_sync_balance() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("Balance updated. Proceeding to the next step.");
 
-    {
-        let options = MnemonicToPrivateKeyOptions {
-            account_index: 1,
-            address_index: 0,
-        };
-        let private_key = mnemonic_to_private_key(&master_mnemonic_phrase, options)?;
-        let key = generate_intmax_account_from_eth_key(private_key);
-        wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
-    }
+    let trash_account = mnemonic_to_account(&master_mnemonic_phrase, 1, 0)?;
+    wait_for_balance_synchronization(trash_account.intmax_key, Duration::from_secs(5)).await?;
 
     Ok(())
 }
@@ -125,15 +117,8 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
     let offset = 0;
     let intmax_senders = derive_intmax_keys(&master_mnemonic_phrase, num_of_recipients, offset)?;
 
-    let intmax_recipient = {
-        let options = MnemonicToPrivateKeyOptions {
-            account_index: 1,
-            address_index: 0,
-        };
-        let private_key = mnemonic_to_private_key(&master_mnemonic_phrase, options)?;
-
-        generate_intmax_account_from_eth_key(private_key)
-    };
+    let trash_account = mnemonic_to_account(&master_mnemonic_phrase, 1, 0)?;
+    let intmax_recipient = trash_account.intmax_key;
 
     // multiple senders -> receiver (simultaneously)
     let transfer_input = TransferInput {

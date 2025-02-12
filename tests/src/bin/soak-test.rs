@@ -17,7 +17,10 @@ use intmax2_zkp::{
     common::signature::key_set::KeySet, ethereum_types::u32limb_trait::U32LimbTrait,
 };
 use serde::Deserialize;
-use tests::{derive_intmax_keys, transfer_with_error_handling};
+use tests::{
+    accounts::{derive_intmax_keys, mnemonic_to_account},
+    transfer_with_error_handling, wait_for_balance_synchronization,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
@@ -26,19 +29,11 @@ pub struct EnvVar {
     pub num_of_recipients: Option<u32>,
     pub recipient_offset: Option<u32>,
     pub balance_prover_base_url: String,
+    pub l1_chain_id: u64,
     // pub cool_down_seconds: Option<u64>,
 }
 
 const ETH_TOKEN_INDEX: u32 = 0;
-
-// pub async fn process_account(key: KeySet, transfers: &[TransferInput]) -> Result<(), CliError> {
-//     wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
-//     transfer(key, transfers, ETH_TOKEN_INDEX).await?;
-//     tokio::time::sleep(Duration::from_secs(20)).await;
-//     wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
-
-//     Ok(())
-// }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -102,6 +97,7 @@ impl TestSystem {
         intmax_recipients: &[KeySet],
         amount: u128,
     ) -> Result<(), CliError> {
+        wait_for_balance_synchronization(sender, Duration::from_secs(5)).await?;
         let transfers = intmax_recipients
             .iter()
             .map(|recipient| TransferInput {
@@ -111,6 +107,33 @@ impl TestSystem {
             })
             .collect::<Vec<_>>();
         transfer(sender, &transfers, ETH_TOKEN_INDEX).await
+    }
+
+    async fn ensure_accounts_without_transfers(
+        &self,
+        required_count: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let accounts_len = self.accounts.lock().unwrap().len();
+
+        if accounts_len >= required_count {
+            return Ok(());
+        }
+        let num_of_keys = required_count - accounts_len;
+
+        // Create new account and receive initial balance from admin
+        let master_mnemonic_phrase = self.master_mnemonic_phrase.clone();
+        let new_accounts = derive_intmax_keys(
+            &master_mnemonic_phrase,
+            num_of_keys as u32,
+            accounts_len as u32,
+        )?;
+
+        let chunk_size = 63;
+        for chunk in new_accounts.chunks(chunk_size) {
+            self.accounts.lock().unwrap().extend(chunk.iter());
+        }
+
+        Ok(())
     }
 
     async fn ensure_accounts(
@@ -133,20 +156,89 @@ impl TestSystem {
         )?;
 
         // TODO: Make it so that each of the 63 addresses that received ETH sends it to the other 63 addresses.
+        // let chunk_size = 63;
+        // for chunk in new_accounts.chunks(chunk_size) {
+        //     self.transfer_from(self.admin_key, chunk, 1000000000u128)
+        //         .await?;
+        //     self.accounts.lock().unwrap().extend(chunk.iter());
+        // }
+
+        let amount = 1000000000u128;
         let chunk_size = 63;
-        for chunk in new_accounts.chunks(chunk_size) {
-            self.transfer_from(self.admin_key, chunk, 1000000000u128)
-                .await?;
-            self.accounts.lock().unwrap().extend(chunk.iter());
+        let results = self.distribute(&new_accounts, amount, chunk_size).await?;
+        for err in results.into_iter().flatten() {
+            log::error!("Failed to distribute balance: {:?}", err)
         }
 
         Ok(())
     }
 
+    /// Distribute the given amount to the accounts.
+    async fn distribute(
+        &self,
+        accounts: &[KeySet],
+        amount: u128,
+        max_transfers_per_transaction: usize,
+    ) -> Result<Vec<Option<CliError>>, Box<dyn std::error::Error>> {
+        if accounts.len() <= max_transfers_per_transaction {
+            self.transfer_from(self.admin_key, accounts, amount).await?;
+            self.accounts.lock().unwrap().extend(accounts.iter());
+
+            return Ok(vec![]);
+        }
+
+        // Split new_accounts into two parts: intermediates and rest
+        let (intermediates, rest) = accounts.split_at(max_transfers_per_transaction);
+        let amount_for_intermediates = amount
+            * ((accounts.len() + max_transfers_per_transaction - 1) / max_transfers_per_transaction)
+                as u128;
+
+        // Transfer from admin to intermediates
+        log::info!("Transfer from admin to intermediates");
+        self.transfer_from(self.admin_key, intermediates, amount_for_intermediates)
+            .await?;
+        self.accounts.lock().unwrap().extend(intermediates.iter());
+
+        // Distribute `rest` into `chunk_size` groups
+        let mut groups: Vec<Vec<KeySet>> = vec![Vec::new(); max_transfers_per_transaction];
+        for (i, key) in rest.iter().enumerate() {
+            groups[i % max_transfers_per_transaction].push(*key);
+        }
+
+        // Transfer from intermediates to rest
+        let transfers = groups
+            .iter()
+            .zip(intermediates)
+            .map(|(group, sender)| async move {
+                for chunk in group.chunks(max_transfers_per_transaction) {
+                    self.transfer_from(*sender, chunk, amount).await?;
+                    self.accounts.lock().unwrap().extend(chunk.iter());
+                }
+
+                Ok::<(), CliError>(())
+            });
+
+        log::info!("Transfer from intermediates to rest");
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(600)) => Ok(vec![]), // Err("transaction timeout".into()),
+            results = join_all(transfers) => {
+                let res = results
+                    .into_iter()
+                    .map(|result| result.err())
+                    .collect::<Vec<_>>();
+
+                Ok(res)
+            }
+        }
+    }
+
     pub async fn run_soak_test(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let trash_account = mnemonic_to_account(&self.master_mnemonic_phrase, 1, 0)?;
+
+        self.ensure_accounts_without_transfers(400).await?;
         loop {
             let config = get_config().await?;
-            println!("Concurrency: {}", config.concurrent_limit);
+            log::info!("Concurrency: {}", config.concurrent_limit);
             if config.end == "true" {
                 break;
             }
@@ -163,7 +255,7 @@ impl TestSystem {
                 .enumerate()
                 .map(|(i, sender)| async move {
                     let transfers = [TransferInput {
-                        recipient: self.admin_key.pubkey.to_hex(),
+                        recipient: trash_account.intmax_key.pubkey.to_hex(),
                         amount: 10u128,
                         token_index: ETH_TOKEN_INDEX,
                     }];
@@ -174,9 +266,9 @@ impl TestSystem {
                     res
                 });
 
-            println!("Starting transactions");
+            log::info!("Starting transactions");
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(900)) => log::info!("transaction timeout"),
+                _ = tokio::time::sleep(Duration::from_secs(300)) => log::info!("transaction timeout"),
                 errors = join_all(futures) => {
                     for (i, error) in errors.iter().enumerate() {
                         if let Some(e) = error {

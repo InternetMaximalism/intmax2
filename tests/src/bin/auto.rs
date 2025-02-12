@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let now = chrono::Local::now();
-        let one_hour_later = now + chrono::Duration::hours(1);
+        let one_hour_later = now + chrono::Duration::minutes(30);
         println!(
             "next config: {:?}, time: {}",
             config,
