@@ -9,14 +9,22 @@ use intmax2_interfaces::data::{
 };
 use intmax2_zkp::{
     common::{signature::key_set::KeySet, transfer::Transfer, trees::asset_tree::AssetLeaf},
-    ethereum_types::u32limb_trait::U32LimbTrait as _,
+    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait as _},
 };
 
 use crate::cli::client::get_client;
 
 use super::error::CliError;
 
-pub async fn balance(key: KeySet) -> Result<(), CliError> {
+pub struct BalanceInfo {
+    pub token_index: u32,
+    pub amount: U256,
+    pub token_type: TokenType,
+    pub address: Option<Address>,
+    pub token_id: Option<U256>,
+}
+
+pub async fn balance(key: KeySet) -> Result<Vec<BalanceInfo>, CliError> {
     let client = get_client()?;
     client.sync(key).await?;
 
@@ -24,28 +32,41 @@ pub async fn balance(key: KeySet) -> Result<(), CliError> {
     let mut balances: Vec<(u32, AssetLeaf)> = user_data.balances().0.into_iter().collect();
     balances.sort_by_key(|(i, _leaf)| *i);
 
-    println!("Balances:");
+    let mut total_balance = vec![];
     for (i, leaf) in balances.iter() {
         let (token_type, address, token_id) = client.liquidity_contract.get_token_info(*i).await?;
-        println!("\t Token #{}:", i);
-        println!("\t\t Amount: {}", leaf.amount);
-        println!("\t\t Type: {}", token_type);
+        let (address, token_id) = match token_type {
+            TokenType::NATIVE => (None, None),
+            TokenType::ERC20 => (Some(address), None),
+            TokenType::ERC721 => (Some(address), Some(token_id)),
+            TokenType::ERC1155 => (Some(address), Some(token_id)),
+        };
+        total_balance.push(BalanceInfo {
+            token_index: *i,
+            amount: leaf.amount,
+            token_type,
+            address,
+            token_id,
+        });
+    }
 
-        match token_type {
-            TokenType::NATIVE => {}
-            TokenType::ERC20 => {
-                println!("\t\t Address: {}", address);
-            }
-            TokenType::ERC721 => {
-                println!("\t\t Address: {}", address);
-                println!("\t\t Token ID: {}", token_id);
-            }
-            TokenType::ERC1155 => {
-                println!("\t\t Address: {}", address);
-                println!("\t\t Token ID: {}", token_id);
-            }
+    Ok(total_balance)
+}
+
+pub async fn log_balance(total_balance: Vec<BalanceInfo>) -> Result<(), CliError> {
+    println!("Balances:");
+    for balance in total_balance {
+        println!("Token #{}:", balance.token_index);
+        println!("\tAmount: {}", balance.amount);
+        println!("\tType: {}", balance.token_type);
+        if let Some(address) = balance.address {
+            println!("\tAddress: {}", address);
+        }
+        if let Some(token_id) = balance.token_id {
+            println!("\tToken ID: {}", token_id);
         }
     }
+
     Ok(())
 }
 
