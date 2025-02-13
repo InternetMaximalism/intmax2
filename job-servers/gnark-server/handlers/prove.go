@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -19,6 +20,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/qope/gnark-plonky2-verifier/types"
 	"github.com/qope/gnark-plonky2-verifier/variables"
+)
+
+const (
+	redisKeyPrefix = "gnark_proof_result:"
+	expiration     = 24 * time.Hour
 )
 
 type ProveResult struct {
@@ -73,17 +79,21 @@ func (s *State) prove(jobId string, proofRaw types.ProofWithPublicInputsRaw) err
 	return nil
 }
 
+func getRedisKey(jobId string) string {
+	return fmt.Sprintf("%s%s", redisKeyPrefix, jobId)
+}
+
 func (s *State) setStatus(ctx context.Context, jobId string, status Status) error {
 	statusJSON, err := json.Marshal(status)
 	if err != nil {
 		return err
 	}
-	return s.RedisClient.Set(ctx, jobId, statusJSON, 24*time.Hour).Err()
+	return s.RedisClient.Set(ctx, getRedisKey(jobId), statusJSON, expiration).Err()
 }
 
 func (s *State) getStatus(ctx context.Context, jobId string) (Status, error) {
 	var status Status
-	statusJSON, err := s.RedisClient.Get(ctx, jobId).Result()
+	statusJSON, err := s.RedisClient.Get(ctx, getRedisKey(jobId)).Result()
 	if err != nil {
 		return status, err
 	}
