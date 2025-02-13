@@ -1,5 +1,5 @@
 use intmax2_client_sdk::client::client::FeeQuote;
-use intmax2_interfaces::api::block_builder::interface::{Fee, FeeInfo};
+use intmax2_interfaces::api::block_builder::interface::{Fee, BlockBuilderFeeInfo};
 use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -72,8 +72,8 @@ pub struct JsFeeInfo {
     pub non_registration_collateral_fee: Option<Vec<JsFee>>,
 }
 
-impl From<FeeInfo> for JsFeeInfo {
-    fn from(fee_info: FeeInfo) -> Self {
+impl From<BlockBuilderFeeInfo> for JsFeeInfo {
+    fn from(fee_info: BlockBuilderFeeInfo) -> Self {
         Self {
             beneficiary: fee_info.beneficiary.map(|b| b.to_hex()),
             registration_fee: fee_info

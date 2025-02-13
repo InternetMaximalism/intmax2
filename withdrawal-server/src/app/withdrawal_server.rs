@@ -1,18 +1,15 @@
-use std::collections::HashMap;
-
 use crate::{
     app::status::{SqlClaimStatus, SqlWithdrawalStatus},
     Env,
 };
 
-use super::{
-    error::WithdrawalServerError,
-    fee::{convert_fee_vec, parse_fee_str},
-};
+use super::{error::WithdrawalServerError, fee::parse_fee_str};
 use intmax2_interfaces::{
     api::{
         block_builder::interface::Fee,
-        withdrawal_server::interface::{ClaimInfo, ContractWithdrawal, WithdrawalInfo},
+        withdrawal_server::interface::{
+            ClaimFeeInfo, ClaimInfo, ContractWithdrawal, WithdrawalFeeInfo, WithdrawalInfo,
+        },
     },
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
     utils::circuit_verifiers::CircuitVerifiers,
@@ -35,8 +32,11 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 struct Config {
-    withdrawal_fee: Option<HashMap<u32, U256>>,
-    claim_fee: Option<HashMap<u32, U256>>,
+    withdrawal_beneficiary: Option<U256>,
+    claim_beneficiary: Option<U256>,
+    direct_withdrawal_fee: Option<Vec<Fee>>,
+    claimable_withdrawal_fee: Option<Vec<Fee>>,
+    claim_fee: Option<Vec<Fee>>,
 }
 
 pub struct WithdrawalServer {
@@ -52,25 +52,47 @@ impl WithdrawalServer {
             url: env.database_url.to_string(),
         })
         .await?;
-        let withdrawal_fee = env
-            .withdrawal_fee
-            .as_deref()
-            .map(parse_fee_str)
+        let withdrawal_beneficiary: Option<U256> =
+            env.withdrawal_beneficiary.as_ref().map(|&s| s.into());
+        let claim_beneficiary: Option<U256> = env.claim_beneficiary.as_ref().map(|&s| s.into());
+        let direct_withdrawal_fee: Option<Vec<Fee>> = env
+            .direct_withdrawal_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
             .transpose()?;
-        let claim_fee = env.claim_fee.as_deref().map(parse_fee_str).transpose()?;
+        let claimable_withdrawal_fee: Option<Vec<Fee>> = env
+            .claimable_withdrawal_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let claim_fee: Option<Vec<Fee>> = env
+            .claim_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
         let config = Config {
-            withdrawal_fee,
+            withdrawal_beneficiary,
+            claim_beneficiary,
+            direct_withdrawal_fee,
+            claimable_withdrawal_fee,
             claim_fee,
         };
         Ok(Self { config, pool })
     }
 
-    pub fn get_withdrawal_fee(&self) -> Option<Vec<Fee>> {
-        convert_fee_vec(&self.config.withdrawal_fee)
+    pub fn get_withdrawal_fee(&self) -> WithdrawalFeeInfo {
+        WithdrawalFeeInfo {
+            beneficiary: self.config.withdrawal_beneficiary,
+            direct_withdrawal_fee: self.config.direct_withdrawal_fee.clone(),
+            claimable_withdrawal_fee: self.config.claimable_withdrawal_fee.clone(),
+        }
     }
 
-    pub fn get_claim_fee(&self) -> Option<Vec<Fee>> {
-        convert_fee_vec(&self.config.claim_fee)
+    pub fn get_claim_fee(&self) -> ClaimFeeInfo {
+        ClaimFeeInfo {
+            beneficiary: self.config.claim_beneficiary,
+            fee: self.config.claim_fee.clone(),
+        }
     }
 
     pub async fn request_withdrawal(

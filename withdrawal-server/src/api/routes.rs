@@ -6,25 +6,28 @@ use actix_web::{
     Error, Scope,
 };
 use intmax2_interfaces::{
-    api::withdrawal_server::types::{
-        GetClaimInfoRequest, GetClaimInfoResponse, GetFeeResponse,
-        GetWithdrawalInfoByRecipientQuery, GetWithdrawalInfoRequest, GetWithdrawalInfoResponse,
-        RequestClaimRequest, RequestWithdrawalRequest,
+    api::withdrawal_server::{
+        interface::{ClaimFeeInfo, WithdrawalFeeInfo},
+        types::{
+            GetClaimInfoRequest, GetClaimInfoResponse, GetWithdrawalInfoByRecipientQuery,
+            GetWithdrawalInfoRequest, GetWithdrawalInfoResponse, RequestClaimRequest,
+            RequestWithdrawalRequest,
+        },
     },
     utils::signature::{Signable as _, WithAuth},
 };
 use serde_qs::actix::QsQuery;
 
 #[get("/withdrawal-fee")]
-pub async fn get_withdrawal_fee(state: Data<State>) -> Result<Json<GetFeeResponse>, Error> {
+pub async fn get_withdrawal_fee(state: Data<State>) -> Result<Json<WithdrawalFeeInfo>, Error> {
     let fees = state.withdrawal_server.get_withdrawal_fee();
-    Ok(Json(GetFeeResponse { fees }))
+    Ok(Json(fees))
 }
 
 #[get("/claim-fee")]
-pub async fn get_claim_fee(state: Data<State>) -> Result<Json<GetFeeResponse>, Error> {
+pub async fn get_claim_fee(state: Data<State>) -> Result<Json<ClaimFeeInfo>, Error> {
     let fees = state.withdrawal_server.get_claim_fee();
-    Ok(Json(GetFeeResponse { fees }))
+    Ok(Json(fees))
 }
 
 #[post("/request-withdrawal")]

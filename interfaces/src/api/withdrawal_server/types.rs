@@ -5,7 +5,7 @@ use plonky2::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{api::block_builder::interface::Fee, utils::signature::Signable};
+use crate::utils::signature::Signable;
 
 use super::interface::{ClaimInfo, WithdrawalInfo};
 
@@ -18,12 +18,6 @@ fn content_prefix(path: &str) -> Vec<u8> {
     format!("intmax2/v1/withdrawal-server/{}", path)
         .as_bytes()
         .to_vec()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetFeeResponse {
-    pub fees: Option<Vec<Fee>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2,14 +2,16 @@ use super::utils::query::{get_request, post_request};
 use async_trait::async_trait;
 use intmax2_interfaces::{
     api::{
-        block_builder::interface::Fee,
         error::ServerError,
         withdrawal_server::{
-            interface::{ClaimInfo, WithdrawalInfo, WithdrawalServerClientInterface},
+            interface::{
+                ClaimFeeInfo, ClaimInfo, WithdrawalFeeInfo, WithdrawalInfo,
+                WithdrawalServerClientInterface,
+            },
             types::{
-                GetClaimInfoRequest, GetClaimInfoResponse, GetFeeResponse,
-                GetWithdrawalInfoByRecipientQuery, GetWithdrawalInfoRequest,
-                GetWithdrawalInfoResponse, RequestClaimRequest, RequestWithdrawalRequest,
+                GetClaimInfoRequest, GetClaimInfoResponse, GetWithdrawalInfoByRecipientQuery,
+                GetWithdrawalInfoRequest, GetWithdrawalInfoResponse, RequestClaimRequest,
+                RequestWithdrawalRequest,
             },
         },
     },
@@ -42,16 +44,16 @@ impl WithdrawalServerClient {
 
 #[async_trait(?Send)]
 impl WithdrawalServerClientInterface for WithdrawalServerClient {
-    async fn get_withdrawal_fee(&self) -> Result<Option<Vec<Fee>>, ServerError> {
-        let response: GetFeeResponse =
+    async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError> {
+        let response: WithdrawalFeeInfo =
             get_request::<(), _>(&self.base_url, "/withdrawal-server/withdrawal-fee", None).await?;
-        Ok(response.fees)
+        Ok(response)
     }
 
-    async fn get_claim_fee(&self) -> Result<Option<Vec<Fee>>, ServerError> {
-        let response: GetFeeResponse =
+    async fn get_claim_fee(&self) -> Result<ClaimFeeInfo, ServerError> {
+        let response: ClaimFeeInfo =
             get_request::<(), _>(&self.base_url, "/withdrawal-server/claim-fee", None).await?;
-        Ok(response.fees)
+        Ok(response)
     }
 
     async fn request_withdrawal(

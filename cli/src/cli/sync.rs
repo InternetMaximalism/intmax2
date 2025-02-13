@@ -5,6 +5,8 @@ use super::{client::get_client, error::CliError, utils::convert_address};
 
 pub async fn sync_withdrawals(key: KeySet) -> Result<(), CliError> {
     let client = get_client()?;
+    
+
     client.sync_withdrawals(key).await?;
     Ok(())
 }

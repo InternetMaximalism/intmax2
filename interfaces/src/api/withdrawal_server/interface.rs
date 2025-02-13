@@ -18,6 +18,21 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawalFeeInfo {
+    pub beneficiary: Option<U256>,
+    pub direct_withdrawal_fee: Option<Vec<Fee>>,
+    pub claimable_withdrawal_fee: Option<Vec<Fee>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimFeeInfo {
+    pub beneficiary: Option<U256>,
+    pub fee: Option<Vec<Fee>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalInfo {
@@ -98,9 +113,9 @@ impl Display for ClaimStatus {
 
 #[async_trait(?Send)]
 pub trait WithdrawalServerClientInterface {
-    async fn get_withdrawal_fee(&self) -> Result<Option<Vec<Fee>>, ServerError>;
+    async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError>;
 
-    async fn get_claim_fee(&self) -> Result<Option<Vec<Fee>>, ServerError>;
+    async fn get_claim_fee(&self) -> Result<ClaimFeeInfo, ServerError>;
 
     async fn request_withdrawal(
         &self,

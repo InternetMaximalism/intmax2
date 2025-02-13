@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::{CollateralBlock, Fee, FeeInfo, FeeProof},
+        block_builder::interface::{BlockBuilderFeeInfo, CollateralBlock, Fee, FeeProof},
         store_vault_server::interface::StoreVaultClientInterface,
     },
     data::{
@@ -130,7 +130,7 @@ pub async fn generate_fee_proof<S: StoreVaultClientInterface, B: BalanceProverCl
 pub fn quote_fee(
     is_registration_block: bool,
     fee_token_index: u32,
-    fee_info: &FeeInfo,
+    fee_info: &BlockBuilderFeeInfo,
 ) -> Result<(Option<Fee>, Option<Fee>), ClientError> {
     let fee_list = if is_registration_block {
         &fee_info.registration_fee
