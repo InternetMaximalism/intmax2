@@ -51,12 +51,16 @@ pub enum Commands {
     SyncWithdrawals {
         #[clap(long)]
         private_key: H256,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
     },
     SyncClaims {
         #[clap(long)]
         private_key: H256,
         #[clap(long)]
         recipient: EthAddress,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
     },
     Balance {
         #[clap(long)]

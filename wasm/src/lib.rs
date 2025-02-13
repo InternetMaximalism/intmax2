@@ -1,6 +1,9 @@
 use client::{get_client, Config};
 use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_interfaces::{
+    api::withdrawal_server::interface::WithdrawalServerClientInterface,
+    data::deposit_data::TokenType,
+};
 use intmax2_zkp::{
     common::transfer::Transfer,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
@@ -164,11 +167,18 @@ pub async fn sync(config: &Config, private_key: &str) -> Result<(), JsError> {
 /// Synchronize the user's withdrawal proof, and send request to the withdrawal aggregator.
 /// It may take a long time to generate ZKP.
 #[wasm_bindgen]
-pub async fn sync_withdrawals(config: &Config, private_key: &str) -> Result<(), JsError> {
+pub async fn sync_withdrawals(
+    config: &Config,
+    private_key: &str,
+    fee_token_index: Option<u32>,
+) -> Result<(), JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
-    client.sync_withdrawals(key).await?;
+    let withdrawal_fee = client.withdrawal_server.get_withdrawal_fee().await?;
+    client
+        .sync_withdrawals(key, &withdrawal_fee, fee_token_index)
+        .await?;
     Ok(())
 }
 
@@ -179,12 +189,16 @@ pub async fn sync_claims(
     config: &Config,
     private_key: &str,
     recipient: &str,
+    fee_token_index: Option<u32>,
 ) -> Result<(), JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
     let recipient = parse_address(recipient)?;
-    client.sync_claims(key, recipient).await?;
+    let claim_fee = client.withdrawal_server.get_claim_fee().await?;
+    client
+        .sync_claims(key, recipient, &claim_fee, fee_token_index)
+        .await?;
     Ok(())
 }
 

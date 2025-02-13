@@ -73,6 +73,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn sync_withdrawal(
         &self,
         key: KeySet,

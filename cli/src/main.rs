@@ -107,16 +107,20 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             )
             .await?;
         }
-        Commands::SyncWithdrawals { private_key } => {
+        Commands::SyncWithdrawals {
+            private_key,
+            fee_token_index,
+        } => {
             let key = privkey_to_keyset(private_key);
-            sync_withdrawals(key).await?;
+            sync_withdrawals(key, fee_token_index).await?;
         }
         Commands::SyncClaims {
             private_key,
             recipient,
+            fee_token_index,
         } => {
             let key = privkey_to_keyset(private_key);
-            sync_claims(key, recipient).await?;
+            sync_claims(key, recipient, fee_token_index).await?;
         }
         Commands::Balance { private_key } => {
             let key = generate_key(private_key);

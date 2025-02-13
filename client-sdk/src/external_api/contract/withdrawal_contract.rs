@@ -76,6 +76,7 @@ impl WithdrawalContract {
         Ok(contract)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn initialize(
         &self,
         signer_private_key: H256,
