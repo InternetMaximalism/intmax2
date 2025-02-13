@@ -9,4 +9,6 @@ pub struct Env {
     pub database_url: String,
     pub database_max_connections: u32,
     pub database_timeout: u64,
+    pub withdrawal_fee: Option<String>,
+    pub claim_fee: Option<String>,
 }

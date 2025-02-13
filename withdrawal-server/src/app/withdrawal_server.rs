@@ -1,8 +1,19 @@
-use crate::app::status::{SqlClaimStatus, SqlWithdrawalStatus};
+use std::collections::HashMap;
 
-use super::error::WithdrawalServerError;
+use crate::{
+    app::status::{SqlClaimStatus, SqlWithdrawalStatus},
+    Env,
+};
+
+use super::{
+    error::WithdrawalServerError,
+    fee::{convert_fee_vec, parse_fee_str},
+};
 use intmax2_interfaces::{
-    api::withdrawal_server::interface::{ClaimInfo, ContractWithdrawal, WithdrawalInfo},
+    api::{
+        block_builder::interface::Fee,
+        withdrawal_server::interface::{ClaimInfo, ContractWithdrawal, WithdrawalInfo},
+    },
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
     utils::circuit_verifiers::CircuitVerifiers,
 };
@@ -23,23 +34,43 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
+struct Config {
+    withdrawal_fee: Option<HashMap<u32, U256>>,
+    claim_fee: Option<HashMap<u32, U256>>,
+}
+
 pub struct WithdrawalServer {
+    config: Config,
     pub pool: DbPool,
 }
 
 impl WithdrawalServer {
-    pub async fn new(
-        database_url: &str,
-        database_max_connections: u32,
-        database_timeout: u64,
-    ) -> anyhow::Result<Self> {
+    pub async fn new(env: &Env) -> anyhow::Result<Self> {
         let pool = DbPool::from_config(&DbPoolConfig {
-            max_connections: database_max_connections,
-            idle_timeout: database_timeout,
-            url: database_url.to_string(),
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: env.database_url.to_string(),
         })
         .await?;
-        Ok(Self { pool })
+        let withdrawal_fee = env
+            .withdrawal_fee
+            .as_deref()
+            .map(parse_fee_str)
+            .transpose()?;
+        let claim_fee = env.claim_fee.as_deref().map(parse_fee_str).transpose()?;
+        let config = Config {
+            withdrawal_fee,
+            claim_fee,
+        };
+        Ok(Self { config, pool })
+    }
+
+    pub async fn withdrawal_fee(&self) -> Option<Vec<Fee>> {
+        convert_fee_vec(&self.config.withdrawal_fee)
+    }
+
+    pub async fn claim_fee(&self) -> Option<Vec<Fee>> {
+        convert_fee_vec(&self.config.claim_fee)
     }
 
     pub async fn request_withdrawal(

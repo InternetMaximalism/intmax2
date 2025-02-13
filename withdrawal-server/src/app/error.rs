@@ -9,6 +9,12 @@ pub enum WithdrawalServerError {
     #[error("Single claim proof verification error")]
     SingleClaimVerificationError,
 
+    #[error("Invalid fee: {0}")]
+    InvalidFee(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+
     #[error("Serialization error {0}")]
     SerializationError(String),
 }
