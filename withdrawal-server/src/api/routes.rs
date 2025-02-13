@@ -6,25 +6,24 @@ use actix_web::{
     Error, Scope,
 };
 use intmax2_interfaces::{
-    api::withdrawal_server::{
-        interface::Fee,
-        types::{
-            GetClaimInfoRequest, GetClaimInfoResponse, GetFeeResponse,
-            GetWithdrawalInfoByRecipientQuery, GetWithdrawalInfoRequest, GetWithdrawalInfoResponse,
-            RequestClaimRequest, RequestWithdrawalRequest,
-        },
+    api::withdrawal_server::types::{
+        GetClaimInfoRequest, GetClaimInfoResponse, GetFeeResponse,
+        GetWithdrawalInfoByRecipientQuery, GetWithdrawalInfoRequest, GetWithdrawalInfoResponse,
+        RequestClaimRequest, RequestWithdrawalRequest,
     },
     utils::signature::{Signable as _, WithAuth},
 };
 use serde_qs::actix::QsQuery;
 
 #[get("/withdrawal-fee")]
-pub async fn get_fee() -> Result<Json<GetFeeResponse>, Error> {
-    let fees = vec![Fee {
-        token_index: 0,
-        constant: 0,
-        coefficient: 0.0,
-    }];
+pub async fn get_withdrawal_fee(state: Data<State>) -> Result<Json<GetFeeResponse>, Error> {
+    let fees = state.withdrawal_server.get_withdrawal_fee();
+    Ok(Json(GetFeeResponse { fees }))
+}
+
+#[get("/claim-fee")]
+pub async fn get_claim_fee(state: Data<State>) -> Result<Json<GetFeeResponse>, Error> {
+    let fees = state.withdrawal_server.get_claim_fee();
     Ok(Json(GetFeeResponse { fees }))
 }
 
@@ -117,9 +116,10 @@ pub async fn get_withdrawal_info_by_recipient(
 
 pub fn withdrawal_server_scope() -> Scope {
     actix_web::web::scope("/withdrawal-server")
+        .service(get_withdrawal_fee)
+        .service(get_claim_fee)
         .service(request_withdrawal)
         .service(request_claim)
-        .service(get_fee)
         .service(get_withdrawal_info)
         .service(get_withdrawal_info_by_recipient)
         .service(get_claim_info)

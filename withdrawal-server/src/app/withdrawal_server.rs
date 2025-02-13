@@ -65,11 +65,11 @@ impl WithdrawalServer {
         Ok(Self { config, pool })
     }
 
-    pub async fn withdrawal_fee(&self) -> Option<Vec<Fee>> {
+    pub fn get_withdrawal_fee(&self) -> Option<Vec<Fee>> {
         convert_fee_vec(&self.config.withdrawal_fee)
     }
 
-    pub async fn claim_fee(&self) -> Option<Vec<Fee>> {
+    pub fn get_claim_fee(&self) -> Option<Vec<Fee>> {
         convert_fee_vec(&self.config.claim_fee)
     }
 

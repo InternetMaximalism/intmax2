@@ -2,9 +2,10 @@ use super::utils::query::{get_request, post_request};
 use async_trait::async_trait;
 use intmax2_interfaces::{
     api::{
+        block_builder::interface::Fee,
         error::ServerError,
         withdrawal_server::{
-            interface::{ClaimInfo, Fee, WithdrawalInfo, WithdrawalServerClientInterface},
+            interface::{ClaimInfo, WithdrawalInfo, WithdrawalServerClientInterface},
             types::{
                 GetClaimInfoRequest, GetClaimInfoResponse, GetFeeResponse,
                 GetWithdrawalInfoByRecipientQuery, GetWithdrawalInfoRequest,
@@ -41,9 +42,15 @@ impl WithdrawalServerClient {
 
 #[async_trait(?Send)]
 impl WithdrawalServerClientInterface for WithdrawalServerClient {
-    async fn fee(&self) -> Result<Vec<Fee>, ServerError> {
+    async fn get_withdrawal_fee(&self) -> Result<Option<Vec<Fee>>, ServerError> {
         let response: GetFeeResponse =
-            get_request::<(), _>(&self.base_url, "/withdrawal-server/fee", None).await?;
+            get_request::<(), _>(&self.base_url, "/withdrawal-server/withdrawal-fee", None).await?;
+        Ok(response.fees)
+    }
+
+    async fn get_claim_fee(&self) -> Result<Option<Vec<Fee>>, ServerError> {
+        let response: GetFeeResponse =
+            get_request::<(), _>(&self.base_url, "/withdrawal-server/claim-fee", None).await?;
         Ok(response.fees)
     }
 

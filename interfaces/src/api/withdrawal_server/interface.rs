@@ -12,20 +12,11 @@ use plonky2::{
 use plonky2_keccak::utils::solidity_keccak256;
 use serde::{Deserialize, Serialize};
 
-use crate::api::error::ServerError;
+use crate::api::{block_builder::interface::Fee, error::ServerError};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
-
-/// fee = constant + coefficient * amount
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Fee {
-    pub token_index: u32,
-    pub constant: u128,
-    pub coefficient: f64,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,7 +98,9 @@ impl Display for ClaimStatus {
 
 #[async_trait(?Send)]
 pub trait WithdrawalServerClientInterface {
-    async fn fee(&self) -> Result<Vec<Fee>, ServerError>;
+    async fn get_withdrawal_fee(&self) -> Result<Option<Vec<Fee>>, ServerError>;
+
+    async fn get_claim_fee(&self) -> Result<Option<Vec<Fee>>, ServerError>;
 
     async fn request_withdrawal(
         &self,

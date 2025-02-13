@@ -5,9 +5,9 @@ use plonky2::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::utils::signature::Signable;
+use crate::{api::block_builder::interface::Fee, utils::signature::Signable};
 
-use super::interface::{ClaimInfo, Fee, WithdrawalInfo};
+use super::interface::{ClaimInfo, WithdrawalInfo};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -23,7 +23,7 @@ fn content_prefix(path: &str) -> Vec<u8> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetFeeResponse {
-    pub fees: Vec<Fee>,
+    pub fees: Option<Vec<Fee>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
