@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
+        block_builder::interface::{BlockBuilderClientInterface, Fee},
         store_vault_server::interface::StoreVaultClientInterface,
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::WithdrawalServerClientInterface,
@@ -16,11 +16,12 @@ use intmax2_zkp::{
             deposit_time_witness::{DepositTimePublicWitness, DepositTimeWitness},
         },
     },
-    ethereum_types::address::Address,
+    ethereum_types::{address::Address, u256::U256},
 };
 
 use crate::client::{
     client::Client,
+    fee_payment::{collect_fees, consume_payment, FeeType},
     strategy::{mining::MiningStatus, strategy::determine_claims},
 };
 
@@ -35,7 +36,16 @@ where
     W: WithdrawalServerClientInterface,
 {
     /// Sync the client's withdrawals and relays to the withdrawal server
-    pub async fn sync_claims(&self, key: KeySet, recipient: Address) -> Result<(), SyncError> {
+    pub async fn sync_claims(
+        &self,
+        key: KeySet,
+        recipient: Address,
+        fee_beneficiary: Option<U256>,
+        fee: Option<Fee>,
+    ) -> Result<(), SyncError> {
+        if fee.is_some() && fee_beneficiary.is_none() {
+            return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
+        }
         let minings = determine_claims(
             &self.store_vault_server,
             &self.validity_prover,
@@ -116,10 +126,42 @@ where
                 .prove_single_claim(key, &claim_witness)
                 .await?;
 
+            let collected_fees = match &fee {
+                Some(fee) => {
+                    let fee_beneficiary = fee_beneficiary.unwrap(); // already validated
+                    collect_fees(
+                        &self.store_vault_server,
+                        &self.validity_prover,
+                        key,
+                        fee_beneficiary,
+                        fee.clone(),
+                        FeeType::Claim,
+                    )
+                    .await?
+                }
+                None => vec![],
+            };
+            let fee_transfer_uuids = collected_fees
+                .iter()
+                .map(|fee| fee.transfer_uuid.clone())
+                .collect::<Vec<_>>();
+
             // send claim request
             self.withdrawal_server
-                .request_claim(key, &single_claim_proof)
+                .request_claim(key, &single_claim_proof, &fee_transfer_uuids)
                 .await?;
+
+            // consume fees
+            for used_fee in &collected_fees {
+                // todo: batch consume
+                consume_payment(
+                    &self.store_vault_server,
+                    key,
+                    used_fee,
+                    "used for claim fee",
+                )
+                .await?;
+            }
 
             // update user data
             let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;

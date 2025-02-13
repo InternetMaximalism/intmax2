@@ -30,13 +30,18 @@ pub struct GetFeeResponse {
 #[serde(rename_all = "camelCase")]
 pub struct RequestWithdrawalRequest {
     pub single_withdrawal_proof: ProofWithPublicInputs<F, C, D>,
+    pub fee_transfer_uuids: Vec<String>,
 }
 
 impl Signable for RequestWithdrawalRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("request_withdrawal"),
-            bincode::serialize(&self.single_withdrawal_proof).unwrap(),
+            bincode::serialize(&(
+                self.single_withdrawal_proof.clone(),
+                self.fee_transfer_uuids.clone(),
+            ))
+            .unwrap(),
         ]
         .concat()
     }
@@ -46,13 +51,18 @@ impl Signable for RequestWithdrawalRequest {
 #[serde(rename_all = "camelCase")]
 pub struct RequestClaimRequest {
     pub single_claim_proof: ProofWithPublicInputs<F, C, D>,
+    pub fee_transfer_uuids: Vec<String>,
 }
 
 impl Signable for RequestClaimRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("request_claim"),
-            bincode::serialize(&self.single_claim_proof).unwrap(),
+            bincode::serialize(&(
+                self.single_claim_proof.clone(),
+                self.fee_transfer_uuids.clone(),
+            ))
+            .unwrap(),
         ]
         .concat()
     }

@@ -7,16 +7,17 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{address::Address, u256::U256},
+    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait as _},
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::client::{
     misc::{get_topic, payment_memo::PaymentMemo},
+    receive_validation::validate_receive,
     sync::utils::generate_salt,
 };
 
-use super::{client::PaymentMemoEntry, error::ClientError};
+use super::{client::PaymentMemoEntry, sync::error::SyncError};
 
 pub const WITHDRAWAL_FEE_MEMO: &str = "withdrawal_fee_memo";
 pub const CLAIM_FEE_MEMO: &str = "claim_fee_memo";
@@ -148,15 +149,11 @@ pub enum FeeType {
     Claim,
 }
 
-pub async fn get_unused_payments<
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    M: DeserializeOwned,
->(
+pub async fn get_unused_payments<S: StoreVaultClientInterface>(
     store_vault_server: &S,
     key: KeySet,
     fee_type: FeeType,
-) -> Result<Vec<PaymentMemo>, ClientError> {
+) -> Result<Vec<PaymentMemo>, SyncError> {
     let topic = match fee_type {
         FeeType::Withdrawal => get_topic(WITHDRAWAL_FEE_MEMO),
         FeeType::Claim => get_topic(CLAIM_FEE_MEMO),
@@ -192,16 +189,12 @@ pub async fn get_unused_payments<
     Ok(unused_memos)
 }
 
-pub async fn consume_payment<
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    M: DeserializeOwned,
->(
+pub async fn consume_payment<S: StoreVaultClientInterface>(
     store_vault_server: &S,
     key: KeySet,
     payment_memo: &PaymentMemo,
     reason: &str,
-) -> Result<(), ClientError> {
+) -> Result<(), SyncError> {
     let topic = get_topic(USED_OR_INVALID_MEMO);
     let memo = UsedOrInvalidMemo {
         reason: reason.to_string(),
@@ -215,4 +208,57 @@ pub async fn consume_payment<
         .save_misc(key, topic, &payment_memo.encrypt(key.pubkey))
         .await?;
     Ok(())
+}
+
+pub async fn collect_fees<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
+    store_vault_server: &S,
+    validity_prover: &V,
+    key: KeySet,
+    fee_beneficiary: U256,
+    fee: Fee,
+    fee_type: FeeType,
+) -> Result<Vec<PaymentMemo>, SyncError> {
+    let unused_fees = get_unused_payments(store_vault_server, key, fee_type).await?;
+    // Extract only those whose fee.token_index and recipient matches and sort by fee.amount
+    let mut sorted_fee_memo = unused_fees
+        .into_iter()
+        .filter(|memo| {
+            memo.transfer.token_index == fee.token_index
+                && memo.transfer.recipient == GenericAddress::from_pubkey(fee_beneficiary)
+        })
+        .collect::<Vec<_>>();
+    sorted_fee_memo.sort_by_key(|memo| memo.transfer.amount);
+
+    // Collect from the smallest to make the fee enough. If there is an invalid fee, mark it as consumed.
+    let mut fee_transfers = vec![];
+    let mut collected_total_fee = U256::zero();
+    for memo in sorted_fee_memo {
+        match validate_receive(
+            store_vault_server,
+            validity_prover,
+            key,
+            &memo.transfer_uuid,
+        )
+        .await
+        {
+            Ok(transfer) => {
+                fee_transfers.push(memo);
+                collected_total_fee += transfer.amount;
+            }
+            Err(e) => {
+                log::warn!("transfer_uuid: {} is invalid: {}", memo.transfer_uuid, e);
+                consume_payment(store_vault_server, key, &memo, &e.to_string()).await?;
+            }
+        }
+        if collected_total_fee >= fee.amount {
+            break;
+        }
+    }
+    if collected_total_fee < fee.amount {
+        return Err(SyncError::FeeError(format!(
+            "fee is not enough: collected_total_fee: {}, fee.amount: {}",
+            collected_total_fee, fee.amount
+        )));
+    }
+    Ok(fee_transfers)
 }
