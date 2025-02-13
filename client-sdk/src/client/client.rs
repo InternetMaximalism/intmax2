@@ -34,7 +34,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     client::{strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt},
     external_api::{
-        contract::{liquidity_contract::LiquidityContract, rollup_contract::RollupContract},
+        contract::{
+            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+            withdrawal_contract::WithdrawalContract,
+        },
         utils::time::sleep_for,
     },
 };
@@ -66,6 +69,7 @@ pub struct Client<
 
     pub liquidity_contract: LiquidityContract,
     pub rollup_contract: RollupContract,
+    pub withdrawal_contract: WithdrawalContract,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

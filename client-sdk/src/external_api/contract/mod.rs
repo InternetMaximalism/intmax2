@@ -9,3 +9,4 @@ pub mod liquidity_contract;
 pub mod proxy_contract;
 pub mod rollup_contract;
 pub mod utils;
+pub mod withdrawal_contract;

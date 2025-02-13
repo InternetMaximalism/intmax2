@@ -1,13 +1,13 @@
 use ethers::types::Address;
+use intmax2_interfaces::api::withdrawal_server::interface::WithdrawalServerClientInterface;
 use intmax2_zkp::common::signature::key_set::KeySet;
 
 use super::{client::get_client, error::CliError, utils::convert_address};
 
 pub async fn sync_withdrawals(key: KeySet) -> Result<(), CliError> {
     let client = get_client()?;
-    
-
-    client.sync_withdrawals(key).await?;
+    let withdrawal_fee = client.withdrawal_server.get_withdrawal_fee().await?;
+    client.sync_withdrawals(key, withdrawal_fee).await?;
     Ok(())
 }
 

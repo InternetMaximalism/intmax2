@@ -1,10 +1,10 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::{BlockBuilderClientInterface, Fee},
+        block_builder::interface::BlockBuilderClientInterface,
         store_vault_server::interface::StoreVaultClientInterface,
         validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::WithdrawalServerClientInterface,
+        withdrawal_server::interface::{ClaimFeeInfo, WithdrawalServerClientInterface},
     },
     data::encryption::Encryption as _,
 };
@@ -16,7 +16,7 @@ use intmax2_zkp::{
             deposit_time_witness::{DepositTimePublicWitness, DepositTimeWitness},
         },
     },
-    ethereum_types::{address::Address, u256::U256},
+    ethereum_types::address::Address,
 };
 
 use crate::client::{
@@ -40,10 +40,14 @@ where
         &self,
         key: KeySet,
         recipient: Address,
-        fee_beneficiary: Option<U256>,
-        fee: Option<Fee>,
+        fee_info: &ClaimFeeInfo,
+        fee_index: Option<usize>,
     ) -> Result<(), SyncError> {
-        if fee.is_some() && fee_beneficiary.is_none() {
+        let fee = match &fee_info.fee {
+            Some(fee) => fee.get(fee_index.unwrap_or(0)).cloned(),
+            None => None,
+        };
+        if fee.is_some() && fee_info.beneficiary.is_none() {
             return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
         }
         let minings = determine_claims(
@@ -128,7 +132,7 @@ where
 
             let collected_fees = match &fee {
                 Some(fee) => {
-                    let fee_beneficiary = fee_beneficiary.unwrap(); // already validated
+                    let fee_beneficiary = fee_info.beneficiary.unwrap(); // already validated
                     collect_fees(
                         &self.store_vault_server,
                         &self.validity_prover,

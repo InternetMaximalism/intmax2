@@ -4,7 +4,7 @@ use intmax2_interfaces::{
         block_builder::interface::{BlockBuilderClientInterface, Fee},
         store_vault_server::interface::StoreVaultClientInterface,
         validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::WithdrawalServerClientInterface,
+        withdrawal_server::interface::{WithdrawalFeeInfo, WithdrawalServerClientInterface},
     },
     data::{
         encryption::Encryption as _, meta_data::MetaDataWithBlockNumber,
@@ -40,12 +40,25 @@ where
     pub async fn sync_withdrawals(
         &self,
         key: KeySet,
-        fee_beneficiary: Option<U256>,
-        fee: Option<Fee>,
+        withdrawal_fee: &WithdrawalFeeInfo,
+        fee_index: Option<usize>,
     ) -> Result<(), SyncError> {
-        if fee.is_some() && fee_beneficiary.is_none() {
+        if (withdrawal_fee.direct_withdrawal_fee.is_some()
+            || withdrawal_fee.claimable_withdrawal_fee.is_some())
+            && withdrawal_fee.beneficiary.is_none()
+        {
             return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
         }
+        let fee_beneficiary = withdrawal_fee.beneficiary;
+        let direct_withdrawal_fee = match &withdrawal_fee.direct_withdrawal_fee {
+            Some(fee) => fee.get(fee_index.unwrap_or(0)).cloned(),
+            None => None,
+        };
+        let claimable_withdrawal_fee = match &withdrawal_fee.claimable_withdrawal_fee {
+            Some(fee) => fee.get(fee_index.unwrap_or(0)).cloned(),
+            None => None,
+        };
+
         let (withdrawals, pending) = determine_withdrawals(
             &self.store_vault_server,
             &self.validity_prover,
@@ -55,8 +68,15 @@ where
         .await?;
         self.update_pending_withdrawals(key, pending).await?;
         for (meta, data) in withdrawals {
-            self.sync_withdrawal(key, meta, &data, fee_beneficiary, fee.clone())
-                .await?;
+            self.sync_withdrawal(
+                key,
+                meta,
+                &data,
+                fee_beneficiary,
+                direct_withdrawal_fee.clone(),
+                claimable_withdrawal_fee.clone(),
+            )
+            .await?;
         }
         Ok(())
     }
@@ -67,7 +87,8 @@ where
         meta: MetaDataWithBlockNumber,
         withdrawal_data: &TransferData,
         fee_beneficiary: Option<U256>,
-        fee: Option<Fee>,
+        direct_withdrawal_fee: Option<Fee>,
+        claimable_withdrawal_fee: Option<Fee>,
     ) -> Result<(), SyncError> {
         log::info!("sync_withdrawal: {:?}", meta);
         // sender balance proof after applying the tx
@@ -107,6 +128,21 @@ where
             .prove_single_withdrawal(key, &withdrawal_witness)
             .await?;
 
+        let need_fee = direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some();
+        let fee = if need_fee {
+            let direct_withdrawal_indices = self
+                .withdrawal_contract
+                .get_direct_withdrawal_token_indices()
+                .await?;
+            if direct_withdrawal_indices.contains(&withdrawal_data.transfer.token_index) {
+                direct_withdrawal_fee
+            } else {
+                claimable_withdrawal_fee
+            }
+        } else {
+            None
+        };
+
         let collected_fees = match &fee {
             Some(fee) => {
                 let fee_beneficiary = fee_beneficiary.unwrap(); // already validated
@@ -122,7 +158,6 @@ where
             }
             None => vec![],
         };
-
         let fee_transfer_uuids = collected_fees
             .iter()
             .map(|fee| fee.transfer_uuid.clone())
