@@ -1,9 +1,17 @@
 # GNARK Server
 
-## Setup
+## Setup 
+
+#### Withdrawal 
 
 ```bash
 go run setup/main.go --circuit=withdrawal_circuit_data
+```
+
+#### Claim
+
+```bash
+go run setup/main.go --circuit=claim_circuit_data
 ```
 
 ## Run
@@ -11,9 +19,18 @@ go run setup/main.go --circuit=withdrawal_circuit_data
 ```bash
 # env
 cp .env.example .env
+```
 
-# run app
+#### Withdrawal
+
+```bash
 go run main.go --circuit=withdrawal_circuit_data
+```
+
+#### Claim
+
+```bash
+go run main.go --circuit=claim_circuit_data
 ```
 
 ## APIs
