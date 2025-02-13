@@ -11,9 +11,12 @@ import (
 	"gnark-server/handlers"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load()
+
 	circuitName := flag.String("circuit", "", "circuit name")
 	flag.Parse()
 
