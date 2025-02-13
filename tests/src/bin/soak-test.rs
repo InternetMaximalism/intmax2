@@ -49,14 +49,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    let my_var = std::env::var("ENV").expect("MY_ENV_VAR not found");
-    println!("ENV: {}", my_var);
-
     log::info!("Start soak test");
     let private_key = H256::from_slice(&hex::decode(config.private_key)?);
     let admin_key = privkey_to_keyset(private_key);
 
-    let system = TestSystem::new(admin_key, config.master_mnemonic);
+    let config_server_base_url = "http://localhost:8080".to_string();
+
+    let system = TestSystem::new(admin_key, config.master_mnemonic, config_server_base_url);
     system.run_soak_test().await?;
     log::info!("End soak test");
 
@@ -69,8 +68,8 @@ struct TestConfig {
     end: String,
 }
 
-async fn get_config() -> Result<TestConfig, Box<dyn std::error::Error>> {
-    let config = get_request::<(), TestConfig>("http://localhost:8080", "/config", None).await?;
+async fn get_config(base_url: &str) -> Result<TestConfig, Box<dyn std::error::Error>> {
+    let config = get_request::<(), TestConfig>(base_url, "/config", None).await?;
 
     Ok(config)
 }
@@ -79,15 +78,21 @@ async fn get_config() -> Result<TestConfig, Box<dyn std::error::Error>> {
 struct TestSystem {
     admin_key: KeySet,
     master_mnemonic_phrase: String,
+    config_server_base_url: String,
     accounts: Arc<Mutex<Vec<KeySet>>>,
 }
 
 impl TestSystem {
-    pub fn new(admin_key: KeySet, master_mnemonic_phrase: String) -> Self {
+    pub fn new(
+        admin_key: KeySet,
+        master_mnemonic_phrase: String,
+        config_server_base_url: String,
+    ) -> Self {
         Self {
             admin_key,
             master_mnemonic_phrase,
             accounts: Arc::new(Mutex::new(Vec::new())),
+            config_server_base_url,
         }
     }
 
@@ -237,7 +242,7 @@ impl TestSystem {
 
         self.ensure_accounts_without_transfers(400).await?;
         loop {
-            let config = get_config().await?;
+            let config = get_config(&self.config_server_base_url).await?;
             log::info!("Concurrency: {}", config.concurrent_limit);
             if config.end == "true" {
                 break;
@@ -247,8 +252,9 @@ impl TestSystem {
 
             // Ensure we have enough accounts
             self.ensure_accounts(concurrent_limit).await?;
-
-            let intmax_senders = self.accounts.lock().unwrap()[0..concurrent_limit].to_vec();
+            let num_accounts = self.accounts.lock().unwrap().len();
+            let num_using_accounts = concurrent_limit.min(num_accounts);
+            let intmax_senders = self.accounts.lock().unwrap()[0..num_using_accounts].to_vec();
 
             let futures = intmax_senders
                 .iter()
@@ -272,9 +278,9 @@ impl TestSystem {
                 errors = join_all(futures) => {
                     for (i, error) in errors.iter().enumerate() {
                         if let Some(e) = error {
-                            log::error!("Recipient ({}/{}) failed: {:?}", i + 1, concurrent_limit, e);
+                            log::error!("Recipient ({}/{}) failed: {:?}", i + 1, num_using_accounts, e);
                         } else {
-                            log::info!("Recipient ({}/{}) succeeded", i + 1, concurrent_limit);
+                            log::info!("Recipient ({}/{}) succeeded", i + 1, num_using_accounts);
                         }
                     }
 
