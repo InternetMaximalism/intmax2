@@ -12,7 +12,10 @@ use intmax2_cli::{
     },
     format::privkey_to_keyset,
 };
-use intmax2_client_sdk::external_api::utils::query::get_request;
+use intmax2_client_sdk::external_api::utils::{
+    query::get_request,
+    retry::{retry_if, RetryConfig},
+};
 use intmax2_zkp::{
     common::signature::key_set::KeySet, ethereum_types::u32limb_trait::U32LimbTrait,
 };
@@ -265,11 +268,30 @@ impl TestSystem {
                         amount: 10u128,
                         token_index: ETH_TOKEN_INDEX,
                     }];
-                    let res = transfer_with_error_handling(*sender, &transfers, 2)
-                        .await
-                        .err();
+
+                    let num_loops = 2;
+                    for i in 0..num_loops {
+                        log::info!(
+                            "Starting transfer from {} (iteration {}/{})",
+                            sender.pubkey,
+                            i + 1,
+                            num_loops
+                        );
+
+                        let retry_config = RetryConfig {
+                            max_retries: 100,
+                            initial_delay: 10000,
+                        };
+                        retry_if(
+                            |_: &CliError| true,
+                            || transfer_with_error_handling(*sender, &transfers),
+                            retry_config,
+                        )
+                        .await?;
+                    }
                     log::info!("Transfer completed from {} (No.{})", sender.pubkey, i);
-                    res
+
+                    Ok::<(), CliError>(())
                 });
 
             log::info!("Starting transactions");
@@ -277,7 +299,7 @@ impl TestSystem {
                 _ = tokio::time::sleep(Duration::from_secs(300)) => log::info!("transaction timeout"),
                 errors = join_all(futures) => {
                     for (i, error) in errors.iter().enumerate() {
-                        if let Some(e) = error {
+                        if let Err(e) = error {
                             log::error!("Recipient ({}/{}) failed: {:?}", i + 1, num_using_accounts, e);
                         } else {
                             log::info!("Recipient ({}/{}) succeeded", i + 1, num_using_accounts);

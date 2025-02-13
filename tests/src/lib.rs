@@ -82,30 +82,21 @@ pub async fn wait_for_balance_synchronization(
 pub async fn transfer_with_error_handling(
     key: KeySet,
     transfer_inputs: &[TransferInput],
-    num_loops: usize,
 ) -> Result<(), CliError> {
-    for i in 0..num_loops {
-        log::info!(
-            "Starting transfer from {} (iteration {}/{})",
-            key.pubkey,
-            i + 1,
-            num_loops
-        );
-        let timer = std::time::Instant::now();
-        transfer(key, transfer_inputs, 0).await?;
-        log::info!(
-            "Complete transfer from {} ({} s)",
-            key.pubkey,
-            timer.elapsed().as_secs()
-        );
-        tokio::time::sleep(Duration::from_secs(20)).await;
-        wait_for_balance_synchronization(key, Duration::from_secs(5))
-            .await
-            .map_err(|err| {
-                println!("transfer_with_error_handling Error: {:?}", err);
-                err
-            })?;
-    }
+    let timer = std::time::Instant::now();
+    transfer(key, transfer_inputs, 0).await?;
+    log::info!(
+        "Complete transfer from {} ({} s)",
+        key.pubkey,
+        timer.elapsed().as_secs()
+    );
+    tokio::time::sleep(Duration::from_secs(20)).await;
+    wait_for_balance_synchronization(key, Duration::from_secs(5))
+        .await
+        .map_err(|err| {
+            println!("transfer_with_error_handling Error: {:?}", err);
+            err
+        })?;
 
     Ok(())
 }

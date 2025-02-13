@@ -13,7 +13,6 @@ use tests::{
 };
 
 const ETH_TOKEN_INDEX: u32 = 0;
-const NUM_TRANSFER_LOOPS: usize = 2;
 
 #[tokio::test]
 async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
@@ -132,7 +131,7 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let futures = intmax_senders.iter().map(|sender| async {
-        transfer_with_error_handling(*sender, &transfers, NUM_TRANSFER_LOOPS)
+        transfer_with_error_handling(*sender, &transfers)
             .await
             .err()
     });
