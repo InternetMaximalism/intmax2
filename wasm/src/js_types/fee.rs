@@ -1,5 +1,5 @@
 use intmax2_client_sdk::client::client::FeeQuote;
-use intmax2_interfaces::api::block_builder::interface::{Fee, BlockBuilderFeeInfo};
+use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
 use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
