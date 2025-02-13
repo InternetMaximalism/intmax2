@@ -7,7 +7,10 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 
-use crate::{client::{receive_validation::ReceiveValidationError, strategy::error::StrategyError}, external_api::contract::error::BlockchainError};
+use crate::{
+    client::{receive_validation::ReceiveValidationError, strategy::error::StrategyError},
+    external_api::contract::error::BlockchainError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {

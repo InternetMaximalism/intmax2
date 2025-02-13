@@ -23,7 +23,7 @@ use crate::client::{
     client::Client,
     fee_payment::{collect_fees, consume_payment, FeeType},
     strategy::strategy::determine_withdrawals,
-    sync::balance_logic::update_send_by_receiver,
+    sync::{balance_logic::update_send_by_receiver, utils::quote_fee},
 };
 
 use super::error::SyncError;
@@ -41,7 +41,7 @@ where
         &self,
         key: KeySet,
         withdrawal_fee: &WithdrawalFeeInfo,
-        fee_index: Option<usize>,
+        fee_token_index: Option<u32>,
     ) -> Result<(), SyncError> {
         if (withdrawal_fee.direct_withdrawal_fee.is_some()
             || withdrawal_fee.claimable_withdrawal_fee.is_some())
@@ -50,15 +50,6 @@ where
             return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
         }
         let fee_beneficiary = withdrawal_fee.beneficiary;
-        let direct_withdrawal_fee = match &withdrawal_fee.direct_withdrawal_fee {
-            Some(fee) => fee.get(fee_index.unwrap_or(0)).cloned(),
-            None => None,
-        };
-        let claimable_withdrawal_fee = match &withdrawal_fee.claimable_withdrawal_fee {
-            Some(fee) => fee.get(fee_index.unwrap_or(0)).cloned(),
-            None => None,
-        };
-
         let (withdrawals, pending) = determine_withdrawals(
             &self.store_vault_server,
             &self.validity_prover,
@@ -73,8 +64,9 @@ where
                 meta,
                 &data,
                 fee_beneficiary,
-                direct_withdrawal_fee.clone(),
-                claimable_withdrawal_fee.clone(),
+                fee_token_index,
+                withdrawal_fee.direct_withdrawal_fee.clone(),
+                withdrawal_fee.claimable_withdrawal_fee.clone(),
             )
             .await?;
         }
@@ -87,8 +79,9 @@ where
         meta: MetaDataWithBlockNumber,
         withdrawal_data: &TransferData,
         fee_beneficiary: Option<U256>,
-        direct_withdrawal_fee: Option<Fee>,
-        claimable_withdrawal_fee: Option<Fee>,
+        fee_token_index: Option<u32>,
+        direct_withdrawal_fee: Option<Vec<Fee>>,
+        claimable_withdrawal_fee: Option<Vec<Fee>>,
     ) -> Result<(), SyncError> {
         log::info!("sync_withdrawal: {:?}", meta);
         // sender balance proof after applying the tx
@@ -128,19 +121,14 @@ where
             .prove_single_withdrawal(key, &withdrawal_witness)
             .await?;
 
-        let need_fee = direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some();
-        let fee = if need_fee {
-            let direct_withdrawal_indices = self
-                .withdrawal_contract
-                .get_direct_withdrawal_token_indices()
-                .await?;
-            if direct_withdrawal_indices.contains(&withdrawal_data.transfer.token_index) {
-                direct_withdrawal_fee
-            } else {
-                claimable_withdrawal_fee
-            }
+        let direct_withdrawal_indices = self
+            .withdrawal_contract
+            .get_direct_withdrawal_token_indices()
+            .await?;
+        let fee = if direct_withdrawal_indices.contains(&withdrawal_data.transfer.token_index) {
+            quote_fee(fee_token_index, direct_withdrawal_fee.clone())?
         } else {
-            None
+            quote_fee(fee_token_index, claimable_withdrawal_fee.clone())?
         };
 
         let collected_fees = match &fee {

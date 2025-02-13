@@ -25,7 +25,7 @@ use crate::client::{
     strategy::{mining::MiningStatus, strategy::determine_claims},
 };
 
-use super::error::SyncError;
+use super::{error::SyncError, utils::quote_fee};
 
 impl<BB, S, V, B, W> Client<BB, S, V, B, W>
 where
@@ -41,12 +41,9 @@ where
         key: KeySet,
         recipient: Address,
         fee_info: &ClaimFeeInfo,
-        fee_index: Option<usize>,
+        fee_token_index: Option<u32>,
     ) -> Result<(), SyncError> {
-        let fee = match &fee_info.fee {
-            Some(fee) => fee.get(fee_index.unwrap_or(0)).cloned(),
-            None => None,
-        };
+        let fee = quote_fee(fee_token_index, fee_info.fee.clone())?;
         if fee.is_some() && fee_info.beneficiary.is_none() {
             return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
         }

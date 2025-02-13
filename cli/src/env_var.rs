@@ -31,6 +31,7 @@ pub struct EnvVar {
     pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
     pub rollup_contract_deployed_block_number: u64,
+    pub withdrawal_contract_address: Address,
 
     // optional block builder base url
     pub block_builder_base_url: Option<String>,

@@ -3,7 +3,10 @@ use intmax2_client_sdk::{
     external_api::{
         balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
-        contract::{liquidity_contract::LiquidityContract, rollup_contract::RollupContract},
+        contract::{
+            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+            withdrawal_contract::WithdrawalContract,
+        },
         store_vault_server::StoreVaultServerClient,
         validity_prover::ValidityProverClient,
         withdrawal_server::WithdrawalServerClient,
@@ -40,6 +43,11 @@ pub fn get_client() -> Result<Client<BB, S, V, B, W>, CliError> {
         env.rollup_contract_address,
         env.rollup_contract_deployed_block_number,
     );
+    let withdrawal_contract = WithdrawalContract::new(
+        &env.l2_rpc_url,
+        env.l2_chain_id,
+        env.withdrawal_contract_address,
+    );
 
     let config = ClientConfig {
         deposit_timeout: env.deposit_timeout,
@@ -59,6 +67,7 @@ pub fn get_client() -> Result<Client<BB, S, V, B, W>, CliError> {
         withdrawal_server,
         liquidity_contract,
         rollup_contract,
+        withdrawal_contract,
         config,
     };
 
