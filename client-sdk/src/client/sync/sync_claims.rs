@@ -23,6 +23,7 @@ use crate::client::{
     client::Client,
     fee_payment::{consume_payment, select_unused_fees, FeeType},
     strategy::{mining::MiningStatus, strategy::determine_claims},
+    sync::utils::wait_till_validity_prover_synced,
 };
 
 use super::{error::SyncError, utils::quote_withdrawal_claim_fee};
@@ -70,6 +71,8 @@ where
                     panic!("mining status is not claimable");
                 }
             };
+
+            wait_till_validity_prover_synced(&self.validity_prover, claim_block_number).await?;
 
             // collect witnesses
             let deposit_block_number = mining.block.block_number;
