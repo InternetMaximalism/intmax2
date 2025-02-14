@@ -121,6 +121,7 @@ pub trait WithdrawalServerClientInterface {
         &self,
         key: KeySet,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
         fee_transfer_uuids: &[String],
     ) -> Result<(), ServerError>;
 
@@ -128,6 +129,7 @@ pub trait WithdrawalServerClientInterface {
         &self,
         key: KeySet,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
         fee_transfer_uuids: &[String],
     ) -> Result<(), ServerError>;
 

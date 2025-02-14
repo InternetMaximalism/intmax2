@@ -6,8 +6,12 @@ use crate::{
 use super::{error::WithdrawalServerError, fee::parse_fee_str};
 use ethers::types::H256;
 use intmax2_client_sdk::{
-    client::{fee_payment::FeeType, receive_validation::validate_receive},
+    client::{
+        fee_payment::FeeType, receive_validation::validate_receive,
+        sync::utils::quote_withdrawal_claim_fee,
+    },
     external_api::{
+        contract::withdrawal_contract::WithdrawalContract,
         store_vault_server::StoreVaultServerClient, validity_prover::ValidityProverClient,
     },
 };
@@ -54,6 +58,7 @@ pub struct WithdrawalServer {
     pub pool: DbPool,
     pub store_vault_server: StoreVaultServerClient,
     pub validity_prover: ValidityProverClient,
+    pub withdrawal_contract: WithdrawalContract,
 }
 
 impl WithdrawalServer {
@@ -96,12 +101,18 @@ impl WithdrawalServer {
         };
         let store_vault_server = StoreVaultServerClient::new(&env.store_vault_server_base_url);
         let validity_prover = ValidityProverClient::new(&env.validity_prover_base_url);
+        let withdrawal_contract = WithdrawalContract::new(
+            &env.l2_rpc_url,
+            env.l2_chain_id,
+            env.withdrawal_contract_address,
+        );
 
         Ok(Self {
             config,
             pool,
             store_vault_server,
             validity_prover,
+            withdrawal_contract,
         })
     }
 
@@ -124,6 +135,7 @@ impl WithdrawalServer {
         &self,
         pubkey: U256,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
         fee_transfer_uuids: &[String],
     ) -> Result<(), WithdrawalServerError> {
         // Verify the single withdrawal proof
@@ -134,6 +146,26 @@ impl WithdrawalServer {
 
         let withdrawal =
             Withdrawal::from_u64_slice(&single_withdrawal_proof.public_inputs.to_u64_vec());
+
+        // validate fee
+        let direct_withdrawal_tokens = self
+            .withdrawal_contract
+            .get_direct_withdrawal_token_indices()
+            .await?;
+        let fees = if direct_withdrawal_tokens.contains(&withdrawal.token_index) {
+            self.config.direct_withdrawal_fee.clone()
+        } else {
+            self.config.claimable_withdrawal_fee.clone()
+        };
+        let fee = quote_withdrawal_claim_fee(fee_token_index, fees)
+            .map_err(|e| WithdrawalServerError::InvalidFee(e.to_string()))?;
+        if let Some(fee) = fee {
+            let transfers = self
+                .fee_validation(FeeType::Withdrawal, &fee, fee_transfer_uuids)
+                .await?;
+            self.add_spent_transfers(&transfers).await?;
+        }
+
         let contract_withdrawal = ContractWithdrawal {
             recipient: withdrawal.recipient,
             token_index: withdrawal.token_index,
@@ -200,11 +232,22 @@ impl WithdrawalServer {
         &self,
         pubkey: U256,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
         fee_transfer_uuids: &[String],
     ) -> Result<(), WithdrawalServerError> {
         let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec());
         let nullifier = claim.nullifier;
         let nullifier_str = nullifier.to_hex();
+
+        // validate fee
+        let fee = quote_withdrawal_claim_fee(fee_token_index, self.config.claim_fee.clone())
+            .map_err(|e| WithdrawalServerError::InvalidFee(e.to_string()))?;
+        if let Some(fee) = fee {
+            let transfers = self
+                .fee_validation(FeeType::Claim, &fee, fee_transfer_uuids)
+                .await?;
+            self.add_spent_transfers(&transfers).await?;
+        }
 
         // If there is already a request with the same withdrawal_hash, return early
         let existing_request = sqlx::query!(
@@ -394,7 +437,37 @@ impl WithdrawalServer {
         &self,
         transfers: &[Transfer],
     ) -> Result<(), WithdrawalServerError> {
-        Ok(())
+        let nullifiers: Vec<String> = transfers
+            .iter()
+            .map(|t| Bytes32::from(t.commitment()).to_hex())
+            .collect::<Vec<_>>();
+        let transfers: Vec<serde_json::Value> = transfers
+            .iter()
+            .map(|t| serde_json::to_value(t).unwrap())
+            .collect::<Vec<_>>();
+
+        // Batch insert the spent transfers
+        match sqlx::query!(
+            r#"
+        INSERT INTO used_payments (nullifier, transfer)
+        SELECT * FROM unnest($1::text[], $2::jsonb[])
+        "#,
+            &nullifiers,
+            &transfers
+        )
+        .execute(&self.pool)
+        .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                if let Some(db_error) = e.as_database_error() {
+                    if db_error.code().as_deref() == Some("23505") {
+                        return Err(WithdrawalServerError::DuplicateNullifier);
+                    }
+                }
+                Err(e.into())
+            }
+        }
     }
 }
 

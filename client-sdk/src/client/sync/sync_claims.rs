@@ -25,7 +25,7 @@ use crate::client::{
     strategy::{mining::MiningStatus, strategy::determine_claims},
 };
 
-use super::{error::SyncError, utils::quote_fee};
+use super::{error::SyncError, utils::quote_withdrawal_claim_fee};
 
 impl<BB, S, V, B, W> Client<BB, S, V, B, W>
 where
@@ -43,7 +43,7 @@ where
         fee_info: &ClaimFeeInfo,
         fee_token_index: Option<u32>,
     ) -> Result<(), SyncError> {
-        let fee = quote_fee(fee_token_index, fee_info.fee.clone())?;
+        let fee = quote_withdrawal_claim_fee(fee_token_index, fee_info.fee.clone())?;
         if fee.is_some() && fee_info.beneficiary.is_none() {
             return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
         }
@@ -149,7 +149,12 @@ where
 
             // send claim request
             self.withdrawal_server
-                .request_claim(key, &single_claim_proof, &fee_transfer_uuids)
+                .request_claim(
+                    key,
+                    &single_claim_proof,
+                    fee_token_index,
+                    &fee_transfer_uuids,
+                )
                 .await?;
 
             // consume fees

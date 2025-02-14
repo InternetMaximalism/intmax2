@@ -23,7 +23,7 @@ use crate::client::{
     client::Client,
     fee_payment::{collect_fees, consume_payment, FeeType},
     strategy::strategy::determine_withdrawals,
-    sync::{balance_logic::update_send_by_receiver, utils::quote_fee},
+    sync::{balance_logic::update_send_by_receiver, utils::quote_withdrawal_claim_fee},
 };
 
 use super::error::SyncError;
@@ -127,9 +127,9 @@ where
             .get_direct_withdrawal_token_indices()
             .await?;
         let fee = if direct_withdrawal_indices.contains(&withdrawal_data.transfer.token_index) {
-            quote_fee(fee_token_index, direct_withdrawal_fee.clone())?
+            quote_withdrawal_claim_fee(fee_token_index, direct_withdrawal_fee.clone())?
         } else {
-            quote_fee(fee_token_index, claimable_withdrawal_fee.clone())?
+            quote_withdrawal_claim_fee(fee_token_index, claimable_withdrawal_fee.clone())?
         };
 
         let collected_fees = match &fee {
@@ -154,7 +154,12 @@ where
 
         // send withdrawal request
         self.withdrawal_server
-            .request_withdrawal(key, &single_withdrawal_proof, &fee_transfer_uuids)
+            .request_withdrawal(
+                key,
+                &single_withdrawal_proof,
+                fee_token_index,
+                &fee_transfer_uuids,
+            )
             .await?;
 
         // consume fees

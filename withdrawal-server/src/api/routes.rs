@@ -45,6 +45,7 @@ pub async fn request_withdrawal(
         .request_withdrawal(
             pubkey,
             &request.inner.single_withdrawal_proof,
+            request.inner.fee_token_index,
             &request.inner.fee_transfer_uuids,
         )
         .await
@@ -67,6 +68,7 @@ pub async fn request_claim(
         .request_claim(
             pubkey,
             &request.inner.single_claim_proof,
+            request.inner.fee_token_index,
             &request.inner.fee_transfer_uuids,
         )
         .await

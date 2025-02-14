@@ -24,6 +24,7 @@ fn content_prefix(path: &str) -> Vec<u8> {
 #[serde(rename_all = "camelCase")]
 pub struct RequestWithdrawalRequest {
     pub single_withdrawal_proof: ProofWithPublicInputs<F, C, D>,
+    pub fee_token_index: Option<u32>,
     pub fee_transfer_uuids: Vec<String>,
 }
 
@@ -33,6 +34,7 @@ impl Signable for RequestWithdrawalRequest {
             content_prefix("request_withdrawal"),
             bincode::serialize(&(
                 self.single_withdrawal_proof.clone(),
+                self.fee_token_index.clone(),
                 self.fee_transfer_uuids.clone(),
             ))
             .unwrap(),
@@ -45,6 +47,7 @@ impl Signable for RequestWithdrawalRequest {
 #[serde(rename_all = "camelCase")]
 pub struct RequestClaimRequest {
     pub single_claim_proof: ProofWithPublicInputs<F, C, D>,
+    pub fee_token_index: Option<u32>,
     pub fee_transfer_uuids: Vec<String>,
 }
 
@@ -54,6 +57,7 @@ impl Signable for RequestClaimRequest {
             content_prefix("request_claim"),
             bincode::serialize(&(
                 self.single_claim_proof.clone(),
+                self.fee_token_index.clone(),
                 self.fee_transfer_uuids.clone(),
             ))
             .unwrap(),

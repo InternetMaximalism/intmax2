@@ -60,10 +60,12 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         &self,
         key: KeySet,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
         fee_transfer_uuids: &[String],
     ) -> Result<(), ServerError> {
         let request = RequestWithdrawalRequest {
             single_withdrawal_proof: single_withdrawal_proof.clone(),
+            fee_token_index,
             fee_transfer_uuids: fee_transfer_uuids.to_vec(),
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
@@ -79,10 +81,12 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         &self,
         key: KeySet,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
         fee_transfer_uuids: &[String],
     ) -> Result<(), ServerError> {
         let request = RequestClaimRequest {
             single_claim_proof: single_claim_proof.clone(),
+            fee_token_index,
             fee_transfer_uuids: fee_transfer_uuids.to_vec(),
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);

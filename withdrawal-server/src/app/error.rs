@@ -1,4 +1,7 @@
-use intmax2_client_sdk::client::receive_validation::ReceiveValidationError;
+use intmax2_client_sdk::{
+    client::receive_validation::ReceiveValidationError,
+    external_api::contract::error::BlockchainError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WithdrawalServerError {
@@ -8,8 +11,14 @@ pub enum WithdrawalServerError {
     #[error("Receive validation error {0}")]
     ReceiveValidationError(#[from] ReceiveValidationError),
 
+    #[error("Blockchain error {0}")]
+    BlockchainError(#[from] BlockchainError),
+
     #[error("Single withdrawal proof verification error")]
     SingleWithdrawalVerificationError,
+
+    #[error("Duplicate nullifier")]
+    DuplicateNullifier,
 
     #[error("Single claim proof verification error")]
     SingleClaimVerificationError,

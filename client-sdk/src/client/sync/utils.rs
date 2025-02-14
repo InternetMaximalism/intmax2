@@ -29,7 +29,7 @@ pub fn generate_salt() -> Salt {
     Salt::rand(&mut rng)
 }
 
-pub fn quote_fee(
+pub fn quote_withdrawal_claim_fee(
     fee_token_index: Option<u32>,
     fees: Option<Vec<Fee>>,
 ) -> Result<Option<Fee>, SyncError> {

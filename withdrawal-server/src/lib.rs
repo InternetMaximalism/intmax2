@@ -1,5 +1,4 @@
-use ethers::types::H256;
-use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32};
+use ethers::types::{Address, H256};
 use serde::Deserialize;
 
 pub mod api;
