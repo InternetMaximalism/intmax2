@@ -6,7 +6,9 @@ require (
 	github.com/consensys/gnark v0.9.1
 	github.com/consensys/gnark-crypto v0.12.2-0.20231013160410-1f65e75b6dfb
 	github.com/consensys/gnark-ignition-verifier v0.0.0-20230527014722-10693546ab33
+	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/uuid v1.6.0
+	github.com/joho/godotenv v1.5.1
 	github.com/qope/gnark-plonky2-verifier v0.0.0-20240624042711-a9b246b33e24
 )
 
@@ -23,7 +25,6 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/redis/go-redis/v9 v9.7.0 // indirect
 	github.com/rs/zerolog v1.30.0 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect

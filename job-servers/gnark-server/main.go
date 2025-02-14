@@ -1,63 +1,68 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 
-	"context"
-	"gnark-server/config"
-	gnarkContext "gnark-server/context"
+	"gnark-server/circuitData"
 	"gnark-server/handlers"
-	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/go-redis/redis/v8"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load()
+
 	circuitName := flag.String("circuit", "", "circuit name")
 	flag.Parse()
 
 	if *circuitName == "" {
-		fmt.Println("Please provide circuit name")
+		log.Fatal("Please provide circuit name")
 		os.Exit(1)
 	}
-	fmt.Printf("Preparing server with circuit: %s\n", *circuitName)
 
-	cfg, err := config.LoadConfig()
+	port := os.Getenv("PORT")
+	if port == "" {
+		log.Fatal("PORT environment variable is not set")
+		os.Exit(1)
+	}
+
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		log.Fatal("REDIS_URL environment variable is not set")
+		return
+	}
+	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
-		fmt.Printf("Failed to load config: %v\n", err)
+		log.Fatal("Redis URL parsing error:", err)
 		return
 	}
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     cfg.GetRedisAddr(),
-		Password: "password",
-		DB:       0,
-	})
+	rdb := redis.NewClient(opt)
+	ctx := context.Background()
 
-	ctxRedis, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	_, err = redisClient.Ping(ctxRedis).Result()
+	// Test connection
+	_, err = rdb.Ping(ctx).Result()
 	if err != nil {
-		fmt.Printf("Failed to load config: %v\n", err)
+		log.Fatal("Redis connection error:", err)
 		return
 	}
 
-	circuitData := gnarkContext.InitCircuitData(*circuitName)
-	ctx := &handlers.CircuitData{
-		CircuitData: circuitData,
-		RedisClient: redisClient,
+	data := circuitData.InitCircuitData(*circuitName)
+	state := &handlers.State{
+		CircuitData: data,
+		RedisClient: rdb,
 	}
 
 	http.HandleFunc("/health", handlers.HealthHandler)
-	http.HandleFunc("/start-proof", ctx.StartProof)
-	http.HandleFunc("/get-proof", ctx.GetProof)
-	fmt.Printf("Server is running on port %s...", cfg.ServerPort)
-	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	http.HandleFunc("/start-proof", state.StartProof)
+	http.HandleFunc("/get-proof", state.GetProof)
+	log.Println("Server is running on port " + port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		panic(err)
 	}
 }

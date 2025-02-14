@@ -1,4 +1,4 @@
-package context
+package circuitData
 
 import (
 	"os"
@@ -17,33 +17,33 @@ type CircuitData struct {
 }
 
 func InitCircuitData(circuitName string) CircuitData{
-	var ctx CircuitData
+	var data CircuitData
 	{
-		fVk, err := os.Open("data/verifying.key")
+		fVk, err := os.Open("data/"+circuitName+"/verifying.key")
 		if err != nil {
 			panic(err)
 		}
-		_, _ = ctx.Vk.ReadFrom(fVk)
+		_, _ = data.Vk.ReadFrom(fVk)
 		defer fVk.Close()
 	}
 	{
-		fPk, err := os.Open("data/proving.key")
+		fPk, err := os.Open("data/"+circuitName+"/proving.key")
 		if err != nil {
 			panic(err)
 		}
-		_, _ = ctx.Pk.ReadFrom(fPk)
+		_, _ = data.Pk.ReadFrom(fPk)
 		defer fPk.Close()
 	}
 	{
-		fCs, err := os.Open("data/circuit.r1cs")
+		fCs, err := os.Open("data/"+circuitName+"/circuit.r1cs")
 		if err != nil {
 			panic(err)
 		}
-		_, _ = ctx.Ccs.ReadFrom(fCs)
+		_, _ = data.Ccs.ReadFrom(fCs)
 		defer fCs.Close()
 	}
 	{
-		ctx.VerifierOnlyCircuitData = variables.DeserializeVerifierOnlyCircuitData(types.ReadVerifierOnlyCircuitData("data/"+circuitName+"/verifier_only_circuit_data.json"))
+		data.VerifierOnlyCircuitData = variables.DeserializeVerifierOnlyCircuitData(types.ReadVerifierOnlyCircuitData("data/"+circuitName+"/verifier_only_circuit_data.json"))
 	}
-	return ctx
+	return data
 }

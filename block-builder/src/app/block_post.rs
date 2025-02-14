@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use super::error::BlockBuilderError;
 
 const PENALTY_FEE_POLLING_INTERVAL: u64 = 2;
+const VALIDITY_PROVER_SYNC_POLLING_INTERVAL: u64 = 5;
+const VALIDITY_SYNC_MAX_RETRY: u64 = 10;
 const EXPIRY_BUFFER: u64 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +47,34 @@ pub(crate) async fn post_block(
     if block_post.signatures.is_empty() && !block_post.force_post {
         log::warn!("No signatures in the block. Skipping post.");
         return Ok(());
+    }
+
+    // wait until validity prover syncs
+    let mut retry = 0;
+    loop {
+        let onchain_latest_block_number = rollup_contract.get_latest_block_number().await?;
+        let validity_prover_latest_block_number = validity_prover_client.get_block_number().await?;
+        // break if synced
+        if onchain_latest_block_number == validity_prover_latest_block_number {
+            break;
+        }
+        if retry >= VALIDITY_SYNC_MAX_RETRY {
+            log::error!("Validity prover is not synced after {} retries", retry);
+            return Err(BlockBuilderError::ValidityProverIsNotSynced(
+                onchain_latest_block_number,
+                validity_prover_latest_block_number,
+            ));
+        }
+        retry += 1;
+        log::warn!(
+            "Validity prover is not synced: onchain={}, validity_prover={}",
+            onchain_latest_block_number,
+            validity_prover_latest_block_number
+        );
+        tokio::time::sleep(tokio::time::Duration::from_secs(
+            VALIDITY_PROVER_SYNC_POLLING_INTERVAL,
+        ))
+        .await;
     }
 
     // wait until penalty fee is below allowance

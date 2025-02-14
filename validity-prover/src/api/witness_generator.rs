@@ -12,6 +12,7 @@ use intmax2_interfaces::api::validity_prover::types::{
     GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
     GetValidityWitnessQuery, GetValidityWitnessResponse,
 };
+use intmax2_zkp::circuits::validity::validity_pis::ValidityPublicInputs;
 use serde_qs::actix::QsQuery;
 
 #[get("/block-number")]
@@ -95,6 +96,20 @@ pub async fn get_validity_witness(
     Ok(Json(GetValidityWitnessResponse { validity_witness }))
 }
 
+#[get("/get-validity-pis")]
+pub async fn get_validity_pis(
+    state: Data<State>,
+    query: QsQuery<GetValidityWitnessQuery>,
+) -> Result<Json<ValidityPublicInputs>, Error> {
+    let query = query.into_inner();
+    let validity_witness = state
+        .witness_generator
+        .get_validity_witness(query.block_number)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(validity_witness.to_validity_pis().unwrap()))
+}
+
 #[get("/get-deposit-info")]
 pub async fn get_deposit_info(
     state: Data<State>,
@@ -161,6 +176,7 @@ pub fn validity_prover_scope() -> actix_web::Scope {
         .service(get_account_info)
         .service(get_update_witness)
         .service(get_validity_witness)
+        .service(get_validity_pis)
         .service(get_deposit_info)
         .service(get_block_number_by_tx_tree_root)
         .service(get_block_merkle_proof)
