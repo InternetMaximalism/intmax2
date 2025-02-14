@@ -4,6 +4,7 @@ use crate::{
 };
 
 use super::{error::WithdrawalServerError, fee::parse_fee_str};
+use intmax2_client_sdk::client::receive_validation::validate_receive;
 use intmax2_interfaces::{
     api::{
         block_builder::interface::Fee,
@@ -99,6 +100,7 @@ impl WithdrawalServer {
         &self,
         pubkey: U256,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_transfer_uuids: &[String],
     ) -> Result<(), WithdrawalServerError> {
         // Verify the single withdrawal proof
         let single_withdrawal_vd = CircuitVerifiers::load().get_single_withdrawal_vd();
@@ -174,6 +176,7 @@ impl WithdrawalServer {
         &self,
         pubkey: U256,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_transfer_uuids: &[String],
     ) -> Result<(), WithdrawalServerError> {
         let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec());
         let nullifier = claim.nullifier;
@@ -323,5 +326,16 @@ impl WithdrawalServer {
             });
         }
         Ok(withdrawal_infos)
+    }
+
+    async fn fee_validation(
+        &self,
+        fee: &Fee,
+        fee_transfer_uuids: &[String],
+    ) -> Result<(), WithdrawalServerError> {
+        validate_receive(store_vault_server, validity_prover, key, transfer_uuid)
+
+
+        Ok(())
     }
 }

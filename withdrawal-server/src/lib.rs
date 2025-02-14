@@ -1,4 +1,4 @@
-use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32};
 use serde::Deserialize;
 
 pub mod api;
@@ -10,6 +10,13 @@ pub struct Env {
     pub database_url: String,
     pub database_max_connections: u32,
     pub database_timeout: u64,
+
+    pub store_vault_server_base_url: String,
+    pub validity_prover_base_url: String,
+
+    pub l2_rpc_url: String,
+    pub l2_chain_id: u64,
+    pub withdrawal_contract_address: Address,
 
     pub withdrawal_beneficiary: Option<Bytes32>,
     pub claim_beneficiary: Option<Bytes32>,

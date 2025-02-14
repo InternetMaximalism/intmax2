@@ -40,10 +40,13 @@ pub async fn request_withdrawal(
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    let single_withdrawal_proof = &request.inner.single_withdrawal_proof;
     state
         .withdrawal_server
-        .request_withdrawal(pubkey, single_withdrawal_proof)
+        .request_withdrawal(
+            pubkey,
+            &request.inner.single_withdrawal_proof,
+            &request.inner.fee_transfer_uuids,
+        )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))
@@ -59,10 +62,13 @@ pub async fn request_claim(
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    let single_claim_proof = &request.inner.single_claim_proof;
     state
         .withdrawal_server
-        .request_claim(pubkey, single_claim_proof)
+        .request_claim(
+            pubkey,
+            &request.inner.single_claim_proof,
+            &request.inner.fee_transfer_uuids,
+        )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))

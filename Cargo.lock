@@ -7539,6 +7539,7 @@ dependencies = [
  "envy",
  "ethers",
  "hashbrown 0.15.2",
+ "intmax2-client-sdk",
  "intmax2-interfaces",
  "intmax2-zkp",
  "log",
