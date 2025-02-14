@@ -143,7 +143,13 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
     fee_token_index: u32,
     claim_fee: bool,
 ) -> Result<(Vec<Transfer>, Vec<PaymentMemoEntry>), SyncError> {
-    let mut transfers = vec![*withdrawal_transfer];
+    let mut transfers = if withdrawal_transfer.amount == U256::zero() {
+        // if withdrawal_transfer.amount is zero, ignore withdrawal_transfer
+        // and only generate fee transfers
+        vec![]
+    } else {
+        vec![*withdrawal_transfer]
+    };
 
     let mut withdrawal_fee_transfer_index = None;
     let mut claim_fee_transfer_index = None;

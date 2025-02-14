@@ -1,4 +1,4 @@
-use intmax2_client_sdk::external_api::indexer::IndexerClient;
+use intmax2_client_sdk::{client::client::PaymentMemoEntry, external_api::indexer::IndexerClient};
 use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
 use intmax2_zkp::{
     common::{signature::key_set::KeySet, transfer::Transfer},
@@ -13,15 +13,14 @@ use super::error::CliError;
 pub async fn send_transfers(
     key: KeySet,
     transfers: &[Transfer],
+    payment_memos: Vec<PaymentMemoEntry>,
     fee_token_index: u32,
 ) -> Result<(), CliError> {
     if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
         return Err(CliError::TooManyTransfer(transfers.len()));
     }
-
     let env = envy::from_env::<EnvVar>()?;
     let client = get_client()?;
-
     // override block builder base url if it is set in the env
     let block_builder_url = if let Some(block_builder_base_url) = env.block_builder_base_url {
         block_builder_base_url.to_string()
@@ -56,7 +55,7 @@ pub async fn send_transfers(
             &block_builder_url,
             key,
             transfers.to_vec(),
-            vec![],
+            payment_memos,
             fee_quote.beneficiary,
             fee_quote.fee,
             fee_quote.collateral_fee,
