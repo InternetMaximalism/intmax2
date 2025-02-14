@@ -4,7 +4,13 @@ use crate::{
 };
 
 use super::{error::WithdrawalServerError, fee::parse_fee_str};
-use intmax2_client_sdk::client::receive_validation::validate_receive;
+use ethers::types::H256;
+use intmax2_client_sdk::{
+    client::{fee_payment::FeeType, receive_validation::validate_receive},
+    external_api::{
+        store_vault_server::StoreVaultServerClient, validity_prover::ValidityProverClient,
+    },
+};
 use intmax2_interfaces::{
     api::{
         block_builder::interface::Fee,
@@ -16,10 +22,13 @@ use intmax2_interfaces::{
     utils::circuit_verifiers::CircuitVerifiers,
 };
 use intmax2_zkp::{
-    common::{claim::Claim, withdrawal::Withdrawal},
-    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
+    common::{
+        claim::Claim, signature::key_set::KeySet, transfer::Transfer, withdrawal::Withdrawal,
+    },
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
     utils::conversion::ToU64,
 };
+use num_bigint::BigUint;
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -33,8 +42,8 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 struct Config {
-    withdrawal_beneficiary: Option<U256>,
-    claim_beneficiary: Option<U256>,
+    withdrawal_beneficiary_key: Option<KeySet>,
+    claim_beneficiary_key: Option<KeySet>,
     direct_withdrawal_fee: Option<Vec<Fee>>,
     claimable_withdrawal_fee: Option<Vec<Fee>>,
     claim_fee: Option<Vec<Fee>>,
@@ -43,6 +52,8 @@ struct Config {
 pub struct WithdrawalServer {
     config: Config,
     pub pool: DbPool,
+    pub store_vault_server: StoreVaultServerClient,
+    pub validity_prover: ValidityProverClient,
 }
 
 impl WithdrawalServer {
@@ -53,9 +64,14 @@ impl WithdrawalServer {
             url: env.database_url.to_string(),
         })
         .await?;
-        let withdrawal_beneficiary: Option<U256> =
-            env.withdrawal_beneficiary.as_ref().map(|&s| s.into());
-        let claim_beneficiary: Option<U256> = env.claim_beneficiary.as_ref().map(|&s| s.into());
+        let withdrawal_beneficiary_key: Option<KeySet> = env
+            .withdrawal_beneficiary_privkey
+            .as_ref()
+            .map(|&s| privkey_to_keyset(s));
+        let claim_beneficiary_key: Option<KeySet> = env
+            .claim_beneficiary_privkey
+            .as_ref()
+            .map(|&s| privkey_to_keyset(s));
         let direct_withdrawal_fee: Option<Vec<Fee>> = env
             .direct_withdrawal_fee
             .as_ref()
@@ -72,18 +88,26 @@ impl WithdrawalServer {
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
         let config = Config {
-            withdrawal_beneficiary,
-            claim_beneficiary,
+            withdrawal_beneficiary_key,
+            claim_beneficiary_key,
             direct_withdrawal_fee,
             claimable_withdrawal_fee,
             claim_fee,
         };
-        Ok(Self { config, pool })
+        let store_vault_server = StoreVaultServerClient::new(&env.store_vault_server_base_url);
+        let validity_prover = ValidityProverClient::new(&env.validity_prover_base_url);
+
+        Ok(Self {
+            config,
+            pool,
+            store_vault_server,
+            validity_prover,
+        })
     }
 
     pub fn get_withdrawal_fee(&self) -> WithdrawalFeeInfo {
         WithdrawalFeeInfo {
-            beneficiary: self.config.withdrawal_beneficiary,
+            beneficiary: self.config.withdrawal_beneficiary_key.map(|k| k.pubkey),
             direct_withdrawal_fee: self.config.direct_withdrawal_fee.clone(),
             claimable_withdrawal_fee: self.config.claimable_withdrawal_fee.clone(),
         }
@@ -91,7 +115,7 @@ impl WithdrawalServer {
 
     pub fn get_claim_fee(&self) -> ClaimFeeInfo {
         ClaimFeeInfo {
-            beneficiary: self.config.claim_beneficiary,
+            beneficiary: self.config.claim_beneficiary_key.map(|k| k.pubkey),
             fee: self.config.claim_fee.clone(),
         }
     }
@@ -330,12 +354,50 @@ impl WithdrawalServer {
 
     async fn fee_validation(
         &self,
+        fee_type: FeeType,
         fee: &Fee,
         fee_transfer_uuids: &[String],
+    ) -> Result<Vec<Transfer>, WithdrawalServerError> {
+        let key = match fee_type {
+            FeeType::Withdrawal => self.config.withdrawal_beneficiary_key.unwrap(),
+            FeeType::Claim => self.config.claim_beneficiary_key.unwrap(),
+        };
+        let mut collected_fee = U256::zero();
+        let mut transfers = Vec::new();
+        for transfer_uuid in fee_transfer_uuids {
+            let transfer = validate_receive(
+                &self.store_vault_server,
+                &self.validity_prover,
+                key,
+                transfer_uuid,
+            )
+            .await?;
+            if fee.token_index != transfer.token_index {
+                return Err(WithdrawalServerError::InvalidFee(format!(
+                    "Invalid fee token index: expected {}, got {}",
+                    fee.token_index, transfer.token_index
+                )));
+            }
+            collected_fee += transfer.amount;
+            transfers.push(transfer);
+        }
+        if collected_fee < fee.amount {
+            return Err(WithdrawalServerError::InvalidFee(format!(
+                "Insufficient fee: expected {}, got {}",
+                fee.amount, collected_fee
+            )));
+        }
+        Ok(transfers)
+    }
+
+    async fn add_spent_transfers(
+        &self,
+        transfers: &[Transfer],
     ) -> Result<(), WithdrawalServerError> {
-        validate_receive(store_vault_server, validity_prover, key, transfer_uuid)
-
-
         Ok(())
     }
+}
+
+pub fn privkey_to_keyset(privkey: H256) -> KeySet {
+    KeySet::new(BigUint::from_bytes_be(privkey.as_bytes()).into())
 }

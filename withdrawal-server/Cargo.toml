@@ -30,3 +30,4 @@ actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
 serde_qs = { workspace = true }
 base64 = "0.22.1"
+num-bigint = "0.4.6"
