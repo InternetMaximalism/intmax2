@@ -18,8 +18,8 @@ pub struct Env {
     pub l2_chain_id: u64,
     pub withdrawal_contract_address: Address,
 
-    pub withdrawal_beneficiary_privkey: Option<H256>,
-    pub claim_beneficiary_privkey: Option<H256>,
+    pub withdrawal_beneficiary_private_key: Option<H256>,
+    pub claim_beneficiary_private_key: Option<H256>,
     pub direct_withdrawal_fee: Option<String>,
     pub claimable_withdrawal_fee: Option<String>,
     pub claim_fee: Option<String>,

@@ -23,6 +23,7 @@ use crate::{
 
 use super::{
     client::PaymentMemoEntry,
+    receive_validation::ReceiveValidationError,
     sync::{error::SyncError, utils::quote_withdrawal_claim_fee},
 };
 
@@ -270,6 +271,7 @@ pub async fn select_unused_fees<S: StoreVaultClientInterface, V: ValidityProverC
     fee_beneficiary: U256,
     fee: Fee,
     fee_type: FeeType,
+    tx_timeout: u64,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
     let unused_fees = get_unused_payments(store_vault_server, key, fee_type).await?;
     // Extract only those whose fee.token_index and recipient matches and sort by fee.amount
@@ -298,8 +300,17 @@ pub async fn select_unused_fees<S: StoreVaultClientInterface, V: ValidityProverC
                 fee_transfers.push(memo);
                 collected_total_fee += transfer.amount;
             }
+            Err(ReceiveValidationError::TxIsNotSettled(timestamp)) => {
+                if timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
+                    consume_payment(store_vault_server, key, &memo, "tx is timeout").await?;
+                }
+                return Err(SyncError::FeeError(format!(
+                    "there is pending fee: timestamp: {}",
+                    timestamp
+                )));
+            }
             Err(e) => {
-                log::warn!("transfer_uuid: {} is invalid: {}", memo.transfer_uuid, e);
+                log::warn!("invalid fee: {}", e);
                 consume_payment(store_vault_server, key, &memo, &e.to_string()).await?;
             }
         }

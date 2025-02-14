@@ -140,6 +140,7 @@ where
                         fee_beneficiary,
                         fee.clone(),
                         FeeType::Claim,
+                        self.config.tx_timeout,
                     )
                     .await?
                 }

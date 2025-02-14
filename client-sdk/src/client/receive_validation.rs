@@ -30,8 +30,8 @@ pub enum ReceiveValidationError {
     #[error("Proof compression error: {0}")]
     ProofCompressionError(#[from] ProofCompressionError),
 
-    #[error("Balance insufficient before sync")]
-    BalanceInsufficientBeforeSync,
+    #[error("Tx is not settled: timestamp {0}")]
+    TxIsNotSettled(u64),
 
     #[error("Strategy error: {0}")]
     StrategyError(#[from] StrategyError),
@@ -53,8 +53,14 @@ pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverCli
     let encrypted_transfer_data_with_meta_data = store_vault_server
         .get_data_batch(key, DataType::Transfer, &[transfer_uuid.to_string()])
         .await?;
+    if encrypted_transfer_data_with_meta_data.is_empty() {
+        return Err(ReceiveValidationError::GeneralError(
+            "Transfer data not found".to_string(),
+        ));
+    }
     let transfer_data =
         TransferData::decrypt(&encrypted_transfer_data_with_meta_data[0].data, key)?;
+    let metadata = encrypted_transfer_data_with_meta_data[0].meta.clone();
     transfer_data
         .validate(key)
         .map_err(|e| StrategyError::ValidationError(e.to_string()))?;
@@ -70,9 +76,7 @@ pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverCli
         .get_block_number_by_tx_tree_root(transfer_data.tx_tree_root)
         .await?;
     if block_number.is_none() {
-        return Err(ReceiveValidationError::GeneralError(
-            "Tx tree root is not included on any block".to_string(),
-        ));
+        return Err(ReceiveValidationError::TxIsNotSettled(metadata.timestamp));
     }
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server,

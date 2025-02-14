@@ -70,11 +70,7 @@ impl WithdrawalServer {
         })
         .await?;
         let withdrawal_beneficiary_key: Option<KeySet> = env
-            .withdrawal_beneficiary_privkey
-            .as_ref()
-            .map(|&s| privkey_to_keyset(s));
-        let claim_beneficiary_key: Option<KeySet> = env
-            .claim_beneficiary_privkey
+            .withdrawal_beneficiary_private_key
             .as_ref()
             .map(|&s| privkey_to_keyset(s));
         let direct_withdrawal_fee: Option<Vec<Fee>> = env
@@ -87,11 +83,23 @@ impl WithdrawalServer {
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
+        if (direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some())
+            && withdrawal_beneficiary_key.is_none()
+        {
+            return Err(anyhow::anyhow!("withdrawal fee beneficiary is needed"));
+        }
+        let claim_beneficiary_key: Option<KeySet> = env
+            .claim_beneficiary_private_key
+            .as_ref()
+            .map(|&s| privkey_to_keyset(s));
         let claim_fee: Option<Vec<Fee>> = env
             .claim_fee
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
+        if claim_fee.is_some() && claim_beneficiary_key.is_none() {
+            return Err(anyhow::anyhow!("claim fee beneficiary is needed"));
+        }
         let config = Config {
             withdrawal_beneficiary_key,
             claim_beneficiary_key,
