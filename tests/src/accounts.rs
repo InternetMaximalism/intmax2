@@ -9,6 +9,7 @@ use intmax2_client_sdk::{
 use intmax2_zkp::common::signature::key_set::KeySet;
 use tiny_hderive::bip32::ExtendedPrivKey;
 
+#[derive(Debug, Clone, Copy)]
 pub struct Account {
     pub eth_private_key: H256,
     pub eth_address: Address,
@@ -78,6 +79,44 @@ pub fn derive_intmax_keys(
     for address_index in 0..num_of_keys {
         let options = MnemonicToPrivateKeyOptions {
             account_index: 0,
+            address_index: offset + address_index,
+        };
+        let private_key = mnemonic_to_private_key(master_mnemonic_phrase, options)?;
+        let key = generate_intmax_account_from_eth_key(private_key);
+        intmax_senders.push(key);
+    }
+
+    Ok(intmax_senders)
+}
+
+pub fn derive_deposit_keys(
+    master_mnemonic_phrase: &str,
+    num_of_keys: u32,
+    offset: u32,
+) -> Result<Vec<Account>, Box<dyn std::error::Error>> {
+    let mut intmax_senders = vec![];
+    for address_index in 0..num_of_keys {
+        let options = MnemonicToPrivateKeyOptions {
+            account_index: 2,
+            address_index: offset + address_index,
+        };
+        let private_key = mnemonic_to_private_key(master_mnemonic_phrase, options)?;
+        let key = private_key_to_account(private_key);
+        intmax_senders.push(key);
+    }
+
+    Ok(intmax_senders)
+}
+
+pub fn derive_withdrawal_intmax_keys(
+    master_mnemonic_phrase: &str,
+    num_of_keys: u32,
+    offset: u32,
+) -> Result<Vec<KeySet>, Box<dyn std::error::Error>> {
+    let mut intmax_senders = vec![];
+    for address_index in 0..num_of_keys {
+        let options = MnemonicToPrivateKeyOptions {
+            account_index: 3,
             address_index: offset + address_index,
         };
         let private_key = mnemonic_to_private_key(master_mnemonic_phrase, options)?;

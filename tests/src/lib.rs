@@ -1,17 +1,30 @@
+use ethers::types::H256;
 use intmax2_cli::cli::{
+    deposit::deposit,
     error::CliError,
     get::{balance, BalanceInfo},
     send::{transfer, TransferInput},
+    sync::sync_withdrawals,
 };
-use intmax2_client_sdk::client::{
-    error::ClientError, strategy::error::StrategyError, sync::error::SyncError,
+use intmax2_client_sdk::{
+    client::{error::ClientError, strategy::error::StrategyError, sync::error::SyncError},
+    external_api::utils::retry::{retry_if, RetryConfig},
 };
-use intmax2_interfaces::api::error::ServerError;
+use intmax2_interfaces::{api::error::ServerError, data::deposit_data::TokenType};
 use intmax2_zkp::common::signature::key_set::KeySet;
 use serde::Deserialize;
 use std::time::Duration;
 
 pub mod accounts;
+pub mod ethereum;
+
+// dev environment
+const TRANSFER_WAITING_DURATION: u64 = 20;
+const TRANSFER_POLLING_DURATION: u64 = 5;
+const DEPOSIT_WAITING_DURATION: u64 = 20 * 60;
+const DEPOSIT_POLLING_DURATION: u64 = 60;
+// const WITHDRAWAL_WAITING_DURATION: u64 = 120;
+// const WITHDRAWAL_POLLING_DURATION: u64 = 10;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
@@ -83,6 +96,14 @@ pub async fn transfer_with_error_handling(
     key: KeySet,
     transfer_inputs: &[TransferInput],
 ) -> Result<(), CliError> {
+    for transfer_input in transfer_inputs {
+        if !transfer_input.recipient.starts_with("0x") || transfer_input.recipient.len() != 66 {
+            return Err(CliError::ParseError(
+                "Invalid recipient INTMAX address".to_string(),
+            ));
+        }
+    }
+
     let timer = std::time::Instant::now();
     transfer(key, transfer_inputs, 0).await?;
     log::info!(
@@ -90,8 +111,9 @@ pub async fn transfer_with_error_handling(
         key.pubkey,
         timer.elapsed().as_secs()
     );
-    tokio::time::sleep(Duration::from_secs(20)).await;
-    wait_for_balance_synchronization(key, Duration::from_secs(5))
+
+    tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
+    wait_for_balance_synchronization(key, Duration::from_secs(TRANSFER_POLLING_DURATION))
         .await
         .map_err(|err| {
             println!("transfer_with_error_handling Error: {:?}", err);
@@ -101,33 +123,82 @@ pub async fn transfer_with_error_handling(
     Ok(())
 }
 
-pub async fn withdraw_with_error_handling(
-    key: KeySet,
-    transfer_inputs: &[TransferInput],
-    num_loops: usize,
+pub async fn deposit_native_token_with_error_handling(
+    depositor_eth_private_key: H256,
+    recipient_key: KeySet,
+    amount: ethers::types::U256,
 ) -> Result<(), CliError> {
-    for i in 0..num_loops {
-        log::info!(
-            "Starting transfer from {} (iteration {}/{})",
-            key.pubkey,
-            i + 1,
-            num_loops
-        );
-        let timer = std::time::Instant::now();
-        transfer(key, transfer_inputs, 0).await?;
-        log::info!(
-            "Complete transfer from {} ({} s)",
-            key.pubkey,
-            timer.elapsed().as_secs()
-        );
-        tokio::time::sleep(Duration::from_secs(20)).await;
-        wait_for_balance_synchronization(key, Duration::from_secs(5))
-            .await
-            .map_err(|err| {
-                println!("transfer_with_error_handling Error: {:?}", err);
-                err
-            })?;
+    let token_type = TokenType::NATIVE;
+    // let amount = ethers::types::U256::from(10);
+    let token_address = ethers::types::Address::default();
+    let token_id = ethers::types::U256::from(0);
+    let is_mining = false;
+
+    let timer = std::time::Instant::now();
+    deposit(
+        recipient_key,
+        depositor_eth_private_key,
+        token_type,
+        amount,
+        token_address,
+        token_id,
+        is_mining,
+    )
+    .await?;
+    log::info!(
+        "Complete transfer from {} ({} s)",
+        recipient_key.pubkey,
+        timer.elapsed().as_secs()
+    );
+
+    // Wait for messaging to Scroll network
+    tokio::time::sleep(Duration::from_secs(DEPOSIT_WAITING_DURATION)).await;
+
+    wait_for_balance_synchronization(recipient_key, Duration::from_secs(DEPOSIT_POLLING_DURATION))
+        .await
+        .map_err(|err| {
+            println!("deposit_native_token_with_error_handling Error: {:?}", err);
+            err
+        })?;
+
+    Ok(())
+}
+
+pub async fn withdraw_directly_with_error_handling(
+    key: KeySet,
+    withdrawal_input: TransferInput,
+) -> Result<(), CliError> {
+    if !withdrawal_input.recipient.starts_with("0x") || withdrawal_input.recipient.len() != 42 {
+        return Err(CliError::ParseError(format!(
+            "Invalid recipient Ethereum address: {}",
+            withdrawal_input.recipient
+        )));
     }
+
+    let retry_config = RetryConfig {
+        max_retries: 100,
+        initial_delay: 10000,
+    };
+    let transfer_inputs = &[withdrawal_input];
+    retry_if(
+        |_: &CliError| true,
+        || transfer(key, transfer_inputs, 0),
+        retry_config,
+    )
+    .await?;
+
+    tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
+    wait_for_balance_synchronization(key, Duration::from_secs(TRANSFER_POLLING_DURATION))
+        .await
+        .map_err(|err| {
+            println!(
+                "withdraw_native_token_with_error_handling before sync_withdrawals Error: {:?}",
+                err
+            );
+            err
+        })?;
+
+    retry_if(|_: &CliError| true, || sync_withdrawals(key), retry_config).await?;
 
     Ok(())
 }

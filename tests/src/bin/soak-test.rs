@@ -33,7 +33,13 @@ pub struct EnvVar {
     pub recipient_offset: Option<u32>,
     pub balance_prover_base_url: String,
     pub l1_chain_id: u64,
-    // pub cool_down_seconds: Option<u64>,
+
+    #[serde(default = "default_url")]
+    pub config_server_base_url: String,
+}
+
+fn default_url() -> String {
+    "0.0.0.0:8080".to_string()
 }
 
 const ETH_TOKEN_INDEX: u32 = 0;
@@ -56,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let private_key = H256::from_slice(&hex::decode(config.private_key)?);
     let admin_key = privkey_to_keyset(private_key);
 
-    let config_server_base_url = "http://localhost:8080".to_string();
+    let config_server_base_url = config.config_server_base_url.to_string();
 
     let system = TestSystem::new(admin_key, config.master_mnemonic, config_server_base_url);
     system.run_soak_test().await?;
@@ -270,11 +276,12 @@ impl TestSystem {
                     }];
 
                     let num_loops = 2;
-                    for i in 0..num_loops {
+                    for l in 0..num_loops {
                         log::info!(
-                            "Starting transfer from {} (iteration {}/{})",
+                            "Starting transfer from {} (No.{}) (iteration {}/{})",
                             sender.pubkey,
-                            i + 1,
+                            i,
+                            l + 1,
                             num_loops
                         );
 
