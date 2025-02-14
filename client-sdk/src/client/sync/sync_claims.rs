@@ -21,7 +21,7 @@ use intmax2_zkp::{
 
 use crate::client::{
     client::Client,
-    fee_payment::{collect_fees, consume_payment, FeeType},
+    fee_payment::{consume_payment, select_unused_fees, FeeType},
     strategy::{mining::MiningStatus, strategy::determine_claims},
 };
 
@@ -130,7 +130,7 @@ where
             let collected_fees = match &fee {
                 Some(fee) => {
                     let fee_beneficiary = fee_info.beneficiary.unwrap(); // already validated
-                    collect_fees(
+                    select_unused_fees(
                         &self.store_vault_server,
                         &self.validity_prover,
                         key,

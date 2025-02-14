@@ -54,6 +54,7 @@ pub struct UsedOrInvalidMemo {
     pub reason: String,
 }
 
+/// quote withdrawal fee
 pub async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
     withdrawal_contract: &WithdrawalContract,
@@ -73,6 +74,7 @@ pub async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
     Ok((fee_info.beneficiary, fee))
 }
 
+/// quote claim fee
 pub async fn quote_claim_fee<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
     fee_token_index: u32,
@@ -82,6 +84,7 @@ pub async fn quote_claim_fee<W: WithdrawalServerClientInterface>(
     Ok((fee_info.beneficiary, fee))
 }
 
+/// generate fee payment memos for withdrawal and claim fee
 pub fn generate_fee_payment_memo(
     transfers: &[Transfer],
     withdrawal_fee_transfer_index: Option<u32>,
@@ -132,6 +135,7 @@ pub fn generate_fee_payment_memo(
     Ok(payment_memos)
 }
 
+/// quote fee and generate transfers for withdrawal and claim
 pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
     withdrawal_contract: &WithdrawalContract,
@@ -189,6 +193,7 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
     Ok((transfers, payment_memos))
 }
 
+/// get unused payment memos
 pub async fn get_unused_payments<S: StoreVaultClientInterface>(
     store_vault_server: &S,
     key: KeySet,
@@ -229,6 +234,7 @@ pub async fn get_unused_payments<S: StoreVaultClientInterface>(
     Ok(unused_memos)
 }
 
+/// consume payment memo
 pub async fn consume_payment<S: StoreVaultClientInterface>(
     store_vault_server: &S,
     key: KeySet,
@@ -250,7 +256,8 @@ pub async fn consume_payment<S: StoreVaultClientInterface>(
     Ok(())
 }
 
-pub async fn collect_fees<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
+/// select unused fees and validate them
+pub async fn select_unused_fees<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
     store_vault_server: &S,
     validity_prover: &V,
     key: KeySet,
