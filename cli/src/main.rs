@@ -8,16 +8,18 @@ use intmax2_cli::{
         deposit::deposit,
         error::CliError,
         get::{balance, claim_status, history, mining_list, withdrawal_status},
-        send::{transfer, TransferInput},
+        send::send_transfers,
         sync::{sync_claims, sync_withdrawals},
     },
-    format::{format_token_info, privkey_to_keyset},
+    format::{format_token_info, parse_generic_address, privkey_to_keyset},
 };
+use intmax2_client_sdk::client::sync::utils::generate_salt;
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::{signature::key_set::KeySet, transfer::Transfer},
     ethereum_types::{u256::U256 as IU256, u32limb_trait::U32LimbTrait},
 };
 use num_bigint::BigUint;
+use serde::Deserialize;
 
 const MAX_BATCH_TRANSFER: usize = 5;
 
@@ -57,12 +59,14 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             fee_token_index,
         } => {
             let key = privkey_to_keyset(private_key);
-            let transfer_input = TransferInput {
-                recipient: to,
+            let transfer = Transfer {
+                recipient: parse_generic_address(&to)
+                    .map_err(|e| CliError::ParseError(e.to_string()))?,
                 amount,
                 token_index,
+                salt: generate_salt(),
             };
-            transfer(key, &[transfer_input], fee_token_index.unwrap_or_default()).await?;
+            send_transfers(key, &[transfer], fee_token_index.unwrap_or_default()).await?;
         }
         Commands::BatchTransfer {
             private_key,
@@ -74,12 +78,18 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let mut transfers = vec![];
             for result in reader.deserialize() {
                 let transfer_input: TransferInput = result?;
-                transfers.push(transfer_input);
+                transfers.push(Transfer {
+                    recipient: parse_generic_address(&transfer_input.recipient)
+                        .map_err(|e| CliError::ParseError(e.to_string()))?,
+                    amount: transfer_input.amount,
+                    token_index: transfer_input.token_index,
+                    salt: generate_salt(),
+                });
             }
             if transfers.len() > MAX_BATCH_TRANSFER {
                 return Err(CliError::TooManyTransfer(transfers.len()));
             }
-            transfer(key, &transfers, fee_token_index.unwrap_or_default()).await?;
+            send_transfers(key, &transfers, fee_token_index.unwrap_or_default()).await?;
         }
         Commands::Deposit {
             eth_private_key,
@@ -91,8 +101,6 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             is_mining,
         } => {
             let key = privkey_to_keyset(private_key);
-            let amount = amount.map(|x| x.into());
-            let token_id = token_id.map(|x| x.into());
             let (amount, token_address, token_id) =
                 format_token_info(token_type, amount, token_address, token_id)?;
             let is_mining = is_mining.unwrap_or(false);
@@ -182,4 +190,12 @@ fn generate_key(private_key: Option<H256>) -> KeySet {
             key
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferInput {
+    recipient: String,
+    amount: IU256,
+    token_index: u32,
 }

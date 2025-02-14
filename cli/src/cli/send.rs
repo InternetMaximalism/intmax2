@@ -1,58 +1,23 @@
-use anyhow::{bail, ensure};
 use intmax2_client_sdk::external_api::indexer::IndexerClient;
 use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
 use intmax2_zkp::{
-    common::{
-        generic_address::GenericAddress, salt::Salt, signature::key_set::KeySet, transfer::Transfer,
-    },
+    common::{signature::key_set::KeySet, transfer::Transfer},
     constants::NUM_TRANSFERS_IN_TX,
-    ethereum_types::{
-        address::Address as IAddress, u256::U256 as IU256, u32limb_trait::U32LimbTrait,
-    },
+    ethereum_types::u32limb_trait::U32LimbTrait,
 };
-use serde::Deserialize;
 
-use crate::{
-    cli::{client::get_client, utils::convert_u256},
-    env_var::EnvVar,
-};
+use crate::{cli::client::get_client, env_var::EnvVar};
 
 use super::error::CliError;
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TransferInput {
-    pub recipient: String,
-    pub amount: u128,
-    pub token_index: u32,
-}
-
-pub async fn transfer(
+pub async fn send_transfers(
     key: KeySet,
-    transfer_inputs: &[TransferInput],
+    transfers: &[Transfer],
     fee_token_index: u32,
 ) -> Result<(), CliError> {
-    let mut rng = rand::thread_rng();
-    if transfer_inputs.len() > NUM_TRANSFERS_IN_TX - 1 {
-        return Err(CliError::TooManyTransfer(transfer_inputs.len()));
+    if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
+        return Err(CliError::TooManyTransfer(transfers.len()));
     }
-
-    let transfers = transfer_inputs
-        .iter()
-        .map(|input| {
-            let recipient = parse_generic_address(&input.recipient)
-                .map_err(|e| CliError::ParseError(format!("Failed to parse recipient: {}", e)))?;
-            let amount = convert_u256(input.amount.into());
-            let token_index = input.token_index;
-            let salt = Salt::rand(&mut rng);
-            Ok(Transfer {
-                recipient,
-                amount,
-                token_index,
-                salt,
-            })
-        })
-        .collect::<Result<Vec<_>, CliError>>()?;
 
     let env = envy::from_env::<EnvVar>()?;
     let client = get_client()?;
@@ -90,7 +55,7 @@ pub async fn transfer(
         .send_tx_request(
             &block_builder_url,
             key,
-            transfers,
+            transfers.to_vec(),
             vec![],
             fee_quote.beneficiary,
             fee_quote.fee,
@@ -117,18 +82,4 @@ pub async fn transfer(
         .await?;
 
     Ok(())
-}
-
-fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
-    ensure!(address.starts_with("0x"), "Invalid prefix");
-    let bytes = hex::decode(&address[2..])?;
-    if bytes.len() == 20 {
-        let address = IAddress::from_bytes_be(&bytes);
-        Ok(GenericAddress::from_address(address))
-    } else if bytes.len() == 32 {
-        let pubkey = IU256::from_bytes_be(&bytes);
-        Ok(GenericAddress::from_pubkey(pubkey))
-    } else {
-        bail!("Invalid length");
-    }
 }

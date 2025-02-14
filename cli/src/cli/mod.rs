@@ -6,3 +6,4 @@ pub mod get;
 pub mod send;
 pub mod sync;
 pub mod utils;
+pub mod withdrawal;

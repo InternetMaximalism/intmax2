@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use ethers::types::{Address as EthAddress, H256};
 use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_zkp::ethereum_types::u256::U256;
 
 #[derive(Parser)]
 #[clap(name = "intmax2_cli")]
@@ -18,7 +19,7 @@ pub enum Commands {
         #[clap(long)]
         to: String,
         #[clap(long)]
-        amount: u128,
+        amount: U256,
         #[clap(long)]
         token_index: u32,
         #[clap(long)]
@@ -40,11 +41,11 @@ pub enum Commands {
         #[clap(long)]
         token_type: TokenType,
         #[clap(long)]
-        amount: Option<u128>,
+        amount: Option<U256>,
         #[clap(long)]
         token_address: Option<EthAddress>,
         #[clap(long)]
-        token_id: Option<u128>,
+        token_id: Option<U256>,
         #[clap(long)]
         is_mining: Option<bool>,
     },
