@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use server_common::db::{DbPool, DbPoolConfig};
 
-use crate::EnvVar;
+use crate::{app::utils::extract_timestamp_from_uuidv7, EnvVar};
 
 pub struct Config {
     pub max_pagination_limit: u32,
@@ -153,9 +153,8 @@ impl StoreVaultServer {
         let data_types: Vec<i32> = entries.iter().map(|entry| entry.data_type as i32).collect();
         let pubkeys: Vec<String> = entries.iter().map(|entry| entry.pubkey.to_hex()).collect();
         let uuids: Vec<String> = (0..entries.len())
-            .map(|_| Uuid::new_v4().to_string())
+            .map(|_| Uuid::now_v7().to_string())
             .collect();
-        let timestamps: Vec<i64> = vec![chrono::Utc::now().timestamp(); entries.len()];
         let encrypted_data: Vec<Vec<u8>> = entries
             .iter()
             .map(|entry| entry.encrypted_data.clone())
@@ -165,18 +164,16 @@ impl StoreVaultServer {
         sqlx::query!(
             r#"
             INSERT INTO encrypted_data 
-            (data_type, pubkey, uuid, timestamp, encrypted_data)
+            (data_type, pubkey, uuid, encrypted_data)
             SELECT 
                 UNNEST($1::integer[]),
                 UNNEST($2::text[]),
                 UNNEST($3::text[]),
-                UNNEST($4::bigint[]),
-                UNNEST($5::bytea[])
+                UNNEST($4::bytea[])
             "#,
             &data_types,
             &pubkeys,
             &uuids,
-            &timestamps,
             &encrypted_data,
         )
         .execute(&self.pool)
@@ -200,7 +197,7 @@ impl StoreVaultServer {
         let pubkey_hex = pubkey.to_hex();
         let records = sqlx::query!(
             r#"
-            SELECT uuid, timestamp, encrypted_data
+            SELECT uuid, encrypted_data
             FROM encrypted_data
             WHERE data_type = $1 AND pubkey = $2 AND uuid = ANY($3)
             "#,
@@ -213,9 +210,10 @@ impl StoreVaultServer {
         let result: Vec<DataWithMetaData> = records
             .into_iter()
             .map(|r| {
+                let u = Uuid::parse_str(r.uuid.as_str()).unwrap_or_default();
                 let meta = MetaData {
                     uuid: r.uuid,
-                    timestamp: r.timestamp as u64,
+                    timestamp: extract_timestamp_from_uuidv7(&u).0,
                 };
                 DataWithMetaData {
                     meta,
@@ -240,17 +238,16 @@ impl StoreVaultServer {
                 let cursor_meta = cursor.cursor.clone().unwrap_or_default();
                 sqlx::query!(
                     r#"
-            SELECT uuid, timestamp, encrypted_data
+            SELECT uuid, encrypted_data
             FROM encrypted_data
             WHERE data_type = $1 
             AND pubkey = $2 
-            AND (timestamp, uuid) > ($3, $4)
-            ORDER BY timestamp ASC, uuid ASC
-            LIMIT $5
+            AND uuid > $3
+            ORDER BY uuid ASC
+            LIMIT $4
         "#,
                     data_type as i32,
                     pubkey_hex,
-                    cursor_meta.timestamp as i64,
                     cursor_meta.uuid,
                     actual_limit + 1
                 )
@@ -258,9 +255,10 @@ impl StoreVaultServer {
                 .await?
                 .into_iter()
                 .map(|r| {
+                    let u = Uuid::parse_str(r.uuid.as_str()).unwrap_or_default();
                     let meta = MetaData {
                         uuid: r.uuid,
-                        timestamp: r.timestamp as u64,
+                        timestamp: extract_timestamp_from_uuidv7(&u).0,
                     };
                     DataWithMetaData {
                         meta,
@@ -270,11 +268,6 @@ impl StoreVaultServer {
                 .collect()
             }
             CursorOrder::Desc => {
-                let timestamp = cursor
-                    .cursor
-                    .as_ref()
-                    .map(|c| c.timestamp as i64)
-                    .unwrap_or_else(|| i64::MAX);
                 let uuid = cursor
                     .cursor
                     .as_ref()
@@ -282,17 +275,16 @@ impl StoreVaultServer {
                     .unwrap_or_default();
                 sqlx::query!(
                     r#"
-            SELECT uuid, timestamp, encrypted_data
+            SELECT uuid, encrypted_data
             FROM encrypted_data
             WHERE data_type = $1 
             AND pubkey = $2 
-            AND (timestamp, uuid) < ($3, $4)
-            ORDER BY timestamp DESC, uuid DESC
-            LIMIT $5
+            AND uuid < $3
+            ORDER BY uuid DESC
+            LIMIT $4
         "#,
                     data_type as i32,
                     pubkey_hex,
-                    timestamp,
                     uuid,
                     actual_limit + 1
                 )
@@ -300,9 +292,10 @@ impl StoreVaultServer {
                 .await?
                 .into_iter()
                 .map(|r| {
+                    let u = Uuid::parse_str(r.uuid.as_str()).unwrap_or_default();
                     let meta = MetaData {
                         uuid: r.uuid,
-                        timestamp: r.timestamp as u64,
+                        timestamp: extract_timestamp_from_uuidv7(&u).0,
                     };
                     DataWithMetaData {
                         meta,
