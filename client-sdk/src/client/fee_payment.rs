@@ -16,6 +16,7 @@ use crate::{
     client::{
         misc::{get_topic, payment_memo::PaymentMemo},
         receive_validation::validate_receive,
+        sync::utils::generate_salt,
     },
     external_api::contract::withdrawal_contract::WithdrawalContract,
 };
@@ -58,7 +59,7 @@ pub async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
     withdrawal_contract: &WithdrawalContract,
     withdrawal_token_index: u32,
     fee_token_index: u32,
-) -> Result<Option<Fee>, SyncError> {
+) -> Result<(Option<U256>, Option<Fee>), SyncError> {
     let fee_info = withdrawal_server.get_withdrawal_fee().await?;
     let direct_withdrawal_indices = withdrawal_contract
         .get_direct_withdrawal_token_indices()
@@ -69,16 +70,16 @@ pub async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
         fee_info.claimable_withdrawal_fee.clone()
     };
     let fee = quote_withdrawal_claim_fee(Some(fee_token_index), fees)?;
-    Ok(fee)
+    Ok((fee_info.beneficiary, fee))
 }
 
 pub async fn quote_claim_fee<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
     fee_token_index: u32,
-) -> Result<Option<Fee>, SyncError> {
+) -> Result<(Option<U256>, Option<Fee>), SyncError> {
     let fee_info = withdrawal_server.get_claim_fee().await?;
     let fee = quote_withdrawal_claim_fee(Some(fee_token_index), fee_info.fee)?;
-    Ok(fee)
+    Ok((fee_info.beneficiary, fee))
 }
 
 pub fn generate_fee_payment_memo(
@@ -128,6 +129,63 @@ pub fn generate_fee_payment_memo(
         payment_memos.push(payment_memo);
     }
 
+    Ok(payment_memos)
+}
+
+pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
+    withdrawal_server: &W,
+    withdrawal_contract: &WithdrawalContract,
+    withdrawal_transfer: &Transfer,
+    fee_token_index: u32,
+    claim_fee: bool,
+) -> Result<Vec<PaymentMemoEntry>, SyncError> {
+    let mut transfers = vec![*withdrawal_transfer];
+
+    let mut withdrawal_fee_transfer_index = None;
+    let mut claim_fee_transfer_index = None;
+
+    let (withdrawal_beneficiary, withdrawal_fee) = quote_withdrawal_fee(
+        withdrawal_server,
+        withdrawal_contract,
+        withdrawal_transfer.token_index,
+        fee_token_index,
+    )
+    .await?;
+    if let Some(withdrawal_fee) = &withdrawal_fee {
+        let withdrawal_beneficiary = withdrawal_beneficiary.ok_or(SyncError::FeeError(
+            "withdrawal_beneficiary is not set".to_string(),
+        ))?;
+        let withdrawal_fee_transfer = Transfer {
+            token_index: withdrawal_fee.token_index,
+            recipient: GenericAddress::from_pubkey(withdrawal_beneficiary),
+            amount: withdrawal_fee.amount,
+            salt: generate_salt(),
+        };
+        withdrawal_fee_transfer_index = Some(transfers.len() as u32);
+        transfers.push(withdrawal_fee_transfer);
+    }
+    if claim_fee {
+        let (claim_beneficiary, claim_fee) =
+            quote_claim_fee(withdrawal_server, fee_token_index).await?;
+        if let Some(claim_fee) = claim_fee {
+            let claim_beneficiary = claim_beneficiary.ok_or(SyncError::FeeError(
+                "claim_beneficiary is not set".to_string(),
+            ))?;
+            let claim_fee_transfer = Transfer {
+                token_index: claim_fee.token_index,
+                recipient: GenericAddress::from_pubkey(claim_beneficiary),
+                amount: claim_fee.amount,
+                salt: generate_salt(),
+            };
+            claim_fee_transfer_index = Some(transfers.len() as u32);
+            transfers.push(claim_fee_transfer);
+        }
+    }
+    let payment_memos = generate_fee_payment_memo(
+        &transfers,
+        withdrawal_fee_transfer_index,
+        claim_fee_transfer_index,
+    )?;
     Ok(payment_memos)
 }
 
