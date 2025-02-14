@@ -437,6 +437,7 @@ impl WithdrawalServer {
         &self,
         transfers: &[Transfer],
     ) -> Result<(), WithdrawalServerError> {
+        log::info!("fee collected: {:?}", transfers);
         let nullifiers: Vec<String> = transfers
             .iter()
             .map(|t| Bytes32::from(t.commitment()).to_hex())

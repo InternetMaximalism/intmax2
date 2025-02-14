@@ -3,6 +3,7 @@ use intmax2_client_sdk::external_api::contract::{
     block_builder_registry::BlockBuilderRegistryContract, erc1155_contract::ERC1155Contract,
     erc20_contract::ERC20Contract, erc721_contract::ERC721Contract,
     liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+    withdrawal_contract::WithdrawalContract,
 };
 use serde::Deserialize;
 
@@ -76,6 +77,29 @@ async fn deploy_contracts() -> anyhow::Result<()> {
     println!(
         "registry contract address: {:?}",
         registry_contract.address()
+    );
+
+    let withdrawal_contract = WithdrawalContract::deploy(
+        &config.rpc_url,
+        config.chain_id,
+        config.deployer_private_key,
+    )
+    .await?;
+    withdrawal_contract
+        .initialize(
+            config.deployer_private_key,
+            random_address,
+            random_address,
+            random_address,
+            random_address,
+            random_address,
+            random_address,
+            vec![0.into(), 1.into(), 2.into()],
+        )
+        .await?;
+    println!(
+        "withdrawal contract address: {:?}",
+        withdrawal_contract.address()
     );
 
     let erc20_token = ERC20Contract::deploy(
