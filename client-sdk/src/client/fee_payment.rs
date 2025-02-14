@@ -7,14 +7,13 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait as _},
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait as _},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::client::{
     misc::{get_topic, payment_memo::PaymentMemo},
     receive_validation::validate_receive,
-    sync::utils::generate_salt,
 };
 
 use super::{client::PaymentMemoEntry, sync::error::SyncError};
@@ -23,10 +22,15 @@ pub const WITHDRAWAL_FEE_MEMO: &str = "withdrawal_fee_memo";
 pub const CLAIM_FEE_MEMO: &str = "claim_fee_memo";
 pub const USED_OR_INVALID_MEMO: &str = "used_or_invalid_memo";
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FeeType {
+    Withdrawal,
+    Claim,
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalFeeMemo {
-    pub withdrawal_transfer: Transfer,
     pub fee: Fee,
 }
 
@@ -42,111 +46,54 @@ pub struct UsedOrInvalidMemo {
     pub reason: String,
 }
 
-// Structure for transfer and payment memos used as input for send_tx_request
-#[derive(Debug, Clone)]
-pub struct TransfersWithMemo {
-    pub transfers: Vec<Transfer>,
-    pub payment_memos: Vec<PaymentMemoEntry>,
-}
+pub fn generate_fee_payment_memo(
+    transfers: &[Transfer],
+    withdrawal_fee_transfer_index: Option<u32>,
+    claim_fee_transfer_index: Option<u32>,
+) -> Result<Vec<PaymentMemoEntry>, SyncError> {
+    let mut payment_memos = vec![];
 
-impl TransfersWithMemo {
-    pub fn single_withdrawal_with_fee(
-        recipient: Address,
-        token_index: u32,
-        amount: U256,
-        fee_beneficiary: U256,
-        fee: Fee,
-    ) -> Self {
-        let withdrawal_transfer = Transfer {
-            recipient: GenericAddress::from_address(recipient),
-            token_index,
-            amount,
-            salt: generate_salt(),
+    if let Some(withdrawal_fee_transfer_index) = withdrawal_fee_transfer_index {
+        if withdrawal_fee_transfer_index >= transfers.len() as u32 {
+            return Err(SyncError::FeeError(
+                "withdrawal_fee_transfer_index is out of range".to_string(),
+            ));
+        }
+        let fee_transfer = &transfers[withdrawal_fee_transfer_index as usize];
+        let fee = Fee {
+            token_index: fee_transfer.token_index,
+            amount: fee_transfer.amount,
         };
-        let fee_transfer = Transfer {
-            recipient: GenericAddress::from_pubkey(fee_beneficiary),
-            token_index: fee.token_index,
-            amount: fee.amount,
-            salt: generate_salt(),
-        };
-        let transfers = vec![withdrawal_transfer, fee_transfer];
-        let withdrawal_fee_memo = WithdrawalFeeMemo {
-            withdrawal_transfer,
-            fee,
-        };
+        let withdrawal_fee_memo = WithdrawalFeeMemo { fee };
         let payment_memo = PaymentMemoEntry {
-            transfer_index: 1, // fee transfer index
+            transfer_index: withdrawal_fee_transfer_index,
             topic: get_topic(WITHDRAWAL_FEE_MEMO),
             memo: serde_json::to_string(&withdrawal_fee_memo).unwrap(),
         };
-        let payment_memos = vec![payment_memo];
-
-        TransfersWithMemo {
-            transfers,
-            payment_memos,
-        }
+        payment_memos.push(payment_memo);
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn single_withdrawal_with_claim_fee(
-        recipient: Address,
-        token_index: u32,
-        amount: U256,
-        withdrawal_fee_beneficiary: U256,
-        withdrawal_fee: Fee,
-        claim_fee_beneficiary: U256,
-        claim_fee: Fee,
-    ) -> Self {
-        let withdrawal_transfer = Transfer {
-            recipient: GenericAddress::from_address(recipient),
-            token_index,
-            amount,
-            salt: generate_salt(),
-        };
-        let withdrawal_fee_transfer = Transfer {
-            recipient: GenericAddress::from_pubkey(withdrawal_fee_beneficiary),
-            token_index: withdrawal_fee.token_index,
-            amount: withdrawal_fee.amount,
-            salt: generate_salt(),
-        };
-        let claim_fee_transfer = Transfer {
-            recipient: GenericAddress::from_pubkey(claim_fee_beneficiary),
-            token_index: claim_fee.token_index,
-            amount: claim_fee.amount,
-            salt: generate_salt(),
-        };
-        let transfers = vec![
-            withdrawal_transfer,
-            withdrawal_fee_transfer,
-            claim_fee_transfer,
-        ];
-        let withdrawal_fee_memo = WithdrawalFeeMemo {
-            withdrawal_transfer,
-            fee: withdrawal_fee,
-        };
-        let claim_fee_memo = ClaimFeeMemo { fee: claim_fee };
-        let payment_memos = vec![
-            PaymentMemoEntry {
-                transfer_index: 1, // fee transfer index
-                topic: get_topic(WITHDRAWAL_FEE_MEMO),
-                memo: serde_json::to_string(&withdrawal_fee_memo).unwrap(),
-            },
-            PaymentMemoEntry {
-                transfer_index: 2, // claim fee transfer index
-                topic: get_topic(CLAIM_FEE_MEMO),
-                memo: serde_json::to_string(&claim_fee_memo).unwrap(),
-            },
-        ];
-        TransfersWithMemo {
-            transfers,
-            payment_memos,
+    if let Some(claim_fee_transfer_index) = claim_fee_transfer_index {
+        if claim_fee_transfer_index >= transfers.len() as u32 {
+            return Err(SyncError::FeeError(
+                "claim_fee_transfer_index is out of range".to_string(),
+            ));
         }
+        let fee_transfer = &transfers[claim_fee_transfer_index as usize];
+        let fee = Fee {
+            token_index: fee_transfer.token_index,
+            amount: fee_transfer.amount,
+        };
+        let claim_fee_memo = ClaimFeeMemo { fee };
+        let payment_memo = PaymentMemoEntry {
+            transfer_index: claim_fee_transfer_index,
+            topic: get_topic(CLAIM_FEE_MEMO),
+            memo: serde_json::to_string(&claim_fee_memo).unwrap(),
+        };
+        payment_memos.push(payment_memo);
     }
-}
 
-pub enum FeeType {
-    Withdrawal,
-    Claim,
+    Ok(payment_memos)
 }
 
 pub async fn get_unused_payments<S: StoreVaultClientInterface>(
