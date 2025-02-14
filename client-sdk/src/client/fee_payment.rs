@@ -2,6 +2,7 @@ use intmax2_interfaces::{
     api::{
         block_builder::interface::Fee, store_vault_server::interface::StoreVaultClientInterface,
         validity_prover::interface::ValidityProverClientInterface,
+        withdrawal_server::interface::WithdrawalServerClientInterface,
     },
     data::encryption::Encryption,
 };
@@ -11,12 +12,18 @@ use intmax2_zkp::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::client::{
-    misc::{get_topic, payment_memo::PaymentMemo},
-    receive_validation::validate_receive,
+use crate::{
+    client::{
+        misc::{get_topic, payment_memo::PaymentMemo},
+        receive_validation::validate_receive,
+    },
+    external_api::contract::withdrawal_contract::WithdrawalContract,
 };
 
-use super::{client::PaymentMemoEntry, sync::error::SyncError};
+use super::{
+    client::PaymentMemoEntry,
+    sync::{error::SyncError, utils::quote_withdrawal_claim_fee},
+};
 
 pub const WITHDRAWAL_FEE_MEMO: &str = "withdrawal_fee_memo";
 pub const CLAIM_FEE_MEMO: &str = "claim_fee_memo";
@@ -44,6 +51,34 @@ pub struct ClaimFeeMemo {
 #[serde(rename_all = "camelCase")]
 pub struct UsedOrInvalidMemo {
     pub reason: String,
+}
+
+pub async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
+    withdrawal_server: &W,
+    withdrawal_contract: &WithdrawalContract,
+    withdrawal_token_index: u32,
+    fee_token_index: u32,
+) -> Result<Option<Fee>, SyncError> {
+    let fee_info = withdrawal_server.get_withdrawal_fee().await?;
+    let direct_withdrawal_indices = withdrawal_contract
+        .get_direct_withdrawal_token_indices()
+        .await?;
+    let fees = if direct_withdrawal_indices.contains(&withdrawal_token_index) {
+        fee_info.direct_withdrawal_fee.clone()
+    } else {
+        fee_info.claimable_withdrawal_fee.clone()
+    };
+    let fee = quote_withdrawal_claim_fee(Some(fee_token_index), fees)?;
+    Ok(fee)
+}
+
+pub async fn quote_claim_fee<W: WithdrawalServerClientInterface>(
+    withdrawal_server: &W,
+    fee_token_index: u32,
+) -> Result<Option<Fee>, SyncError> {
+    let fee_info = withdrawal_server.get_claim_fee().await?;
+    let fee = quote_withdrawal_claim_fee(Some(fee_token_index), fee_info.fee)?;
+    Ok(fee)
 }
 
 pub fn generate_fee_payment_memo(

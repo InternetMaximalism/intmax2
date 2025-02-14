@@ -34,7 +34,7 @@ impl Signable for RequestWithdrawalRequest {
             content_prefix("request_withdrawal"),
             bincode::serialize(&(
                 self.single_withdrawal_proof.clone(),
-                self.fee_token_index.clone(),
+                self.fee_token_index,
                 self.fee_transfer_uuids.clone(),
             ))
             .unwrap(),
@@ -57,7 +57,7 @@ impl Signable for RequestClaimRequest {
             content_prefix("request_claim"),
             bincode::serialize(&(
                 self.single_claim_proof.clone(),
-                self.fee_token_index.clone(),
+                self.fee_token_index,
                 self.fee_transfer_uuids.clone(),
             ))
             .unwrap(),
