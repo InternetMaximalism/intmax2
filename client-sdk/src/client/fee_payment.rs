@@ -138,7 +138,7 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
     withdrawal_transfer: &Transfer,
     fee_token_index: u32,
     claim_fee: bool,
-) -> Result<Vec<PaymentMemoEntry>, SyncError> {
+) -> Result<(Vec<Transfer>, Vec<PaymentMemoEntry>), SyncError> {
     let mut transfers = vec![*withdrawal_transfer];
 
     let mut withdrawal_fee_transfer_index = None;
@@ -186,7 +186,7 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
         withdrawal_fee_transfer_index,
         claim_fee_transfer_index,
     )?;
-    Ok(payment_memos)
+    Ok((transfers, payment_memos))
 }
 
 pub async fn get_unused_payments<S: StoreVaultClientInterface>(
