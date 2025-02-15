@@ -1,5 +1,5 @@
 import { cleanEnv, num, str, url } from 'envalid';
-import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_intmax_account_from_eth_key, get_user_data, get_withdrawal_info, JsGenericAddress, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, send_tx_request, sync, sync_withdrawals, } from '../pkg/intmax2_wasm_lib';
+import { Config, } from '../pkg/intmax2_wasm_lib';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
