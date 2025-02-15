@@ -101,7 +101,8 @@ async function main() {
   const withdrawalInfo = await get_withdrawal_info(config, privateKey);
   for (let i = 0; i < withdrawalInfo.length; i++) {
     const withdrawal = withdrawalInfo[i];
-    console.log("Withdrawal: ", withdrawal);
+    const contract_withdrawal = withdrawal.contract_withdrawal;
+    console.log(`Withdrawal: amount: ${contract_withdrawal.amount}, token_index: ${contract_withdrawal.token_index}, status: ${withdrawal.status}`);
   }
 }
 
@@ -137,8 +138,8 @@ async function sendWithdrawal(config: Config, block_builder_base_url: string, pu
   console.log("Sending withdrawal tx...");
   const withdrawalTransfer = new JsTransfer(new JsGenericAddress(false, ethAddress), tokenIndex, amount, generateRandomHex(32));
   const fee_quote = await quote_withdrawal_fee(config, tokenIndex, feeTokenIndex);
-  console.log("Fee beneficiary: ", fee_quote.beneficiary);
-  console.log("Fee quote: ", fee_quote.fee?.amount);
+  console.log("Withdrawal fee beneficiary: ", fee_quote.beneficiary);
+  console.log("Withdrawal fee quote: ", fee_quote.fee?.amount);
   const withdrawalTransfers = await generate_withdrawal_transfers(config, withdrawalTransfer, feeTokenIndex, withClaimFee);
   const paymentMemos = generate_fee_payment_memo(withdrawalTransfers.transfers, withdrawalTransfers.withdrawal_fee_transfer_index, withdrawalTransfers.claim_fee_transfer_index);
   await sendTx(config, block_builder_base_url, publicKey, privateKey, withdrawalTransfers.transfers, paymentMemos, feeTokenIndex);
