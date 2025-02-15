@@ -136,6 +136,13 @@ pub fn generate_fee_payment_memo(
     Ok(payment_memos)
 }
 
+#[derive(Debug, Clone)]
+pub struct WithdrawalTransfers {
+    pub transfers: Vec<Transfer>,
+    pub withdrawal_fee_transfer_index: Option<u32>,
+    pub claim_fee_transfer_index: Option<u32>,
+}
+
 /// quote fee and generate transfers for withdrawal and claim
 pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
@@ -143,7 +150,7 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
     withdrawal_transfer: &Transfer,
     fee_token_index: u32,
     with_claim_fee: bool,
-) -> Result<(Vec<Transfer>, Vec<PaymentMemoEntry>), SyncError> {
+) -> Result<WithdrawalTransfers, SyncError> {
     let mut transfers = if withdrawal_transfer.amount == U256::zero() {
         // if withdrawal_transfer.amount is zero, ignore withdrawal_transfer
         // and only generate fee transfers
@@ -192,12 +199,11 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
             transfers.push(claim_fee_transfer);
         }
     }
-    let payment_memos = generate_fee_payment_memo(
-        &transfers,
+    Ok(WithdrawalTransfers {
+        transfers,
         withdrawal_fee_transfer_index,
         claim_fee_transfer_index,
-    )?;
-    Ok((transfers, payment_memos))
+    })
 }
 
 /// get unused payment memos

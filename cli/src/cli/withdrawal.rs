@@ -1,5 +1,5 @@
 use intmax2_client_sdk::client::{
-    fee_payment::generate_withdrawal_transfers, sync::utils::generate_salt,
+    fee_payment::generate_fee_payment_memo, sync::utils::generate_salt,
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
@@ -23,14 +23,38 @@ pub async fn send_withdrawal(
         amount,
         salt: generate_salt(),
     };
-    let (transfers, payment_memos) = generate_withdrawal_transfers(
-        &client.withdrawal_server,
-        &client.withdrawal_contract,
-        &withdrawal_transfer,
+    let withdrawal_transfers = client
+        .generate_withdrawal_transfers(&withdrawal_transfer, fee_token_index, with_claim_fee)
+        .await?;
+    if let Some(withdrawal_fee_index) = withdrawal_transfers.withdrawal_fee_transfer_index {
+        let withdrawal_fee_transfer =
+            &withdrawal_transfers.transfers[withdrawal_fee_index as usize];
+        log::info!(
+            "Withdrawal fee: {} #{}",
+            withdrawal_fee_transfer.amount,
+            withdrawal_fee_transfer.token_index
+        );
+    }
+    if let Some(claim_fee_index) = withdrawal_transfers.claim_fee_transfer_index {
+        let claim_fee_transfer = &withdrawal_transfers.transfers[claim_fee_index as usize];
+        log::info!(
+            "Claim fee: {} #{}",
+            claim_fee_transfer.amount,
+            claim_fee_transfer.token_index
+        );
+    }
+
+    let payment_memos = generate_fee_payment_memo(
+        &withdrawal_transfers.transfers,
+        withdrawal_transfers.withdrawal_fee_transfer_index,
+        withdrawal_transfers.claim_fee_transfer_index,
+    )?;
+    send_transfers(
+        key,
+        &withdrawal_transfers.transfers,
+        payment_memos,
         fee_token_index,
-        with_claim_fee,
     )
     .await?;
-    send_transfers(key, &transfers, payment_memos, fee_token_index).await?;
     Ok(())
 }

@@ -7,7 +7,7 @@ use intmax2_client_sdk::external_api::{
     validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
-    block_builder::interface::{BlockBuilderStatus, BlockBuilderFeeInfo, FeeProof},
+    block_builder::interface::{BlockBuilderFeeInfo, BlockBuilderStatus, FeeProof},
     validity_prover::interface::ValidityProverClientInterface,
 };
 use intmax2_zkp::{

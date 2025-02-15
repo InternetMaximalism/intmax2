@@ -33,7 +33,10 @@ use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    client::{strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt},
+    client::{
+        fee_payment::generate_withdrawal_transfers,
+        strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt,
+    },
     external_api::{
         contract::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
@@ -46,7 +49,7 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
-    fee_payment::{quote_claim_fee, quote_withdrawal_fee},
+    fee_payment::{quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers},
     fee_proof::{generate_fee_proof, quote_block_builder_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     misc::payment_memo::PaymentMemo,
@@ -685,6 +688,23 @@ where
             fee,
             collateral_fee: None,
         })
+    }
+
+    pub async fn generate_withdrawal_transfers(
+        &self,
+        withdrawal_transfer: &Transfer,
+        fee_token_index: u32,
+        with_claim_fee: bool,
+    ) -> Result<WithdrawalTransfers, ClientError> {
+        let withdrawal_transfers = generate_withdrawal_transfers(
+            &self.withdrawal_server,
+            &self.withdrawal_contract,
+            withdrawal_transfer,
+            fee_token_index,
+            with_claim_fee,
+        )
+        .await?;
+        Ok(withdrawal_transfers)
     }
 }
 
