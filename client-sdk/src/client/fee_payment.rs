@@ -254,7 +254,7 @@ pub async fn consume_payment<S: StoreVaultClientInterface>(
     };
     let payment_memo = PaymentMemo {
         transfer_uuid: payment_memo.transfer_uuid.clone(),
-        transfer: payment_memo.transfer,
+        transfer_data: payment_memo.transfer_data.clone(),
         memo: serde_json::to_string(&memo).unwrap(),
     };
     store_vault_server
@@ -278,11 +278,12 @@ pub async fn select_unused_fees<S: StoreVaultClientInterface, V: ValidityProverC
     let mut sorted_fee_memo = unused_fees
         .into_iter()
         .filter(|memo| {
-            memo.transfer.token_index == fee.token_index
-                && memo.transfer.recipient == GenericAddress::from_pubkey(fee_beneficiary)
+            memo.transfer_data.transfer.token_index == fee.token_index
+                && memo.transfer_data.transfer.recipient
+                    == GenericAddress::from_pubkey(fee_beneficiary)
         })
         .collect::<Vec<_>>();
-    sorted_fee_memo.sort_by_key(|memo| memo.transfer.amount);
+    sorted_fee_memo.sort_by_key(|memo| memo.transfer_data.transfer.amount);
 
     // Collect from the smallest to make the fee enough. If there is an invalid fee, mark it as consumed.
     let mut fee_transfers = vec![];

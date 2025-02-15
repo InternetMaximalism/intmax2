@@ -546,7 +546,7 @@ where
             let transfer_uuid = transfer_uuids[position].clone();
             let payment_memo = PaymentMemo {
                 transfer_uuid,
-                transfer: transfer_data.transfer,
+                transfer_data: transfer_data.clone(),
                 memo: memo_entry.memo.clone(),
             };
             // todo: batch save

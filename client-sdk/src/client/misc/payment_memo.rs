@@ -1,19 +1,20 @@
 use intmax2_interfaces::{
-    api::store_vault_server::interface::StoreVaultClientInterface, data::encryption::Encryption,
+    api::store_vault_server::interface::StoreVaultClientInterface,
+    data::{encryption::Encryption, transfer_data::TransferData},
 };
 
-use intmax2_zkp::common::{signature::key_set::KeySet, transfer::Transfer};
+use intmax2_zkp::common::signature::key_set::KeySet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::client::error::ClientError;
 
 use super::get_topic;
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", bound(deserialize = ""))]
 pub struct PaymentMemo {
     pub transfer_uuid: String,
-    pub transfer: Transfer,
+    pub transfer_data: TransferData,
     pub memo: String,
 }
 
