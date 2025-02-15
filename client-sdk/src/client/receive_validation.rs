@@ -14,6 +14,7 @@ use intmax2_interfaces::{
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    ethereum_types::u256::U256,
 };
 use thiserror::Error;
 
@@ -62,7 +63,7 @@ pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverCli
         TransferData::decrypt(&encrypted_transfer_data_with_meta_data[0].data, key)?;
     let metadata = encrypted_transfer_data_with_meta_data[0].meta.clone();
     transfer_data
-        .validate(key)
+        .validate(key.pubkey)
         .map_err(|e| StrategyError::ValidationError(e.to_string()))?;
 
     let recipient = transfer_data.transfer.recipient;
@@ -83,12 +84,14 @@ pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverCli
         transfer_data.sender_proof_set_ephemeral_key,
     )
     .await?;
-    sender_proof_set.validate(KeySet::dummy()).map_err(|e| {
-        ReceiveValidationError::ValidationError(format!(
-            "Failed to validate sender proof set: {}",
-            e
-        ))
-    })?;
+    sender_proof_set
+        .validate(U256::dummy_pubkey())
+        .map_err(|e| {
+            ReceiveValidationError::ValidationError(format!(
+                "Failed to validate sender proof set: {}",
+                e
+            ))
+        })?;
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;

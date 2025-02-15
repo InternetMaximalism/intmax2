@@ -60,7 +60,7 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
             Err(e) => return Err(e),
         };
         // validate sender proof set
-        match sender_proof_set.validate(key) {
+        match sender_proof_set.validate(key.pubkey) {
             Ok(_) => {
                 // check tx
                 let spent_proof = sender_proof_set.spent_proof.decompress()?;

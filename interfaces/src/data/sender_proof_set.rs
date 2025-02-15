@@ -1,6 +1,6 @@
 use intmax2_zkp::{
     circuits::balance::{balance_pis::BalancePublicInputs, send::spent_circuit::SpentPublicInputs},
-    common::signature::key_set::KeySet,
+    ethereum_types::u256::U256,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +23,7 @@ pub struct SenderProofSet {
 impl Encryption for SenderProofSet {}
 
 impl Validation for SenderProofSet {
-    fn validate(&self, _key: KeySet) -> anyhow::Result<()> {
+    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
         // skip spent proof verification because spent circuit cannot be deserialized for now.
         let spent_proof = self.spent_proof.decompress()?;
         let prev_balance_proof = self.prev_balance_proof.decompress()?;
