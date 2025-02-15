@@ -235,7 +235,7 @@ pub async fn get_unused_payments<S: StoreVaultClientInterface>(
         .filter(|memo| {
             !used_memos
                 .iter()
-                .any(|used_memo| used_memo.transfer_uuid == memo.transfer_uuid)
+                .any(|used_memo| used_memo.meta.uuid == memo.meta.uuid)
         })
         .collect::<Vec<PaymentMemo>>();
     Ok(unused_memos)
@@ -253,7 +253,7 @@ pub async fn consume_payment<S: StoreVaultClientInterface>(
         reason: reason.to_string(),
     };
     let payment_memo = PaymentMemo {
-        transfer_uuid: payment_memo.transfer_uuid.clone(),
+        meta: payment_memo.meta.clone(),
         transfer_data: payment_memo.transfer_data.clone(),
         memo: serde_json::to_string(&memo).unwrap(),
     };
@@ -292,8 +292,9 @@ pub async fn select_unused_fees<S: StoreVaultClientInterface, V: ValidityProverC
         match validate_receive(
             store_vault_server,
             validity_prover,
-            key,
-            &memo.transfer_uuid,
+            memo.transfer_data.transfer.recipient.to_pubkey().unwrap(),
+            &memo.meta,
+            &memo.transfer_data,
         )
         .await
         {

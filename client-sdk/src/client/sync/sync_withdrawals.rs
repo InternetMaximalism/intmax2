@@ -150,7 +150,7 @@ where
         };
         let fee_transfer_uuids = collected_fees
             .iter()
-            .map(|fee| fee.transfer_uuid.clone())
+            .map(|fee| fee.meta.uuid.clone())
             .collect::<Vec<_>>();
 
         // send withdrawal request

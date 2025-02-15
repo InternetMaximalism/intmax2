@@ -1,6 +1,6 @@
 use intmax2_interfaces::{
     api::store_vault_server::interface::StoreVaultClientInterface,
-    data::{encryption::Encryption, transfer_data::TransferData},
+    data::{encryption::Encryption, meta_data::MetaData, transfer_data::TransferData},
 };
 
 use intmax2_zkp::common::signature::key_set::KeySet;
@@ -13,7 +13,7 @@ use super::get_topic;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", bound(deserialize = ""))]
 pub struct PaymentMemo {
-    pub transfer_uuid: String,
+    pub meta: MetaData,
     pub transfer_data: TransferData,
     pub memo: String,
 }

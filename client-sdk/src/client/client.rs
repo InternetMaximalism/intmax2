@@ -11,6 +11,7 @@ use intmax2_interfaces::{
     data::{
         deposit_data::{DepositData, TokenType},
         encryption::Encryption as _,
+        meta_data::MetaData,
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
@@ -545,7 +546,11 @@ where
                 ))?;
             let transfer_uuid = transfer_uuids[position].clone();
             let payment_memo = PaymentMemo {
-                transfer_uuid,
+                meta: MetaData {
+                    // todo: use response from store-vault-server
+                    timestamp: chrono::Utc::now().timestamp() as u64,
+                    uuid: transfer_uuid.clone(),
+                },
                 transfer_data: transfer_data.clone(),
                 memo: memo_entry.memo.clone(),
             };

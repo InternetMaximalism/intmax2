@@ -1,19 +1,17 @@
 use intmax2_interfaces::{
     api::{
-        error::ServerError,
-        store_vault_server::interface::{DataType, StoreVaultClientInterface},
+        error::ServerError, store_vault_server::interface::StoreVaultClientInterface,
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
-        encryption::{errors::EncryptionError, Encryption},
-        proof_compression::ProofCompressionError,
-        transfer_data::TransferData,
+        encryption::errors::EncryptionError, meta_data::MetaData,
+        proof_compression::ProofCompressionError, transfer_data::TransferData,
         validation::Validation as _,
     },
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{generic_address::GenericAddress, transfer::Transfer},
     ethereum_types::u256::U256,
 };
 use thiserror::Error;
@@ -48,26 +46,16 @@ pub enum ReceiveValidationError {
 pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
     store_vault_server: &S,
     validity_prover: &V,
-    key: KeySet,
-    transfer_uuid: &str,
+    recipient_pubkey: U256,
+    meta: &MetaData,
+    transfer_data: &TransferData,
 ) -> Result<Transfer, ReceiveValidationError> {
-    let encrypted_transfer_data_with_meta_data = store_vault_server
-        .get_data_batch(key, DataType::Transfer, &[transfer_uuid.to_string()])
-        .await?;
-    if encrypted_transfer_data_with_meta_data.is_empty() {
-        return Err(ReceiveValidationError::GeneralError(
-            "Transfer data not found".to_string(),
-        ));
-    }
-    let transfer_data =
-        TransferData::decrypt(&encrypted_transfer_data_with_meta_data[0].data, key)?;
-    let metadata = encrypted_transfer_data_with_meta_data[0].meta.clone();
     transfer_data
-        .validate(key.pubkey)
+        .validate(recipient_pubkey)
         .map_err(|e| StrategyError::ValidationError(e.to_string()))?;
 
     let recipient = transfer_data.transfer.recipient;
-    if recipient != GenericAddress::from_pubkey(key.pubkey) {
+    if recipient != GenericAddress::from_pubkey(recipient_pubkey) {
         return Err(ReceiveValidationError::GeneralError(
             "Recipient is not the same as the key".to_string(),
         ));
@@ -77,7 +65,7 @@ pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverCli
         .get_block_number_by_tx_tree_root(transfer_data.tx_tree_root)
         .await?;
     if block_number.is_none() {
-        return Err(ReceiveValidationError::TxIsNotSettled(metadata.timestamp));
+        return Err(ReceiveValidationError::TxIsNotSettled(meta.timestamp));
     }
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server,

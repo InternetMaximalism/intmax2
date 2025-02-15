@@ -2,6 +2,13 @@ use crate::{
     app::status::{SqlClaimStatus, SqlWithdrawalStatus},
     Env,
 };
+use intmax2_interfaces::{
+    api::store_vault_server::interface::{DataType, StoreVaultClientInterface},
+    data::{
+        encryption::{errors::EncryptionError, Encryption},
+        transfer_data::TransferData,
+    },
+};
 
 use super::{error::WithdrawalServerError, fee::parse_fee_str};
 use ethers::types::H256;
@@ -413,14 +420,36 @@ impl WithdrawalServer {
             FeeType::Withdrawal => self.config.withdrawal_beneficiary_key.unwrap(),
             FeeType::Claim => self.config.claim_beneficiary_key.unwrap(),
         };
+        // fetch transfer data
+        let encrypted_transfer_data = self
+            .store_vault_server
+            .get_data_batch(key, DataType::Transfer, fee_transfer_uuids)
+            .await?;
+        if encrypted_transfer_data.len() != fee_transfer_uuids.len() {
+            return Err(WithdrawalServerError::InvalidFee(format!(
+                "Invalid fee transfer uuid response: expected {}, got {}",
+                fee_transfer_uuids.len(),
+                encrypted_transfer_data.len()
+            )));
+        }
+
+        let transfer_data_with_meta = encrypted_transfer_data
+            .iter()
+            .map(|data| {
+                let transfer_data = TransferData::decrypt(&data.data, key)?;
+                Ok((data.meta.clone(), transfer_data))
+            })
+            .collect::<Result<Vec<_>, EncryptionError>>()?;
+
         let mut collected_fee = U256::zero();
         let mut transfers = Vec::new();
-        for transfer_uuid in fee_transfer_uuids {
+        for (meta, transfer_data) in transfer_data_with_meta {
             let transfer = validate_receive(
                 &self.store_vault_server,
                 &self.validity_prover,
-                key,
-                transfer_uuid,
+                key.pubkey,
+                &meta,
+                &transfer_data,
             )
             .await?;
             if fee.token_index != transfer.token_index {

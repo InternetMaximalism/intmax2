@@ -2,11 +2,18 @@ use intmax2_client_sdk::{
     client::receive_validation::ReceiveValidationError,
     external_api::contract::error::BlockchainError,
 };
+use intmax2_interfaces::{api::error::ServerError, data::encryption::errors::EncryptionError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WithdrawalServerError {
     #[error("Database error {0}")]
     DBError(#[from] sqlx::Error),
+
+    #[error("Server error {0}")]
+    ServerError(#[from] ServerError),
+
+    #[error("Encryption error {0}")]
+    EncryptionError(#[from] EncryptionError),
 
     #[error("Receive validation error {0}")]
     ReceiveValidationError(#[from] ReceiveValidationError),
