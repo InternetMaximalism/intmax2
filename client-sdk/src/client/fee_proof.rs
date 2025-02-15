@@ -127,7 +127,7 @@ pub async fn generate_fee_proof<S: StoreVaultClientInterface, B: BalanceProverCl
     Ok((fee_proof, collateral_spent_witness))
 }
 
-pub(crate) fn quote_block_builder_fee(
+pub(crate) fn quote_transfer_fee(
     is_registration_block: bool,
     fee_token_index: u32,
     fee_info: &BlockBuilderFeeInfo,

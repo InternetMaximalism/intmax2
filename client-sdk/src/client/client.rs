@@ -50,7 +50,7 @@ use super::{
     config::ClientConfig,
     error::ClientError,
     fee_payment::{quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers},
-    fee_proof::{generate_fee_proof, quote_block_builder_fee},
+    fee_proof::{generate_fee_proof, quote_transfer_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     misc::payment_memo::PaymentMemo,
     strategy::mining::{fetch_mining_info, Mining},
@@ -644,7 +644,7 @@ where
         let is_registration_block = account_info.account_id.is_none();
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
         let (fee, collateral_fee) =
-            quote_block_builder_fee(is_registration_block, fee_token_index, &fee_info)?;
+            quote_transfer_fee(is_registration_block, fee_token_index, &fee_info)?;
         if fee_info.beneficiary.is_none() && fee.is_some() {
             return Err(ClientError::BlockBuilderFeeError(
                 "beneficiary is required".to_string(),

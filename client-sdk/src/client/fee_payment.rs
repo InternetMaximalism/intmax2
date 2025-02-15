@@ -55,6 +55,14 @@ pub struct UsedOrInvalidMemo {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawalTransfers {
+    pub transfers: Vec<Transfer>,
+    pub withdrawal_fee_transfer_index: Option<u32>,
+    pub claim_fee_transfer_index: Option<u32>,
+}
+
 /// quote withdrawal fee
 pub(crate) async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
@@ -134,13 +142,6 @@ pub fn generate_fee_payment_memo(
     }
 
     Ok(payment_memos)
-}
-
-#[derive(Debug, Clone)]
-pub struct WithdrawalTransfers {
-    pub transfers: Vec<Transfer>,
-    pub withdrawal_fee_transfer_index: Option<u32>,
-    pub claim_fee_transfer_index: Option<u32>,
 }
 
 /// quote fee and generate transfers for withdrawal and claim
