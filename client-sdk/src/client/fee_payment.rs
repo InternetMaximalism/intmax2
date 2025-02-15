@@ -56,7 +56,7 @@ pub struct UsedOrInvalidMemo {
 }
 
 /// quote withdrawal fee
-pub async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
+pub(crate) async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
     withdrawal_contract: &WithdrawalContract,
     withdrawal_token_index: u32,
@@ -76,7 +76,7 @@ pub async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
 }
 
 /// quote claim fee
-pub async fn quote_claim_fee<W: WithdrawalServerClientInterface>(
+pub(crate) async fn quote_claim_fee<W: WithdrawalServerClientInterface>(
     withdrawal_server: &W,
     fee_token_index: u32,
 ) -> Result<(Option<U256>, Option<Fee>), SyncError> {

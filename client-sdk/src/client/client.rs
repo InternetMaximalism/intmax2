@@ -46,7 +46,8 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
-    fee_proof::{generate_fee_proof, quote_fee},
+    fee_payment::{quote_claim_fee, quote_withdrawal_fee},
+    fee_proof::{generate_fee_proof, quote_block_builder_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     misc::payment_memo::PaymentMemo,
     strategy::mining::{fetch_mining_info, Mining},
@@ -630,7 +631,7 @@ where
         fetch_tx_history(self, key).await
     }
 
-    pub async fn quote_fee(
+    pub async fn quote_block_builder_fee(
         &self,
         block_builder_url: &str,
         pubkey: U256,
@@ -639,7 +640,8 @@ where
         let account_info = self.validity_prover.get_account_info(pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
-        let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
+        let (fee, collateral_fee) =
+            quote_block_builder_fee(is_registration_block, fee_token_index, &fee_info)?;
         if fee_info.beneficiary.is_none() && fee.is_some() {
             return Err(ClientError::BlockBuilderFeeError(
                 "beneficiary is required".to_string(),
@@ -654,6 +656,34 @@ where
             beneficiary: fee_info.beneficiary,
             fee,
             collateral_fee,
+        })
+    }
+
+    pub async fn quote_withdrawal_fee(
+        &self,
+        withdrawal_token_index: u32,
+        fee_token_index: u32,
+    ) -> Result<FeeQuote, ClientError> {
+        let (beneficiary, fee) = quote_withdrawal_fee(
+            &self.withdrawal_server,
+            &self.withdrawal_contract,
+            withdrawal_token_index,
+            fee_token_index,
+        )
+        .await?;
+        Ok(FeeQuote {
+            beneficiary,
+            fee,
+            collateral_fee: None,
+        })
+    }
+
+    pub async fn quote_claim_fee(&self, fee_token_index: u32) -> Result<FeeQuote, ClientError> {
+        let (beneficiary, fee) = quote_claim_fee(&self.withdrawal_server, fee_token_index).await?;
+        Ok(FeeQuote {
+            beneficiary,
+            fee,
+            collateral_fee: None,
         })
     }
 }

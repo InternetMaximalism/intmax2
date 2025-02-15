@@ -22,6 +22,7 @@ use utils::{parse_h256, parse_h256_as_u256, str_privkey_to_keyset};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 pub mod client;
+pub mod fee_payment;
 pub mod js_types;
 pub mod misc;
 pub mod native;
@@ -311,7 +312,7 @@ pub async fn quote_fee(
     let pubkey = parse_h256_as_u256(pubkey)?;
     let client = get_client(config);
     let fee_quote = client
-        .quote_fee(block_builder_url, pubkey, fee_token_index)
+        .quote_block_builder_fee(block_builder_url, pubkey, fee_token_index)
         .await?;
     Ok(fee_quote.into())
 }
