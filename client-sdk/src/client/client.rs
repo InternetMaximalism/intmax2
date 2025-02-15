@@ -631,7 +631,7 @@ where
         fetch_tx_history(self, key).await
     }
 
-    pub async fn quote_block_builder_fee(
+    pub async fn quote_transfer_fee(
         &self,
         block_builder_url: &str,
         pubkey: U256,

@@ -37,7 +37,7 @@ pub async fn send_transfers(
     };
 
     let fee_quote = client
-        .quote_block_builder_fee(&block_builder_url, key.pubkey, fee_token_index)
+        .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
         .await?;
     if let Some(fee) = &fee_quote.fee {
         log::info!("beneficiary: {}", fee_quote.beneficiary.unwrap().to_hex());

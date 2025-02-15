@@ -302,7 +302,7 @@ pub async fn fetch_tx_history(
 }
 
 #[wasm_bindgen]
-pub async fn quote_fee(
+pub async fn quote_transfer_fee(
     config: &Config,
     block_builder_url: &str,
     pubkey: &str,
@@ -312,8 +312,30 @@ pub async fn quote_fee(
     let pubkey = parse_h256_as_u256(pubkey)?;
     let client = get_client(config);
     let fee_quote = client
-        .quote_block_builder_fee(block_builder_url, pubkey, fee_token_index)
+        .quote_transfer_fee(block_builder_url, pubkey, fee_token_index)
         .await?;
+    Ok(fee_quote.into())
+}
+
+#[wasm_bindgen]
+pub async fn quote_withdrawal_fee(
+    config: &Config,
+    withdrawal_token_index: u32,
+    fee_token_index: u32,
+) -> Result<JsFeeQuote, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let fee_quote = client
+        .quote_withdrawal_fee(withdrawal_token_index, fee_token_index)
+        .await?;
+    Ok(fee_quote.into())
+}
+
+#[wasm_bindgen]
+pub async fn quote_claim_fee(config: &Config, fee_token_index: u32) -> Result<JsFeeQuote, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let fee_quote = client.quote_claim_fee(fee_token_index).await?;
     Ok(fee_quote.into())
 }
 
