@@ -36,8 +36,8 @@ pub enum Commands {
         token_index: u32,
         #[clap(long)]
         fee_token_index: Option<u32>,
-        #[clap(long)]
-        pay_claim_fee: Option<bool>,
+        #[clap(long, default_value = "false")]
+        with_claim_fee: bool,
     },
     BatchTransfer {
         #[clap(long)]

@@ -14,7 +14,7 @@ pub async fn send_withdrawal(
     amount: U256,
     token_index: u32,
     fee_token_index: Option<u32>,
-    claim_fee: bool,
+    with_claim_fee: bool,
 ) -> Result<(), CliError> {
     let client = get_client()?;
     let fee_token_index = fee_token_index.unwrap_or(0);
@@ -29,7 +29,7 @@ pub async fn send_withdrawal(
         &client.withdrawal_contract,
         &withdrawal_transfer,
         fee_token_index,
-        claim_fee,
+        with_claim_fee,
     )
     .await?;
     send_transfers(key, &transfers, payment_memos, fee_token_index).await?;

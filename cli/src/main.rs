@@ -80,11 +80,18 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             amount,
             token_index,
             fee_token_index,
-            pay_claim_fee,
+            with_claim_fee,
         } => {
             let key = privkey_to_keyset(private_key);
-            let claim_fee = pay_claim_fee.unwrap_or(false);
-            send_withdrawal(key, to, amount, token_index, fee_token_index, claim_fee).await?;
+            send_withdrawal(
+                key,
+                to,
+                amount,
+                token_index,
+                fee_token_index,
+                with_claim_fee,
+            )
+            .await?;
         }
         Commands::BatchTransfer {
             private_key,

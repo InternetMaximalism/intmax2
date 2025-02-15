@@ -142,7 +142,7 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
     withdrawal_contract: &WithdrawalContract,
     withdrawal_transfer: &Transfer,
     fee_token_index: u32,
-    claim_fee: bool,
+    with_claim_fee: bool,
 ) -> Result<(Vec<Transfer>, Vec<PaymentMemoEntry>), SyncError> {
     let mut transfers = if withdrawal_transfer.amount == U256::zero() {
         // if withdrawal_transfer.amount is zero, ignore withdrawal_transfer
@@ -175,7 +175,7 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
         withdrawal_fee_transfer_index = Some(transfers.len() as u32);
         transfers.push(withdrawal_fee_transfer);
     }
-    if claim_fee {
+    if with_claim_fee {
         let (claim_beneficiary, claim_fee) =
             quote_claim_fee(withdrawal_server, fee_token_index).await?;
         if let Some(claim_fee) = claim_fee {
