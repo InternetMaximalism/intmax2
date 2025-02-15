@@ -41,7 +41,7 @@ where
         &self,
         key: KeySet,
         withdrawal_fee: &WithdrawalFeeInfo,
-        fee_token_index: Option<u32>,
+        fee_token_index: u32,
     ) -> Result<(), SyncError> {
         if (withdrawal_fee.direct_withdrawal_fee.is_some()
             || withdrawal_fee.claimable_withdrawal_fee.is_some())
@@ -80,7 +80,7 @@ where
         meta: MetaDataWithBlockNumber,
         withdrawal_data: &TransferData,
         fee_beneficiary: Option<U256>,
-        fee_token_index: Option<u32>,
+        fee_token_index: u32,
         direct_withdrawal_fee: Option<Vec<Fee>>,
         claimable_withdrawal_fee: Option<Vec<Fee>>,
     ) -> Result<(), SyncError> {
@@ -127,9 +127,9 @@ where
             .get_direct_withdrawal_token_indices()
             .await?;
         let fee = if direct_withdrawal_indices.contains(&withdrawal_data.transfer.token_index) {
-            quote_withdrawal_claim_fee(fee_token_index, direct_withdrawal_fee.clone())?
+            quote_withdrawal_claim_fee(Some(fee_token_index), direct_withdrawal_fee.clone())?
         } else {
-            quote_withdrawal_claim_fee(fee_token_index, claimable_withdrawal_fee.clone())?
+            quote_withdrawal_claim_fee(Some(fee_token_index), claimable_withdrawal_fee.clone())?
         };
 
         let collected_fees = match &fee {
@@ -158,7 +158,7 @@ where
             .request_withdrawal(
                 key,
                 &single_withdrawal_proof,
-                fee_token_index,
+                Some(fee_token_index),
                 &fee_transfer_uuids,
             )
             .await?;

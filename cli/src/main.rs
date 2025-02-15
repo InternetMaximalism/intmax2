@@ -83,6 +83,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             with_claim_fee,
         } => {
             let key = privkey_to_keyset(private_key);
+            let fee_token_index = fee_token_index.unwrap_or(0);
             send_withdrawal(
                 key,
                 to,

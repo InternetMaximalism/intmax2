@@ -42,9 +42,9 @@ where
         key: KeySet,
         recipient: Address,
         fee_info: &ClaimFeeInfo,
-        fee_token_index: Option<u32>,
+        fee_token_index: u32,
     ) -> Result<(), SyncError> {
-        let fee = quote_withdrawal_claim_fee(fee_token_index, fee_info.fee.clone())?;
+        let fee = quote_withdrawal_claim_fee(Some(fee_token_index), fee_info.fee.clone())?;
         if fee.is_some() && fee_info.beneficiary.is_none() {
             return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
         }
@@ -156,7 +156,7 @@ where
                 .request_claim(
                     key,
                     &single_claim_proof,
-                    fee_token_index,
+                    Some(fee_token_index),
                     &fee_transfer_uuids,
                 )
                 .await?;

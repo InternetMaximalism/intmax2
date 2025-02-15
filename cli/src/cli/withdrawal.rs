@@ -13,11 +13,10 @@ pub async fn send_withdrawal(
     to: Address,
     amount: U256,
     token_index: u32,
-    fee_token_index: Option<u32>,
+    fee_token_index: u32,
     with_claim_fee: bool,
 ) -> Result<(), CliError> {
     let client = get_client()?;
-    let fee_token_index = fee_token_index.unwrap_or(0);
     let withdrawal_transfer = Transfer {
         recipient: GenericAddress::from_address(to),
         token_index,

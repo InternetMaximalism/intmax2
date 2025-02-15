@@ -170,7 +170,7 @@ pub async fn sync(config: &Config, private_key: &str) -> Result<(), JsError> {
 pub async fn sync_withdrawals(
     config: &Config,
     private_key: &str,
-    fee_token_index: Option<u32>,
+    fee_token_index: u32,
 ) -> Result<(), JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
@@ -189,7 +189,7 @@ pub async fn sync_claims(
     config: &Config,
     private_key: &str,
     recipient: &str,
-    fee_token_index: Option<u32>,
+    fee_token_index: u32,
 ) -> Result<(), JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
