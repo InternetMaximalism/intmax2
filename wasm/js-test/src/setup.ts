@@ -35,6 +35,7 @@ export const env = cleanEnv(process.env, {
     L2_CHAIN_ID: num(),
     ROLLUP_CONTRACT_ADDRESS: str(),
     ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER: num(),
+    WITHDRAWAL_CONTRACT_ADDRESS: str(),
 });
 
 export const config = new Config(
@@ -56,4 +57,5 @@ export const config = new Config(
     BigInt(env.L2_CHAIN_ID),
     env.ROLLUP_CONTRACT_ADDRESS,
     BigInt(env.ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER),
+    env.WITHDRAWAL_CONTRACT_ADDRESS,
 );
