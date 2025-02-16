@@ -26,3 +26,4 @@ envy = "0.4.2"
 actix = "0.13.5"
 dotenv = "0.15.0"
 num-bigint = "0.4.6"
+env_logger.workspace = true

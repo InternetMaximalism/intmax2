@@ -6343,6 +6343,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "dotenv",
+ "env_logger",
  "envy",
  "ethers",
  "hashbrown 0.15.2",
