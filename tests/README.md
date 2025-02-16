@@ -26,6 +26,9 @@ NUM_OF_RECIPIENTS=128 cargo test -r test_block_generation_included_many_senders 
 - `SERVER_URL`: the server URL [default: "localhost:8080"]
 - `END`: the initial status of soak test [default: "false"]
 
+- `PRIVATE_KEY`: INTMAX private key. You need to have at least 0.2 Gwei on INTMAX.
+- `MASTER_MNEMONIC`: The mnemonic phrase used to generate the sender's and receiver's address.
+
 Build config server.
 
 ```sh
