@@ -15,7 +15,7 @@ sqlx = { workspace = true }
 thiserror = { workspace = true }
 cargo_metadata = "0.19.1"
 futures-core = "0.3"
-opentelemetry = { version = "0.27", default-features = false, features = ["trace"] }
+opentelemetry = { version = "0.28", default-features = false, features = ["trace"] }
 opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
 opentelemetry-semantic-conventions = "0.27"
