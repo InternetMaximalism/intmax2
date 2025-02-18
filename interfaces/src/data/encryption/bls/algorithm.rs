@@ -11,8 +11,9 @@ use intmax2_zkp::{
 };
 use rand::Rng;
 
+use crate::data::encryption::errors::ECIESError;
+
 use super::{
-    errors::ECIESError,
     message::EncryptedMessage,
     utils::{ecdh_x, hmac_sha256, kdf, sha256, U256_SIZE},
 };

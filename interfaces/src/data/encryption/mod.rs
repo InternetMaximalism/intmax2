@@ -1,12 +1,10 @@
-use algorithm::{decrypt, encrypt};
+use bls::algorithm::{decrypt, encrypt};
 use errors::EncryptionError;
 use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
 use serde::{de::DeserializeOwned, Serialize};
 
-pub mod algorithm;
+pub mod bls;
 pub mod errors;
-pub mod message;
-pub mod utils;
 
 pub trait Encryption: Sized + Serialize + DeserializeOwned {
     fn to_bytes(&self) -> Vec<u8> {
