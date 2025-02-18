@@ -24,7 +24,7 @@ pub enum ProveType {
     ReceiveDeposit,
     SingleWithdrawal,
     SingleClaim,
-    Echo, // for testing
+    Dummy, // for testing
 }
 
 #[derive(Debug, Serialize, Deserialize)]
