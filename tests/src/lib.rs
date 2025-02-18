@@ -74,6 +74,17 @@ pub async fn wait_for_balance_synchronization(
             )))) => {
                 log::warn!("{message}. Waiting for the balance to be updated...");
             }
+            Err(CliError::SyncError(SyncError::ServerError(ServerError::ServerError(
+                503,
+                message,
+                _,
+                _,
+            )))) => {
+                log::warn!("{message}. Waiting for the balance to be updated...");
+
+                // Wait for an additional minute
+                tokio::time::sleep(Duration::from_secs(60)).await;
+            }
             Err(CliError::ClientError(ClientError::ServerError(ServerError::ServerError(
                 status,
                 message,

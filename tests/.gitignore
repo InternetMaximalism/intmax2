@@ -1,2 +1,4 @@
 .env
 output*.log
+/data/*
+!/data/.gitkeep

@@ -12,27 +12,36 @@ struct Response {
     message: String,
 }
 
-async fn get_config() -> Result<TestConfig, Box<dyn std::error::Error>> {
-    let config = get_request::<(), TestConfig>("http://localhost:8080", "/config", None).await?;
+async fn get_config(
+    config_server_base_url: &str,
+) -> Result<TestConfig, Box<dyn std::error::Error>> {
+    let config = get_request::<(), TestConfig>(config_server_base_url, "/config", None).await?;
 
     Ok(config)
 }
 
 const MAX_CONCURRENT_LIMIT: usize = 800;
+const MAX_CONCURRENT_LIMIT2: usize = 10000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check the current config
-    let config = get_config().await?;
-    post_request::<TestConfig, Response>("http://localhost:8080", "/config", Some(&config)).await?;
+    let config_server_base_url = std::env::var("CONFIG_SERVER_BASE_URL")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    println!("config_server_base_url: {}", config_server_base_url);
+
+    let config = get_config(&config_server_base_url).await?;
+    post_request::<TestConfig, Response>(&config_server_base_url, "/config", Some(&config)).await?;
 
     loop {
-        let mut config = get_config().await?;
+        let mut config = get_config(&config_server_base_url).await?;
         if config.end == "true" {
             break;
         }
 
-        if config.concurrent_limit > MAX_CONCURRENT_LIMIT {
+        if config.concurrent_limit > MAX_CONCURRENT_LIMIT2 {
+            config.concurrent_limit = MAX_CONCURRENT_LIMIT2;
+        } else if config.concurrent_limit > MAX_CONCURRENT_LIMIT {
             config.concurrent_limit += MAX_CONCURRENT_LIMIT;
         } else {
             config.concurrent_limit *= 2;
@@ -46,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             one_hour_later.format("%Y-%m-%d %H:%M:%S")
         );
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
-        post_request::<TestConfig, Response>("http://localhost:8080", "/config", Some(&config))
+        post_request::<TestConfig, Response>(&config_server_base_url, "/config", Some(&config))
             .await?;
     }
 

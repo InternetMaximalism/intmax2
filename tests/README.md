@@ -23,6 +23,7 @@ NUM_OF_RECIPIENTS=128 cargo test -r test_block_generation_included_many_senders 
 ## soak-test
 
 - `CONCURRENT_LIMIT`: the initial number of INTMAX accounts
+- `ETH_REFILL_OFFSET`: The offset of addresses to refill ETH before starting the transfer test
 - `SERVER_URL`: the server URL [default: "localhost:8080"]
 - `END`: the initial status of soak test [default: "false"]
 

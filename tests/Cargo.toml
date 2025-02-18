@@ -32,3 +32,5 @@ futures = "0.3.31"
 env_logger.workspace = true
 itertools = "0.14.0"
 chrono.workspace = true
+regex = "1.11.1"
+statrs = "0.18.0"

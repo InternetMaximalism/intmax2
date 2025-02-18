@@ -29,6 +29,7 @@ use tests::{
 pub struct EnvVar {
     pub master_mnemonic: String,
     pub private_key: String,
+    pub transfer_admin_private_key: String,
     pub num_of_recipients: Option<u32>,
     pub recipient_offset: Option<u32>,
     pub balance_prover_base_url: String,
@@ -36,6 +37,9 @@ pub struct EnvVar {
 
     #[serde(default = "default_url")]
     pub config_server_base_url: String,
+
+    #[serde(default)]
+    pub eth_refill_offset: usize,
 }
 
 fn default_url() -> String {
@@ -64,7 +68,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config_server_base_url = config.config_server_base_url.to_string();
 
-    let system = TestSystem::new(admin_key, config.master_mnemonic, config_server_base_url);
+    let system = TestSystem::new(
+        admin_key,
+        config.master_mnemonic,
+        config_server_base_url,
+        config.eth_refill_offset,
+    );
     system.run_soak_test().await?;
     log::info!("End soak test");
 
@@ -89,6 +98,7 @@ struct TestSystem {
     master_mnemonic_phrase: String,
     config_server_base_url: String,
     accounts: Arc<Mutex<Vec<KeySet>>>,
+    eth_refill_offset: usize,
 }
 
 impl TestSystem {
@@ -96,12 +106,14 @@ impl TestSystem {
         admin_key: KeySet,
         master_mnemonic_phrase: String,
         config_server_base_url: String,
+        eth_refill_offset: usize,
     ) -> Self {
         Self {
             admin_key,
             master_mnemonic_phrase,
             accounts: Arc::new(Mutex::new(Vec::new())),
             config_server_base_url,
+            eth_refill_offset,
         }
     }
 
@@ -127,6 +139,7 @@ impl TestSystem {
         &self,
         required_count: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        dbg!("without transfers");
         let accounts_len = self.accounts.lock().unwrap().len();
 
         if accounts_len >= required_count {
@@ -249,7 +262,11 @@ impl TestSystem {
     pub async fn run_soak_test(&self) -> Result<(), Box<dyn std::error::Error>> {
         let trash_account = mnemonic_to_account(&self.master_mnemonic_phrase, 1, 0)?;
 
-        self.ensure_accounts_without_transfers(400).await?;
+        log::info!("eth_refill_offset: {}", self.eth_refill_offset);
+        if self.eth_refill_offset != 0 {
+            self.ensure_accounts_without_transfers(self.eth_refill_offset)
+                .await?;
+        }
         loop {
             let config = get_config(&self.config_server_base_url).await?;
             log::info!("Concurrency: {}", config.concurrent_limit);
