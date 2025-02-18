@@ -3,7 +3,7 @@ use intmax2_cli::cli::{
     deposit::deposit,
     error::CliError,
     get::{balance, BalanceInfo},
-    send::{transfer, TransferInput},
+    send::send_transfers,
     sync::sync_withdrawals,
 };
 use intmax2_client_sdk::{
@@ -11,7 +11,10 @@ use intmax2_client_sdk::{
     external_api::utils::retry::{retry_if, RetryConfig},
 };
 use intmax2_interfaces::{api::error::ServerError, data::deposit_data::TokenType};
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{
+    common::{signature::key_set::KeySet, transfer::Transfer},
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+};
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -105,10 +108,10 @@ pub async fn wait_for_balance_synchronization(
 
 pub async fn transfer_with_error_handling(
     key: KeySet,
-    transfer_inputs: &[TransferInput],
+    transfer_inputs: &[Transfer],
 ) -> Result<(), CliError> {
     for transfer_input in transfer_inputs {
-        if !transfer_input.recipient.starts_with("0x") || transfer_input.recipient.len() != 66 {
+        if !transfer_input.recipient.is_pubkey {
             return Err(CliError::ParseError(
                 "Invalid recipient INTMAX address".to_string(),
             ));
@@ -116,7 +119,7 @@ pub async fn transfer_with_error_handling(
     }
 
     let timer = std::time::Instant::now();
-    transfer(key, transfer_inputs, 0).await?;
+    send_transfers(key, transfer_inputs, vec![], 0).await?;
     log::info!(
         "Complete transfer from {} ({} s)",
         key.pubkey,
@@ -137,12 +140,12 @@ pub async fn transfer_with_error_handling(
 pub async fn deposit_native_token_with_error_handling(
     depositor_eth_private_key: H256,
     recipient_key: KeySet,
-    amount: ethers::types::U256,
+    amount: U256,
 ) -> Result<(), CliError> {
     let token_type = TokenType::NATIVE;
     // let amount = ethers::types::U256::from(10);
     let token_address = ethers::types::Address::default();
-    let token_id = ethers::types::U256::from(0);
+    let token_id = U256::from(0);
     let is_mining = false;
 
     let timer = std::time::Instant::now();
@@ -177,12 +180,12 @@ pub async fn deposit_native_token_with_error_handling(
 
 pub async fn withdraw_directly_with_error_handling(
     key: KeySet,
-    withdrawal_input: TransferInput,
+    withdrawal_input: Transfer,
 ) -> Result<(), CliError> {
-    if !withdrawal_input.recipient.starts_with("0x") || withdrawal_input.recipient.len() != 42 {
+    if withdrawal_input.recipient.is_pubkey {
         return Err(CliError::ParseError(format!(
             "Invalid recipient Ethereum address: {}",
-            withdrawal_input.recipient
+            withdrawal_input.recipient.data.to_hex()
         )));
     }
 
@@ -193,7 +196,7 @@ pub async fn withdraw_directly_with_error_handling(
     let transfer_inputs = &[withdrawal_input];
     retry_if(
         |_: &CliError| true,
-        || transfer(key, transfer_inputs, 0),
+        || send_transfers(key, transfer_inputs, vec![], 0),
         retry_config,
     )
     .await?;
@@ -209,7 +212,12 @@ pub async fn withdraw_directly_with_error_handling(
             err
         })?;
 
-    retry_if(|_: &CliError| true, || sync_withdrawals(key), retry_config).await?;
+    retry_if(
+        |_: &CliError| true,
+        || sync_withdrawals(key, Some(0)),
+        retry_config,
+    )
+    .await?;
 
     Ok(())
 }

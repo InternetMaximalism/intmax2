@@ -6,18 +6,19 @@ use std::{
 use ethers::{types::H256, utils::hex};
 use futures::future::join_all;
 use intmax2_cli::{
-    cli::{
-        error::CliError,
-        send::{transfer, TransferInput},
-    },
+    cli::{error::CliError, send::send_transfers},
     format::privkey_to_keyset,
 };
-use intmax2_client_sdk::external_api::utils::{
-    query::get_request,
-    retry::{retry_if, RetryConfig},
+use intmax2_client_sdk::{
+    client::sync::utils::generate_salt,
+    external_api::utils::{
+        query::get_request,
+        retry::{retry_if, RetryConfig},
+    },
 };
 use intmax2_zkp::{
-    common::signature::key_set::KeySet, ethereum_types::u32limb_trait::U32LimbTrait,
+    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;
 use tests::{
@@ -121,18 +122,19 @@ impl TestSystem {
         &self,
         sender: KeySet,
         intmax_recipients: &[KeySet],
-        amount: u128,
+        amount: U256,
     ) -> Result<(), CliError> {
         wait_for_balance_synchronization(sender, Duration::from_secs(5)).await?;
         let transfers = intmax_recipients
             .iter()
-            .map(|recipient| TransferInput {
-                recipient: recipient.pubkey.to_hex(),
+            .map(|recipient| Transfer {
+                recipient: GenericAddress::from_pubkey(recipient.pubkey),
                 amount, // 1000000000u128,
                 token_index: ETH_TOKEN_INDEX,
+                salt: generate_salt(),
             })
             .collect::<Vec<_>>();
-        transfer(sender, &transfers, ETH_TOKEN_INDEX).await
+        send_transfers(sender, &transfers, vec![], ETH_TOKEN_INDEX).await
     }
 
     async fn ensure_accounts_without_transfers(
@@ -190,7 +192,7 @@ impl TestSystem {
         //     self.accounts.lock().unwrap().extend(chunk.iter());
         // }
 
-        let amount = 1000000000u128;
+        let amount = U256::from(1000000000);
         let chunk_size = 63;
         let results = self.distribute(&new_accounts, amount, chunk_size).await?;
         for err in results.into_iter().flatten() {
@@ -204,7 +206,7 @@ impl TestSystem {
     async fn distribute(
         &self,
         accounts: &[KeySet],
-        amount: u128,
+        amount: U256,
         max_transfers_per_transaction: usize,
     ) -> Result<Vec<Option<CliError>>, Box<dyn std::error::Error>> {
         if accounts.len() <= max_transfers_per_transaction {
@@ -216,9 +218,8 @@ impl TestSystem {
 
         // Split new_accounts into two parts: intermediates and rest
         let (intermediates, rest) = accounts.split_at(max_transfers_per_transaction);
-        let amount_for_intermediates = amount
-            * ((accounts.len() + max_transfers_per_transaction - 1) / max_transfers_per_transaction)
-                as u128;
+        let amount_for_intermediates =
+            mul_u256(amount, accounts.len(), max_transfers_per_transaction);
 
         // Transfer from admin to intermediates
         log::info!("Transfer from admin to intermediates");
@@ -286,10 +287,11 @@ impl TestSystem {
                 .iter()
                 .enumerate()
                 .map(|(i, sender)| async move {
-                    let transfers = [TransferInput {
-                        recipient: trash_account.intmax_key.pubkey.to_hex(),
-                        amount: 10u128,
+                    let transfers = [Transfer {
+                        recipient: address_to_generic_address(trash_account.eth_address),
+                        amount: U256::from(10),
                         token_index: ETH_TOKEN_INDEX,
+                        salt: generate_salt(),
                     }];
 
                     let num_loops = 2;
@@ -336,5 +338,25 @@ impl TestSystem {
         }
 
         Ok(())
+    }
+}
+
+pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts: usize) -> U256 {
+    let amount_big = num_bigint::BigUint::from_bytes_be(&amount.to_bytes_be());
+    let max_transfers_per_transaction_big =
+        num_bigint::BigUint::from(max_transfers_per_transaction);
+    let num_accounts_big = num_bigint::BigUint::from(num_accounts);
+    let amount_big = amount_big * max_transfers_per_transaction_big * num_accounts_big;
+
+    // validation for overflow
+    assert!(amount_big.bits() <= 256);
+
+    U256::from_bytes_be(&amount_big.to_bytes_be())
+}
+
+pub fn address_to_generic_address(address: ethers::types::Address) -> GenericAddress {
+    GenericAddress {
+        is_pubkey: true,
+        data: U256::from_bytes_be(address.as_bytes()),
     }
 }

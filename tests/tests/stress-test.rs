@@ -2,11 +2,12 @@ use std::time::Duration;
 
 use ethers::{types::H256, utils::hex};
 use futures::future::join_all;
-use intmax2_cli::{
-    cli::send::{transfer, TransferInput},
-    format::privkey_to_keyset,
+use intmax2_cli::{cli::send::send_transfers, format::privkey_to_keyset};
+use intmax2_client_sdk::client::sync::utils::generate_salt;
+use intmax2_zkp::{
+    common::{generic_address::GenericAddress, transfer::Transfer},
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
-use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
 use tests::{
     accounts::{derive_intmax_keys, mnemonic_to_account},
     transfer_with_error_handling, wait_for_balance_synchronization, EnvVar,
@@ -44,13 +45,14 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
     // sender -> multiple recipients (bulk-transfer)
     let transfers = intmax_recipients
         .iter()
-        .map(|recipient| TransferInput {
-            recipient: recipient.pubkey.to_hex(),
-            amount: 1000000000u128,
+        .map(|recipient| Transfer {
+            recipient: GenericAddress::from_pubkey(recipient.pubkey),
+            amount: U256::from(1000000000),
             token_index: ETH_TOKEN_INDEX,
+            salt: generate_salt(),
         })
         .collect::<Vec<_>>();
-    transfer(intmax_sender, &transfers, ETH_TOKEN_INDEX).await?;
+    send_transfers(intmax_sender, &transfers, vec![], ETH_TOKEN_INDEX).await?;
 
     Ok(())
 }
@@ -120,10 +122,11 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
     let intmax_recipient = trash_account.intmax_key;
 
     // multiple senders -> receiver (simultaneously)
-    let transfer_input = TransferInput {
-        recipient: intmax_recipient.pubkey.to_hex(),
-        amount: 10u128,
+    let transfer_input = Transfer {
+        recipient: GenericAddress::from_pubkey(intmax_recipient.pubkey),
+        amount: U256::from(10),
         token_index: ETH_TOKEN_INDEX,
+        salt: generate_salt(),
     };
     let transfers = [transfer_input];
 
