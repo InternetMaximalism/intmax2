@@ -352,6 +352,7 @@ mod tests {
     use intmax2_zkp::common::signature::key_set::KeySet;
 
     #[tokio::test]
+    #[ignore]
     async fn test_private_zkp_server() {
         let client = super::PrivateZKPServerClient::new("https://dev.private.zkp.intmax.xyz");
         let _pubkey = client.get_pubkey().await.unwrap();
