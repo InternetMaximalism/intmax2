@@ -41,7 +41,7 @@ pub trait RsaEncryption: Sized + Serialize + DeserializeOwned {
         Ok(data)
     }
 
-    fn encrypt(&self, pubkey: &RsaPublicKey) -> RsaEncryptedMessage {
+    fn encrypt_with_rsa(&self, pubkey: &RsaPublicKey) -> RsaEncryptedMessage {
         encrypt_with_rsa(pubkey, &self.to_bytes())
     }
 
