@@ -2,10 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{encryption::Encryption, validation::Validation};
 use intmax2_zkp::{
-    common::{
-        signature::key_set::KeySet, trees::tx_tree::TxMerkleProof,
-        witness::spent_witness::SpentWitness,
-    },
+    common::{trees::tx_tree::TxMerkleProof, witness::spent_witness::SpentWitness},
     ethereum_types::{bytes32::Bytes32, u256::U256},
     utils::poseidon_hash_out::PoseidonHashOut,
 };
@@ -27,7 +24,7 @@ pub struct TxData {
 impl Encryption for TxData {}
 
 impl Validation for TxData {
-    fn validate(&self, _key: KeySet) -> anyhow::Result<()> {
+    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
         let tx_tree_root: PoseidonHashOut = self.tx_tree_root.try_into()?;
         self.tx_merkle_proof
             .verify(&self.spent_witness.tx, self.tx_index as u64, tx_tree_root)?;

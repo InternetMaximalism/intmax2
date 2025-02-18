@@ -1,9 +1,9 @@
-use intmax2_client_sdk::client::client::FeeQuote;
-use intmax2_interfaces::api::block_builder::interface::{Fee, FeeInfo};
+use intmax2_client_sdk::client::{client::FeeQuote, fee_payment::WithdrawalTransfers};
+use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
 use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
-use super::utils::parse_u256;
+use super::{common::JsTransfer, utils::parse_u256};
 
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
@@ -72,8 +72,8 @@ pub struct JsFeeInfo {
     pub non_registration_collateral_fee: Option<Vec<JsFee>>,
 }
 
-impl From<FeeInfo> for JsFeeInfo {
-    fn from(fee_info: FeeInfo) -> Self {
+impl From<BlockBuilderFeeInfo> for JsFeeInfo {
+    fn from(fee_info: BlockBuilderFeeInfo) -> Self {
         Self {
             beneficiary: fee_info.beneficiary.map(|b| b.to_hex()),
             registration_fee: fee_info
@@ -89,5 +89,43 @@ impl From<FeeInfo> for JsFeeInfo {
                 .non_registration_collateral_fee
                 .map(|fees| fees.into_iter().map(JsFee::from).collect()),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct JsWithdrawalTransfers {
+    pub transfers: Vec<JsTransfer>,
+    pub withdrawal_fee_transfer_index: Option<u32>,
+    pub claim_fee_transfer_index: Option<u32>,
+}
+
+impl From<WithdrawalTransfers> for JsWithdrawalTransfers {
+    fn from(withdrawal_transfers: WithdrawalTransfers) -> Self {
+        Self {
+            transfers: withdrawal_transfers
+                .transfers
+                .into_iter()
+                .map(JsTransfer::from)
+                .collect(),
+            withdrawal_fee_transfer_index: withdrawal_transfers.withdrawal_fee_transfer_index,
+            claim_fee_transfer_index: withdrawal_transfers.claim_fee_transfer_index,
+        }
+    }
+}
+
+impl TryFrom<JsWithdrawalTransfers> for WithdrawalTransfers {
+    type Error = JsError;
+
+    fn try_from(js_withdrawal_transfers: JsWithdrawalTransfers) -> Result<Self, JsError> {
+        Ok(WithdrawalTransfers {
+            transfers: js_withdrawal_transfers
+                .transfers
+                .into_iter()
+                .map(|t| t.try_into())
+                .collect::<Result<_, _>>()?,
+            withdrawal_fee_transfer_index: js_withdrawal_transfers.withdrawal_fee_transfer_index,
+            claim_fee_transfer_index: js_withdrawal_transfers.claim_fee_transfer_index,
+        })
     }
 }

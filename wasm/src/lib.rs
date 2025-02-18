@@ -1,9 +1,9 @@
 use client::{get_client, Config};
-use intmax2_client_sdk::{
-    client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key,
-    external_api::utils::time::sleep_for,
+use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
+use intmax2_interfaces::{
+    api::withdrawal_server::interface::WithdrawalServerClientInterface,
+    data::deposit_data::TokenType,
 };
-use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::transfer::Transfer,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
@@ -13,6 +13,7 @@ use js_types::{
     data::{JsDepositResult, JsTxResult, JsUserData},
     fee::{JsFee, JsFeeQuote},
     history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
+    payment_memo::JsPaymentMemoEntry,
     utils::{parse_address, parse_u256},
     wrapper::JsTxRequestMemo,
 };
@@ -21,6 +22,7 @@ use utils::{parse_h256, parse_h256_as_u256, str_privkey_to_keyset};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 pub mod client;
+pub mod fee_payment;
 pub mod js_types;
 pub mod misc;
 pub mod native;
@@ -87,11 +89,13 @@ pub async fn prepare_deposit(
 
 /// Function to send a tx request to the block builder. The return value contains information to take a backup.
 #[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
 pub async fn send_tx_request(
     config: &Config,
     block_builder_url: &str,
     private_key: &str,
     transfers: Vec<JsTransfer>,
+    payment_memos: Vec<JsPaymentMemoEntry>,
     beneficiary: Option<String>,
     fee: Option<JsFee>,
     collateral_fee: Option<JsFee>,
@@ -101,6 +105,10 @@ pub async fn send_tx_request(
     let transfers: Vec<Transfer> = transfers
         .iter()
         .map(|transfer| transfer.clone().try_into())
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let payment_memos = payment_memos
+        .iter()
+        .map(|e| e.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
     let beneficiary = beneficiary.map(|b| parse_h256_as_u256(&b)).transpose()?;
     let fee = fee.map(|f| f.try_into()).transpose()?;
@@ -112,6 +120,7 @@ pub async fn send_tx_request(
             block_builder_url,
             key,
             transfers,
+            payment_memos,
             beneficiary,
             fee,
             collateral_fee,
@@ -137,20 +146,9 @@ pub async fn query_and_finalize(
     let tx_request_memo = tx_request_memo.to_tx_request_memo()?;
     let is_registration_block = tx_request_memo.is_registration_block;
     let tx = tx_request_memo.tx;
-    let mut tries = 0;
-    let proposal = loop {
-        let proposal = client
-            .query_proposal(block_builder_url, key, is_registration_block, tx)
-            .await?;
-        if let Some(p) = proposal {
-            break p;
-        }
-        if tries > config.block_builder_query_limit {
-            return Err(JsError::new("Failed to get proposal"));
-        }
-        tries += 1;
-        sleep_for(config.block_builder_query_interval).await;
-    };
+    let proposal = client
+        .query_proposal(block_builder_url, key, is_registration_block, tx)
+        .await?;
     let tx_result = client
         .finalize_tx(block_builder_url, key, &tx_request_memo, &proposal)
         .await?;
@@ -170,11 +168,18 @@ pub async fn sync(config: &Config, private_key: &str) -> Result<(), JsError> {
 /// Synchronize the user's withdrawal proof, and send request to the withdrawal aggregator.
 /// It may take a long time to generate ZKP.
 #[wasm_bindgen]
-pub async fn sync_withdrawals(config: &Config, private_key: &str) -> Result<(), JsError> {
+pub async fn sync_withdrawals(
+    config: &Config,
+    private_key: &str,
+    fee_token_index: u32,
+) -> Result<(), JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
-    client.sync_withdrawals(key).await?;
+    let withdrawal_fee = client.withdrawal_server.get_withdrawal_fee().await?;
+    client
+        .sync_withdrawals(key, &withdrawal_fee, fee_token_index)
+        .await?;
     Ok(())
 }
 
@@ -185,12 +190,16 @@ pub async fn sync_claims(
     config: &Config,
     private_key: &str,
     recipient: &str,
+    fee_token_index: u32,
 ) -> Result<(), JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
     let recipient = parse_address(recipient)?;
-    client.sync_claims(key, recipient).await?;
+    let claim_fee = client.withdrawal_server.get_claim_fee().await?;
+    client
+        .sync_claims(key, recipient, &claim_fee, fee_token_index)
+        .await?;
     Ok(())
 }
 
@@ -293,7 +302,7 @@ pub async fn fetch_tx_history(
 }
 
 #[wasm_bindgen]
-pub async fn quote_fee(
+pub async fn quote_transfer_fee(
     config: &Config,
     block_builder_url: &str,
     pubkey: &str,
@@ -303,8 +312,30 @@ pub async fn quote_fee(
     let pubkey = parse_h256_as_u256(pubkey)?;
     let client = get_client(config);
     let fee_quote = client
-        .quote_fee(block_builder_url, pubkey, fee_token_index)
+        .quote_transfer_fee(block_builder_url, pubkey, fee_token_index)
         .await?;
+    Ok(fee_quote.into())
+}
+
+#[wasm_bindgen]
+pub async fn quote_withdrawal_fee(
+    config: &Config,
+    withdrawal_token_index: u32,
+    fee_token_index: u32,
+) -> Result<JsFeeQuote, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let fee_quote = client
+        .quote_withdrawal_fee(withdrawal_token_index, fee_token_index)
+        .await?;
+    Ok(fee_quote.into())
+}
+
+#[wasm_bindgen]
+pub async fn quote_claim_fee(config: &Config, fee_token_index: u32) -> Result<JsFeeQuote, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let fee_quote = client.quote_claim_fee(fee_token_index).await?;
     Ok(fee_quote.into())
 }
 

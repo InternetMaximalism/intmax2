@@ -7,6 +7,9 @@ pub struct ClientConfig {
     pub tx_timeout: u64,
     pub block_builder_request_interval: u64,
     pub block_builder_request_limit: u64,
+    pub block_builder_query_wait_time: u64,
+    pub block_builder_query_interval: u64,
+    pub block_builder_query_limit: u64,
 }
 
 impl Default for ClientConfig {
@@ -15,7 +18,10 @@ impl Default for ClientConfig {
             deposit_timeout: 7200,
             tx_timeout: 60,
             block_builder_request_interval: 5,
-            block_builder_request_limit: 10,
+            block_builder_request_limit: 12,
+            block_builder_query_wait_time: 5,
+            block_builder_query_interval: 5,
+            block_builder_query_limit: 20,
         }
     }
 }

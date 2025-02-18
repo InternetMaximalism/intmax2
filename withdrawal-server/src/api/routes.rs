@@ -7,25 +7,27 @@ use actix_web::{
 };
 use intmax2_interfaces::{
     api::withdrawal_server::{
-        interface::Fee,
+        interface::{ClaimFeeInfo, WithdrawalFeeInfo},
         types::{
-            GetClaimInfoRequest, GetClaimInfoResponse, GetFeeResponse,
-            GetWithdrawalInfoByRecipientQuery, GetWithdrawalInfoRequest, GetWithdrawalInfoResponse,
-            RequestClaimRequest, RequestWithdrawalRequest,
+            GetClaimInfoRequest, GetClaimInfoResponse, GetWithdrawalInfoByRecipientQuery,
+            GetWithdrawalInfoRequest, GetWithdrawalInfoResponse, RequestClaimRequest,
+            RequestWithdrawalRequest,
         },
     },
     utils::signature::{Signable as _, WithAuth},
 };
 use serde_qs::actix::QsQuery;
 
-#[get("/fee")]
-pub async fn get_fee() -> Result<Json<GetFeeResponse>, Error> {
-    let fees = vec![Fee {
-        token_index: 0,
-        constant: 0,
-        coefficient: 0.0,
-    }];
-    Ok(Json(GetFeeResponse { fees }))
+#[get("/withdrawal-fee")]
+pub async fn get_withdrawal_fee(state: Data<State>) -> Result<Json<WithdrawalFeeInfo>, Error> {
+    let fees = state.withdrawal_server.get_withdrawal_fee();
+    Ok(Json(fees))
+}
+
+#[get("/claim-fee")]
+pub async fn get_claim_fee(state: Data<State>) -> Result<Json<ClaimFeeInfo>, Error> {
+    let fees = state.withdrawal_server.get_claim_fee();
+    Ok(Json(fees))
 }
 
 #[post("/request-withdrawal")]
@@ -38,10 +40,14 @@ pub async fn request_withdrawal(
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    let single_withdrawal_proof = &request.inner.single_withdrawal_proof;
     state
         .withdrawal_server
-        .request_withdrawal(pubkey, single_withdrawal_proof)
+        .request_withdrawal(
+            pubkey,
+            &request.inner.single_withdrawal_proof,
+            request.inner.fee_token_index,
+            &request.inner.fee_transfer_uuids,
+        )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))
@@ -57,10 +63,14 @@ pub async fn request_claim(
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    let single_claim_proof = &request.inner.single_claim_proof;
     state
         .withdrawal_server
-        .request_claim(pubkey, single_claim_proof)
+        .request_claim(
+            pubkey,
+            &request.inner.single_claim_proof,
+            request.inner.fee_token_index,
+            &request.inner.fee_transfer_uuids,
+        )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))
@@ -117,9 +127,10 @@ pub async fn get_withdrawal_info_by_recipient(
 
 pub fn withdrawal_server_scope() -> Scope {
     actix_web::web::scope("/withdrawal-server")
+        .service(get_withdrawal_fee)
+        .service(get_claim_fee)
         .service(request_withdrawal)
         .service(request_claim)
-        .service(get_fee)
         .service(get_withdrawal_info)
         .service(get_withdrawal_info_by_recipient)
         .service(get_claim_info)

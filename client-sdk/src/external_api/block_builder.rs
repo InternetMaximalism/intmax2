@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use intmax2_interfaces::api::{
     block_builder::{
-        interface::{BlockBuilderClientInterface, BlockBuilderStatus, FeeInfo, FeeProof},
+        interface::{
+            BlockBuilderClientInterface, BlockBuilderFeeInfo, BlockBuilderStatus, FeeProof,
+        },
         types::{
             GetBlockBuilderStatusQuery, GetBlockBuilderStatusResponse, PostSignatureRequest,
             QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
@@ -33,8 +35,12 @@ impl Default for BlockBuilderClient {
 
 #[async_trait(?Send)]
 impl BlockBuilderClientInterface for BlockBuilderClient {
-    async fn get_fee_info(&self, block_builder_url: &str) -> Result<FeeInfo, ServerError> {
-        get_request::<(), FeeInfo>(block_builder_url, "/block-builder/fee-info", None).await
+    async fn get_fee_info(
+        &self,
+        block_builder_url: &str,
+    ) -> Result<BlockBuilderFeeInfo, ServerError> {
+        get_request::<(), BlockBuilderFeeInfo>(block_builder_url, "/block-builder/fee-info", None)
+            .await
     }
 
     async fn get_status(

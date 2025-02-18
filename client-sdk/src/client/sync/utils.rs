@@ -1,5 +1,8 @@
 use intmax2_interfaces::{
-    api::validity_prover::interface::ValidityProverClientInterface, data::user_data::UserData,
+    api::{
+        block_builder::interface::Fee, validity_prover::interface::ValidityProverClientInterface,
+    },
+    data::user_data::UserData,
 };
 use intmax2_zkp::{
     common::{
@@ -24,6 +27,26 @@ const D: usize = 2;
 pub fn generate_salt() -> Salt {
     let mut rng = rand::thread_rng();
     Salt::rand(&mut rng)
+}
+
+pub fn quote_withdrawal_claim_fee(
+    fee_token_index: Option<u32>,
+    fees: Option<Vec<Fee>>,
+) -> Result<Option<Fee>, SyncError> {
+    if fees.is_none() {
+        return Ok(None);
+    }
+    let fees = fees.unwrap();
+    let fee_token_index =
+        fee_token_index.ok_or(SyncError::FeeError("fee token index is needed".to_string()))?;
+    let fee = fees
+        .iter()
+        .find(|fee| fee.token_index == fee_token_index)
+        .ok_or(SyncError::FeeError(format!(
+            "fee with token index {} not found",
+            fee_token_index
+        )))?;
+    Ok(Some(fee.clone()))
 }
 
 pub async fn generate_spent_witness(

@@ -3,7 +3,10 @@ use intmax2_client_sdk::{
     external_api::{
         balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
-        contract::{liquidity_contract::LiquidityContract, rollup_contract::RollupContract},
+        contract::{
+            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+            withdrawal_contract::WithdrawalContract,
+        },
         store_vault_server::StoreVaultServerClient,
         validity_prover::ValidityProverClient,
         withdrawal_server::WithdrawalServerClient,
@@ -77,6 +80,9 @@ pub struct Config {
 
     /// Scroll block number when the rollup contract was deployed
     pub rollup_contract_deployed_block_number: u64,
+
+    /// Address of the withdrawal contract
+    pub withdrawal_contract_address: String,
 }
 
 #[wasm_bindgen]
@@ -104,6 +110,7 @@ impl Config {
         l2_chain_id: u64,
         rollup_contract_address: String,
         rollup_contract_deployed_block_number: u64,
+        withdrawal_contract_address: String,
     ) -> Config {
         Config {
             store_vault_server_url,
@@ -124,6 +131,7 @@ impl Config {
             l2_chain_id,
             rollup_contract_address,
             rollup_contract_deployed_block_number,
+            withdrawal_contract_address,
         }
     }
 }
@@ -140,6 +148,9 @@ pub fn get_client(config: &Config) -> Client<BB, S, V, B, W> {
         tx_timeout: config.tx_timeout,
         block_builder_request_interval: config.block_builder_request_interval,
         block_builder_request_limit: config.block_builder_request_limit,
+        block_builder_query_wait_time: config.block_builder_query_wait_time,
+        block_builder_query_interval: config.block_builder_query_interval,
+        block_builder_query_limit: config.block_builder_query_limit,
     };
 
     let liquidity_contract = LiquidityContract::new(
@@ -154,6 +165,11 @@ pub fn get_client(config: &Config) -> Client<BB, S, V, B, W> {
         config.rollup_contract_address.parse().unwrap(),
         config.rollup_contract_deployed_block_number,
     );
+    let withdrawal_contract = WithdrawalContract::new(
+        &config.l2_rpc_url,
+        config.l2_chain_id,
+        config.withdrawal_contract_address.parse().unwrap(),
+    );
 
     Client {
         block_builder,
@@ -163,6 +179,7 @@ pub fn get_client(config: &Config) -> Client<BB, S, V, B, W> {
         withdrawal_server,
         liquidity_contract,
         rollup_contract,
+        withdrawal_contract,
         config: client_config,
     }
 }

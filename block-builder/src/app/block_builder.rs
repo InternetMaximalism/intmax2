@@ -7,7 +7,7 @@ use intmax2_client_sdk::external_api::{
     validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
-    block_builder::interface::{BlockBuilderStatus, FeeInfo, FeeProof},
+    block_builder::interface::{BlockBuilderFeeInfo, BlockBuilderStatus, FeeProof},
     validity_prover::interface::ValidityProverClientInterface,
 };
 use intmax2_zkp::{
@@ -164,8 +164,8 @@ impl BlockBuilder {
         })
     }
 
-    pub fn get_fee_info(&self) -> FeeInfo {
-        FeeInfo {
+    pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
+        BlockBuilderFeeInfo {
             beneficiary: self.config.beneficiary_pubkey,
             registration_fee: convert_fee_vec(&self.config.registration_fee),
             non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),

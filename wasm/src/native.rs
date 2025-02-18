@@ -148,6 +148,7 @@ pub async fn verify_signature(
     public_key: &str,
     message: &[u8],
 ) -> Result<bool, JsError> {
+    init_logger();
     let public_key =
         U256::from_hex(public_key).map_err(|_| JsError::new("Failed to parse public key"))?;
     let signature = FlatG2::try_from(signature.clone())

@@ -86,7 +86,7 @@ pub async fn validate_fee_proof(
                 ))?;
         // validate transfer data
         let transfer_data = &collateral_block.fee_transfer_data;
-        match transfer_data.validate(KeySet::dummy()) {
+        match transfer_data.validate(U256::dummy_pubkey()) {
             Ok(_) => {}
             Err(e) => {
                 log::error!("Failed to validate transfer data: {}", e);
@@ -144,9 +144,11 @@ async fn validate_fee_single(
     transfer_witness: &TransferWitness,
 ) -> Result<(), FeeError> {
     // todo: validate spent proof inside `validate` method
-    sender_proof_set.validate(KeySet::dummy()).map_err(|e| {
-        FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {}", e))
-    })?;
+    sender_proof_set
+        .validate(U256::dummy_pubkey())
+        .map_err(|e| {
+            FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {}", e))
+        })?;
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;

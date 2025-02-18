@@ -1,4 +1,4 @@
-use ethers::types::{Address, H256, U256};
+use ethers::types::{Address, H256};
 use intmax2_client_sdk::external_api::contract::{
     erc1155_contract::ERC1155Contract,
     erc20_contract::ERC20Contract,
@@ -7,7 +7,7 @@ use intmax2_client_sdk::external_api::contract::{
     utils::{get_address, get_eth_balance},
 };
 use intmax2_interfaces::data::deposit_data::TokenType;
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
 
 use super::{
     client::get_client,
@@ -38,9 +38,7 @@ pub async fn deposit(
 
     log::info!("Balance check done");
 
-    let amount = convert_u256(amount);
     let token_address = convert_address(token_address);
-    let token_id = convert_u256(token_id);
     let depositor = convert_address(get_address(liquidity_contract.chain_id, eth_private_key));
 
     let deposit_result = client
@@ -129,6 +127,9 @@ async fn balance_check_and_approve(
     token_address: Address,
     token_id: U256,
 ) -> Result<(), CliError> {
+    let amount = convert_u256(amount);
+    let token_id = convert_u256(token_id);
+
     let chain_id = liquidity_contract.chain_id;
     let rpc_url = liquidity_contract.rpc_url.clone();
     let address = get_address(chain_id, eth_private_key);

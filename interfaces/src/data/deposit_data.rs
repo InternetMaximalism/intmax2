@@ -5,7 +5,6 @@ use intmax2_zkp::{
     common::{
         deposit::{get_pubkey_salt_hash, Deposit},
         salt::Salt,
-        signature::key_set::KeySet,
     },
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
     utils::leafable::Leafable,
@@ -105,8 +104,8 @@ impl DepositData {
 impl Encryption for DepositData {}
 
 impl Validation for DepositData {
-    fn validate(&self, key: KeySet) -> anyhow::Result<()> {
-        if self.pubkey_salt_hash != get_pubkey_salt_hash(key.pubkey, self.deposit_salt) {
+    fn validate(&self, pubkey: U256) -> anyhow::Result<()> {
+        if self.pubkey_salt_hash != get_pubkey_salt_hash(pubkey, self.deposit_salt) {
             anyhow::bail!("Invalid pubkey_salt_hash");
         }
         Ok(())

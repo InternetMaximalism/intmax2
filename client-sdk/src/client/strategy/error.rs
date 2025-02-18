@@ -23,6 +23,9 @@ pub enum StrategyError {
     #[error("Balance insufficient before sync")]
     BalanceInsufficientBeforeSync,
 
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
     #[error("Balance insufficient during sync")]
     BalanceInsufficientDuringSync,
 

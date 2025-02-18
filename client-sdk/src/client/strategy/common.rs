@@ -45,7 +45,7 @@ pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: Encryption 
                 return None;
             }
             match T::decrypt(&data, key) {
-                Ok(data) => match data.validate(key) {
+                Ok(data) => match data.validate(key.pubkey) {
                     Ok(_) => Some((meta, data)),
                     Err(e) => {
                         log::warn!("failed to validate {}: {}", data_type, e);

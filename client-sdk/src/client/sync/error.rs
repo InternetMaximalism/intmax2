@@ -1,10 +1,16 @@
 use intmax2_interfaces::{
     api::error::ServerError,
-    data::{error::DataError, proof_compression::ProofCompressionError},
+    data::{
+        encryption::errors::EncryptionError, error::DataError,
+        proof_compression::ProofCompressionError,
+    },
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 
-use crate::client::strategy::error::StrategyError;
+use crate::{
+    client::{receive_validation::ReceiveValidationError, strategy::error::StrategyError},
+    external_api::contract::error::BlockchainError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
@@ -14,11 +20,23 @@ pub enum SyncError {
     #[error("Strategy error: {0}")]
     StrategyError(#[from] StrategyError),
 
+    #[error("Blockchain error: {0}")]
+    BlockchainError(#[from] BlockchainError),
+
     #[error("Proof compression error: {0}")]
     ProofCompressionError(#[from] ProofCompressionError),
 
     #[error("Data error: {0}")]
     DataError(#[from] DataError),
+
+    #[error("Encryption error: {0}")]
+    EncryptionError(#[from] EncryptionError),
+
+    #[error("Receive validation error: {0}")]
+    ReceiveValidationError(#[from] ReceiveValidationError),
+
+    #[error("Fee error: {0}")]
+    FeeError(String),
 
     #[error("Internal error: {0}")]
     InternalError(String),

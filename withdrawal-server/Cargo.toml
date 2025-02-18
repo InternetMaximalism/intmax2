@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = { workspace = true }
 plonky2 = { workspace = true }
 intmax2-zkp = { workspace = true }
+intmax2-client-sdk = { path = "../client-sdk" }
 intmax2-interfaces = { path = "../interfaces" }
 server-common = { path = "../server-common" }
 tokio = { version = "1", features = ["full"] }
@@ -29,3 +30,4 @@ actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
 serde_qs = { workspace = true }
 base64 = "0.22.1"
+num-bigint = "0.4.6"

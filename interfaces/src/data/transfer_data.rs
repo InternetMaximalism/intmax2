@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use intmax2_zkp::{
     common::{
-        signature::key_set::KeySet,
         transfer::Transfer,
         trees::{transfer_tree::TransferMerkleProof, tx_tree::TxMerkleProof},
         tx::Tx,
@@ -41,7 +40,7 @@ impl TransferData {
 impl Encryption for TransferData {}
 
 impl Validation for TransferData {
-    fn validate(&self, _key: KeySet) -> anyhow::Result<()> {
+    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
         let tx_tree_root: PoseidonHashOut = self.tx_tree_root.try_into()?;
         self.tx_merkle_proof
             .verify(&self.tx, self.tx_index as u64, tx_tree_root)?;

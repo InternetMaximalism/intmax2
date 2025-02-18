@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO used_payments (nullifier, transfer)\n        SELECT * FROM unnest($1::text[], $2::jsonb[])\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "JsonbArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fef99224ab5696d816088d400b985830e8875f093c62b23e8c44b1d8a8bb587b"
+}

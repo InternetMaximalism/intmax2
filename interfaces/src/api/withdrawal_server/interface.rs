@@ -12,19 +12,25 @@ use plonky2::{
 use plonky2_keccak::utils::solidity_keccak256;
 use serde::{Deserialize, Serialize};
 
-use crate::api::error::ServerError;
+use crate::api::{block_builder::interface::Fee, error::ServerError};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
-/// fee = constant + coefficient * amount
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Fee {
-    pub token_index: u32,
-    pub constant: u128,
-    pub coefficient: f64,
+pub struct WithdrawalFeeInfo {
+    pub beneficiary: Option<U256>,
+    pub direct_withdrawal_fee: Option<Vec<Fee>>,
+    pub claimable_withdrawal_fee: Option<Vec<Fee>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimFeeInfo {
+    pub beneficiary: Option<U256>,
+    pub fee: Option<Vec<Fee>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,18 +113,24 @@ impl Display for ClaimStatus {
 
 #[async_trait(?Send)]
 pub trait WithdrawalServerClientInterface {
-    async fn fee(&self) -> Result<Vec<Fee>, ServerError>;
+    async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError>;
+
+    async fn get_claim_fee(&self) -> Result<ClaimFeeInfo, ServerError>;
 
     async fn request_withdrawal(
         &self,
         key: KeySet,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
+        fee_transfer_uuids: &[String],
     ) -> Result<(), ServerError>;
 
     async fn request_claim(
         &self,
         key: KeySet,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
+        fee_token_index: Option<u32>,
+        fee_transfer_uuids: &[String],
     ) -> Result<(), ServerError>;
 
     async fn get_withdrawal_info(&self, key: KeySet) -> Result<Vec<WithdrawalInfo>, ServerError>;

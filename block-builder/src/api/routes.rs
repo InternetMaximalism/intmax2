@@ -4,7 +4,7 @@ use actix_web::{
     Error,
 };
 use intmax2_interfaces::api::block_builder::{
-    interface::FeeInfo,
+    interface::BlockBuilderFeeInfo,
     types::{
         GetBlockBuilderStatusQuery, GetBlockBuilderStatusResponse, PostSignatureRequest,
         QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
@@ -16,7 +16,7 @@ use serde_qs::actix::QsQuery;
 use crate::api::state::State;
 
 #[get("/fee-info")]
-pub async fn get_fee_info(state: Data<State>) -> Result<Json<FeeInfo>, Error> {
+pub async fn get_fee_info(state: Data<State>) -> Result<Json<BlockBuilderFeeInfo>, Error> {
     let fee_info = state.block_builder.get_fee_info();
     Ok(Json(fee_info))
 }

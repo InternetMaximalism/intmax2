@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use ethers::types::{Address as EthAddress, H256};
 use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 
 #[derive(Parser)]
 #[clap(name = "intmax2_cli")]
@@ -16,13 +17,27 @@ pub enum Commands {
         #[clap(long)]
         private_key: H256,
         #[clap(long)]
-        to: String,
+        to: Bytes32,
         #[clap(long)]
-        amount: u128,
+        amount: U256,
         #[clap(long)]
         token_index: u32,
         #[clap(long)]
         fee_token_index: Option<u32>,
+    },
+    Withdrawal {
+        #[clap(long)]
+        private_key: H256,
+        #[clap(long)]
+        to: Address,
+        #[clap(long)]
+        amount: U256,
+        #[clap(long)]
+        token_index: u32,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
+        #[clap(long, default_value = "false")]
+        with_claim_fee: bool,
     },
     BatchTransfer {
         #[clap(long)]
@@ -40,23 +55,27 @@ pub enum Commands {
         #[clap(long)]
         token_type: TokenType,
         #[clap(long)]
-        amount: Option<u128>,
+        amount: Option<U256>,
         #[clap(long)]
         token_address: Option<EthAddress>,
         #[clap(long)]
-        token_id: Option<u128>,
+        token_id: Option<U256>,
         #[clap(long)]
         is_mining: Option<bool>,
     },
     SyncWithdrawals {
         #[clap(long)]
         private_key: H256,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
     },
     SyncClaims {
         #[clap(long)]
         private_key: H256,
         #[clap(long)]
         recipient: EthAddress,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
     },
     Balance {
         #[clap(long)]

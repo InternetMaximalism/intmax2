@@ -11,6 +11,7 @@ use intmax2_interfaces::{
     data::{
         deposit_data::{DepositData, TokenType},
         encryption::Encryption as _,
+        meta_data::MetaData,
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
@@ -32,9 +33,15 @@ use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    client::{strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt},
+    client::{
+        fee_payment::generate_withdrawal_transfers,
+        strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt,
+    },
     external_api::{
-        contract::{liquidity_contract::LiquidityContract, rollup_contract::RollupContract},
+        contract::{
+            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+            withdrawal_contract::WithdrawalContract,
+        },
         utils::time::sleep_for,
     },
 };
@@ -42,8 +49,10 @@ use crate::{
 use super::{
     config::ClientConfig,
     error::ClientError,
-    fee::{generate_fee_proof, quote_fee},
+    fee_payment::{quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers},
+    fee_proof::{generate_fee_proof, quote_transfer_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
+    misc::payment_memo::PaymentMemo,
     strategy::mining::{fetch_mining_info, Mining},
     sync::utils::{generate_spent_witness, get_balance_proof},
 };
@@ -65,6 +74,14 @@ pub struct Client<
 
     pub liquidity_contract: LiquidityContract,
     pub rollup_contract: RollupContract,
+    pub withdrawal_contract: WithdrawalContract,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentMemoEntry {
+    pub transfer_index: u32,
+    pub topic: Bytes32,
+    pub memo: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -75,6 +92,7 @@ pub struct TxRequestMemo {
     pub transfers: Vec<Transfer>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
+    pub payment_memos: Vec<PaymentMemoEntry>,
     pub fee_index: Option<u32>,
 }
 
@@ -176,11 +194,13 @@ where
     }
 
     /// Send a transaction request to the block builder
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_tx_request(
         &self,
         block_builder_url: &str,
         key: KeySet,
         transfers: Vec<Transfer>,
+        payment_memos: Vec<PaymentMemoEntry>,
         fee_beneficiary: Option<U256>,
         fee: Option<Fee>,
         collateral_fee: Option<Fee>,
@@ -209,6 +229,13 @@ where
             return Err(ClientError::BlockBuilderFeeError(
                 "fee_beneficiary is required".to_string(),
             ));
+        }
+        for e in &payment_memos {
+            if e.transfer_index as usize >= transfers.len() {
+                return Err(ClientError::PaymentMemoError(
+                    "memo.transfer_index is out of range".to_string(),
+                ));
+            }
         }
 
         // fetch if this is first time tx
@@ -359,6 +386,7 @@ where
             spent_witness,
             sender_proof_set_ephemeral_key,
             fee_index,
+            payment_memos,
         };
         Ok(memo)
     }
@@ -369,11 +397,28 @@ where
         key: KeySet,
         is_registration_block: bool,
         tx: Tx,
-    ) -> Result<Option<BlockProposal>, ClientError> {
-        let proposal = self
-            .block_builder
-            .query_proposal(block_builder_url, is_registration_block, key.pubkey, tx)
-            .await?;
+    ) -> Result<BlockProposal, ClientError> {
+        let mut tries = 0;
+        let proposal = loop {
+            let proposal = self
+                .block_builder
+                .query_proposal(block_builder_url, is_registration_block, key.pubkey, tx)
+                .await?;
+            if let Some(proposal) = proposal {
+                break proposal;
+            }
+            if tries > self.config.block_builder_query_limit {
+                return Err(ClientError::FailedToGetProposal(
+                    "block builder query limit exceeded".to_string(),
+                ));
+            }
+            tries += 1;
+            log::info!(
+                "Failed to get proposal, retrying in {} seconds",
+                self.config.block_builder_query_interval
+            );
+            sleep_for(self.config.block_builder_query_interval).await;
+        };
         Ok(proposal)
     }
 
@@ -468,7 +513,7 @@ where
             )
             .await?;
 
-        let transfer_uuids = uuids
+        let transfer_uuids: Vec<String> = uuids
             .iter()
             .zip(entries.iter())
             .filter_map(|(uuid, entry)| {
@@ -490,6 +535,34 @@ where
                 }
             })
             .collect();
+
+        // Save payment memo after posting signature because it's not critical data,
+        // and we should reduce the time before posting the signature.
+        for memo_entry in memo.payment_memos.iter() {
+            let (position, transfer_data) = transfer_data_vec
+                .iter()
+                .enumerate()
+                .find(|(_position, transfer_data)| {
+                    transfer_data.transfer_index == memo_entry.transfer_index
+                })
+                .ok_or(ClientError::UnexpectedError(
+                    "transfer_data not found".to_string(),
+                ))?;
+            let transfer_uuid = transfer_uuids[position].clone();
+            let payment_memo = PaymentMemo {
+                meta: MetaData {
+                    // todo: use response from store-vault-server
+                    timestamp: chrono::Utc::now().timestamp() as u64,
+                    uuid: transfer_uuid.clone(),
+                },
+                transfer_data: transfer_data.clone(),
+                memo: memo_entry.memo.clone(),
+            };
+            // todo: batch save
+            self.store_vault_server
+                .save_misc(key, memo_entry.topic, &payment_memo.encrypt(key.pubkey))
+                .await?;
+        }
 
         let result = TxResult {
             tx_tree_root: proposal.tx_tree_root,
@@ -561,7 +634,7 @@ where
         fetch_tx_history(self, key).await
     }
 
-    pub async fn quote_fee(
+    pub async fn quote_transfer_fee(
         &self,
         block_builder_url: &str,
         pubkey: U256,
@@ -570,7 +643,8 @@ where
         let account_info = self.validity_prover.get_account_info(pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
-        let (fee, collateral_fee) = quote_fee(is_registration_block, fee_token_index, &fee_info)?;
+        let (fee, collateral_fee) =
+            quote_transfer_fee(is_registration_block, fee_token_index, &fee_info)?;
         if fee_info.beneficiary.is_none() && fee.is_some() {
             return Err(ClientError::BlockBuilderFeeError(
                 "beneficiary is required".to_string(),
@@ -586,6 +660,51 @@ where
             fee,
             collateral_fee,
         })
+    }
+
+    pub async fn quote_withdrawal_fee(
+        &self,
+        withdrawal_token_index: u32,
+        fee_token_index: u32,
+    ) -> Result<FeeQuote, ClientError> {
+        let (beneficiary, fee) = quote_withdrawal_fee(
+            &self.withdrawal_server,
+            &self.withdrawal_contract,
+            withdrawal_token_index,
+            fee_token_index,
+        )
+        .await?;
+        Ok(FeeQuote {
+            beneficiary,
+            fee,
+            collateral_fee: None,
+        })
+    }
+
+    pub async fn quote_claim_fee(&self, fee_token_index: u32) -> Result<FeeQuote, ClientError> {
+        let (beneficiary, fee) = quote_claim_fee(&self.withdrawal_server, fee_token_index).await?;
+        Ok(FeeQuote {
+            beneficiary,
+            fee,
+            collateral_fee: None,
+        })
+    }
+
+    pub async fn generate_withdrawal_transfers(
+        &self,
+        withdrawal_transfer: &Transfer,
+        fee_token_index: u32,
+        with_claim_fee: bool,
+    ) -> Result<WithdrawalTransfers, ClientError> {
+        let withdrawal_transfers = generate_withdrawal_transfers(
+            &self.withdrawal_server,
+            &self.withdrawal_contract,
+            withdrawal_transfer,
+            fee_token_index,
+            with_claim_fee,
+        )
+        .await?;
+        Ok(withdrawal_transfers)
     }
 }
 

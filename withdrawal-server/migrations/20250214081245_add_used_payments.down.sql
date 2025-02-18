@@ -1,0 +1,1 @@
+DROP IF EXISTS TABLE used_payments;
