@@ -1,8 +1,18 @@
 use intmax2_zkp::ethereum_types::u256::U256;
+use plonky2::{
+    field::goldilocks_field::GoldilocksField,
+    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
+};
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
 use crate::data::encryption::RsaEncryption;
+
+type F = GoldilocksField;
+type C = PoseidonGoldilocksConfig;
+const D: usize = 2;
+
+// -------------- inter types ----------------
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +36,15 @@ pub struct ProveRequestWithType {
 }
 
 impl RsaEncryption for ProveRequestWithType {}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProofResultWithError {
+    pub proof: Option<ProofWithPublicInputs<F, C, D>>,
+    pub error: Option<String>,
+}
+
+// ----------------- api types -------------------
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,7 +74,7 @@ pub struct ProofResultQuery {
 pub struct ProofResultResponse {
     pub status: String,
     #[serde_as(as = "Option<Base64>")]
-    pub result: Option<Vec<u8>>,
+    pub result: Option<Vec<u8>>, // contains encrypted `ProofResultWithError`
     #[serde_as(as = "Option<Base64>")]
     pub error: Option<Vec<u8>>,
 }
