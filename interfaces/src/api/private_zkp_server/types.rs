@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
-use crate::data::encryption::rsa::RsaEncryptedMessage;
+use crate::data::encryption::{rsa::RsaEncryptedMessage, RsaEncryption};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +21,8 @@ pub struct ProveRequestWithType {
     pub prove_type: ProveType,
     pub request: Vec<u8>,
 }
+
+impl RsaEncryption for ProveRequestWithType {}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
