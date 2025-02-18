@@ -70,7 +70,7 @@ mod test {
 
     #[test]
     fn test_rsa_encrypt_decrypt() {
-        let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
+        let private_key = RsaPrivateKey::new(&mut OsRng, 3072).unwrap();
         let public_key = private_key.to_public_key();
 
         let data = b"hello world";

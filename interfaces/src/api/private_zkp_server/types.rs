@@ -5,6 +5,25 @@ use crate::data::encryption::rsa::RsaEncryptedMessage;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum ProveType {
+    Spent,
+    Send,
+    Update,
+    ReceiveTransfer,
+    ReceiveDeposit,
+    SingleWithdrawal,
+    SingleClaim,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProveRequestWithType {
+    pub prove_type: ProveType,
+    pub request: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProveRequest {
     pub data: RsaEncryptedMessage,
 }
@@ -13,6 +32,8 @@ pub struct ProveRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProveResponse {
-    #[serde_as(as = "Base64")]
-    pub data: Vec<u8>,
+    #[serde_as(as = "Option<Base64>")]
+    pub data: Option<Vec<u8>>,
+    #[serde_as(as = "Option<Base64>")]
+    pub error: Option<Vec<u8>>,
 }
