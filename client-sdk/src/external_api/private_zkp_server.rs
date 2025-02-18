@@ -297,7 +297,7 @@ impl PrivateZKPServerClient {
         let mut retries = 0;
         loop {
             let response = self.get_request(&request_id).await?;
-            log::info!("get_request response: {:?}", response);
+            log::info!("private_zkp_server status: {:?}", response.status);
             if response.status == "success" {
                 if response.result.is_none() {
                     return Err(ServerError::InvalidResponse(format!(
