@@ -1,14 +1,24 @@
+use std::sync::{Arc, RwLock};
+
 use async_trait::async_trait;
-use intmax2_interfaces::api::{
-    balance_prover::{
-        interface::BalanceProverClientInterface,
-        types::{
-            ProveReceiveDepositRequest, ProveReceiveTransferRequest, ProveResponse,
-            ProveSendRequest, ProveSingleClaimRequest, ProveSingleWithdrawalRequest,
-            ProveSpentRequest, ProveUpdateRequest,
+use base64::{prelude::BASE64_STANDARD, Engine};
+use intmax2_interfaces::{
+    api::{
+        balance_prover::{
+            interface::BalanceProverClientInterface,
+            types::{
+                ProveReceiveDepositRequest, ProveReceiveTransferRequest, ProveSendRequest,
+                ProveSingleClaimRequest, ProveSingleWithdrawalRequest, ProveSpentRequest,
+                ProveUpdateRequest,
+            },
+        },
+        error::ServerError,
+        private_zkp_server::types::{
+            CreateProofResponse, CreateProveRequest, GetPublicKeyResponse, ProofResultQuery,
+            ProofResultResponse, ProofResultWithError, ProveRequestWithType, ProveType,
         },
     },
-    error::ServerError,
+    data::encryption::{BlsEncryption, RsaEncryption},
 };
 use intmax2_zkp::{
     common::{
@@ -26,48 +36,82 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
+use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
 
-use super::utils::query::post_request;
+use super::utils::query::{get_request, post_request};
+
+const MAX_RETRIES: usize = 10;
+const RETRY_INTERVAL: usize = 5; // seconds
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 #[derive(Debug, Clone)]
-pub struct BalanceProverClient {
+pub struct PrivateZKPServerClient {
     base_url: String,
+
+    // rsa public key is used to encrypt the prove request
+    // because async OnceLock is not stable, we use RwLock + Option instead
+    pubkey: Arc<RwLock<Option<RsaPublicKey>>>,
 }
 
-impl BalanceProverClient {
+impl PrivateZKPServerClient {
     pub fn new(base_url: &str) -> Self {
-        BalanceProverClient {
+        PrivateZKPServerClient {
             base_url: base_url.to_string(),
+            pubkey: Arc::new(RwLock::new(None)),
         }
+    }
+
+    pub async fn get_pubkey(&self) -> Result<RsaPublicKey, ServerError> {
+        let is_pubkey_set = self.pubkey.read().unwrap().is_some();
+        if !is_pubkey_set {
+            let new_public_key = self.fetch_pubkey().await?;
+            *self.pubkey.write().unwrap() = Some(new_public_key);
+        }
+        Ok(self.pubkey.read().unwrap().as_ref().unwrap().clone())
+    }
+
+    async fn fetch_pubkey(&self) -> Result<RsaPublicKey, ServerError> {
+        let response: GetPublicKeyResponse =
+            get_request::<(), _>(&self.base_url, "/v1/public-key", None).await?;
+        let public_key_bytes = BASE64_STANDARD.decode(&response.public_key).map_err(|e| {
+            ServerError::DeserializationError(format!("Failed to decode public key: {:?}", e))
+        })?;
+        let public_key = RsaPublicKey::from_public_key_der(&public_key_bytes).map_err(|e| {
+            ServerError::DeserializationError(format!("Failed to parse public key: {:?}", e))
+        })?;
+        Ok(public_key)
     }
 }
 
 #[async_trait(?Send)]
-impl BalanceProverClientInterface for BalanceProverClient {
+impl BalanceProverClientInterface for PrivateZKPServerClient {
     async fn prove_spent(
         &self,
-        _key: KeySet,
+        key: KeySet,
         spent_witness: &SpentWitness,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let request = ProveSpentRequest {
             spent_witness: spent_witness.clone(),
         };
-        let response: ProveResponse = post_request(
-            &self.base_url,
-            "/balance-prover/prove-spent",
-            Some(&request),
-        )
-        .await?;
-        Ok(response.proof)
+        let result = self
+            .request_and_get_proof(
+                key,
+                &ProveRequestWithType {
+                    prove_type: ProveType::Spent,
+                    pubkey: key.pubkey,
+                    request: bincode::serialize(&request).unwrap(),
+                },
+            )
+            .await?;
+        self.handle_proof_result(result)
     }
 
     async fn prove_send(
         &self,
-        _key: KeySet,
+        key: KeySet,
         pubkey: U256,
         tx_witness: &TxWitness,
         update_witness: &UpdateWitness<F, C, D>,
@@ -81,14 +125,22 @@ impl BalanceProverClientInterface for BalanceProverClient {
             spent_proof: spent_proof.clone(),
             prev_proof: prev_proof.clone(),
         };
-        let response: ProveResponse =
-            post_request(&self.base_url, "/balance-prover/prove-send", Some(&request)).await?;
-        Ok(response.proof)
+        let result = self
+            .request_and_get_proof(
+                key,
+                &ProveRequestWithType {
+                    prove_type: ProveType::Send,
+                    pubkey: key.pubkey,
+                    request: bincode::serialize(&request).unwrap(),
+                },
+            )
+            .await?;
+        self.handle_proof_result(result)
     }
 
     async fn prove_update(
         &self,
-        _key: KeySet,
+        key: KeySet,
         pubkey: U256,
         update_witness: &UpdateWitness<F, C, D>,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -98,18 +150,22 @@ impl BalanceProverClientInterface for BalanceProverClient {
             update_witness: update_witness.clone(),
             prev_proof: prev_proof.clone(),
         };
-        let response: ProveResponse = post_request(
-            &self.base_url,
-            "/balance-prover/prove-update",
-            Some(&request),
-        )
-        .await?;
-        Ok(response.proof)
+        let result = self
+            .request_and_get_proof(
+                key,
+                &ProveRequestWithType {
+                    prove_type: ProveType::Update,
+                    pubkey: key.pubkey,
+                    request: bincode::serialize(&request).unwrap(),
+                },
+            )
+            .await?;
+        self.handle_proof_result(result)
     }
 
     async fn prove_receive_transfer(
         &self,
-        _key: KeySet,
+        key: KeySet,
         pubkey: U256,
         receive_transfer_witness: &ReceiveTransferWitness<F, C, D>,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -119,18 +175,22 @@ impl BalanceProverClientInterface for BalanceProverClient {
             receive_transfer_witness: receive_transfer_witness.clone(),
             prev_proof: prev_proof.clone(),
         };
-        let response: ProveResponse = post_request(
-            &self.base_url,
-            "/balance-prover/prove-receive-transfer",
-            Some(&request),
-        )
-        .await?;
-        Ok(response.proof)
+        let result = self
+            .request_and_get_proof(
+                key,
+                &ProveRequestWithType {
+                    prove_type: ProveType::ReceiveTransfer,
+                    pubkey: key.pubkey,
+                    request: bincode::serialize(&request).unwrap(),
+                },
+            )
+            .await?;
+        self.handle_proof_result(result)
     }
 
     async fn prove_receive_deposit(
         &self,
-        _key: KeySet,
+        key: KeySet,
         pubkey: U256,
         receive_deposit_witness: &ReceiveDepositWitness,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -140,30 +200,38 @@ impl BalanceProverClientInterface for BalanceProverClient {
             receive_deposit_witness: receive_deposit_witness.clone(),
             prev_proof: prev_proof.clone(),
         };
-        let response: ProveResponse = post_request(
-            &self.base_url,
-            "/balance-prover/prove-receive-deposit",
-            Some(&request),
-        )
-        .await?;
-        Ok(response.proof)
+        let result = self
+            .request_and_get_proof(
+                key,
+                &ProveRequestWithType {
+                    prove_type: ProveType::ReceiveDeposit,
+                    pubkey: key.pubkey,
+                    request: bincode::serialize(&request).unwrap(),
+                },
+            )
+            .await?;
+        self.handle_proof_result(result)
     }
 
     async fn prove_single_withdrawal(
         &self,
-        _key: KeySet,
+        key: KeySet,
         withdrawal_witness: &WithdrawalWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let request = ProveSingleWithdrawalRequest {
             withdrawal_witness: withdrawal_witness.clone(),
         };
-        let response: ProveResponse = post_request(
-            &self.base_url,
-            "/balance-prover/prove-single-withdrawal",
-            Some(&request),
-        )
-        .await?;
-        Ok(response.proof)
+        let result = self
+            .request_and_get_proof(
+                key,
+                &ProveRequestWithType {
+                    prove_type: ProveType::SingleWithdrawal,
+                    pubkey: key.pubkey,
+                    request: bincode::serialize(&request).unwrap(),
+                },
+            )
+            .await?;
+        self.handle_proof_result(result)
     }
 
     async fn prove_single_claim(
@@ -174,12 +242,131 @@ impl BalanceProverClientInterface for BalanceProverClient {
         let request = ProveSingleClaimRequest {
             claim_witness: claim_witness.clone(),
         };
-        let response: ProveResponse = post_request(
-            &self.base_url,
-            "/balance-prover/prove-single-claim",
-            Some(&request),
-        )
-        .await?;
-        Ok(response.proof)
+        let result = self
+            .request_and_get_proof(
+                _key,
+                &ProveRequestWithType {
+                    prove_type: ProveType::SingleClaim,
+                    pubkey: _key.pubkey,
+                    request: bincode::serialize(&request).unwrap(),
+                },
+            )
+            .await?;
+        self.handle_proof_result(result)
+    }
+}
+
+impl PrivateZKPServerClient {
+    pub(crate) async fn send_prove_request(
+        &self,
+        request: &ProveRequestWithType,
+    ) -> Result<String, ServerError> {
+        let rsa_pubkey = self.get_pubkey().await?;
+        let encrypted_request = request.encrypt_with_rsa(&rsa_pubkey);
+        let encrypted_data = bincode::serialize(&encrypted_request).map_err(|e| {
+            ServerError::SerializeError(format!("Failed to serialize encrypted request: {:?}", e))
+        })?;
+        let request = CreateProveRequest {
+            encrypted_data,
+            public_key: "0x".to_string(),
+            transition_type: "none".to_string(),
+        };
+        let response: CreateProofResponse =
+            post_request(&self.base_url, "/v1/proof/create", Some(&request)).await?;
+        Ok(response.request_id)
+    }
+
+    pub(crate) async fn get_request(
+        &self,
+        request_id: &str,
+    ) -> Result<ProofResultResponse, ServerError> {
+        let query = ProofResultQuery {
+            request_id: request_id.to_string(),
+        };
+        let response: ProofResultResponse =
+            get_request(&self.base_url, "/v1/proof/result", Some(&query)).await?;
+        Ok(response)
+    }
+
+    pub(crate) async fn request_and_get_proof(
+        &self,
+        key: KeySet,
+        request: &ProveRequestWithType,
+    ) -> Result<ProofResultWithError, ServerError> {
+        let request_id = self.send_prove_request(request).await?;
+        let mut retries = 0;
+        loop {
+            let response = self.get_request(&request_id).await?;
+            log::info!("get_request response: {:?}", response);
+            if response.status == "success" {
+                if response.result.is_none() {
+                    return Err(ServerError::InvalidResponse(format!(
+                        "Proof result is missing: {}",
+                        response.error.unwrap_or_default()
+                    )));
+                }
+
+                let proof_with_result =
+                    ProofResultWithError::decrypt(&response.result.unwrap(), key).map_err(|e| {
+                        ServerError::DeserializationError(format!(
+                            "Failed to decrypt proof result: {:?}",
+                            e
+                        ))
+                    })?;
+
+                return Ok(proof_with_result);
+            }
+            if retries >= MAX_RETRIES {
+                return Err(ServerError::UnknownError(format!(
+                    "Failed to get proof after {} retries",
+                    MAX_RETRIES
+                )));
+            }
+            retries += 1;
+            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL as u64)).await;
+        }
+    }
+
+    pub(crate) fn handle_proof_result(
+        &self,
+        proof_result: ProofResultWithError,
+    ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
+        if let Some(error) = proof_result.error {
+            return Err(ServerError::InvalidResponse(format!(
+                "Proof result contains error: {}",
+                error
+            )));
+        }
+        if proof_result.proof.is_none() {
+            return Err(ServerError::InvalidResponse(
+                "Proof result is missing proof".to_string(),
+            ));
+        }
+        Ok(proof_result.proof.unwrap())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use intmax2_interfaces::api::private_zkp_server::types::{ProveRequestWithType, ProveType};
+    use intmax2_zkp::common::signature::key_set::KeySet;
+
+    #[tokio::test]
+    async fn test_private_zkp_server() {
+        let client = super::PrivateZKPServerClient::new("https://dev.private.zkp.intmax.xyz");
+        let _pubkey = client.get_pubkey().await.unwrap();
+
+        let mut rng = rand::thread_rng();
+        let key = KeySet::rand(&mut rng);
+        let dummy_request = ProveRequestWithType {
+            prove_type: ProveType::Dummy,
+            pubkey: key.pubkey,
+            request: vec![],
+        };
+        let result = client
+            .request_and_get_proof(key, &dummy_request)
+            .await
+            .unwrap();
+        println!("result: {:?}", result);
     }
 }

@@ -61,13 +61,13 @@ pub struct CreateProveRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProofResponse {
-    request_id: String,
+    pub request_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProofResultQuery {
-    request_id: String,
+    pub request_id: String,
 }
 
 #[serde_as]
@@ -77,6 +77,11 @@ pub struct ProofResultResponse {
     pub status: String,
     #[serde_as(as = "Option<Base64>")]
     pub result: Option<Vec<u8>>, // contains encrypted `ProofResultWithError`
-    #[serde_as(as = "Option<Base64>")]
-    pub error: Option<Vec<u8>>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPublicKeyResponse {
+    pub public_key: String,
 }
