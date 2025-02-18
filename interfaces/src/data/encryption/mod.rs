@@ -5,6 +5,7 @@ use serde::{de::DeserializeOwned, Serialize};
 
 pub mod bls;
 pub mod errors;
+pub mod rsa;
 
 pub trait Encryption: Sized + Serialize + DeserializeOwned {
     fn to_bytes(&self) -> Vec<u8> {
