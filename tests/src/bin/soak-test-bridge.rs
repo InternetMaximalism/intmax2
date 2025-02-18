@@ -22,7 +22,8 @@ use intmax2_zkp::{
 use serde::Deserialize;
 use tests::{
     accounts::{derive_withdrawal_intmax_keys, mnemonic_to_account},
-    wait_for_balance_synchronization, withdraw_directly_with_error_handling,
+    address_to_generic_address, mul_u256, wait_for_balance_synchronization,
+    withdraw_directly_with_error_handling,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -335,25 +336,5 @@ impl TestSystem {
         }
 
         Ok(())
-    }
-}
-
-pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts: usize) -> U256 {
-    let amount_big = num_bigint::BigUint::from_bytes_be(&amount.to_bytes_be());
-    let max_transfers_per_transaction_big =
-        num_bigint::BigUint::from(max_transfers_per_transaction);
-    let num_accounts_big = num_bigint::BigUint::from(num_accounts);
-    let amount_big = amount_big * max_transfers_per_transaction_big * num_accounts_big;
-
-    // validation for overflow
-    assert!(amount_big.bits() <= 256);
-
-    U256::from_bytes_be(&amount_big.to_bytes_be())
-}
-
-pub fn address_to_generic_address(address: ethers::types::Address) -> GenericAddress {
-    GenericAddress {
-        is_pubkey: true,
-        data: U256::from_bytes_be(address.as_bytes()),
     }
 }

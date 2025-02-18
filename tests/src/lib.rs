@@ -12,8 +12,8 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::{api::error::ServerError, data::deposit_data::TokenType};
 use intmax2_zkp::{
-    common::{signature::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;
 use std::time::Duration;
@@ -220,6 +220,23 @@ pub async fn withdraw_directly_with_error_handling(
     .await?;
 
     Ok(())
+}
+
+pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts: usize) -> U256 {
+    let amount_big = num_bigint::BigUint::from_bytes_be(&amount.to_bytes_be());
+    let max_transfers_per_transaction_big =
+        num_bigint::BigUint::from(max_transfers_per_transaction);
+    let num_accounts_big = num_bigint::BigUint::from(num_accounts);
+    let amount_big = amount_big * max_transfers_per_transaction_big * num_accounts_big;
+
+    // validation for overflow
+    assert!(amount_big.bits() <= 256);
+
+    U256::from_bytes_be(&amount_big.to_bytes_be())
+}
+
+pub fn address_to_generic_address(eth_address: ethers::types::Address) -> GenericAddress {
+    GenericAddress::from_address(Address::from_bytes_be(eth_address.as_bytes()))
 }
 
 // const NUM_TRANSFER_LOOPS: usize = 2;

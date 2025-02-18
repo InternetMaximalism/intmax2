@@ -18,12 +18,13 @@ use intmax2_client_sdk::{
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::u256::U256,
 };
 use serde::Deserialize;
 use tests::{
     accounts::{derive_intmax_keys, mnemonic_to_account},
-    transfer_with_error_handling, wait_for_balance_synchronization,
+    address_to_generic_address, mul_u256, transfer_with_error_handling,
+    wait_for_balance_synchronization,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -338,25 +339,5 @@ impl TestSystem {
         }
 
         Ok(())
-    }
-}
-
-pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts: usize) -> U256 {
-    let amount_big = num_bigint::BigUint::from_bytes_be(&amount.to_bytes_be());
-    let max_transfers_per_transaction_big =
-        num_bigint::BigUint::from(max_transfers_per_transaction);
-    let num_accounts_big = num_bigint::BigUint::from(num_accounts);
-    let amount_big = amount_big * max_transfers_per_transaction_big * num_accounts_big;
-
-    // validation for overflow
-    assert!(amount_big.bits() <= 256);
-
-    U256::from_bytes_be(&amount_big.to_bytes_be())
-}
-
-pub fn address_to_generic_address(address: ethers::types::Address) -> GenericAddress {
-    GenericAddress {
-        is_pubkey: true,
-        data: U256::from_bytes_be(address.as_bytes()),
     }
 }
