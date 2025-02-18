@@ -6,7 +6,7 @@ use plonky2::{
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
-use crate::data::encryption::RsaEncryption;
+use crate::data::encryption::{BlsEncryption, RsaEncryption};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -43,6 +43,8 @@ pub struct ProofResultWithError {
     pub proof: Option<ProofWithPublicInputs<F, C, D>>,
     pub error: Option<String>,
 }
+
+impl BlsEncryption for ProofResultWithError {}
 
 // ----------------- api types -------------------
 
