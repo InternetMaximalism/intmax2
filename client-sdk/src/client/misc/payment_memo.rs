@@ -1,6 +1,6 @@
 use intmax2_interfaces::{
     api::store_vault_server::interface::StoreVaultClientInterface,
-    data::{encryption::Encryption, meta_data::MetaData, transfer_data::TransferData},
+    data::{encryption::BlsEncryption, meta_data::MetaData, transfer_data::TransferData},
 };
 
 use intmax2_zkp::common::signature::key_set::KeySet;
@@ -18,7 +18,7 @@ pub struct PaymentMemo {
     pub memo: String,
 }
 
-impl Encryption for PaymentMemo {}
+impl BlsEncryption for PaymentMemo {}
 
 pub async fn save_payment_memo<
     S: StoreVaultClientInterface,

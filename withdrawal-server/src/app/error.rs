@@ -2,7 +2,7 @@ use intmax2_client_sdk::{
     client::receive_validation::ReceiveValidationError,
     external_api::contract::error::BlockchainError,
 };
-use intmax2_interfaces::{api::error::ServerError, data::encryption::errors::EncryptionError};
+use intmax2_interfaces::{api::error::ServerError, data::encryption::errors::BlsEncryptionError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WithdrawalServerError {
@@ -13,7 +13,7 @@ pub enum WithdrawalServerError {
     ServerError(#[from] ServerError),
 
     #[error("Encryption error {0}")]
-    EncryptionError(#[from] EncryptionError),
+    EncryptionError(#[from] BlsEncryptionError),
 
     #[error("Receive validation error {0}")]
     ReceiveValidationError(#[from] ReceiveValidationError),

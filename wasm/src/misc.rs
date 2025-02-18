@@ -10,7 +10,7 @@ use crate::{
 };
 use intmax2_interfaces::{
     api::store_vault_server::interface::StoreVaultClientInterface as _,
-    data::{encryption::Encryption as _, generic_misc_data::GenericMiscData},
+    data::{encryption::BlsEncryption as _, generic_misc_data::GenericMiscData},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

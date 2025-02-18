@@ -3449,6 +3449,7 @@ name = "intmax2-interfaces"
 version = "0.1.10"
 dependencies = [
  "aes",
+ "aes-gcm",
  "alloy-primitives",
  "anyhow",
  "ark-bn254",
@@ -3471,6 +3472,7 @@ dependencies = [
  "plonky2_keccak",
  "plonky2_u32",
  "rand",
+ "rsa",
  "serde",
  "serde_bytes",
  "serde_json",

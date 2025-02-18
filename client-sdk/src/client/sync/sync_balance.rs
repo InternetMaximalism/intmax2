@@ -7,9 +7,9 @@ use intmax2_interfaces::{
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
     data::{
-        deposit_data::DepositData, encryption::Encryption as _, meta_data::MetaDataWithBlockNumber,
-        proof_compression::CompressedBalanceProof, transfer_data::TransferData, tx_data::TxData,
-        user_data::UserData,
+        deposit_data::DepositData, encryption::BlsEncryption as _,
+        meta_data::MetaDataWithBlockNumber, proof_compression::CompressedBalanceProof,
+        transfer_data::TransferData, tx_data::TxData, user_data::UserData,
     },
     utils::digest::get_digest,
 };

@@ -470,7 +470,7 @@ impl StoreVaultServer {
 mod tests {
     use ethers::core::rand;
     use intmax2_interfaces::{
-        data::{encryption::Encryption as _, meta_data::MetaData, user_data::UserData},
+        data::{encryption::BlsEncryption as _, meta_data::MetaData, user_data::UserData},
         utils::digest::get_digest,
     };
     use intmax2_zkp::common::signature::key_set::KeySet;

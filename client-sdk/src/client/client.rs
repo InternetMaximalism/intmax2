@@ -10,7 +10,7 @@ use intmax2_interfaces::{
     },
     data::{
         deposit_data::{DepositData, TokenType},
-        encryption::Encryption as _,
+        encryption::BlsEncryption as _,
         meta_data::MetaData,
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,

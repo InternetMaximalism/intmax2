@@ -5,7 +5,7 @@ use intmax2_interfaces::{
         store_vault_server::interface::StoreVaultClientInterface,
     },
     data::{
-        encryption::Encryption, proof_compression::CompressedSpentProof,
+        encryption::BlsEncryption, proof_compression::CompressedSpentProof,
         sender_proof_set::SenderProofSet, transfer_data::TransferData, user_data::UserData,
     },
 };

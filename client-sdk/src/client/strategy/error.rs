@@ -1,6 +1,6 @@
 use intmax2_interfaces::{
     api::error::ServerError,
-    data::{encryption::errors::EncryptionError, proof_compression::ProofCompressionError},
+    data::{encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError},
 };
 use thiserror::Error;
 
@@ -12,7 +12,7 @@ pub enum StrategyError {
     ServerError(#[from] ServerError),
 
     #[error("Encryption error: {0}")]
-    EncryptionError(#[from] EncryptionError),
+    EncryptionError(#[from] BlsEncryptionError),
 
     #[error("Proof compression error: {0}")]
     ProofCompressionError(#[from] ProofCompressionError),

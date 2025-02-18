@@ -5,7 +5,7 @@ use crate::{
 use intmax2_interfaces::{
     api::store_vault_server::interface::{DataType, StoreVaultClientInterface},
     data::{
-        encryption::{errors::EncryptionError, Encryption},
+        encryption::{errors::BlsEncryptionError, BlsEncryption},
         transfer_data::TransferData,
     },
 };
@@ -439,7 +439,7 @@ impl WithdrawalServer {
                 let transfer_data = TransferData::decrypt(&data.data, key)?;
                 Ok((data.meta.clone(), transfer_data))
             })
-            .collect::<Result<Vec<_>, EncryptionError>>()?;
+            .collect::<Result<Vec<_>, BlsEncryptionError>>()?;
 
         let mut collected_fee = U256::zero();
         let mut transfers = Vec::new();

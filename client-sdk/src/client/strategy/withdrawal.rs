@@ -5,7 +5,7 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
-        encryption::Encryption,
+        encryption::BlsEncryption,
         meta_data::{MetaData, MetaDataWithBlockNumber},
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,

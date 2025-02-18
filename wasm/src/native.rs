@@ -16,7 +16,7 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface as _,
     },
     data::{
-        deposit_data::DepositData, encryption::Encryption as _, meta_data::MetaData,
+        deposit_data::DepositData, encryption::BlsEncryption as _, meta_data::MetaData,
         transfer_data::TransferData, tx_data::TxData,
     },
     utils::signature::Auth,

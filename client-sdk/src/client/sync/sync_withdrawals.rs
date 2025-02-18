@@ -7,7 +7,7 @@ use intmax2_interfaces::{
         withdrawal_server::interface::{WithdrawalFeeInfo, WithdrawalServerClientInterface},
     },
     data::{
-        encryption::Encryption as _, meta_data::MetaDataWithBlockNumber,
+        encryption::BlsEncryption as _, meta_data::MetaDataWithBlockNumber,
         transfer_data::TransferData,
     },
 };

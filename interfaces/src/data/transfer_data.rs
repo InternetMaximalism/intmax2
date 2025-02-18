@@ -10,7 +10,7 @@ use intmax2_zkp::{
     utils::poseidon_hash_out::PoseidonHashOut,
 };
 
-use super::{encryption::Encryption, sender_proof_set::SenderProofSet, validation::Validation};
+use super::{encryption::BlsEncryption, sender_proof_set::SenderProofSet, validation::Validation};
 
 /// Backup data for receiving transfers
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -37,7 +37,7 @@ impl TransferData {
     }
 }
 
-impl Encryption for TransferData {}
+impl BlsEncryption for TransferData {}
 
 impl Validation for TransferData {
     fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {

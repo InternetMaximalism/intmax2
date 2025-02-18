@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::error::ServerError,
     data::{
-        encryption::errors::EncryptionError, error::DataError,
+        encryption::errors::BlsEncryptionError, error::DataError,
         proof_compression::ProofCompressionError,
     },
 };
@@ -30,7 +30,7 @@ pub enum SyncError {
     DataError(#[from] DataError),
 
     #[error("Encryption error: {0}")]
-    EncryptionError(#[from] EncryptionError),
+    EncryptionError(#[from] BlsEncryptionError),
 
     #[error("Receive validation error: {0}")]
     ReceiveValidationError(#[from] ReceiveValidationError),

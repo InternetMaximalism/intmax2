@@ -4,7 +4,7 @@ use intmax2_interfaces::{
         types::DataWithMetaData,
     },
     data::{
-        encryption::Encryption,
+        encryption::BlsEncryption,
         meta_data::MetaData,
         sender_proof_set::SenderProofSet,
         user_data::{ProcessStatus, UserData},
@@ -17,7 +17,7 @@ use num_bigint::BigUint;
 
 use super::error::StrategyError;
 
-pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: Encryption + Validation>(
+pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: BlsEncryption + Validation>(
     store_vault_server: &S,
     key: KeySet,
     data_type: DataType,

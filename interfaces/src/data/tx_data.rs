@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{encryption::Encryption, validation::Validation};
+use super::{encryption::BlsEncryption, validation::Validation};
 use intmax2_zkp::{
     common::{trees::tx_tree::TxMerkleProof, witness::spent_witness::SpentWitness},
     ethereum_types::{bytes32::Bytes32, u256::U256},
@@ -21,7 +21,7 @@ pub struct TxData {
     pub sender_proof_set_ephemeral_key: U256,
 }
 
-impl Encryption for TxData {}
+impl BlsEncryption for TxData {}
 
 impl Validation for TxData {
     fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {

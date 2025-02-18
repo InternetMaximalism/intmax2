@@ -4,7 +4,7 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
-    data::encryption::Encryption,
+    data::encryption::BlsEncryption,
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
