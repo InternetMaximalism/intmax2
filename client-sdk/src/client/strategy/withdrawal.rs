@@ -1,7 +1,10 @@
 use super::{common::fetch_decrypt_validate, error::StrategyError};
 use intmax2_interfaces::{
     api::{
-        store_vault_server::interface::{DataType, StoreVaultClientInterface},
+        store_vault_server::{
+            interface::{DataType, StoreVaultClientInterface},
+            types::{CursorOrder, MetaDataCursor, MetaDataCursorResponse},
+        },
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
@@ -9,7 +12,6 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
-        user_data::ProcessStatus,
     },
 };
 use intmax2_zkp::common::signature::key_set::KeySet;
@@ -20,6 +22,7 @@ pub struct WithdrawalInfo {
     pub settled: Vec<(MetaDataWithBlockNumber, TransferData)>,
     pub pending: Vec<(MetaData, TransferData)>,
     pub timeout: Vec<(MetaData, TransferData)>,
+    pub cursor_response: MetaDataCursorResponse,
 }
 
 pub async fn fetch_withdrawal_info<
@@ -29,18 +32,22 @@ pub async fn fetch_withdrawal_info<
     store_vault_server: &S,
     validity_prover: &V,
     key: KeySet,
-    withdrawal_status: &ProcessStatus,
+    included_uuids: &[String],
+    excluded_uuids: &[String],
+    cursor: &MetaDataCursor,
     tx_timeout: u64,
 ) -> Result<WithdrawalInfo, StrategyError> {
     let mut settled = Vec::new();
     let mut pending = Vec::new();
     let mut timeout = Vec::new();
 
-    let data_with_meta = fetch_decrypt_validate::<_, TransferData>(
+    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<_, TransferData>(
         store_vault_server,
         key,
         DataType::Withdrawal,
-        withdrawal_status,
+        included_uuids,
+        excluded_uuids,
+        cursor,
     )
     .await?;
     for (meta, transfer_data) in data_with_meta {
@@ -76,9 +83,21 @@ pub async fn fetch_withdrawal_info<
             pending.push((meta, transfer_data));
         }
     }
+
+    // sort
+    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.uuid.clone()));
+    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
+    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
+    if cursor.order == CursorOrder::Desc {
+        settled.reverse();
+        pending.reverse();
+        timeout.reverse();
+    }
+
     Ok(WithdrawalInfo {
         settled,
         pending,
         timeout,
+        cursor_response,
     })
 }

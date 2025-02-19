@@ -80,6 +80,7 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
     if balances.is_insufficient() {
         return Err(StrategyError::BalanceInsufficientBeforeSync);
     }
+    
     let tx_info = fetch_tx_info(
         store_vault_server,
         validity_prover,

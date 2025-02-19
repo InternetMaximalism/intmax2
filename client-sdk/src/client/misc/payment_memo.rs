@@ -1,5 +1,8 @@
 use intmax2_interfaces::{
-    api::store_vault_server::interface::StoreVaultClientInterface,
+    api::store_vault_server::{
+        interface::StoreVaultClientInterface,
+        types::{CursorOrder, MetaDataCursor},
+    },
     data::{encryption::BlsEncryption, meta_data::MetaData, transfer_data::TransferData},
 };
 
@@ -36,19 +39,40 @@ pub async fn save_payment_memo<
     Ok(uuid)
 }
 
-pub async fn get_payment_memos<S: StoreVaultClientInterface>(
+pub async fn get_all_payment_memos<S: StoreVaultClientInterface>(
     store_vault_server: &S,
     key: KeySet,
     memo_name: &str,
 ) -> Result<Vec<PaymentMemo>, ClientError> {
     let topic = get_topic(memo_name);
-    let encrypted_memos = store_vault_server
-        .get_misc_sequence(key, topic, &None)
-        .await?;
+
+    let mut encrypted_memos = vec![];
+    let mut cursor = None;
+    loop {
+        let (encrypted_memos_partial, cursor_response) = store_vault_server
+            .get_misc_sequence(
+                key,
+                topic,
+                &MetaDataCursor {
+                    cursor: cursor.clone(),
+                    order: CursorOrder::Asc,
+                    limit: None,
+                },
+            )
+            .await?;
+        encrypted_memos.extend(encrypted_memos_partial);
+        if cursor_response.has_more {
+            cursor = cursor_response.next_cursor;
+        } else {
+            break;
+        }
+    }
+
     let mut memos = Vec::new();
     for encrypted_memo in encrypted_memos {
         let memo = PaymentMemo::decrypt(&encrypted_memo.data, key)?;
         memos.push(memo);
     }
+
     Ok(memos)
 }

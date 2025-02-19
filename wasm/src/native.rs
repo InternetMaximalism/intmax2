@@ -102,7 +102,7 @@ pub async fn fetch_encrypted_data(
     };
     let mut data_array = Vec::new();
     let (deposit_data, _) = sv
-        .get_data_sequence_native(DataType::Deposit, &metadata_cursor, &limit, &order, &auth)
+        .get_data_sequence_with_auth(DataType::Deposit, &metadata_cursor, &limit, &order, &auth)
         .await?;
     data_array.extend(
         deposit_data
@@ -110,7 +110,7 @@ pub async fn fetch_encrypted_data(
             .map(|data| JsEncryptedData::new(DataType::Deposit, data)),
     );
     let (transfer_data, _) = sv
-        .get_data_sequence_native(DataType::Transfer, &metadata_cursor, &limit, &order, &auth)
+        .get_data_sequence_with_auth(DataType::Transfer, &metadata_cursor, &limit, &order, &auth)
         .await?;
     data_array.extend(
         transfer_data
@@ -118,7 +118,7 @@ pub async fn fetch_encrypted_data(
             .map(|data| JsEncryptedData::new(DataType::Transfer, data)),
     );
     let (tx_data, _) = sv
-        .get_data_sequence_native(DataType::Tx, &metadata_cursor, &limit, &order, &auth)
+        .get_data_sequence_with_auth(DataType::Tx, &metadata_cursor, &limit, &order, &auth)
         .await?;
     data_array.extend(
         tx_data

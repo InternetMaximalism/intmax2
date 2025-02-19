@@ -67,7 +67,9 @@ pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverCl
         validity_prover,
         liquidity_contract,
         key,
-        &ProcessStatus::default(),
+        &[],
+        &[],
+        todo!(),
         deposit_timeout,
     )
     .await?;

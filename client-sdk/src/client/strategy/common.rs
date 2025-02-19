@@ -1,18 +1,15 @@
 use intmax2_interfaces::{
     api::store_vault_server::{
         interface::{DataType, StoreVaultClientInterface},
-        types::DataWithMetaData,
+        types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
     },
     data::{
-        encryption::BlsEncryption,
-        meta_data::MetaData,
-        sender_proof_set::SenderProofSet,
-        user_data::{ProcessStatus, UserData},
-        validation::Validation,
+        encryption::BlsEncryption, meta_data::MetaData, sender_proof_set::SenderProofSet,
+        user_data::UserData, validation::Validation,
     },
 };
 use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
-use itertools::Itertools;
+use itertools::Itertools as _;
 use num_bigint::BigUint;
 
 use super::error::StrategyError;
@@ -21,27 +18,29 @@ pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: BlsEncrypti
     store_vault_server: &S,
     key: KeySet,
     data_type: DataType,
-    process_status: &ProcessStatus,
-) -> Result<Vec<(MetaData, T)>, StrategyError> {
+    included_uuids: &[String],
+    excluded_uuids: &[String],
+    cursor: &MetaDataCursor,
+) -> Result<(Vec<(MetaData, T)>, MetaDataCursorResponse), StrategyError> {
     // fetch pending data
-    let encrypted_pending_data_with_meta = store_vault_server
-        .get_data_batch(key, data_type, &process_status.pending_uuids)
+    let encrypted_included_data_with_meta = store_vault_server
+        .get_data_batch(key, data_type, &included_uuids)
         .await?;
 
     // fetch unprocessed data
-    let encrypted_unprocessed_data_with_meta = store_vault_server
-        .get_data_sequence(key, data_type, &process_status.last_processed_meta_data)
+    let (encrypted_unprocessed_data_with_meta, cursor_response) = store_vault_server
+        .get_data_sequence(key, data_type, cursor)
         .await?;
 
     // decrypt
-    let data_with_meta = encrypted_pending_data_with_meta
+    let data_with_meta = encrypted_included_data_with_meta
         .into_iter()
         .chain(encrypted_unprocessed_data_with_meta.into_iter())
         .unique_by(|data_with_meta| data_with_meta.meta.uuid.clone()) // remove duplicates
         .filter_map(|data_with_meta| {
             let DataWithMetaData { meta, data } = data_with_meta;
-            if process_status.processed_uuids.contains(&meta.uuid) {
-                log::warn!("{} {} is already processed", data_type, meta.uuid);
+            if excluded_uuids.contains(&meta.uuid) {
+                log::warn!("{} {} is in excluded", data_type, meta.uuid);
                 return None;
             }
             match T::decrypt(&data, key) {
@@ -59,7 +58,7 @@ pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: BlsEncrypti
             }
         })
         .collect::<Vec<_>>();
-    Ok(data_with_meta)
+    Ok((data_with_meta, cursor_response))
 }
 
 pub async fn fetch_sender_proof_set<S: StoreVaultClientInterface>(
