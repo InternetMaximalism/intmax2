@@ -12,7 +12,6 @@ use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
     data::{JsDepositResult, JsTxResult, JsUserData},
     fee::{JsFee, JsFeeQuote},
-    history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     payment_memo::JsPaymentMemoEntry,
     utils::{parse_address, parse_u256},
     wrapper::JsTxRequestMemo,
@@ -23,6 +22,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 pub mod client;
 pub mod fee_payment;
+pub mod history;
 pub mod js_types;
 pub mod misc;
 pub mod native;
@@ -260,45 +260,6 @@ pub async fn get_claim_info(
     let info = client.get_claim_info(key).await?;
     let js_info = info.into_iter().map(JsClaimInfo::from).collect();
     Ok(js_info)
-}
-
-#[wasm_bindgen]
-pub async fn fetch_deposit_history(
-    config: &Config,
-    private_key: &str,
-) -> Result<Vec<JsDepositEntry>, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let client = get_client(config);
-    let history = client.fetch_deposit_history(key).await?;
-    let js_history = history.into_iter().map(JsDepositEntry::from).collect();
-    Ok(js_history)
-}
-
-#[wasm_bindgen]
-pub async fn fetch_transfer_history(
-    config: &Config,
-    private_key: &str,
-) -> Result<Vec<JsTransferEntry>, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let client = get_client(config);
-    let history = client.fetch_transfer_history(key).await?;
-    let js_history = history.into_iter().map(JsTransferEntry::from).collect();
-    Ok(js_history)
-}
-
-#[wasm_bindgen]
-pub async fn fetch_tx_history(
-    config: &Config,
-    private_key: &str,
-) -> Result<Vec<JsTxEntry>, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let client = get_client(config);
-    let history = client.fetch_tx_history(key).await?;
-    let js_history = history.into_iter().map(JsTxEntry::from).collect();
-    Ok(js_history)
 }
 
 #[wasm_bindgen]

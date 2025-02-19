@@ -9,7 +9,10 @@ use crate::{
     utils::str_privkey_to_keyset,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::interface::StoreVaultClientInterface as _,
+    api::store_vault_server::{
+        interface::StoreVaultClientInterface as _,
+        types::{CursorOrder, MetaDataCursor},
+    },
     data::{encryption::BlsEncryption as _, generic_misc_data::GenericMiscData},
 };
 
@@ -64,10 +67,24 @@ pub async fn get_derive_path_list(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
-    let encrypted_data = client
-        .store_vault_server
-        .get_misc_sequence(key, derive_topic(), &None)
-        .await?;
+
+    let mut encrypted_data = vec![];
+    let mut cursor = MetaDataCursor {
+        cursor: None,
+        order: CursorOrder::Asc,
+        limit: None,
+    };
+    loop {
+        let (encrypted_data_partial, cursor_response) = client
+            .store_vault_server
+            .get_misc_sequence(key, derive_topic(), &cursor)
+            .await?;
+        encrypted_data.extend(encrypted_data_partial);
+        if !cursor_response.has_more {
+            break;
+        }
+        cursor.cursor = cursor_response.next_cursor;
+    }
     let mut derive_list: Vec<JsDerive> = Vec::new();
     for data in encrypted_data {
         let generic_misc_data = GenericMiscData::decrypt(&data.data, key)?;
