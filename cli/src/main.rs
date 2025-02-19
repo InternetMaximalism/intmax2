@@ -160,9 +160,14 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let key = generate_key(private_key);
             balance(key).await?;
         }
-        Commands::History { private_key } => {
+        Commands::History {
+            private_key,
+            order,
+            from,
+        } => {
             let key = generate_key(private_key);
-            history(key).await?;
+            let order = order.unwrap_or_default();
+            history(key, order, from).await?;
         }
         Commands::WithdrawalStatus { private_key } => {
             let key = privkey_to_keyset(private_key);

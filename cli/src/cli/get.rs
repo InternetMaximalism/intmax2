@@ -1,11 +1,14 @@
 use chrono::DateTime;
 use colored::{ColoredString, Colorize as _};
 use intmax2_client_sdk::client::history::EntryStatus;
-use intmax2_interfaces::data::{
-    deposit_data::{DepositData, TokenType},
-    meta_data::MetaData,
-    transfer_data::TransferData,
-    tx_data::TxData,
+use intmax2_interfaces::{
+    api::store_vault_server::types::{CursorOrder, MetaDataCursor},
+    data::{
+        deposit_data::{DepositData, TokenType},
+        meta_data::MetaData,
+        transfer_data::TransferData,
+        tx_data::TxData,
+    },
 };
 use intmax2_zkp::{
     common::{signature::key_set::KeySet, transfer::Transfer, trees::asset_tree::AssetLeaf},
@@ -95,11 +98,24 @@ pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
     Ok(())
 }
 
-pub async fn history(key: KeySet) -> Result<(), CliError> {
+pub async fn history(
+    key: KeySet,
+    order: CursorOrder,
+    from_timestamp: Option<u64>,
+) -> Result<(), CliError> {
+    let cursor = MetaDataCursor {
+        cursor: from_timestamp.map(|timestamp| MetaData {
+            timestamp,
+            uuid: "".to_string(),
+        }),
+        order,
+        limit: None,
+    };
+
     let client = get_client()?;
-    let deposit_history = client.fetch_deposit_history(key).await?;
-    let transfer_history = client.fetch_transfer_history(key).await?;
-    let tx_history = client.fetch_tx_history(key).await?;
+    let (deposit_history, _) = client.fetch_deposit_history(key, &cursor).await?;
+    let (transfer_history, _) = client.fetch_transfer_history(key, &cursor).await?;
+    let (tx_history, _) = client.fetch_tx_history(key, &cursor).await?;
 
     let mut history: Vec<HistoryEum> = Vec::new();
     for entry in deposit_history {

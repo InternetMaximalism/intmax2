@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use ethers::types::{Address as EthAddress, H256};
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_interfaces::{
+    api::store_vault_server::types::CursorOrder, data::deposit_data::TokenType,
+};
 use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 
 #[derive(Parser)]
@@ -84,6 +86,10 @@ pub enum Commands {
     History {
         #[clap(long)]
         private_key: Option<H256>,
+        #[clap(long)]
+        order: Option<CursorOrder>, // asc or desc
+        #[clap(long)]
+        from: Option<u64>,
     },
     WithdrawalStatus {
         #[clap(long)]

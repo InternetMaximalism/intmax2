@@ -250,6 +250,15 @@ impl From<MetaData> for JsMetaData {
     }
 }
 
+impl From<JsMetaData> for MetaData {
+    fn from(js_meta_data: JsMetaData) -> Self {
+        Self {
+            timestamp: js_meta_data.timestamp,
+            uuid: js_meta_data.uuid,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsWithdrawalInfo {
