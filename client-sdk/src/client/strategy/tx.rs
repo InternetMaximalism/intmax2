@@ -10,6 +10,7 @@ use intmax2_interfaces::{
     data::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         tx_data::TxData,
+        user_data::ProcessStatus,
     },
 };
 use intmax2_zkp::common::signature::key_set::KeySet;
@@ -19,7 +20,6 @@ pub struct TxInfo {
     pub settled: Vec<(MetaDataWithBlockNumber, TxData)>,
     pub pending: Vec<(MetaData, TxData)>,
     pub timeout: Vec<(MetaData, TxData)>,
-    pub cursor_response: MetaDataCursorResponse,
 }
 
 pub async fn fetch_tx_info<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
@@ -30,7 +30,7 @@ pub async fn fetch_tx_info<S: StoreVaultClientInterface, V: ValidityProverClient
     excluded_uuids: &[String],
     cursor: &MetaDataCursor,
     tx_timeout: u64,
-) -> Result<TxInfo, StrategyError> {
+) -> Result<(TxInfo, MetaDataCursorResponse), StrategyError> {
     let mut settled = Vec::new();
     let mut pending = Vec::new();
     let mut timeout = Vec::new();
@@ -73,10 +73,70 @@ pub async fn fetch_tx_info<S: StoreVaultClientInterface, V: ValidityProverClient
         timeout.reverse();
     }
 
+    Ok((
+        TxInfo {
+            settled,
+            pending,
+            timeout,
+        },
+        cursor_response,
+    ))
+}
+
+pub async fn fetch_all_unprocessed_tx_info<
+    S: StoreVaultClientInterface,
+    V: ValidityProverClientInterface,
+>(
+    store_vault_server: &S,
+    validity_prover: &V,
+    key: KeySet,
+    process_status: &ProcessStatus,
+    tx_timeout: u64,
+) -> Result<TxInfo, StrategyError> {
+    let mut cursor = MetaDataCursor {
+        cursor: process_status.last_processed_meta_data.clone(),
+        order: CursorOrder::Asc,
+        limit: None,
+    };
+    let mut included_uuids = process_status.processed_uuids.clone(); // cleared after first fetch
+
+    let mut settled = Vec::new();
+    let mut pending = Vec::new();
+    let mut timeout = Vec::new();
+    loop {
+        let (
+            TxInfo {
+                settled: settled_part,
+                pending: pending_part,
+                timeout: timeout_part,
+            },
+            cursor_response,
+        ) = fetch_tx_info(
+            store_vault_server,
+            validity_prover,
+            key,
+            &included_uuids,
+            &process_status.processed_uuids,
+            &cursor,
+            tx_timeout,
+        )
+        .await?;
+        if !included_uuids.is_empty() {
+            included_uuids = Vec::new(); // clear included_uuids after first fetch
+        }
+
+        settled.extend(settled_part);
+        pending.extend(pending_part);
+        timeout.extend(timeout_part);
+        if !cursor_response.has_more {
+            break;
+        }
+        cursor.cursor = cursor_response.next_cursor;
+    }
+
     Ok(TxInfo {
         settled,
         pending,
         timeout,
-        cursor_response,
     })
 }

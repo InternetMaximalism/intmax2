@@ -23,6 +23,7 @@ use crate::{
 
 use super::{
     client::PaymentMemoEntry,
+    misc::payment_memo::get_all_payment_memos,
     receive_validation::ReceiveValidationError,
     sync::{error::SyncError, utils::quote_withdrawal_claim_fee},
 };
@@ -213,30 +214,12 @@ pub async fn get_unused_payments<S: StoreVaultClientInterface>(
     key: KeySet,
     fee_type: FeeType,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
-    let topic = match fee_type {
-        FeeType::Withdrawal => get_topic(WITHDRAWAL_FEE_MEMO),
-        FeeType::Claim => get_topic(CLAIM_FEE_MEMO),
+    let memo_name = match fee_type {
+        FeeType::Withdrawal => WITHDRAWAL_FEE_MEMO,
+        FeeType::Claim => CLAIM_FEE_MEMO,
     };
-    let encrypted_memos = store_vault_server
-        .get_misc_sequence(key, topic, &None)
-        .await?;
-    if encrypted_memos.is_empty() {
-        // early return if no memos
-        return Ok(vec![]);
-    }
-
-    let memos = encrypted_memos
-        .iter()
-        .map(|data| PaymentMemo::decrypt(&data.data, key))
-        .collect::<Result<Vec<PaymentMemo>, _>>()?;
-    let used_topic = get_topic(USED_OR_INVALID_MEMO);
-    let encrypted_used_memos = store_vault_server
-        .get_misc_sequence(key, used_topic, &None)
-        .await?;
-    let used_memos = encrypted_used_memos
-        .iter()
-        .map(|data| PaymentMemo::decrypt(&data.data, key))
-        .collect::<Result<Vec<PaymentMemo>, _>>()?;
+    let memos = get_all_payment_memos(store_vault_server, key, memo_name).await?;
+    let used_memos = get_all_payment_memos(store_vault_server, key, USED_OR_INVALID_MEMO).await?;
     let unused_memos = memos
         .into_iter()
         .filter(|memo| {

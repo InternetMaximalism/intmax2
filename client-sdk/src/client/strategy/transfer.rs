@@ -157,7 +157,7 @@ pub async fn fetch_all_unprocessed_transfer_info<
         ) = fetch_transfer_info(
             store_vault_server,
             validity_prover,
-            key.clone(),
+            key,
             &included_uuids,
             &process_status.processed_uuids,
             &cursor,
@@ -176,7 +176,7 @@ pub async fn fetch_all_unprocessed_transfer_info<
         }
         cursor.cursor = cursor_response.next_cursor;
     }
-    
+
     Ok(TransferInfo {
         settled,
         pending,

@@ -12,6 +12,7 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
+        user_data::ProcessStatus,
     },
 };
 use intmax2_zkp::common::signature::key_set::KeySet;
@@ -22,7 +23,6 @@ pub struct WithdrawalInfo {
     pub settled: Vec<(MetaDataWithBlockNumber, TransferData)>,
     pub pending: Vec<(MetaData, TransferData)>,
     pub timeout: Vec<(MetaData, TransferData)>,
-    pub cursor_response: MetaDataCursorResponse,
 }
 
 pub async fn fetch_withdrawal_info<
@@ -36,7 +36,7 @@ pub async fn fetch_withdrawal_info<
     excluded_uuids: &[String],
     cursor: &MetaDataCursor,
     tx_timeout: u64,
-) -> Result<WithdrawalInfo, StrategyError> {
+) -> Result<(WithdrawalInfo, MetaDataCursorResponse), StrategyError> {
     let mut settled = Vec::new();
     let mut pending = Vec::new();
     let mut timeout = Vec::new();
@@ -94,10 +94,70 @@ pub async fn fetch_withdrawal_info<
         timeout.reverse();
     }
 
+    Ok((
+        WithdrawalInfo {
+            settled,
+            pending,
+            timeout,
+        },
+        cursor_response,
+    ))
+}
+
+pub async fn fetch_all_unprocessed_withdrawal_info<
+    S: StoreVaultClientInterface,
+    V: ValidityProverClientInterface,
+>(
+    store_vault_server: &S,
+    validity_prover: &V,
+    key: KeySet,
+    process_status: &ProcessStatus,
+    tx_timeout: u64,
+) -> Result<WithdrawalInfo, StrategyError> {
+    let mut cursor = MetaDataCursor {
+        cursor: process_status.last_processed_meta_data.clone(),
+        order: CursorOrder::Asc,
+        limit: None,
+    };
+    let mut included_uuids = process_status.processed_uuids.clone(); // cleared after first fetch
+
+    let mut settled = Vec::new();
+    let mut pending = Vec::new();
+    let mut timeout = Vec::new();
+    loop {
+        let (
+            WithdrawalInfo {
+                settled: settled_part,
+                pending: pending_part,
+                timeout: timeout_part,
+            },
+            cursor_response,
+        ) = fetch_withdrawal_info(
+            store_vault_server,
+            validity_prover,
+            key,
+            &included_uuids,
+            &process_status.processed_uuids,
+            &cursor,
+            tx_timeout,
+        )
+        .await?;
+        if !included_uuids.is_empty() {
+            included_uuids = Vec::new(); // clear included_uuids after first fetch
+        }
+
+        settled.extend(settled_part);
+        pending.extend(pending_part);
+        timeout.extend(timeout_part);
+        if !cursor_response.has_more {
+            break;
+        }
+        cursor.cursor = cursor_response.next_cursor;
+    }
+
     Ok(WithdrawalInfo {
         settled,
         pending,
         timeout,
-        cursor_response,
     })
 }

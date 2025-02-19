@@ -9,7 +9,7 @@ use intmax2_interfaces::{
 use intmax2_zkp::common::signature::key_set::KeySet;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::client::error::ClientError;
+use crate::client::{error::ClientError, sync::error::SyncError};
 
 use super::get_topic;
 
@@ -43,7 +43,7 @@ pub async fn get_all_payment_memos<S: StoreVaultClientInterface>(
     store_vault_server: &S,
     key: KeySet,
     memo_name: &str,
-) -> Result<Vec<PaymentMemo>, ClientError> {
+) -> Result<Vec<PaymentMemo>, SyncError> {
     let topic = get_topic(memo_name);
 
     let mut encrypted_memos = vec![];
