@@ -2,7 +2,10 @@ use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
         block_builder::interface::BlockBuilderClientInterface,
-        store_vault_server::interface::StoreVaultClientInterface,
+        store_vault_server::{
+            interface::StoreVaultClientInterface,
+            types::{MetaDataCursor, MetaDataCursorResponse},
+        },
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
@@ -11,7 +14,6 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         transfer_data::TransferData,
         tx_data::TxData,
-        user_data::ProcessStatus,
     },
 };
 use intmax2_zkp::common::signature::key_set::KeySet;
@@ -59,16 +61,19 @@ pub async fn fetch_deposit_history<
 >(
     client: &Client<BB, S, V, B, W>,
     key: KeySet,
-) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
+    cursor: &MetaDataCursor,
+) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
     let user_data = client.get_user_data(key).await?;
 
     let mut history = Vec::new();
-    let all_deposit_info = fetch_deposit_info(
+    let (all_deposit_info, cursor_response) = fetch_deposit_info(
         &client.store_vault_server,
         &client.validity_prover,
         &client.liquidity_contract,
         key,
-        &ProcessStatus::default(),
+        &[],
+        &[],
+        cursor,
         client.config.deposit_timeout,
     )
     .await?;
@@ -102,7 +107,7 @@ pub async fn fetch_deposit_history<
         (meta.timestamp, meta.uuid.clone())
     });
 
-    Ok(history)
+    Ok((history, cursor_response))
 }
 
 pub async fn fetch_transfer_history<
@@ -114,15 +119,18 @@ pub async fn fetch_transfer_history<
 >(
     client: &Client<BB, S, V, B, W>,
     key: KeySet,
-) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
+    cursor: &MetaDataCursor,
+) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
     let user_data = client.get_user_data(key).await?;
 
     let mut history = Vec::new();
-    let all_transfers_info = fetch_transfer_info(
+    let (all_transfers_info, cursor_response) = fetch_transfer_info(
         &client.store_vault_server,
         &client.validity_prover,
         key,
-        &ProcessStatus::default(),
+        &[],
+        &[],
+        cursor,
         client.config.tx_timeout,
     )
     .await?;
@@ -156,7 +164,7 @@ pub async fn fetch_transfer_history<
         (meta.timestamp, meta.uuid.clone())
     });
 
-    Ok(history)
+    Ok((history, cursor_response))
 }
 
 pub async fn fetch_tx_history<
@@ -168,15 +176,18 @@ pub async fn fetch_tx_history<
 >(
     client: &Client<BB, S, V, B, W>,
     key: KeySet,
-) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
+    cursor: &MetaDataCursor,
+) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
     let user_data = client.get_user_data(key).await?;
 
     let mut history = Vec::new();
-    let all_tx_info = fetch_tx_info(
+    let (all_tx_info, cursor_response) = fetch_tx_info(
         &client.store_vault_server,
         &client.validity_prover,
         key,
-        &ProcessStatus::default(),
+        &[],
+        &[],
+        cursor,
         client.config.tx_timeout,
     )
     .await?;
@@ -207,5 +218,5 @@ pub async fn fetch_tx_history<
         (meta.timestamp, meta.uuid.clone())
     });
 
-    Ok(history)
+    Ok((history, cursor_response))
 }

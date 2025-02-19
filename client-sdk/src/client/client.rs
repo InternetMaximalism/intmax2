@@ -2,7 +2,10 @@ use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
         block_builder::interface::{BlockBuilderClientInterface, Fee},
-        store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+        store_vault_server::{
+            interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+            types::{MetaDataCursor, MetaDataCursorResponse},
+        },
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::{
             ClaimInfo, WithdrawalInfo, WithdrawalServerClientInterface,
@@ -616,22 +619,25 @@ where
     pub async fn fetch_deposit_history(
         &self,
         key: KeySet,
-    ) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
-        fetch_deposit_history(self, key).await
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
+        fetch_deposit_history(self, key, cursor).await
     }
 
     pub async fn fetch_transfer_history(
         &self,
         key: KeySet,
-    ) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
-        fetch_transfer_history(self, key).await
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
+        fetch_transfer_history(self, key, cursor).await
     }
 
     pub async fn fetch_tx_history(
         &self,
         key: KeySet,
-    ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
-        fetch_tx_history(self, key).await
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
+        fetch_tx_history(self, key, cursor).await
     }
 
     pub async fn quote_transfer_fee(
