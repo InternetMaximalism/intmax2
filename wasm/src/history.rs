@@ -12,19 +12,19 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsDepositHistory {
-    pub deposit_history: Vec<JsDepositEntry>,
+    pub history: Vec<JsDepositEntry>,
     pub cursor_response: JsMetaDataCursorResponse,
 }
 
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTransferHistory {
-    pub transfer_history: Vec<JsTransferEntry>,
+    pub history: Vec<JsTransferEntry>,
     pub cursor_response: JsMetaDataCursorResponse,
 }
 
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTxHistory {
-    pub tx_history: Vec<JsTxEntry>,
+    pub history: Vec<JsTxEntry>,
     pub cursor_response: JsMetaDataCursorResponse,
 }
 
@@ -43,7 +43,7 @@ pub async fn fetch_deposit_history(
     let js_history = history.into_iter().map(JsDepositEntry::from).collect();
     let js_cursor_response = JsMetaDataCursorResponse::from(cursor_response);
     Ok(JsDepositHistory {
-        deposit_history: js_history,
+        history: js_history,
         cursor_response: js_cursor_response,
     })
 }
@@ -63,7 +63,7 @@ pub async fn fetch_transfer_history(
     let js_history = history.into_iter().map(JsTransferEntry::from).collect();
     let js_cursor_response = JsMetaDataCursorResponse::from(cursor_response);
     Ok(JsTransferHistory {
-        transfer_history: js_history,
+        history: js_history,
         cursor_response: js_cursor_response,
     })
 }
@@ -83,7 +83,7 @@ pub async fn fetch_tx_history(
     let js_history = history.into_iter().map(JsTxEntry::from).collect();
     let js_cursor_response = JsMetaDataCursorResponse::from(cursor_response);
     Ok(JsTxHistory {
-        tx_history: js_history,
+        history: js_history,
         cursor_response: js_cursor_response,
     })
 }

@@ -1,4 +1,4 @@
-import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_user_data, get_withdrawal_info, JsGenericAddress, JsPaymentMemoEntry, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
+import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_user_data, get_withdrawal_info, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
 import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
 import { ethers } from 'ethers';
@@ -82,19 +82,21 @@ async function main() {
   await syncBalanceProof(config, privateKey);
   console.log("balance proof synced");
 
-  const deposit_history = await fetch_deposit_history(config, privateKey,);
-  for (let i = 0; i < deposit_history.length; i++) {
-    const entry = deposit_history[i];
+
+  const cursor = new JsMetaDataCursor(null, "asc", null);
+  const deposit_history = await fetch_deposit_history(config, privateKey, cursor);
+  for (let i = 0; i < deposit_history.history.length; i++) {
+    const entry = deposit_history.history[i];
     console.log(`Deposit: depositor ${entry.data.depositor} of ${entry.data.amount} (#${entry.data.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
   }
-  const transfer_history = await fetch_transfer_history(config, privateKey);
-  for (let i = 0; i < transfer_history.length; i++) {
-    const entry = transfer_history[i];
+  const transfer_history = await fetch_transfer_history(config, privateKey, cursor);
+  for (let i = 0; i < transfer_history.history.length; i++) {
+    const entry = transfer_history.history[i];
     console.log(`Receive: sender ${entry.data.sender} of ${entry.data.transfer.amount} (#${entry.data.transfer.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
   }
-  const tx_history = await fetch_tx_history(config, privateKey);
-  for (let i = 0; i < tx_history.length; i++) {
-    const entry = tx_history[i];
+  const tx_history = await fetch_tx_history(config, privateKey, cursor);
+  for (let i = 0; i < tx_history.history.length; i++) {
+    const entry = tx_history.history[i];
     console.log(`Send: transfers ${entry.data.transfers.length} at ${entry.meta.timestamp} ${entry.status.status}`);
   }
   // print withdrawal status 
