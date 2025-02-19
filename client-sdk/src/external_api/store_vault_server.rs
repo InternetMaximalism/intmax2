@@ -143,7 +143,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         &self,
         key: KeySet,
         data_type: DataType,
-        metadata_cursor: &Option<MetaData>,
+        cursor: &MetaDataCursor,
     ) -> Result<Vec<DataWithMetaData>, ServerError> {
         let mut data_array = vec![];
 
