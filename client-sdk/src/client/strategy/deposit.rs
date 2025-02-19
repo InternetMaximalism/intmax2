@@ -25,6 +25,7 @@ pub struct DepositInfo {
     pub timeout: Vec<(MetaData, DepositData)>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_deposit_info<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
     store_vault_server: &S,
     validity_prover: &V,
@@ -137,7 +138,7 @@ pub async fn fetch_all_unprocessed_deposit_info<
             store_vault_server,
             validity_prover,
             liquidity_contract,
-            key.clone(),
+            key,
             &included_uuids,
             &process_status.processed_uuids,
             &cursor,

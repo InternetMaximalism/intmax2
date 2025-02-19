@@ -24,7 +24,7 @@ pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: BlsEncrypti
 ) -> Result<(Vec<(MetaData, T)>, MetaDataCursorResponse), StrategyError> {
     // fetch pending data
     let encrypted_included_data_with_meta = store_vault_server
-        .get_data_batch(key, data_type, &included_uuids)
+        .get_data_batch(key, data_type, included_uuids)
         .await?;
 
     // fetch unprocessed data
