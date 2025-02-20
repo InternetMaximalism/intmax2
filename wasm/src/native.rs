@@ -20,8 +20,8 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface as _,
     },
     data::{
-        deposit_data::DepositData, encryption::BlsEncryption as _,
-        transfer_data::TransferData, tx_data::TxData,
+        deposit_data::DepositData, encryption::BlsEncryption as _, transfer_data::TransferData,
+        tx_data::TxData,
     },
     utils::signature::Auth,
 };
