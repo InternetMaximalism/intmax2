@@ -1,0 +1,94 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build_x86:
+    name: Build for x86
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target: [
+          x86_64-unknown-linux-gnu,
+        ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: nightly-2024-09-17
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Build binary
+        run: cargo build --release
+
+      - name: Package binary
+        run: |
+          cd target/release
+          tar czvf ../../${{ github.event.repository.name }}-${{ matrix.target }}.tar.gz intmax2-cli block-builder
+          cd -
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-${{ matrix.target }}
+          path: ${{ github.event.repository.name }}-${{ matrix.target }}.tar.gz
+
+  build_aarch64:
+    name: Build for aarch64
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        target: [
+          aarch64-unknown-linux-gnu,
+        ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: nightly-2024-09-17
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Build binary
+        run: cargo build --release
+
+      - name: Package binary
+        run: |
+          cd target/release
+          tar czvf ../../${{ github.event.repository.name }}-${{ matrix.target }}.tar.gz intmax2-cli block-builder
+          cd -
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-${{ matrix.target }}
+          path: ${{ github.event.repository.name }}-${{ matrix.target }}.tar.gz
+
+  create_release:
+    name: Create Release
+    needs: [build_x86, build_aarch64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            */*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
