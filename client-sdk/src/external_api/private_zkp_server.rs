@@ -345,29 +345,3 @@ impl PrivateZKPServerClient {
         Ok(proof_result.proof.unwrap())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use intmax2_interfaces::api::private_zkp_server::types::{ProveRequestWithType, ProveType};
-    use intmax2_zkp::common::signature::key_set::KeySet;
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_private_zkp_server() {
-        let client = super::PrivateZKPServerClient::new("https://dev.private.zkp.intmax.xyz");
-        let _pubkey = client.get_pubkey().await.unwrap();
-
-        let mut rng = rand::thread_rng();
-        let key = KeySet::rand(&mut rng);
-        let dummy_request = ProveRequestWithType {
-            prove_type: ProveType::Dummy,
-            pubkey: key.pubkey,
-            request: vec![],
-        };
-        let result = client
-            .request_and_get_proof(key, &dummy_request)
-            .await
-            .unwrap();
-        println!("result: {:?}", result);
-    }
-}
