@@ -57,7 +57,7 @@ pub enum Commands {
     },
     WithdrawalStatus {
         #[clap(long)]
-        private_key: H256,
+        private_key: Option<H256>,
     },
     ClaimWithdrawals {
         #[clap(long)]

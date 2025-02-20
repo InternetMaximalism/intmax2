@@ -119,7 +119,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             history(key).await?;
         }
         Commands::WithdrawalStatus { private_key } => {
-            let key = privkey_to_keyset(private_key);
+            let key = generate_key(private_key);
             withdrawal_status(key).await?;
         }
         Commands::ClaimWithdrawals {
