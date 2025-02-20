@@ -38,6 +38,8 @@ use plonky2::{
 };
 use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
 
+use crate::external_api::utils::time::sleep_for;
+
 use super::utils::query::{get_request, post_request};
 
 const MAX_RETRIES: usize = 10;
@@ -323,7 +325,7 @@ impl PrivateZKPServerClient {
                 )));
             }
             retries += 1;
-            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL as u64)).await;
+            sleep_for(RETRY_INTERVAL as u64).await;
         }
     }
 
