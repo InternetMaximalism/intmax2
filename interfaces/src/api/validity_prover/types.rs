@@ -57,7 +57,7 @@ pub struct GetDepositInfoResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDepositInfoBatchQuery {
+pub struct GetDepositInfoBatchRequest {
     pub deposit_hashes: Vec<Bytes32>,
 }
 
@@ -81,7 +81,7 @@ pub struct GetBlockNumberByTxTreeRootResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetBlockNumberByTxTreeRootBatchQuery {
+pub struct GetBlockNumberByTxTreeRootBatchRequest {
     pub tx_tree_roots: Vec<Bytes32>,
 }
 
@@ -149,7 +149,7 @@ pub struct GetAccountInfoResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetAccountInfoBatchQuery {
+pub struct GetAccountInfoBatchRequest {
     pub pubkeys: Vec<U256>,
 }
 

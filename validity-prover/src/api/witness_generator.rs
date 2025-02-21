@@ -1,15 +1,15 @@
 use crate::api::state::State;
 use actix_web::{
-    get,
+    get, post,
     web::{Data, Json},
     Error,
 };
 use intmax2_interfaces::api::validity_prover::types::{
-    GetAccountInfoBatchQuery, GetAccountInfoBatchResponse, GetAccountInfoQuery,
+    GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
     GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
-    GetBlockNumberByTxTreeRootBatchQuery, GetBlockNumberByTxTreeRootBatchResponse,
+    GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
     GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse, GetBlockNumberResponse,
-    GetDepositInfoBatchQuery, GetDepositInfoBatchResponse, GetDepositInfoQuery,
+    GetDepositInfoBatchRequest, GetDepositInfoBatchResponse, GetDepositInfoQuery,
     GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
     GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
     GetValidityWitnessQuery, GetValidityWitnessResponse,
@@ -65,15 +65,15 @@ pub async fn get_account_info(
     Ok(Json(GetAccountInfoResponse { account_info }))
 }
 
-#[get("/get-account-info-batch")]
+#[post("/get-account-info-batch")]
 pub async fn get_account_info_batch(
     state: Data<State>,
-    query: QsQuery<GetAccountInfoBatchQuery>,
+    request: Json<GetAccountInfoBatchRequest>,
 ) -> Result<Json<GetAccountInfoBatchResponse>, Error> {
-    let query = query.into_inner();
+    let request = request.into_inner();
     let account_info = state
         .witness_generator
-        .get_account_info_batch(&query.pubkeys)
+        .get_account_info_batch(&request.pubkeys)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetAccountInfoBatchResponse { account_info }))
@@ -140,15 +140,15 @@ pub async fn get_deposit_info(
     Ok(Json(GetDepositInfoResponse { deposit_info }))
 }
 
-#[get("/get-deposit-info-batch")]
+#[post("/get-deposit-info-batch")]
 pub async fn get_deposit_info_batch(
     state: Data<State>,
-    query: QsQuery<GetDepositInfoBatchQuery>,
+    request: Json<GetDepositInfoBatchRequest>,
 ) -> Result<Json<GetDepositInfoBatchResponse>, Error> {
-    let query = query.into_inner();
+    let request = request.into_inner();
     let deposit_info = state
         .witness_generator
-        .get_deposit_info_batch(&query.deposit_hashes)
+        .get_deposit_info_batch(&request.deposit_hashes)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetDepositInfoBatchResponse { deposit_info }))
@@ -168,15 +168,15 @@ pub async fn get_block_number_by_tx_tree_root(
     Ok(Json(GetBlockNumberByTxTreeRootResponse { block_number }))
 }
 
-#[get("/get-block-number-by-tx-tree-root-batch")]
+#[post("/get-block-number-by-tx-tree-root-batch")]
 pub async fn get_block_number_by_tx_tree_root_batch(
     state: Data<State>,
-    query: QsQuery<GetBlockNumberByTxTreeRootBatchQuery>,
+    request: Json<GetBlockNumberByTxTreeRootBatchRequest>,
 ) -> Result<Json<GetBlockNumberByTxTreeRootBatchResponse>, Error> {
-    let query = query.into_inner();
+    let request = request.into_inner();
     let block_numbers = state
         .witness_generator
-        .get_block_number_by_tx_tree_root_batch(&query.tx_tree_roots)
+        .get_block_number_by_tx_tree_root_batch(&request.tx_tree_roots)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetBlockNumberByTxTreeRootBatchResponse {

@@ -4,15 +4,16 @@ use intmax2_interfaces::api::{
     validity_prover::{
         interface::{AccountInfo, DepositInfo, TransitionProofTask, ValidityProverClientInterface},
         types::{
-            AssignResponse, CompleteRequest, GetAccountInfoBatchQuery, GetAccountInfoBatchResponse,
-            GetAccountInfoQuery, GetAccountInfoResponse, GetBlockMerkleProofQuery,
-            GetBlockMerkleProofResponse, GetBlockNumberByTxTreeRootBatchQuery,
-            GetBlockNumberByTxTreeRootBatchResponse, GetBlockNumberByTxTreeRootQuery,
-            GetBlockNumberByTxTreeRootResponse, GetBlockNumberResponse, GetDepositInfoBatchQuery,
-            GetDepositInfoBatchResponse, GetDepositInfoQuery, GetDepositInfoResponse,
-            GetDepositMerkleProofQuery, GetDepositMerkleProofResponse, GetNextDepositIndexResponse,
-            GetUpdateWitnessQuery, GetUpdateWitnessResponse, GetValidityWitnessQuery,
-            GetValidityWitnessResponse, HeartBeatRequest,
+            AssignResponse, CompleteRequest, GetAccountInfoBatchRequest,
+            GetAccountInfoBatchResponse, GetAccountInfoQuery, GetAccountInfoResponse,
+            GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
+            GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
+            GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
+            GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
+            GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
+            GetDepositMerkleProofResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
+            GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
+            HeartBeatRequest,
         },
     },
 };
@@ -117,13 +118,13 @@ impl ValidityProverClientInterface for ValidityProverClient {
         &self,
         deposit_hashes: &[Bytes32],
     ) -> Result<Vec<Option<DepositInfo>>, ServerError> {
-        let query = GetDepositInfoBatchQuery {
+        let request = GetDepositInfoBatchRequest {
             deposit_hashes: deposit_hashes.to_vec(),
         };
-        let response: GetDepositInfoBatchResponse = get_request(
+        let response: GetDepositInfoBatchResponse = post_request(
             &self.base_url,
             "/validity-prover/get-deposit-info-batch",
-            Some(query),
+            Some(&request),
         )
         .await?;
         Ok(response.deposit_info)
@@ -147,13 +148,13 @@ impl ValidityProverClientInterface for ValidityProverClient {
         &self,
         tx_tree_roots: &[Bytes32],
     ) -> Result<Vec<Option<u32>>, ServerError> {
-        let query = GetBlockNumberByTxTreeRootBatchQuery {
+        let request = GetBlockNumberByTxTreeRootBatchRequest {
             tx_tree_roots: tx_tree_roots.to_vec(),
         };
-        let response: GetBlockNumberByTxTreeRootBatchResponse = get_request(
+        let response: GetBlockNumberByTxTreeRootBatchResponse = post_request(
             &self.base_url,
             "/validity-prover/get-block-number-by-tx-tree-root-batch",
-            Some(query),
+            Some(&request),
         )
         .await?;
         Ok(response.block_numbers)
@@ -224,13 +225,13 @@ impl ValidityProverClientInterface for ValidityProverClient {
         &self,
         pubkeys: &[U256],
     ) -> Result<Vec<AccountInfo>, ServerError> {
-        let query = GetAccountInfoBatchQuery {
+        let request = GetAccountInfoBatchRequest {
             pubkeys: pubkeys.to_vec(),
         };
-        let response: GetAccountInfoBatchResponse = get_request(
+        let response: GetAccountInfoBatchResponse = post_request(
             &self.base_url,
             "/validity-prover/get-account-info-batch",
-            Some(query),
+            Some(&request),
         )
         .await?;
         Ok(response.account_info)
