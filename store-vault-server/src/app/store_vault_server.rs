@@ -272,7 +272,7 @@ impl StoreVaultServer {
                     .cursor
                     .as_ref()
                     .map(|c| c.uuid.clone())
-                    .unwrap_or_default();
+                    .unwrap_or(Uuid::max().to_string());
                 sqlx::query!(
                     r#"
             SELECT uuid, encrypted_data

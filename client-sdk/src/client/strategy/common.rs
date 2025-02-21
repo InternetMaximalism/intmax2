@@ -23,9 +23,13 @@ pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: BlsEncrypti
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<(MetaData, T)>, MetaDataCursorResponse), StrategyError> {
     // fetch pending data
-    let encrypted_included_data_with_meta = store_vault_server
-        .get_data_batch(key, data_type, included_uuids)
-        .await?;
+    let encrypted_included_data_with_meta = if included_uuids.is_empty() {
+        Vec::new()
+    } else {
+        store_vault_server
+            .get_data_batch(key, data_type, included_uuids)
+            .await?
+    };
 
     // fetch unprocessed data
     let (encrypted_unprocessed_data_with_meta, cursor_response) = store_vault_server
