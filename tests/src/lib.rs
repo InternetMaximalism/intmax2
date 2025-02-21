@@ -1,4 +1,5 @@
 use ethers::types::H256;
+use futures::future::join_all;
 use intmax2_cli::cli::{
     deposit::deposit,
     error::CliError,
@@ -16,7 +17,7 @@ use intmax2_zkp::{
     ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;
-use std::time::Duration;
+use std::{future::Future, time::Duration};
 
 pub mod accounts;
 pub mod ethereum;
@@ -237,6 +238,40 @@ pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts
 
 pub fn address_to_generic_address(eth_address: ethers::types::Address) -> GenericAddress {
     GenericAddress::from_address(Address::from_bytes_be(eth_address.as_bytes()))
+}
+
+pub async fn log_polling_futures<F, E>(futures: &mut Vec<F>, senders: &[KeySet])
+where
+    E: std::fmt::Debug,
+    F: Future<Output = Result<(), E>> + Unpin,
+{
+    let num_using_accounts = futures.len();
+    assert!(
+        senders.len() >= num_using_accounts,
+        "Number of senders is less than the number of futures"
+    );
+
+    let results = join_all(futures).await;
+
+    for (i, result) in results.iter().enumerate() {
+        if let Err(e) = result {
+            log::error!(
+                "Recipient {} ({}/{}) failed: {:?}",
+                senders[i].pubkey.to_hex(),
+                i + 1,
+                num_using_accounts,
+                e
+            );
+            continue;
+        }
+
+        log::info!(
+            "Recipient {} ({}/{}) succeeded",
+            senders[i].pubkey.to_hex(),
+            i + 1,
+            num_using_accounts
+        );
+    }
 }
 
 // const NUM_TRANSFER_LOOPS: usize = 2;

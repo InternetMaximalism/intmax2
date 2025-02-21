@@ -22,7 +22,7 @@ use intmax2_zkp::{
 use serde::Deserialize;
 use tests::{
     accounts::{derive_withdrawal_intmax_keys, mnemonic_to_account},
-    address_to_generic_address, mul_u256, wait_for_balance_synchronization,
+    address_to_generic_address, log_polling_futures, mul_u256, wait_for_balance_synchronization,
     withdraw_directly_with_error_handling,
 };
 
@@ -267,6 +267,7 @@ impl TestSystem {
 
     pub async fn run_soak_test(&self) -> Result<(), Box<dyn std::error::Error>> {
         let trash_account = mnemonic_to_account(&self.master_mnemonic_phrase, 1, 0)?;
+        let timeout_duration = Duration::from_secs(WITHDRAWAL_TIMEOUT);
 
         // NOTE: Be cautious of insufficient balances, as funds will only be sent once to the intermediary address.
         // self.ensure_accounts_without_transfers(4800).await?;
@@ -275,6 +276,7 @@ impl TestSystem {
             self.ensure_accounts_without_transfers(self.eth_refill_offset)
                 .await?;
         }
+
         loop {
             let config = get_config(&self.config_server_base_url).await?;
             log::info!("Concurrency: {}", config.concurrent_limit);
@@ -290,49 +292,33 @@ impl TestSystem {
             let num_using_accounts = concurrent_limit.min(num_accounts);
             let intmax_senders = self.accounts.lock().unwrap()[0..num_using_accounts].to_vec();
 
-            let futures = intmax_senders
+            let mut futures = intmax_senders
                 .iter()
                 .enumerate()
-                .map(|(i, sender)| async move {
-                    // if i % 2 == 0 {
-                    log::info!("Starting withdrawal from {} (No.{})", sender.pubkey, i);
-                    let withdrawal_input = Transfer {
-                        recipient: address_to_generic_address(trash_account.eth_address),
-                        amount: U256::from(10),
-                        token_index: ETH_TOKEN_INDEX,
-                        salt: generate_salt(),
-                    };
-                    withdraw_directly_with_error_handling(*sender, withdrawal_input).await?;
-                    log::info!("Withdrawal completed from {} (No.{})", sender.pubkey, i);
-                    // } else {
-                    //     log::info!("Starting deposit from {} (No.{})", sender.pubkey, i);
-                    //     deposit_native_token_with_error_handling(
-                    //         *sender,
-                    //         trash_account.intmax_key,
-                    //         ethers::types::U256::from(10),
-                    //     )
-                    //     .await?;
-                    //     log::info!("Deposit completed from {} (No.{})", sender.pubkey, i);
-                    // }
+                .map(|(i, sender)| {
+                    let f = async move {
+                        log::info!("Starting withdrawal from {} (No.{})", sender.pubkey, i);
+                        let withdrawal_input = Transfer {
+                            recipient: address_to_generic_address(trash_account.eth_address),
+                            amount: U256::from(10),
+                            token_index: ETH_TOKEN_INDEX,
+                            salt: generate_salt(),
+                        };
+                        withdraw_directly_with_error_handling(*sender, withdrawal_input).await?;
+                        log::info!("Withdrawal completed from {} (No.{})", sender.pubkey, i);
 
-                    Ok::<(), CliError>(())
-                });
+                        Ok::<(), Box<dyn std::error::Error>>(())
+                    };
+                    Box::pin(async move {
+                        tokio::time::timeout(timeout_duration, f)
+                            .await
+                            .map_err(|_| format!("Operation {} timed out", i))?
+                    })
+                })
+                .collect::<Vec<_>>();
 
             log::info!("Starting transactions");
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(WITHDRAWAL_TIMEOUT)) => log::info!("transaction timeout"),
-                errors = join_all(futures) => {
-                    for (i, error) in errors.iter().enumerate() {
-                        if let Err(e) = error {
-                            log::error!("Recipient ({}/{}) failed: {:?}", i + 1, num_using_accounts, e);
-                        } else {
-                            log::info!("Recipient ({}/{}) succeeded", i + 1, num_using_accounts);
-                        }
-                    }
-
-                    log::info!("Completed transactions");
-                },
-            }
+            log_polling_futures(&mut futures, &intmax_senders).await;
         }
 
         Ok(())
