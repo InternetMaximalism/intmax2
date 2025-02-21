@@ -17,6 +17,8 @@ use intmax2_interfaces::api::validity_prover::types::{
 use intmax2_zkp::circuits::validity::validity_pis::ValidityPublicInputs;
 use serde_qs::actix::QsQuery;
 
+const MAX_BATCH_SIZE: usize = 1024;
+
 #[get("/block-number")]
 pub async fn get_block_number(state: Data<State>) -> Result<Json<GetBlockNumberResponse>, Error> {
     let block_number = state
@@ -71,6 +73,9 @@ pub async fn get_account_info_batch(
     request: Json<GetAccountInfoBatchRequest>,
 ) -> Result<Json<GetAccountInfoBatchResponse>, Error> {
     let request = request.into_inner();
+    if request.pubkeys.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
+    }
     let account_info = state
         .witness_generator
         .get_account_info_batch(&request.pubkeys)
@@ -146,6 +151,9 @@ pub async fn get_deposit_info_batch(
     request: Json<GetDepositInfoBatchRequest>,
 ) -> Result<Json<GetDepositInfoBatchResponse>, Error> {
     let request = request.into_inner();
+    if request.deposit_hashes.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
+    }
     let deposit_info = state
         .witness_generator
         .get_deposit_info_batch(&request.deposit_hashes)
@@ -174,6 +182,9 @@ pub async fn get_block_number_by_tx_tree_root_batch(
     request: Json<GetBlockNumberByTxTreeRootBatchRequest>,
 ) -> Result<Json<GetBlockNumberByTxTreeRootBatchResponse>, Error> {
     let request = request.into_inner();
+    if request.tx_tree_roots.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
+    }
     let block_numbers = state
         .witness_generator
         .get_block_number_by_tx_tree_root_batch(&request.tx_tree_roots)
