@@ -21,6 +21,7 @@ pub struct EnvVar {
     pub block_builder_private_key: H256,
     pub eth_allowance_for_block: String,
 
+    pub tx_timeout: u64,
     pub accepting_tx_interval: u64,
     pub proposing_block_interval: u64,
     pub deposit_check_interval: Option<u64>,

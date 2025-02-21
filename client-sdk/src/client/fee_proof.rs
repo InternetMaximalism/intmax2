@@ -32,6 +32,7 @@ use super::{error::ClientError, sync::utils::generate_spent_witness};
 pub async fn generate_fee_proof<S: StoreVaultClientInterface, B: BalanceProverClientInterface>(
     store_vault_server: &S,
     balance_prover: &B,
+    tx_timeout: u64,
     key: KeySet,
     user_data: &UserData,
     sender_proof_set_ephemeral_key: U256,
@@ -105,7 +106,7 @@ pub async fn generate_fee_proof<S: StoreVaultClientInterface, B: BalanceProverCl
                 transfer_merkle_proof,
             };
 
-            let expiry = 0; // todo: set expiry
+            let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
             let signature: FlatG2 =
                 sign_to_tx_root_and_expiry(key.privkey, tx_tree_root, expiry, pubkey_hash).into();
             let collateral_block = CollateralBlock {

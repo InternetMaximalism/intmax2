@@ -318,6 +318,7 @@ where
             let (fee_proof, collateral_spent_witness) = generate_fee_proof(
                 &self.store_vault_server,
                 &self.balance_prover,
+                self.config.tx_timeout,
                 key,
                 &user_data,
                 sender_proof_set_ephemeral_key,
@@ -437,6 +438,22 @@ where
         proposal
             .verify(memo.tx)
             .map_err(|e| ClientError::InvalidBlockProposal(format!("{}", e)))?;
+
+        // verify expiry
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        if proposal.expiry == 0 {
+            return Err(ClientError::InvalidBlockProposal(
+                "expiry 0 is not allowed".to_string(),
+            ));
+        } else if proposal.expiry < current_time {
+            return Err(ClientError::InvalidBlockProposal(
+                "proposal expired".to_string(),
+            ));
+        } else if proposal.expiry > current_time + self.config.tx_timeout {
+            return Err(ClientError::InvalidBlockProposal(
+                "proposal expiry too far".to_string(),
+            ));
+        }
 
         let mut entries = vec![];
 

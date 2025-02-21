@@ -47,6 +47,7 @@ struct Config {
     block_builder_private_key: H256,
     eth_allowance_for_block: U256,
     deposit_check_interval: Option<u64>,
+    tx_timeout: u64,
     accepting_tx_interval: u64,
     proposing_block_interval: u64,
     initial_heart_beat_delay: u64,
@@ -137,6 +138,7 @@ impl BlockBuilder {
             block_builder_private_key: env.block_builder_private_key,
             eth_allowance_for_block,
             deposit_check_interval: env.deposit_check_interval,
+            tx_timeout: env.tx_timeout,
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
@@ -311,7 +313,7 @@ impl BlockBuilder {
         if !state.is_accepting_txs() {
             return Err(BlockBuilderError::NotAcceptingTx);
         }
-        state.propose_block(is_registration_block);
+        state.propose_block(is_registration_block, self.config.tx_timeout);
         Ok(())
     }
 

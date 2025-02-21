@@ -18,6 +18,8 @@ use intmax2_zkp::{
 
 use super::utils::query::{get_request, post_request};
 
+pub const DEFAULT_BLOCK_EXPIRY: u64 = 80;
+
 #[derive(Debug, Clone)]
 pub struct BlockBuilderClient;
 
