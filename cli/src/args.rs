@@ -81,11 +81,11 @@ pub enum Commands {
     },
     Balance {
         #[clap(long)]
-        private_key: Option<H256>,
+        private_key: H256,
     },
     History {
         #[clap(long)]
-        private_key: Option<H256>,
+        private_key: H256,
         #[clap(long)]
         order: Option<CursorOrder>, // asc or desc
         #[clap(long)]
