@@ -12,6 +12,7 @@ use intmax2_zkp::{
     common::{signature::key_set::KeySet, transfer::Transfer},
     ethereum_types::u32limb_trait::U32LimbTrait as _,
 };
+use uuid::Uuid;
 
 use crate::cli::client::get_client;
 
@@ -25,9 +26,9 @@ pub async fn history(
     let cursor = MetaDataCursor {
         cursor: from_timestamp.map(|timestamp| MetaData {
             timestamp,
-            uuid: "".to_string(),
+            uuid: Uuid::default().to_string(),
         }),
-        order,
+        order: order.clone(),
         limit: None,
     };
 
@@ -64,6 +65,9 @@ pub async fn history(
         HistoryEum::Receive { meta, .. } => (meta.timestamp, meta.uuid.clone()),
         HistoryEum::Send { meta, .. } => (meta.timestamp, meta.uuid.clone()),
     });
+    if order == CursorOrder::Desc {
+        history.reverse();
+    }
 
     println!("History:");
     for entry in history {
