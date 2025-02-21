@@ -4,20 +4,21 @@ use actix_web::{
     web::{Data, Json},
     Error,
 };
-use intmax2_interfaces::api::validity_prover::types::{
-    GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
-    GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
-    GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
-    GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse, GetBlockNumberResponse,
-    GetDepositInfoBatchRequest, GetDepositInfoBatchResponse, GetDepositInfoQuery,
-    GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
-    GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-    GetValidityWitnessQuery, GetValidityWitnessResponse,
+use intmax2_interfaces::api::validity_prover::{
+    interface::MAX_BATCH_SIZE,
+    types::{
+        GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
+        GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
+        GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
+        GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
+        GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
+        GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
+        GetDepositMerkleProofResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
+        GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
+    },
 };
 use intmax2_zkp::circuits::validity::validity_pis::ValidityPublicInputs;
 use serde_qs::actix::QsQuery;
-
-const MAX_BATCH_SIZE: usize = 1024;
 
 #[get("/block-number")]
 pub async fn get_block_number(state: Data<State>) -> Result<Json<GetBlockNumberResponse>, Error> {
