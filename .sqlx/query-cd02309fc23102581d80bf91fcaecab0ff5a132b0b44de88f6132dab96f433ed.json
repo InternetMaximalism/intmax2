@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT tx_tree_root, block_number \n            FROM tx_tree_roots \n            WHERE tx_tree_root = ANY($1)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tx_tree_root",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "block_number",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "ByteaArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "cd02309fc23102581d80bf91fcaecab0ff5a132b0b44de88f6132dab96f433ed"
+}
