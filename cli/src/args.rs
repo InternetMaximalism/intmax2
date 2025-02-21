@@ -109,6 +109,12 @@ pub enum Commands {
         #[clap(long)]
         eth_private_key: H256,
     },
+    Resync {
+        #[clap(long)]
+        private_key: H256,
+        #[clap(long, default_value = "false")]
+        deep: bool,
+    },
     GenerateKey,
     GenerateFromEthKey {
         #[clap(long)]

@@ -356,4 +356,24 @@ where
             .await?;
         Ok(())
     }
+
+    /// Reset user data and resync. `is_deep` is true if the user wants to reset completely.
+    /// Otherwise, only the last processed meta data will be reset.
+    pub async fn resync(&self, key: KeySet, is_deep: bool) -> Result<(), SyncError> {
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+
+        if is_deep {
+            user_data = UserData::new(key.pubkey);
+        } else {
+            user_data.deposit_status.last_processed_meta_data = None;
+            user_data.transfer_status.last_processed_meta_data = None;
+            user_data.withdrawal_status.last_processed_meta_data = None;
+        }
+
+        self.store_vault_server
+            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
+            .await?;
+
+        self.sync(key).await
+    }
 }

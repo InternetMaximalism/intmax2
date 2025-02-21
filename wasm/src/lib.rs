@@ -165,6 +165,16 @@ pub async fn sync(config: &Config, private_key: &str) -> Result<(), JsError> {
     Ok(())
 }
 
+/// Resynchronize the user's balance proof.
+#[wasm_bindgen]
+pub async fn resync(config: &Config, private_key: &str, is_deep: bool) -> Result<(), JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    client.resync(key, is_deep).await?;
+    Ok(())
+}
+
 /// Synchronize the user's withdrawal proof, and send request to the withdrawal aggregator.
 /// It may take a long time to generate ZKP.
 #[wasm_bindgen]

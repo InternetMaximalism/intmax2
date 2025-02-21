@@ -28,3 +28,9 @@ pub async fn sync_claims(
         .await?;
     Ok(())
 }
+
+pub async fn resync(key: KeySet, is_deep: bool) -> Result<(), CliError> {
+    let client = get_client()?;
+    client.resync(key, is_deep).await?;
+    Ok(())
+}
