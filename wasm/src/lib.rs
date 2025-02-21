@@ -13,7 +13,7 @@ use js_types::{
     data::{JsDepositResult, JsTxResult, JsUserData},
     fee::{JsFee, JsFeeQuote},
     payment_memo::JsPaymentMemoEntry,
-    utils::{parse_address, parse_u256},
+    utils::{parse_address, parse_bytes32, parse_u256},
     wrapper::JsTxRequestMemo,
 };
 use num_bigint::BigUint;
@@ -153,6 +153,23 @@ pub async fn query_and_finalize(
         .finalize_tx(block_builder_url, key, &tx_request_memo, &proposal)
         .await?;
     Ok(tx_result.into())
+}
+
+#[wasm_bindgen]
+pub async fn get_settlement_status(
+    config: &Config,
+    pubkey: &str,
+    tx_tree_root: &str,
+) -> Result<String, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let pubkey = parse_h256_as_u256(pubkey)?;
+    let tx_tree_root = parse_bytes32(tx_tree_root)?;
+    let status = client
+        .get_settlement_status(pubkey, tx_tree_root)
+        .await
+        .map_err(|e| JsError::new(&format!("failed to get settlement status: {}", e)))?;
+    Ok(status.to_string())
 }
 
 /// Synchronize the user's balance proof. It may take a long time to generate ZKP.

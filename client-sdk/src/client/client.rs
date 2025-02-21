@@ -1,3 +1,5 @@
+use core::fmt;
+
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
@@ -122,6 +124,24 @@ pub struct TxResult {
     pub withdrawal_uuids: Vec<String>,
     pub transfer_data_vec: Vec<TransferData>,
     pub withdrawal_data_vec: Vec<TransferData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SettlementStatus {
+    Pending,
+    Settled,
+    Failed,
+}
+
+impl fmt::Display for SettlementStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SettlementStatus::Pending => write!(f, "pending"),
+            SettlementStatus::Settled => write!(f, "settled"),
+            SettlementStatus::Failed => write!(f, "failed"),
+        }
+    }
 }
 
 impl<BB, S, V, B, W> Client<BB, S, V, B, W>
@@ -576,6 +596,47 @@ where
         };
 
         Ok(result)
+    }
+
+    pub async fn get_settlement_status(
+        &self,
+        sender: U256,
+        tx_tree_root: Bytes32,
+    ) -> Result<SettlementStatus, ClientError> {
+        // get onchain info
+        let block_number = self
+            .validity_prover
+            .get_block_number_by_tx_tree_root(tx_tree_root)
+            .await?;
+        if block_number.is_none() {
+            return Ok(SettlementStatus::Failed);
+        }
+        let block_number = block_number.unwrap();
+        let validity_witness = self
+            .validity_prover
+            .get_validity_witness(block_number)
+            .await?;
+        let validity_pis = validity_witness.to_validity_pis().map_err(|e| {
+            ClientError::UnexpectedError(format!("failed to convert to validity pis: {}", e))
+        })?;
+
+        // get sender leaf
+        let sender_leaf = validity_witness
+            .block_witness
+            .get_sender_tree()
+            .leaves()
+            .into_iter()
+            .find(|leaf| leaf.sender == sender);
+        let sender_leaf = match sender_leaf {
+            Some(leaf) => leaf,
+            None => return Ok(SettlementStatus::Failed),
+        };
+
+        if sender_leaf.did_return_sig && validity_pis.is_valid_block {
+            Ok(SettlementStatus::Settled)
+        } else {
+            Ok(SettlementStatus::Failed)
+        }
     }
 
     pub async fn get_withdrawal_info(
