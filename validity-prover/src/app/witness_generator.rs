@@ -327,6 +327,18 @@ impl WitnessGenerator {
         })
     }
 
+    pub async fn get_account_info_batch(
+        &self,
+        pubkeys: &[U256],
+    ) -> Result<Vec<AccountInfo>, ValidityProverError> {
+        let mut account_infos = Vec::new();
+        for pubkey in pubkeys {
+            let account_info = self.get_account_info(*pubkey).await?;
+            account_infos.push(account_info);
+        }
+        Ok(account_infos)
+    }
+
     pub async fn get_deposit_info(
         &self,
         deposit_hash: Bytes32,
@@ -363,7 +375,7 @@ impl WitnessGenerator {
 
     pub async fn get_block_number_by_tx_tree_root_batch(
         &self,
-        tx_tree_roots: Vec<Bytes32>,
+        tx_tree_roots: &[Bytes32],
     ) -> Result<Vec<Option<u32>>, ValidityProverError> {
         // early return
         if tx_tree_roots.is_empty() {

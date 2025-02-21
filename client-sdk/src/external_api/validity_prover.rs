@@ -4,12 +4,15 @@ use intmax2_interfaces::api::{
     validity_prover::{
         interface::{AccountInfo, DepositInfo, TransitionProofTask, ValidityProverClientInterface},
         types::{
-            AssignResponse, CompleteRequest, GetAccountInfoQuery, GetAccountInfoResponse,
-            GetBlockMerkleProofQuery, GetBlockMerkleProofResponse, GetBlockNumberByTxTreeRootQuery,
-            GetBlockNumberByTxTreeRootResponse, GetBlockNumberResponse, GetDepositInfoQuery,
-            GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
-            GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-            GetValidityWitnessQuery, GetValidityWitnessResponse, HeartBeatRequest,
+            AssignResponse, CompleteRequest, GetAccountInfoBatchQuery, GetAccountInfoBatchResponse,
+            GetAccountInfoQuery, GetAccountInfoResponse, GetBlockMerkleProofQuery,
+            GetBlockMerkleProofResponse, GetBlockNumberByTxTreeRootBatchQuery,
+            GetBlockNumberByTxTreeRootBatchResponse, GetBlockNumberByTxTreeRootQuery,
+            GetBlockNumberByTxTreeRootResponse, GetBlockNumberResponse, GetDepositInfoBatchQuery,
+            GetDepositInfoBatchResponse, GetDepositInfoQuery, GetDepositInfoResponse,
+            GetDepositMerkleProofQuery, GetDepositMerkleProofResponse, GetNextDepositIndexResponse,
+            GetUpdateWitnessQuery, GetUpdateWitnessResponse, GetValidityWitnessQuery,
+            GetValidityWitnessResponse, HeartBeatRequest,
         },
     },
 };
@@ -110,6 +113,22 @@ impl ValidityProverClientInterface for ValidityProverClient {
         Ok(response.deposit_info)
     }
 
+    async fn get_deposit_info_batch(
+        &self,
+        deposit_hashes: &[Bytes32],
+    ) -> Result<Vec<Option<DepositInfo>>, ServerError> {
+        let query = GetDepositInfoBatchQuery {
+            deposit_hashes: deposit_hashes.to_vec(),
+        };
+        let response: GetDepositInfoBatchResponse = get_request(
+            &self.base_url,
+            "/validity-prover/get-deposit-info-batch",
+            Some(query),
+        )
+        .await?;
+        Ok(response.deposit_info)
+    }
+
     async fn get_block_number_by_tx_tree_root(
         &self,
         tx_tree_root: Bytes32,
@@ -122,6 +141,22 @@ impl ValidityProverClientInterface for ValidityProverClient {
         )
         .await?;
         Ok(response.block_number)
+    }
+
+    async fn get_block_number_by_tx_tree_root_batch(
+        &self,
+        tx_tree_roots: &[Bytes32],
+    ) -> Result<Vec<Option<u32>>, ServerError> {
+        let query = GetBlockNumberByTxTreeRootBatchQuery {
+            tx_tree_roots: tx_tree_roots.to_vec(),
+        };
+        let response: GetBlockNumberByTxTreeRootBatchResponse = get_request(
+            &self.base_url,
+            "/validity-prover/get-block-number-by-tx-tree-root-batch",
+            Some(query),
+        )
+        .await?;
+        Ok(response.block_numbers)
     }
 
     async fn get_validity_witness(
@@ -179,6 +214,22 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetAccountInfoResponse = get_request(
             &self.base_url,
             "/validity-prover/get-account-info",
+            Some(query),
+        )
+        .await?;
+        Ok(response.account_info)
+    }
+
+    async fn get_account_info_batch(
+        &self,
+        pubkeys: &[U256],
+    ) -> Result<Vec<AccountInfo>, ServerError> {
+        let query = GetAccountInfoBatchQuery {
+            pubkeys: pubkeys.to_vec(),
+        };
+        let response: GetAccountInfoBatchResponse = get_request(
+            &self.base_url,
+            "/validity-prover/get-account-info-batch",
             Some(query),
         )
         .await?;
