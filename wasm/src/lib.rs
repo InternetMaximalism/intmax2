@@ -156,7 +156,7 @@ pub async fn query_and_finalize(
 }
 
 #[wasm_bindgen]
-pub async fn get_settlement_status(
+pub async fn get_tx_status(
     config: &Config,
     pubkey: &str,
     tx_tree_root: &str,
@@ -166,7 +166,7 @@ pub async fn get_settlement_status(
     let pubkey = parse_h256_as_u256(pubkey)?;
     let tx_tree_root = parse_bytes32(tx_tree_root)?;
     let status = client
-        .get_settlement_status(pubkey, tx_tree_root)
+        .get_tx_status(pubkey, tx_tree_root)
         .await
         .map_err(|e| JsError::new(&format!("failed to get settlement status: {}", e)))?;
     Ok(status.to_string())

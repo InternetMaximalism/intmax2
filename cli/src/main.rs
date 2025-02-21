@@ -58,6 +58,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             amount,
             token_index,
             fee_token_index,
+            wait,
         } => {
             let key = privkey_to_keyset(private_key);
             let transfer = Transfer {
@@ -71,6 +72,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
                 &[transfer],
                 vec![],
                 fee_token_index.unwrap_or_default(),
+                wait,
             )
             .await?;
         }
@@ -81,6 +83,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             token_index,
             fee_token_index,
             with_claim_fee,
+            wait,
         } => {
             let key = privkey_to_keyset(private_key);
             let fee_token_index = fee_token_index.unwrap_or(0);
@@ -91,6 +94,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
                 token_index,
                 fee_token_index,
                 with_claim_fee,
+                wait,
             )
             .await?;
         }
@@ -98,6 +102,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             private_key,
             csv_path,
             fee_token_index,
+            wait,
         } => {
             let key = privkey_to_keyset(private_key);
             let mut reader = csv::Reader::from_path(csv_path)?;
@@ -115,7 +120,14 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             if transfers.len() > MAX_BATCH_TRANSFER {
                 return Err(CliError::TooManyTransfer(transfers.len()));
             }
-            send_transfers(key, &transfers, vec![], fee_token_index.unwrap_or_default()).await?;
+            send_transfers(
+                key,
+                &transfers,
+                vec![],
+                fee_token_index.unwrap_or_default(),
+                wait,
+            )
+            .await?;
         }
         Commands::Deposit {
             eth_private_key,

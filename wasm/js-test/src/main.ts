@@ -1,4 +1,4 @@
-import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_user_data, get_withdrawal_info, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
+import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_tx_status, get_user_data, get_withdrawal_info, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
 import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
 import { ethers } from 'ethers';
@@ -25,15 +25,15 @@ async function main() {
   const balance = await getEthBalance(ethKey, env.L1_RPC_URL);
   console.log("balance: ", balance);
 
-  const depositResult = await prepare_deposit(config, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId, false);
-  const pubkeySaltHash = depositResult.deposit_data.pubkey_salt_hash;
-  console.log("pubkeySaltHash: ", pubkeySaltHash);
+  // const depositResult = await prepare_deposit(config, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId, false);
+  // const pubkeySaltHash = depositResult.deposit_data.pubkey_salt_hash;
+  // console.log("pubkeySaltHash: ", pubkeySaltHash);
 
-  await deposit(ethKey, env.L1_RPC_URL, env.LIQUIDITY_CONTRACT_ADDRESS, env.L2_RPC_URL, env.ROLLUP_CONTRACT_ADDRESS, BigInt(amount), tokenType, tokenAddress, tokenId, pubkeySaltHash, ethAddress);
+  // await deposit(ethKey, env.L1_RPC_URL, env.LIQUIDITY_CONTRACT_ADDRESS, env.L2_RPC_URL, env.ROLLUP_CONTRACT_ADDRESS, BigInt(amount), tokenType, tokenAddress, tokenId, pubkeySaltHash, ethAddress);
 
-  // wait for the validity prover syncs
-  console.log("Waiting for the validity prover to sync...");
-  await sleep(40);
+  // // wait for the validity prover syncs
+  // console.log("Waiting for the validity prover to sync...");
+  // await sleep(40);
 
   // sync the account's balance proof 
   await syncBalanceProof(config, privateKey);
@@ -132,8 +132,21 @@ async function sendTx(config: Config, block_builder_base_url: string, publicKey:
   console.log("Transfer root of tx: ", memo.tx().transfer_tree_root);
   // wait for the block builder to propose the block
   await sleep(env.BLOCK_BUILDER_QUERY_WAIT_TIME);
-  await query_and_finalize(config, env.BLOCK_BUILDER_BASE_URL, privateKey, memo);
-  console.log("Tx finalized");
+  const result = await query_and_finalize(config, env.BLOCK_BUILDER_BASE_URL, privateKey, memo);
+
+  const tx_tree_root = result.tx_tree_root;
+  while (true) {
+    let status = await get_tx_status(config, publicKey, tx_tree_root);
+    if (status === "success") {
+      break;
+    } else if (status === "failed") {
+      throw new Error("tx failed")
+    }
+    console.log("Tx status: ", status,);
+    await sleep(10);
+  }
+
+  console.log("Tx success");
 }
 
 async function sendWithdrawal(config: Config, block_builder_base_url: string, publicKey: string, privateKey: string, ethAddress: string, tokenIndex: number, amount: string, feeTokenIndex: number, withClaimFee: boolean) {

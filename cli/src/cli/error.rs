@@ -50,4 +50,7 @@ pub enum CliError {
 
     #[error("Pending tx error")]
     PendingTxError,
+
+    #[error("Tx failed: {0}")]
+    TxFailed(String),
 }
