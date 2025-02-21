@@ -44,22 +44,37 @@ pub async fn fetch_tx_info<S: StoreVaultClientInterface, V: ValidityProverClient
         cursor,
     )
     .await?;
-    for (meta, tx_data) in data_with_meta {
-        let tx_tree_root = tx_data.tx_tree_root;
-        let block_number = validity_prover
-            .get_block_number_by_tx_tree_root(tx_tree_root)
-            .await?;
-        if let Some(block_number) = block_number {
-            let meta = MetaDataWithBlockNumber { meta, block_number };
-            settled.push((meta, tx_data));
-        } else if meta.timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
-            // timeout
-            log::error!("Tx {} is timeout", meta.uuid);
-            timeout.push((meta, tx_data));
-        } else {
-            // pending
-            log::info!("Tx {} is pending", meta.uuid);
-            pending.push((meta, tx_data));
+
+    // Prepare batch request data
+    let tx_tree_roots: Vec<_> = data_with_meta
+        .iter()
+        .map(|(_, tx_data)| tx_data.tx_tree_root)
+        .collect();
+    let block_numbers = validity_prover
+        .get_block_number_by_tx_tree_root_batch(&tx_tree_roots)
+        .await?;
+
+    // Current timestamp for timeout checking
+    let current_time = chrono::Utc::now().timestamp() as u64;
+
+    // Process results and categorize transactions
+    for ((meta, tx_data), block_number) in data_with_meta.into_iter().zip(block_numbers) {
+        match block_number {
+            Some(block_number) => {
+                // Transaction is settled
+                let meta = MetaDataWithBlockNumber { meta, block_number };
+                settled.push((meta, tx_data));
+            }
+            None if meta.timestamp + tx_timeout < current_time => {
+                // Transaction has timed out
+                log::error!("Tx {} is timeout", meta.uuid);
+                timeout.push((meta, tx_data));
+            }
+            None => {
+                // Transaction is still pending
+                log::info!("Tx {} is pending", meta.uuid);
+                pending.push((meta, tx_data));
+            }
         }
     }
 

@@ -50,7 +50,10 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
         cursor,
     )
     .await?;
-    for (meta, transfer_data) in data_with_meta {
+
+    let mut valid_transfers = Vec::new();
+    for (meta, mut transfer_data) in data_with_meta {
+        // Fetch and decrypt sender proof set
         let sender_proof_set = match fetch_sender_proof_set(
             store_vault_server,
             transfer_data.sender_proof_set_ephemeral_key,
@@ -58,19 +61,24 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
         .await
         {
             Ok(sender_proof_set) => sender_proof_set,
-            // ignore encryption error
             Err(StrategyError::EncryptionError(e)) => {
                 log::error!("failed to decrypt sender proof set: {}", e);
                 continue;
             }
-            // return other errors
             Err(e) => return Err(e),
         };
-        // validate sender proof set
+
+        // Validate sender proof set and check tx
         match sender_proof_set.validate(key.pubkey) {
             Ok(_) => {
-                // check tx
-                let spent_proof = sender_proof_set.spent_proof.decompress()?;
+                let spent_proof = match sender_proof_set.spent_proof.decompress() {
+                    Ok(proof) => proof,
+                    Err(e) => {
+                        log::error!("failed to decompress spent proof: {}", e);
+                        continue;
+                    }
+                };
+
                 let spent_pis =
                     SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec());
                 if spent_pis.tx != transfer_data.tx {
@@ -84,25 +92,41 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
             }
         }
 
-        let mut transfer_data = transfer_data;
         transfer_data.set_sender_proof_set(sender_proof_set);
+        valid_transfers.push((meta, transfer_data));
+    }
 
-        let tx_tree_root = transfer_data.tx_tree_root;
-        let block_number = validity_prover
-            .get_block_number_by_tx_tree_root(tx_tree_root)
-            .await?;
-        if let Some(block_number) = block_number {
-            // set block number
-            let meta = MetaDataWithBlockNumber { meta, block_number };
-            settled.push((meta, transfer_data));
-        } else if meta.timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
-            // timeout
-            log::error!("Transfer {} is timeout", meta.uuid);
-            timeout.push((meta, transfer_data));
-        } else {
-            // pending
-            log::info!("Transfer {} is pending", meta.uuid);
-            pending.push((meta, transfer_data));
+    // Batch fetch block numbers for all valid transfers
+    let tx_tree_roots: Vec<_> = valid_transfers
+        .iter()
+        .map(|(_, transfer_data)| transfer_data.tx_tree_root)
+        .collect();
+
+    let block_numbers = validity_prover
+        .get_block_number_by_tx_tree_root_batch(&tx_tree_roots)
+        .await?;
+
+    // Current timestamp for timeout checking
+    let current_time = chrono::Utc::now().timestamp() as u64;
+
+    // Process results and categorize transfers
+    for ((meta, transfer_data), block_number) in valid_transfers.into_iter().zip(block_numbers) {
+        match block_number {
+            Some(block_number) => {
+                // Transfer is settled
+                let meta = MetaDataWithBlockNumber { meta, block_number };
+                settled.push((meta, transfer_data));
+            }
+            None if meta.timestamp + tx_timeout < current_time => {
+                // Transfer has timed out
+                log::error!("Transfer {} is timeout", meta.uuid);
+                timeout.push((meta, transfer_data));
+            }
+            None => {
+                // Transfer is still pending
+                log::info!("Transfer {} is pending", meta.uuid);
+                pending.push((meta, transfer_data));
+            }
         }
     }
 

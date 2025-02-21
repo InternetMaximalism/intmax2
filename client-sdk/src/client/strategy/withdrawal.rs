@@ -50,12 +50,24 @@ pub async fn fetch_withdrawal_info<
         cursor,
     )
     .await?;
-    for (meta, transfer_data) in data_with_meta {
+
+    // First, fetch and decrypt all sender proof sets
+    let mut valid_transfers = Vec::new();
+    for (meta, mut transfer_data) in data_with_meta {
         let ephemeral_key =
             KeySet::new(BigUint::from(transfer_data.sender_proof_set_ephemeral_key).into());
-        let encrypted_sender_proof_set = store_vault_server
-            .get_sender_proof_set(ephemeral_key)
-            .await?;
+
+        // Fetch encrypted sender proof set
+        let encrypted_sender_proof_set =
+            match store_vault_server.get_sender_proof_set(ephemeral_key).await {
+                Ok(data) => data,
+                Err(e) => {
+                    log::error!("failed to fetch sender proof set: {}", e);
+                    continue;
+                }
+            };
+
+        // Decrypt sender proof set
         let sender_proof_set =
             match SenderProofSet::decrypt(&encrypted_sender_proof_set, ephemeral_key) {
                 Ok(data) => data,
@@ -64,23 +76,42 @@ pub async fn fetch_withdrawal_info<
                     continue;
                 }
             };
-        let mut transfer_data = transfer_data;
+
         transfer_data.set_sender_proof_set(sender_proof_set);
-        let tx_tree_root = transfer_data.tx_tree_root;
-        let block_number = validity_prover
-            .get_block_number_by_tx_tree_root(tx_tree_root)
-            .await?;
-        if let Some(block_number) = block_number {
-            let meta = MetaDataWithBlockNumber { meta, block_number };
-            settled.push((meta, transfer_data));
-        } else if meta.timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
-            // timeout
-            log::error!("Withdrawal {} is timeout", meta.uuid);
-            timeout.push((meta, transfer_data));
-        } else {
-            // pending
-            log::info!("Withdrawal {} is pending", meta.uuid);
-            pending.push((meta, transfer_data));
+        valid_transfers.push((meta, transfer_data));
+    }
+
+    // Batch fetch block numbers for all valid transfers
+    let tx_tree_roots: Vec<_> = valid_transfers
+        .iter()
+        .map(|(_, transfer_data)| transfer_data.tx_tree_root)
+        .collect();
+
+    let block_numbers = validity_prover
+        .get_block_number_by_tx_tree_root_batch(&tx_tree_roots)
+        .await?;
+
+    // Current timestamp for timeout checking
+    let current_time = chrono::Utc::now().timestamp() as u64;
+
+    // Process results and categorize transfers
+    for ((meta, transfer_data), block_number) in valid_transfers.into_iter().zip(block_numbers) {
+        match block_number {
+            Some(block_number) => {
+                // Transfer is settled
+                let meta = MetaDataWithBlockNumber { meta, block_number };
+                settled.push((meta, transfer_data));
+            }
+            None if meta.timestamp + tx_timeout < current_time => {
+                // Transfer has timed out
+                log::error!("Withdrawal {} is timeout", meta.uuid);
+                timeout.push((meta, transfer_data));
+            }
+            None => {
+                // Transfer is still pending
+                log::info!("Withdrawal {} is pending", meta.uuid);
+                pending.push((meta, transfer_data));
+            }
         }
     }
 

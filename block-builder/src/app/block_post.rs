@@ -110,13 +110,18 @@ pub(crate) async fn post_block(
     let mut account_id_packed = None;
     let mut eliminated_pubkeys = Vec::new();
     if block_post.is_registration_block {
-        // todo: batch check
-        for pubkey in block_post.pubkeys.iter() {
-            if pubkey.is_dummy_pubkey() {
-                // ignore dummy pubkey
-                continue;
-            }
-            let account_info = validity_prover_client.get_account_info(*pubkey).await?;
+        // eliminate pubkeys that already have account_id, which means the user sent another registration tx before this block
+        // filter out dummy pubkeys for efficiency
+        let pubkeys_without_dummy = block_post
+            .pubkeys
+            .iter()
+            .filter(|pubkey| !pubkey.is_dummy_pubkey())
+            .cloned()
+            .collect::<Vec<_>>();
+        let account_ids = validity_prover_client
+            .get_account_info_batch(&pubkeys_without_dummy)
+            .await?;
+        for (pubkey, account_info) in pubkeys_without_dummy.iter().zip(account_ids.iter()) {
             if account_info.account_id.is_some() {
                 eliminated_pubkeys.push(*pubkey);
             }
