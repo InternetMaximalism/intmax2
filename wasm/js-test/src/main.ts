@@ -25,15 +25,15 @@ async function main() {
   const balance = await getEthBalance(ethKey, env.L1_RPC_URL);
   console.log("balance: ", balance);
 
-  // const depositResult = await prepare_deposit(config, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId, false);
-  // const pubkeySaltHash = depositResult.deposit_data.pubkey_salt_hash;
-  // console.log("pubkeySaltHash: ", pubkeySaltHash);
+  const depositResult = await prepare_deposit(config, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId, false);
+  const pubkeySaltHash = depositResult.deposit_data.pubkey_salt_hash;
+  console.log("pubkeySaltHash: ", pubkeySaltHash);
 
-  // await deposit(ethKey, env.L1_RPC_URL, env.LIQUIDITY_CONTRACT_ADDRESS, env.L2_RPC_URL, env.ROLLUP_CONTRACT_ADDRESS, BigInt(amount), tokenType, tokenAddress, tokenId, pubkeySaltHash, ethAddress);
+  await deposit(ethKey, env.L1_RPC_URL, env.LIQUIDITY_CONTRACT_ADDRESS, env.L2_RPC_URL, env.ROLLUP_CONTRACT_ADDRESS, BigInt(amount), tokenType, tokenAddress, tokenId, pubkeySaltHash, ethAddress);
 
-  // // wait for the validity prover syncs
-  // console.log("Waiting for the validity prover to sync...");
-  // await sleep(40);
+  // wait for the validity prover syncs
+  console.log("Waiting for the validity prover to sync...");
+  await sleep(40);
 
   // sync the account's balance proof 
   await syncBalanceProof(config, privateKey);

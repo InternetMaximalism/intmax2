@@ -168,7 +168,7 @@ pub async fn get_tx_status(
     let status = client
         .get_tx_status(pubkey, tx_tree_root)
         .await
-        .map_err(|e| JsError::new(&format!("failed to get settlement status: {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to get tx status: {}", e)))?;
     Ok(status.to_string())
 }
 
