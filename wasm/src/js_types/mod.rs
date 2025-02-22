@@ -1,6 +1,7 @@
 pub mod account;
 pub mod auth;
 pub mod common;
+pub mod cursor;
 pub mod data;
 pub mod encrypted_data;
 pub mod fee;

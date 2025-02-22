@@ -12,9 +12,8 @@ use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
     data::{JsDepositResult, JsTxResult, JsUserData},
     fee::{JsFee, JsFeeQuote},
-    history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     payment_memo::JsPaymentMemoEntry,
-    utils::{parse_address, parse_u256},
+    utils::{parse_address, parse_bytes32, parse_u256},
     wrapper::JsTxRequestMemo,
 };
 use num_bigint::BigUint;
@@ -23,6 +22,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 pub mod client;
 pub mod fee_payment;
+pub mod history;
 pub mod js_types;
 pub mod misc;
 pub mod native;
@@ -155,6 +155,23 @@ pub async fn query_and_finalize(
     Ok(tx_result.into())
 }
 
+#[wasm_bindgen]
+pub async fn get_tx_status(
+    config: &Config,
+    pubkey: &str,
+    tx_tree_root: &str,
+) -> Result<String, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let pubkey = parse_h256_as_u256(pubkey)?;
+    let tx_tree_root = parse_bytes32(tx_tree_root)?;
+    let status = client
+        .get_tx_status(pubkey, tx_tree_root)
+        .await
+        .map_err(|e| JsError::new(&format!("failed to get tx status: {}", e)))?;
+    Ok(status.to_string())
+}
+
 /// Synchronize the user's balance proof. It may take a long time to generate ZKP.
 #[wasm_bindgen]
 pub async fn sync(config: &Config, private_key: &str) -> Result<(), JsError> {
@@ -162,6 +179,16 @@ pub async fn sync(config: &Config, private_key: &str) -> Result<(), JsError> {
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
     client.sync(key).await?;
+    Ok(())
+}
+
+/// Resynchronize the user's balance proof.
+#[wasm_bindgen]
+pub async fn resync(config: &Config, private_key: &str, is_deep: bool) -> Result<(), JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    client.resync(key, is_deep).await?;
     Ok(())
 }
 
@@ -260,45 +287,6 @@ pub async fn get_claim_info(
     let info = client.get_claim_info(key).await?;
     let js_info = info.into_iter().map(JsClaimInfo::from).collect();
     Ok(js_info)
-}
-
-#[wasm_bindgen]
-pub async fn fetch_deposit_history(
-    config: &Config,
-    private_key: &str,
-) -> Result<Vec<JsDepositEntry>, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let client = get_client(config);
-    let history = client.fetch_deposit_history(key).await?;
-    let js_history = history.into_iter().map(JsDepositEntry::from).collect();
-    Ok(js_history)
-}
-
-#[wasm_bindgen]
-pub async fn fetch_transfer_history(
-    config: &Config,
-    private_key: &str,
-) -> Result<Vec<JsTransferEntry>, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let client = get_client(config);
-    let history = client.fetch_transfer_history(key).await?;
-    let js_history = history.into_iter().map(JsTransferEntry::from).collect();
-    Ok(js_history)
-}
-
-#[wasm_bindgen]
-pub async fn fetch_tx_history(
-    config: &Config,
-    private_key: &str,
-) -> Result<Vec<JsTxEntry>, JsError> {
-    init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let client = get_client(config);
-    let history = client.fetch_tx_history(key).await?;
-    let js_history = history.into_iter().map(JsTxEntry::from).collect();
-    Ok(js_history)
 }
 
 #[wasm_bindgen]

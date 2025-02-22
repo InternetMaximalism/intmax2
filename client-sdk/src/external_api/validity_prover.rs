@@ -2,14 +2,21 @@ use async_trait::async_trait;
 use intmax2_interfaces::api::{
     error::ServerError,
     validity_prover::{
-        interface::{AccountInfo, DepositInfo, TransitionProofTask, ValidityProverClientInterface},
+        interface::{
+            AccountInfo, DepositInfo, TransitionProofTask, ValidityProverClientInterface,
+            MAX_BATCH_SIZE,
+        },
         types::{
-            AssignResponse, CompleteRequest, GetAccountInfoQuery, GetAccountInfoResponse,
-            GetBlockMerkleProofQuery, GetBlockMerkleProofResponse, GetBlockNumberByTxTreeRootQuery,
-            GetBlockNumberByTxTreeRootResponse, GetBlockNumberResponse, GetDepositInfoQuery,
-            GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
-            GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-            GetValidityWitnessQuery, GetValidityWitnessResponse, HeartBeatRequest,
+            AssignResponse, CompleteRequest, GetAccountInfoBatchRequest,
+            GetAccountInfoBatchResponse, GetAccountInfoQuery, GetAccountInfoResponse,
+            GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
+            GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
+            GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
+            GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
+            GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
+            GetDepositMerkleProofResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
+            GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
+            HeartBeatRequest,
         },
     },
 };
@@ -110,6 +117,30 @@ impl ValidityProverClientInterface for ValidityProverClient {
         Ok(response.deposit_info)
     }
 
+    async fn get_deposit_info_batch(
+        &self,
+        deposit_hashes: &[Bytes32],
+    ) -> Result<Vec<Option<DepositInfo>>, ServerError> {
+        let mut all_deposit_info = Vec::with_capacity(deposit_hashes.len());
+
+        for chunk in deposit_hashes.chunks(MAX_BATCH_SIZE) {
+            let request = GetDepositInfoBatchRequest {
+                deposit_hashes: chunk.to_vec(),
+            };
+
+            let response: GetDepositInfoBatchResponse = post_request(
+                &self.base_url,
+                "/validity-prover/get-deposit-info-batch",
+                Some(&request),
+            )
+            .await?;
+
+            all_deposit_info.extend(response.deposit_info);
+        }
+
+        Ok(all_deposit_info)
+    }
+
     async fn get_block_number_by_tx_tree_root(
         &self,
         tx_tree_root: Bytes32,
@@ -122,6 +153,28 @@ impl ValidityProverClientInterface for ValidityProverClient {
         )
         .await?;
         Ok(response.block_number)
+    }
+
+    async fn get_block_number_by_tx_tree_root_batch(
+        &self,
+        tx_tree_roots: &[Bytes32],
+    ) -> Result<Vec<Option<u32>>, ServerError> {
+        let mut all_block_numbers = Vec::with_capacity(tx_tree_roots.len());
+
+        for chunk in tx_tree_roots.chunks(MAX_BATCH_SIZE) {
+            let request = GetBlockNumberByTxTreeRootBatchRequest {
+                tx_tree_roots: chunk.to_vec(),
+            };
+            let response: GetBlockNumberByTxTreeRootBatchResponse = post_request(
+                &self.base_url,
+                "/validity-prover/get-block-number-by-tx-tree-root-batch",
+                Some(&request),
+            )
+            .await?;
+            all_block_numbers.extend(response.block_numbers);
+        }
+
+        Ok(all_block_numbers)
     }
 
     async fn get_validity_witness(
@@ -183,6 +236,28 @@ impl ValidityProverClientInterface for ValidityProverClient {
         )
         .await?;
         Ok(response.account_info)
+    }
+
+    async fn get_account_info_batch(
+        &self,
+        pubkeys: &[U256],
+    ) -> Result<Vec<AccountInfo>, ServerError> {
+        let mut all_account_info = Vec::with_capacity(pubkeys.len());
+
+        for chunk in pubkeys.chunks(MAX_BATCH_SIZE) {
+            let request = GetAccountInfoBatchRequest {
+                pubkeys: chunk.to_vec(),
+            };
+            let response: GetAccountInfoBatchResponse = post_request(
+                &self.base_url,
+                "/validity-prover/get-account-info-batch",
+                Some(&request),
+            )
+            .await?;
+            all_account_info.extend(response.account_info);
+        }
+
+        Ok(all_account_info)
     }
 }
 

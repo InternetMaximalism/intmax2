@@ -16,6 +16,8 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
+pub const MAX_BATCH_SIZE: usize = 128;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DepositInfo {
@@ -61,10 +63,20 @@ pub trait ValidityProverClientInterface {
         deposit_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ServerError>;
 
+    async fn get_deposit_info_batch(
+        &self,
+        deposit_hashes: &[Bytes32],
+    ) -> Result<Vec<Option<DepositInfo>>, ServerError>;
+
     async fn get_block_number_by_tx_tree_root(
         &self,
         tx_tree_root: Bytes32,
     ) -> Result<Option<u32>, ServerError>;
+
+    async fn get_block_number_by_tx_tree_root_batch(
+        &self,
+        tx_tree_roots: &[Bytes32],
+    ) -> Result<Vec<Option<u32>>, ServerError>;
 
     async fn get_validity_witness(&self, block_number: u32)
         -> Result<ValidityWitness, ServerError>;
@@ -82,4 +94,9 @@ pub trait ValidityProverClientInterface {
     ) -> Result<DepositMerkleProof, ServerError>;
 
     async fn get_account_info(&self, pubkey: U256) -> Result<AccountInfo, ServerError>;
+
+    async fn get_account_info_batch(
+        &self,
+        pubkeys: &[U256],
+    ) -> Result<Vec<AccountInfo>, ServerError>;
 }

@@ -1,15 +1,15 @@
 use clap::Parser;
 use colored::Colorize as _;
-use ethers::types::H256;
 use intmax2_cli::{
     args::{Args, Commands},
     cli::{
         claim::claim_withdrawals,
         deposit::deposit,
         error::CliError,
-        get::{balance, claim_status, history, log_balance, mining_list, withdrawal_status},
+        get::{balance, claim_status, mining_list, withdrawal_status},
+        history::history,
         send::send_transfers,
-        sync::{sync_claims, sync_withdrawals},
+        sync::{resync, sync_claims, sync_withdrawals},
         withdrawal::send_withdrawal,
     },
     format::{format_token_info, parse_generic_address, privkey_to_keyset},
@@ -58,6 +58,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             amount,
             token_index,
             fee_token_index,
+            wait,
         } => {
             let key = privkey_to_keyset(private_key);
             let transfer = Transfer {
@@ -71,6 +72,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
                 &[transfer],
                 vec![],
                 fee_token_index.unwrap_or_default(),
+                wait,
             )
             .await?;
         }
@@ -81,6 +83,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             token_index,
             fee_token_index,
             with_claim_fee,
+            wait,
         } => {
             let key = privkey_to_keyset(private_key);
             let fee_token_index = fee_token_index.unwrap_or(0);
@@ -91,6 +94,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
                 token_index,
                 fee_token_index,
                 with_claim_fee,
+                wait,
             )
             .await?;
         }
@@ -98,6 +102,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             private_key,
             csv_path,
             fee_token_index,
+            wait,
         } => {
             let key = privkey_to_keyset(private_key);
             let mut reader = csv::Reader::from_path(csv_path)?;
@@ -115,7 +120,14 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             if transfers.len() > MAX_BATCH_TRANSFER {
                 return Err(CliError::TooManyTransfer(transfers.len()));
             }
-            send_transfers(key, &transfers, vec![], fee_token_index.unwrap_or_default()).await?;
+            send_transfers(
+                key,
+                &transfers,
+                vec![],
+                fee_token_index.unwrap_or_default(),
+                wait,
+            )
+            .await?;
         }
         Commands::Deposit {
             eth_private_key,
@@ -157,13 +169,17 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             sync_claims(key, recipient, fee_token_index).await?;
         }
         Commands::Balance { private_key } => {
-            let key = generate_key(private_key);
-            let total_balance = balance(key).await?;
-            log_balance(total_balance).await?;
+            let key = privkey_to_keyset(private_key);
+            balance(key).await?;
         }
-        Commands::History { private_key } => {
-            let key = generate_key(private_key);
-            history(key).await?;
+        Commands::History {
+            private_key,
+            order,
+            from,
+        } => {
+            let key = privkey_to_keyset(private_key);
+            let order = order.unwrap_or_default();
+            history(key, order, from).await?;
         }
         Commands::WithdrawalStatus { private_key } => {
             let key = privkey_to_keyset(private_key);
@@ -184,6 +200,10 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let key = privkey_to_keyset(private_key);
             claim_withdrawals(key, eth_private_key).await?;
         }
+        Commands::Resync { private_key, deep } => {
+            let key = privkey_to_keyset(private_key);
+            resync(key, deep).await?;
+        }
         Commands::GenerateKey => {
             let mut rng = rand::thread_rng();
             let key = KeySet::rand(&mut rng);
@@ -202,21 +222,6 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         }
     }
     Ok(())
-}
-
-fn generate_key(private_key: Option<H256>) -> KeySet {
-    match private_key {
-        Some(private_key) => privkey_to_keyset(private_key),
-        None => {
-            let pubkey: H256 = std::env::var("PUBKEY").unwrap().parse().unwrap();
-            let mut rng = rand::thread_rng();
-            let mut key = KeySet::rand(&mut rng);
-            key.pubkey = BigUint::from_bytes_be(pubkey.as_bytes())
-                .try_into()
-                .unwrap();
-            key
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]

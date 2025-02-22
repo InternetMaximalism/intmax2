@@ -23,12 +23,8 @@ pub mod accounts;
 pub mod ethereum;
 
 // dev environment
-const TRANSFER_WAITING_DURATION: u64 = 20;
-const TRANSFER_POLLING_DURATION: u64 = 5;
 const DEPOSIT_WAITING_DURATION: u64 = 20 * 60;
 const DEPOSIT_POLLING_DURATION: u64 = 60;
-// const WITHDRAWAL_WAITING_DURATION: u64 = 120;
-// const WITHDRAWAL_POLLING_DURATION: u64 = 10;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
@@ -120,20 +116,20 @@ pub async fn transfer_with_error_handling(
     }
 
     let timer = std::time::Instant::now();
-    send_transfers(key, transfer_inputs, vec![], 0).await?;
+    send_transfers(key, transfer_inputs, vec![], 0, true).await?;
     log::info!(
         "Complete transfer from {} ({} s)",
         key.pubkey,
         timer.elapsed().as_secs()
     );
 
-    tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
-    wait_for_balance_synchronization(key, Duration::from_secs(TRANSFER_POLLING_DURATION))
-        .await
-        .map_err(|err| {
-            println!("transfer_with_error_handling Error: {:?}", err);
-            err
-        })?;
+    // tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
+    // wait_for_balance_synchronization(key, Duration::from_secs(TRANSFER_POLLING_DURATION))
+    //     .await
+    //     .map_err(|err| {
+    //         println!("transfer_with_error_handling Error: {:?}", err);
+    //         err
+    //     })?;
 
     Ok(())
 }
@@ -197,21 +193,21 @@ pub async fn withdraw_directly_with_error_handling(
     let transfer_inputs = &[withdrawal_input];
     retry_if(
         |_: &CliError| true,
-        || send_transfers(key, transfer_inputs, vec![], 0),
+        || send_transfers(key, transfer_inputs, vec![], 0, true),
         retry_config,
     )
     .await?;
 
-    tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
-    wait_for_balance_synchronization(key, Duration::from_secs(TRANSFER_POLLING_DURATION))
-        .await
-        .map_err(|err| {
-            println!(
-                "withdraw_native_token_with_error_handling before sync_withdrawals Error: {:?}",
-                err
-            );
-            err
-        })?;
+    // tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
+    // wait_for_balance_synchronization(key, Duration::from_secs(TRANSFER_POLLING_DURATION))
+    //     .await
+    //     .map_err(|err| {
+    //         println!(
+    //             "withdraw_native_token_with_error_handling before sync_withdrawals Error: {:?}",
+    //             err
+    //         );
+    //         err
+    //     })?;
 
     retry_if(
         |_: &CliError| true,

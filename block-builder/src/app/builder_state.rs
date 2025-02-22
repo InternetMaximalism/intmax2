@@ -187,9 +187,8 @@ impl BuilderState {
     }
 
     /// Propose a block with the tx requests
-    pub fn propose_block(&mut self, is_registration_block: bool) {
-        // todo: set
-        let expiry = 0;
+    pub fn propose_block(&mut self, is_registration_block: bool, tx_timeout: u64) {
+        let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
 
         let tx_requests = match self {
             BuilderState::AcceptingTxs(state) => state.tx_requests.clone(),

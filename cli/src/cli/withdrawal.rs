@@ -15,6 +15,7 @@ pub async fn send_withdrawal(
     token_index: u32,
     fee_token_index: u32,
     with_claim_fee: bool,
+    wait: bool,
 ) -> Result<(), CliError> {
     let client = get_client()?;
     let withdrawal_transfer = Transfer {
@@ -54,6 +55,7 @@ pub async fn send_withdrawal(
         &withdrawal_transfers.transfers,
         payment_memos,
         fee_token_index,
+        wait,
     )
     .await?;
     Ok(())

@@ -57,6 +57,18 @@ pub struct GetDepositInfoResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GetDepositInfoBatchRequest {
+    pub deposit_hashes: Vec<Bytes32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDepositInfoBatchResponse {
+    pub deposit_info: Vec<Option<DepositInfo>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetBlockNumberByTxTreeRootQuery {
     pub tx_tree_root: Bytes32,
 }
@@ -65,6 +77,18 @@ pub struct GetBlockNumberByTxTreeRootQuery {
 #[serde(rename_all = "camelCase")]
 pub struct GetBlockNumberByTxTreeRootResponse {
     pub block_number: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBlockNumberByTxTreeRootBatchRequest {
+    pub tx_tree_roots: Vec<Bytes32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBlockNumberByTxTreeRootBatchResponse {
+    pub block_numbers: Vec<Option<u32>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -121,6 +145,18 @@ pub struct GetAccountInfoQuery {
 #[serde(rename_all = "camelCase")]
 pub struct GetAccountInfoResponse {
     pub account_info: AccountInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetAccountInfoBatchRequest {
+    pub pubkeys: Vec<U256>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetAccountInfoBatchResponse {
+    pub account_info: Vec<AccountInfo>,
 }
 
 // Below are Coordinator API

@@ -13,7 +13,7 @@ use intmax2_zkp::{
 };
 
 use super::{
-    deposit_data::DepositData, encryption::Encryption, error::DataError, meta_data::MetaData,
+    deposit_data::DepositData, encryption::BlsEncryption, error::DataError, meta_data::MetaData,
     proof_compression::CompressedBalanceProof, transfer_data::TransferData, tx_data::TxData,
 };
 
@@ -95,7 +95,7 @@ impl UserData {
     }
 }
 
-impl Encryption for UserData {}
+impl BlsEncryption for UserData {}
 
 /// Token index -> AssetLeaf
 #[derive(Debug, Clone)]

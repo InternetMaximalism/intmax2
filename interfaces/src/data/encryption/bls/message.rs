@@ -10,10 +10,9 @@ use ark_bn254::Fr;
 use ctr::Ctr64BE;
 use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait};
 
-use super::{
-    errors::ECIESError,
-    utils::{ecdh_x, hmac_sha256, kdf, sha256, U256_SIZE},
-};
+use crate::data::encryption::errors::ECIESError;
+
+use super::utils::{ecdh_x, hmac_sha256, kdf, sha256, U256_SIZE};
 
 /// The symmetric keys derived from an ECIES message.
 #[derive(Debug)]

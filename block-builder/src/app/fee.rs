@@ -11,7 +11,7 @@ use intmax2_interfaces::{
         store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
-        encryption::Encryption, sender_proof_set::SenderProofSet, transfer_data::TransferData,
+        encryption::BlsEncryption, sender_proof_set::SenderProofSet, transfer_data::TransferData,
         validation::Validation,
     },
 };

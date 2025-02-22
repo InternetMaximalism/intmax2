@@ -17,12 +17,12 @@ use intmax2_zkp::{
 use num_bigint::BigUint;
 use std::fmt::Display;
 
-use crate::{
-    client::strategy::deposit::fetch_deposit_info,
-    external_api::contract::liquidity_contract::LiquidityContract,
-};
+use crate::external_api::contract::liquidity_contract::LiquidityContract;
 
-use super::{error::StrategyError, tx::fetch_tx_info};
+use super::{
+    deposit::fetch_all_unprocessed_deposit_info, error::StrategyError,
+    tx::fetch_all_unprocessed_tx_info,
+};
 
 #[derive(Debug, Clone)]
 pub struct Mining {
@@ -62,7 +62,7 @@ pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverCl
     deposit_timeout: u64,
 ) -> Result<Vec<Mining>, StrategyError> {
     // get all deposit info
-    let deposit_info = fetch_deposit_info(
+    let deposit_info = fetch_all_unprocessed_deposit_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
@@ -102,7 +102,7 @@ pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverCl
     let last_block_number = account_info.last_block_number;
 
     // get tx info
-    let tx_info = fetch_tx_info(
+    let tx_info = fetch_all_unprocessed_tx_info(
         store_vault_server,
         validity_prover,
         key,

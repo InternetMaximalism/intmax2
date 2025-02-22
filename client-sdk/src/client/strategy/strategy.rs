@@ -15,16 +15,16 @@ use intmax2_zkp::common::signature::key_set::KeySet;
 use crate::{
     client::strategy::{
         common::fetch_user_data,
+        deposit::fetch_all_unprocessed_deposit_info,
         mining::{fetch_mining_info, MiningStatus},
-        withdrawal::fetch_withdrawal_info,
+        transfer::fetch_all_unprocessed_transfer_info,
+        tx::fetch_all_unprocessed_tx_info,
+        withdrawal::fetch_all_unprocessed_withdrawal_info,
     },
     external_api::contract::liquidity_contract::LiquidityContract,
 };
 
-use super::{
-    deposit::fetch_deposit_info, error::StrategyError, mining::Mining,
-    transfer::fetch_transfer_info, tx::fetch_tx_info,
-};
+use super::{error::StrategyError, mining::Mining};
 
 // Next sync action
 #[derive(Debug, Clone)]
@@ -80,7 +80,8 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
     if balances.is_insufficient() {
         return Err(StrategyError::BalanceInsufficientBeforeSync);
     }
-    let tx_info = fetch_tx_info(
+
+    let tx_info = fetch_all_unprocessed_tx_info(
         store_vault_server,
         validity_prover,
         key,
@@ -98,7 +99,7 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
     }
 
     // Then, collect deposit and transfer data
-    let deposit_info = fetch_deposit_info(
+    let deposit_info = fetch_all_unprocessed_deposit_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
@@ -107,7 +108,7 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
         deposit_timeout,
     )
     .await?;
-    let transfer_info = fetch_transfer_info(
+    let transfer_info = fetch_all_unprocessed_transfer_info(
         store_vault_server,
         validity_prover,
         key,
@@ -253,7 +254,7 @@ pub async fn determine_withdrawals<
 > {
     log::info!("determine_withdrawals");
     let user_data = fetch_user_data(store_vault_server, key).await?;
-    let withdrawal_info = fetch_withdrawal_info(
+    let withdrawal_info = fetch_all_unprocessed_withdrawal_info(
         store_vault_server,
         validity_prover,
         key,

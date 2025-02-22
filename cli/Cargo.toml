@@ -14,6 +14,7 @@ reqwest = { workspace = true }
 ethers = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
+uuid = { workspace = true }
 clap = { version = "4.5.28", features = ["derive"] }
 anyhow = "1.0.93"
 num-bigint = "0.4.6"

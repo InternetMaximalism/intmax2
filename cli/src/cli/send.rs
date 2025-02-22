@@ -1,4 +1,7 @@
-use intmax2_client_sdk::{client::client::PaymentMemoEntry, external_api::indexer::IndexerClient};
+use intmax2_client_sdk::{
+    client::client::{PaymentMemoEntry, TxStatus},
+    external_api::{indexer::IndexerClient, utils::time::sleep_for},
+};
 use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
 use intmax2_zkp::{
     common::{signature::key_set::KeySet, transfer::Transfer},
@@ -10,11 +13,14 @@ use crate::{cli::client::get_client, env_var::EnvVar};
 
 use super::error::CliError;
 
+const TX_STATUS_POLLING_INTERVAL: u64 = 5;
+
 pub async fn send_transfers(
     key: KeySet,
     transfers: &[Transfer],
     payment_memos: Vec<PaymentMemoEntry>,
     fee_token_index: u32,
+    wait: bool,
 ) -> Result<(), CliError> {
     if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
         return Err(CliError::TooManyTransfer(transfers.len()));
@@ -76,9 +82,32 @@ pub async fn send_transfers(
         .await?;
 
     log::info!("Finalizing tx");
-    client
+    let result = client
         .finalize_tx(&block_builder_url, key, &memo, &proposal)
         .await?;
+
+    if wait {
+        log::info!("Waiting for the block to be finalized");
+
+        loop {
+            let status = client
+                .get_tx_status(key.pubkey, result.tx_tree_root)
+                .await?;
+            log::info!("Tx status: {:?}", status);
+            match status {
+                TxStatus::Pending => {}
+                TxStatus::Success => {
+                    log::info!("tx success");
+                    break;
+                }
+                TxStatus::Failed(reason) => {
+                    log::error!("tx failed: {}", reason);
+                    break;
+                }
+            }
+            sleep_for(TX_STATUS_POLLING_INTERVAL).await;
+        }
+    }
 
     Ok(())
 }

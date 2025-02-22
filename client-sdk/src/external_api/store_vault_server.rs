@@ -14,7 +14,6 @@ use intmax2_interfaces::{
             },
         },
     },
-    data::meta_data::MetaData,
     utils::signature::{Auth, Signable, WithAuth},
 };
 use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::bytes32::Bytes32};
@@ -143,28 +142,13 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         &self,
         key: KeySet,
         data_type: DataType,
-        metadata_cursor: &Option<MetaData>,
-    ) -> Result<Vec<DataWithMetaData>, ServerError> {
-        let mut data_array = vec![];
-
-        let mut has_more = true;
-        let mut metadata_cursor = metadata_cursor.clone();
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         let auth = generate_auth_for_get_data_sequence(key);
-        while has_more {
-            let (data, cursor) = self
-                .get_data_sequence_native(
-                    data_type,
-                    &metadata_cursor,
-                    &None,
-                    &CursorOrder::Asc,
-                    &auth,
-                )
-                .await?;
-            has_more = cursor.has_more;
-            metadata_cursor = cursor.next_cursor;
-            data_array.extend(data);
-        }
-        Ok(data_array)
+        let (data, cursor) = self
+            .get_data_sequence_with_auth(data_type, cursor, &auth)
+            .await?;
+        Ok((data, cursor))
     }
 
     async fn save_misc(
@@ -191,21 +175,13 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         &self,
         key: KeySet,
         topic: Bytes32,
-        meta_cursor: &Option<MetaData>,
-    ) -> Result<Vec<DataWithMetaData>, ServerError> {
-        let mut data_array = vec![];
-        let mut has_more = true;
-        let mut metadata_cursor = meta_cursor.clone();
+        meta_cursor: &MetaDataCursor,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         let auth = generate_auth_for_get_misc_sequence(key, topic);
-        while has_more {
-            let (data, cursor) = self
-                .get_misc_sequence_native(topic, &metadata_cursor, &None, &CursorOrder::Asc, &auth)
-                .await?;
-            has_more = cursor.has_more;
-            metadata_cursor = cursor.next_cursor;
-            data_array.extend(data);
-        }
-        Ok(data_array)
+        let (data, cursor) = self
+            .get_misc_sequence_native_with_auth(topic, meta_cursor, &auth)
+            .await?;
+        Ok((data, cursor))
     }
 }
 
@@ -222,12 +198,10 @@ impl StoreVaultServerClient {
         dummy_request.verify(auth)
     }
 
-    pub async fn get_data_sequence_native(
+    pub async fn get_data_sequence_with_auth(
         &self,
         data_type: DataType,
-        metadata_cursor: &Option<MetaData>,
-        limit: &Option<u32>,
-        order: &CursorOrder,
+        cursor: &MetaDataCursor,
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         self.verify_auth_for_get_data_sequence(auth)
@@ -235,11 +209,7 @@ impl StoreVaultServerClient {
         let request_with_auth = WithAuth {
             inner: GetDataSequenceRequest {
                 data_type,
-                cursor: MetaDataCursor {
-                    cursor: metadata_cursor.clone(),
-                    order: order.clone(),
-                    limit: *limit,
-                },
+                cursor: cursor.clone(),
             },
             auth: auth.clone(),
         };
@@ -252,22 +222,16 @@ impl StoreVaultServerClient {
         Ok((response.data, response.cursor_response))
     }
 
-    pub async fn get_misc_sequence_native(
+    pub async fn get_misc_sequence_native_with_auth(
         &self,
         topic: Bytes32,
-        metadata_cursor: &Option<MetaData>,
-        limit: &Option<u32>,
-        order: &CursorOrder,
+        cursor: &MetaDataCursor,
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         let request_with_auth = WithAuth {
             inner: GetMiscSequenceRequest {
                 topic,
-                cursor: MetaDataCursor {
-                    cursor: metadata_cursor.clone(),
-                    order: order.clone(),
-                    limit: *limit,
-                },
+                cursor: cursor.clone(),
             },
             auth: auth.clone(),
         };

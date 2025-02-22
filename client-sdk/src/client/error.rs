@@ -1,6 +1,6 @@
 use intmax2_interfaces::{
     api::error::ServerError,
-    data::{encryption::errors::EncryptionError, proof_compression::ProofCompressionError},
+    data::{encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError},
 };
 
 use crate::external_api::contract::error::BlockchainError;
@@ -25,7 +25,7 @@ pub enum ClientError {
     ProofCompressionError(#[from] ProofCompressionError),
 
     #[error("Encryption error: {0}")]
-    EncryptionError(#[from] EncryptionError),
+    EncryptionError(#[from] BlsEncryptionError),
 
     #[error("Payment memo error: {0}")]
     PaymentMemoError(String),

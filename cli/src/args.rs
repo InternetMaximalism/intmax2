@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use ethers::types::{Address as EthAddress, H256};
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_interfaces::{
+    api::store_vault_server::types::CursorOrder, data::deposit_data::TokenType,
+};
 use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 
 #[derive(Parser)]
@@ -24,6 +26,8 @@ pub enum Commands {
         token_index: u32,
         #[clap(long)]
         fee_token_index: Option<u32>,
+        #[clap(long, default_value = "false")]
+        wait: bool,
     },
     Withdrawal {
         #[clap(long)]
@@ -38,6 +42,8 @@ pub enum Commands {
         fee_token_index: Option<u32>,
         #[clap(long, default_value = "false")]
         with_claim_fee: bool,
+        #[clap(long, default_value = "false")]
+        wait: bool,
     },
     BatchTransfer {
         #[clap(long)]
@@ -46,6 +52,8 @@ pub enum Commands {
         csv_path: String,
         #[clap(long)]
         fee_token_index: Option<u32>,
+        #[clap(long, default_value = "false")]
+        wait: bool,
     },
     Deposit {
         #[clap(long)]
@@ -79,11 +87,15 @@ pub enum Commands {
     },
     Balance {
         #[clap(long)]
-        private_key: Option<H256>,
+        private_key: H256,
     },
     History {
         #[clap(long)]
-        private_key: Option<H256>,
+        private_key: H256,
+        #[clap(long)]
+        order: Option<CursorOrder>, // asc or desc
+        #[clap(long)]
+        from: Option<u64>,
     },
     WithdrawalStatus {
         #[clap(long)]
@@ -102,6 +114,12 @@ pub enum Commands {
         private_key: H256,
         #[clap(long)]
         eth_private_key: H256,
+    },
+    Resync {
+        #[clap(long)]
+        private_key: H256,
+        #[clap(long, default_value = "false")]
+        deep: bool,
     },
     GenerateKey,
     GenerateFromEthKey {

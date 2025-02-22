@@ -10,7 +10,7 @@ use intmax2_zkp::{
     utils::leafable::Leafable,
 };
 
-use super::{encryption::Encryption, validation::Validation};
+use super::{encryption::BlsEncryption, validation::Validation};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,7 +101,7 @@ impl DepositData {
     }
 }
 
-impl Encryption for DepositData {}
+impl BlsEncryption for DepositData {}
 
 impl Validation for DepositData {
     fn validate(&self, pubkey: U256) -> anyhow::Result<()> {

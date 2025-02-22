@@ -4,7 +4,7 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
-        encryption::errors::EncryptionError, meta_data::MetaData,
+        encryption::errors::BlsEncryptionError, meta_data::MetaData,
         proof_compression::ProofCompressionError, transfer_data::TransferData,
         validation::Validation as _,
     },
@@ -24,7 +24,7 @@ pub enum ReceiveValidationError {
     ServerError(#[from] ServerError),
 
     #[error("Encryption error: {0}")]
-    EncryptionError(#[from] EncryptionError),
+    EncryptionError(#[from] BlsEncryptionError),
 
     #[error("Proof compression error: {0}")]
     ProofCompressionError(#[from] ProofCompressionError),

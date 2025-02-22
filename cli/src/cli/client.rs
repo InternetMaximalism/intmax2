@@ -1,12 +1,12 @@
 use intmax2_client_sdk::{
     client::{client::Client, config::ClientConfig},
     external_api::{
-        balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
         contract::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
         },
+        private_zkp_server::PrivateZKPServerClient,
         store_vault_server::StoreVaultServerClient,
         validity_prover::ValidityProverClient,
         withdrawal_server::WithdrawalServerClient,
@@ -20,7 +20,8 @@ use super::error::CliError;
 type BB = BlockBuilderClient;
 type S = StoreVaultServerClient;
 type V = ValidityProverClient;
-type B = BalanceProverClient;
+// type B = BalanceProverClient;
+type B = PrivateZKPServerClient;
 type W = WithdrawalServerClient;
 
 pub fn get_client() -> Result<Client<BB, S, V, B, W>, CliError> {

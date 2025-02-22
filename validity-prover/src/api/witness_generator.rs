@@ -1,16 +1,21 @@
 use crate::api::state::State;
 use actix_web::{
-    get,
+    get, post,
     web::{Data, Json},
     Error,
 };
-use intmax2_interfaces::api::validity_prover::types::{
-    GetAccountInfoQuery, GetAccountInfoResponse, GetBlockMerkleProofQuery,
-    GetBlockMerkleProofResponse, GetBlockNumberByTxTreeRootQuery,
-    GetBlockNumberByTxTreeRootResponse, GetBlockNumberResponse, GetDepositInfoQuery,
-    GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
-    GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-    GetValidityWitnessQuery, GetValidityWitnessResponse,
+use intmax2_interfaces::api::validity_prover::{
+    interface::MAX_BATCH_SIZE,
+    types::{
+        GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
+        GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
+        GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
+        GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
+        GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
+        GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
+        GetDepositMerkleProofResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
+        GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
+    },
 };
 use intmax2_zkp::circuits::validity::validity_pis::ValidityPublicInputs;
 use serde_qs::actix::QsQuery;
@@ -61,6 +66,23 @@ pub async fn get_account_info(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetAccountInfoResponse { account_info }))
+}
+
+#[post("/get-account-info-batch")]
+pub async fn get_account_info_batch(
+    state: Data<State>,
+    request: Json<GetAccountInfoBatchRequest>,
+) -> Result<Json<GetAccountInfoBatchResponse>, Error> {
+    let request = request.into_inner();
+    if request.pubkeys.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
+    }
+    let account_info = state
+        .witness_generator
+        .get_account_info_batch(&request.pubkeys)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(GetAccountInfoBatchResponse { account_info }))
 }
 
 #[get("/get-update-witness")]
@@ -124,6 +146,23 @@ pub async fn get_deposit_info(
     Ok(Json(GetDepositInfoResponse { deposit_info }))
 }
 
+#[post("/get-deposit-info-batch")]
+pub async fn get_deposit_info_batch(
+    state: Data<State>,
+    request: Json<GetDepositInfoBatchRequest>,
+) -> Result<Json<GetDepositInfoBatchResponse>, Error> {
+    let request = request.into_inner();
+    if request.deposit_hashes.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
+    }
+    let deposit_info = state
+        .witness_generator
+        .get_deposit_info_batch(&request.deposit_hashes)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(GetDepositInfoBatchResponse { deposit_info }))
+}
+
 #[get("/get-block-number-by-tx-tree-root")]
 pub async fn get_block_number_by_tx_tree_root(
     state: Data<State>,
@@ -136,6 +175,25 @@ pub async fn get_block_number_by_tx_tree_root(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetBlockNumberByTxTreeRootResponse { block_number }))
+}
+
+#[post("/get-block-number-by-tx-tree-root-batch")]
+pub async fn get_block_number_by_tx_tree_root_batch(
+    state: Data<State>,
+    request: Json<GetBlockNumberByTxTreeRootBatchRequest>,
+) -> Result<Json<GetBlockNumberByTxTreeRootBatchResponse>, Error> {
+    let request = request.into_inner();
+    if request.tx_tree_roots.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
+    }
+    let block_numbers = state
+        .witness_generator
+        .get_block_number_by_tx_tree_root_batch(&request.tx_tree_roots)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(GetBlockNumberByTxTreeRootBatchResponse {
+        block_numbers,
+    }))
 }
 
 #[get("/get-block-merkle-proof")]
@@ -174,11 +232,14 @@ pub fn validity_prover_scope() -> actix_web::Scope {
         .service(get_validity_proof_block_number)
         .service(get_next_deposit_index)
         .service(get_account_info)
+        .service(get_account_info_batch)
         .service(get_update_witness)
         .service(get_validity_witness)
         .service(get_validity_pis)
         .service(get_deposit_info)
+        .service(get_deposit_info_batch)
         .service(get_block_number_by_tx_tree_root)
+        .service(get_block_number_by_tx_tree_root_batch)
         .service(get_block_merkle_proof)
         .service(get_deposit_merkle_proof)
 }

@@ -52,7 +52,7 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
             salt: generate_salt(),
         })
         .collect::<Vec<_>>();
-    send_transfers(intmax_sender, &transfers, vec![], ETH_TOKEN_INDEX).await?;
+    send_transfers(intmax_sender, &transfers, vec![], ETH_TOKEN_INDEX, true).await?;
 
     Ok(())
 }

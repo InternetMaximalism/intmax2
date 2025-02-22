@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -326,12 +327,36 @@ impl WitnessGenerator {
         })
     }
 
+    pub async fn get_account_info_batch(
+        &self,
+        pubkeys: &[U256],
+    ) -> Result<Vec<AccountInfo>, ValidityProverError> {
+        let mut account_infos = Vec::new();
+        for pubkey in pubkeys {
+            let account_info = self.get_account_info(*pubkey).await?;
+            account_infos.push(account_info);
+        }
+        Ok(account_infos)
+    }
+
     pub async fn get_deposit_info(
         &self,
         deposit_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ValidityProverError> {
         let deposit_info = self.observer.get_deposit_info(deposit_hash).await?;
         Ok(deposit_info)
+    }
+
+    pub async fn get_deposit_info_batch(
+        &self,
+        deposit_hashes: &[Bytes32],
+    ) -> Result<Vec<Option<DepositInfo>>, ValidityProverError> {
+        let mut deposit_infos = Vec::new();
+        for deposit_hash in deposit_hashes {
+            let deposit_info = self.observer.get_deposit_info(*deposit_hash).await?;
+            deposit_infos.push(deposit_info);
+        }
+        Ok(deposit_infos)
     }
 
     pub async fn get_block_number_by_tx_tree_root(
@@ -346,6 +371,43 @@ impl WitnessGenerator {
         .await?;
 
         Ok(record.map(|r| r.block_number as u32))
+    }
+
+    pub async fn get_block_number_by_tx_tree_root_batch(
+        &self,
+        tx_tree_roots: &[Bytes32],
+    ) -> Result<Vec<Option<u32>>, ValidityProverError> {
+        // early return
+        if tx_tree_roots.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let root_bytes: Vec<Vec<u8>> = tx_tree_roots.iter().map(|r| r.to_bytes_be()).collect();
+
+        let records = sqlx::query!(
+            r#"
+            SELECT tx_tree_root, block_number 
+            FROM tx_tree_roots 
+            WHERE tx_tree_root = ANY($1)
+            "#,
+            &root_bytes as &[Vec<u8>]
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let block_map: HashMap<Vec<u8>, i32> = records
+            .into_iter()
+            .map(|r| (r.tx_tree_root, r.block_number))
+            .collect();
+
+        Ok(tx_tree_roots
+            .iter()
+            .map(|root| {
+                block_map
+                    .get(&root.to_bytes_be())
+                    .map(|&block_number| block_number as u32)
+            })
+            .collect())
     }
 
     pub async fn get_validity_witness(

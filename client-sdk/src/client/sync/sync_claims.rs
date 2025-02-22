@@ -6,7 +6,7 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::{ClaimFeeInfo, WithdrawalServerClientInterface},
     },
-    data::encryption::Encryption as _,
+    data::encryption::BlsEncryption as _,
 };
 use intmax2_zkp::{
     common::{

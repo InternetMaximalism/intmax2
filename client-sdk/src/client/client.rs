@@ -1,8 +1,13 @@
+use core::fmt;
+
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
         block_builder::interface::{BlockBuilderClientInterface, Fee},
-        store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+        store_vault_server::{
+            interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+            types::{MetaDataCursor, MetaDataCursorResponse},
+        },
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::{
             ClaimInfo, WithdrawalInfo, WithdrawalServerClientInterface,
@@ -10,7 +15,7 @@ use intmax2_interfaces::{
     },
     data::{
         deposit_data::{DepositData, TokenType},
-        encryption::Encryption as _,
+        encryption::BlsEncryption as _,
         meta_data::MetaData,
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,
@@ -119,6 +124,24 @@ pub struct TxResult {
     pub withdrawal_uuids: Vec<String>,
     pub transfer_data_vec: Vec<TransferData>,
     pub withdrawal_data_vec: Vec<TransferData>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TxStatus {
+    Pending,
+    Success,
+    Failed(String),
+}
+
+impl fmt::Display for TxStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TxStatus::Pending => write!(f, "pending"),
+            TxStatus::Success => write!(f, "success"),
+            TxStatus::Failed(_) => write!(f, "failed"),
+        }
+    }
 }
 
 impl<BB, S, V, B, W> Client<BB, S, V, B, W>
@@ -315,6 +338,7 @@ where
             let (fee_proof, collateral_spent_witness) = generate_fee_proof(
                 &self.store_vault_server,
                 &self.balance_prover,
+                self.config.tx_timeout,
                 key,
                 &user_data,
                 sender_proof_set_ephemeral_key,
@@ -434,6 +458,22 @@ where
         proposal
             .verify(memo.tx)
             .map_err(|e| ClientError::InvalidBlockProposal(format!("{}", e)))?;
+
+        // verify expiry
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        if proposal.expiry == 0 {
+            return Err(ClientError::InvalidBlockProposal(
+                "expiry 0 is not allowed".to_string(),
+            ));
+        } else if proposal.expiry < current_time {
+            return Err(ClientError::InvalidBlockProposal(
+                "proposal expired".to_string(),
+            ));
+        } else if proposal.expiry > current_time + self.config.tx_timeout {
+            return Err(ClientError::InvalidBlockProposal(
+                "proposal expiry too far".to_string(),
+            ));
+        }
 
         let mut entries = vec![];
 
@@ -575,6 +615,53 @@ where
         Ok(result)
     }
 
+    pub async fn get_tx_status(
+        &self,
+        sender: U256,
+        tx_tree_root: Bytes32,
+    ) -> Result<TxStatus, ClientError> {
+        // get onchain info
+        let block_number = self
+            .validity_prover
+            .get_block_number_by_tx_tree_root(tx_tree_root)
+            .await?;
+        if block_number.is_none() {
+            return Ok(TxStatus::Pending);
+        }
+        let block_number = block_number.unwrap();
+        let validity_witness = self
+            .validity_prover
+            .get_validity_witness(block_number)
+            .await?;
+        let validity_pis = validity_witness.to_validity_pis().map_err(|e| {
+            ClientError::UnexpectedError(format!("failed to convert to validity pis: {}", e))
+        })?;
+
+        // get sender leaf
+        let sender_leaf = validity_witness
+            .block_witness
+            .get_sender_tree()
+            .leaves()
+            .into_iter()
+            .find(|leaf| leaf.sender == sender);
+        let sender_leaf = match sender_leaf {
+            Some(leaf) => leaf,
+            None => return Ok(TxStatus::Failed("sender leaf not found".to_string())),
+        };
+
+        if !sender_leaf.did_return_sig {
+            return Ok(TxStatus::Failed(
+                "sender did'nt returned signature".to_string(),
+            ));
+        }
+
+        if !validity_pis.is_valid_block {
+            return Ok(TxStatus::Failed("block is not valid".to_string()));
+        }
+
+        Ok(TxStatus::Success)
+    }
+
     pub async fn get_withdrawal_info(
         &self,
         key: KeySet,
@@ -616,22 +703,25 @@ where
     pub async fn fetch_deposit_history(
         &self,
         key: KeySet,
-    ) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
-        fetch_deposit_history(self, key).await
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
+        fetch_deposit_history(self, key, cursor).await
     }
 
     pub async fn fetch_transfer_history(
         &self,
         key: KeySet,
-    ) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
-        fetch_transfer_history(self, key).await
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
+        fetch_transfer_history(self, key, cursor).await
     }
 
     pub async fn fetch_tx_history(
         &self,
         key: KeySet,
-    ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
-        fetch_tx_history(self, key).await
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
+        fetch_tx_history(self, key, cursor).await
     }
 
     pub async fn quote_transfer_fee(

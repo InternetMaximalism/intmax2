@@ -11,8 +11,9 @@ use intmax2_zkp::{
 };
 use rand::Rng;
 
+use crate::data::encryption::errors::ECIESError;
+
 use super::{
-    errors::ECIESError,
     message::EncryptedMessage,
     utils::{ecdh_x, hmac_sha256, kdf, sha256, U256_SIZE},
 };
@@ -21,7 +22,7 @@ pub use alloy_primitives::bytes::BytesMut;
 
 const ENCRYPTION_VERSION: u8 = 1;
 
-pub fn encrypt(pubkey: U256, data: &[u8]) -> Vec<u8> {
+pub fn encrypt_bls(pubkey: U256, data: &[u8]) -> Vec<u8> {
     let sender = EciesSender::new(pubkey);
     let mut encrypted_data = BytesMut::new();
     sender.encrypt_message(data, &mut encrypted_data);
@@ -34,7 +35,7 @@ pub fn encrypt(pubkey: U256, data: &[u8]) -> Vec<u8> {
     version_data.to_vec()
 }
 
-pub fn decrypt(key: KeySet, encrypted_data: &[u8]) -> anyhow::Result<Vec<u8>> {
+pub fn decrypt_bls(key: KeySet, encrypted_data: &[u8]) -> anyhow::Result<Vec<u8>> {
     let (version_data, encrypted_data) = encrypted_data.split_at(1);
     let version = version_data[0];
     if version != 1 {
@@ -139,8 +140,8 @@ mod test {
     use rand::Rng;
 
     use super::{
-        decrypt, ecdh_x, encrypt, hmac_sha256, kdf, sha256, BytesMut, EciesReceiver, EciesSender,
-        U256_SIZE,
+        decrypt_bls, ecdh_x, encrypt_bls, hmac_sha256, kdf, sha256, BytesMut, EciesReceiver,
+        EciesSender, U256_SIZE,
     };
 
     #[test]
@@ -231,10 +232,10 @@ mod test {
         let data = b"hello world";
         println!("data: {:?}", data.to_vec());
 
-        let encrypted_data = encrypt(key.pubkey, data);
+        let encrypted_data = encrypt_bls(key.pubkey, data);
         println!("encrypted data: {:?}", encrypted_data);
 
-        let decrypted_data = decrypt(key, &encrypted_data).unwrap();
+        let decrypted_data = decrypt_bls(key, &encrypted_data).unwrap();
         println!("decrypted data: {:?}", decrypted_data);
 
         assert_eq!(data.to_vec(), decrypted_data);
@@ -262,7 +263,7 @@ mod test {
 
         let encrypted_data = encrypt_with_unsupported_version(key.pubkey, data);
 
-        let decrypted_data = decrypt(key, &encrypted_data);
+        let decrypted_data = decrypt_bls(key, &encrypted_data);
 
         match decrypted_data {
             Ok(_) => panic!("Decryption should fail"),

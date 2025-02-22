@@ -139,7 +139,7 @@ impl Config {
 pub fn get_client(config: &Config) -> Client<BB, S, V, B, W> {
     let block_builder = BB::new();
     let store_vault_server = S::new(&config.store_vault_server_url);
-    let balance_prover: BalanceProverClient = B::new(&config.balance_prover_url);
+    let balance_prover = B::new(&config.balance_prover_url);
     let validity_prover = V::new(&config.validity_prover_url);
     let withdrawal_server = W::new(&config.withdrawal_server_url);
 

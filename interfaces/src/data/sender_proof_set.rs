@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::utils::circuit_verifiers::CircuitVerifiers;
 
 use super::{
-    encryption::Encryption,
+    encryption::BlsEncryption,
     proof_compression::{CompressedBalanceProof, CompressedSpentProof},
     validation::Validation,
 };
@@ -20,7 +20,7 @@ pub struct SenderProofSet {
     pub prev_balance_proof: CompressedBalanceProof,
 }
 
-impl Encryption for SenderProofSet {}
+impl BlsEncryption for SenderProofSet {}
 
 impl Validation for SenderProofSet {
     fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
