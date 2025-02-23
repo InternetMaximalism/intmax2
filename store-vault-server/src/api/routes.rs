@@ -6,12 +6,15 @@ use actix_web::{
     Error,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::types::{
-        GetDataBatchRequest, GetDataBatchResponse, GetDataSequenceRequest, GetDataSequenceResponse,
-        GetMiscSequenceRequest, GetMiscSequenceResponse, GetSenderProofSetRequest,
-        GetSenderProofSetResponse, GetUserDataRequest, GetUserDataResponse, SaveDataBatchRequest,
-        SaveDataBatchResponse, SaveMiscRequest, SaveMiscResponse, SaveSenderProofSetRequest,
-        SaveUserDataRequest,
+    api::store_vault_server::{
+        interface::MAX_BATCH_SIZE,
+        types::{
+            GetDataBatchRequest, GetDataBatchResponse, GetDataSequenceRequest,
+            GetDataSequenceResponse, GetMiscSequenceRequest, GetMiscSequenceResponse,
+            GetSenderProofSetRequest, GetSenderProofSetResponse, GetUserDataRequest,
+            GetUserDataResponse, SaveDataBatchRequest, SaveDataBatchResponse, SaveMiscRequest,
+            SaveMiscResponse, SaveSenderProofSetRequest, SaveUserDataRequest,
+        },
     },
     utils::signature::{Signable, WithAuth},
 };
@@ -102,7 +105,6 @@ pub async fn save_data_batch(
     let pubkey = request.auth.pubkey;
     let entries = &request.inner.data;
 
-    const MAX_BATCH_SIZE: usize = 1000;
     if entries.len() > MAX_BATCH_SIZE {
         return Err(actix_web::error::ErrorBadRequest(format!(
             "Batch size exceeds maximum limit of {}",
@@ -137,6 +139,14 @@ pub async fn get_data_batch(
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
     let request = &request.inner;
+
+    if request.uuids.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest(format!(
+            "Batch size exceeds maximum limit of {}",
+            MAX_BATCH_SIZE
+        )));
+    }
+
     let data = state
         .store_vault_server
         .get_data_batch(request.data_type, pubkey, &request.uuids)
@@ -156,6 +166,16 @@ pub async fn get_data_sequence(
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
     let request = &request.inner;
+
+    if let Some(limit) = request.cursor.limit {
+        if limit > MAX_BATCH_SIZE as u32 {
+            return Err(actix_web::error::ErrorBadRequest(format!(
+                "Batch size exceeds maximum limit of {}",
+                MAX_BATCH_SIZE
+            )));
+        }
+    }
+
     let (data, cursor_response) = state
         .store_vault_server
         .get_data_sequence(request.data_type, pubkey, &request.cursor)
@@ -198,6 +218,16 @@ pub async fn get_misc_sequence(
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
     let request = &request.inner;
+
+    if let Some(limit) = request.cursor.limit {
+        if limit > MAX_BATCH_SIZE as u32 {
+            return Err(actix_web::error::ErrorBadRequest(format!(
+                "Batch size exceeds maximum limit of {}",
+                MAX_BATCH_SIZE
+            )));
+        }
+    }
+
     let (data, cursor_response) = state
         .store_vault_server
         .get_misc_sequence(pubkey, request.topic, &request.cursor)

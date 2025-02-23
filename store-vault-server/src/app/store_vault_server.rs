@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Ok, Result};
 use intmax2_interfaces::{
     api::store_vault_server::{
-        interface::{DataType, SaveDataEntry},
+        interface::{DataType, SaveDataEntry, MAX_BATCH_SIZE},
         types::{CursorOrder, DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
     },
     data::meta_data::MetaData,
@@ -16,13 +16,8 @@ use server_common::db::{DbPool, DbPoolConfig};
 
 use crate::{app::utils::extract_timestamp_from_uuidv7, EnvVar};
 
-pub struct Config {
-    pub max_pagination_limit: u32,
-}
-
 pub struct StoreVaultServer {
     pool: DbPool,
-    config: Config,
 }
 
 impl StoreVaultServer {
@@ -33,10 +28,7 @@ impl StoreVaultServer {
             url: env.database_url.clone(),
         })
         .await?;
-        let config = Config {
-            max_pagination_limit: env.max_pagination_limit,
-        };
-        Ok(Self { pool, config })
+        Ok(Self { pool })
     }
 
     pub async fn save_user_data(
@@ -188,12 +180,6 @@ impl StoreVaultServer {
         pubkey: U256,
         uuids: &[String],
     ) -> Result<Vec<DataWithMetaData>> {
-        if uuids.len() > self.config.max_pagination_limit as usize {
-            return Err(anyhow!(
-                "Number of uuids exceeds the limit {}",
-                self.config.max_pagination_limit
-            ));
-        }
         let pubkey_hex = pubkey.to_hex();
         let records = sqlx::query!(
             r#"
@@ -231,7 +217,7 @@ impl StoreVaultServer {
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse)> {
         let pubkey_hex = pubkey.to_hex();
-        let actual_limit = cursor.limit.unwrap_or(self.config.max_pagination_limit) as i64;
+        let actual_limit = cursor.limit.unwrap_or(MAX_BATCH_SIZE as u32) as i64;
 
         let result: Vec<DataWithMetaData> = match cursor.order {
             CursorOrder::Asc => {
@@ -361,7 +347,7 @@ impl StoreVaultServer {
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse)> {
         let pubkey_hex = pubkey.to_hex();
         let topic_hex = topic.to_hex();
-        let actual_limit = cursor.limit.unwrap_or(self.config.max_pagination_limit) as i64;
+        let actual_limit = cursor.limit.unwrap_or(MAX_BATCH_SIZE as u32) as i64;
 
         let result: Vec<DataWithMetaData> = match cursor.order {
             CursorOrder::Asc => {

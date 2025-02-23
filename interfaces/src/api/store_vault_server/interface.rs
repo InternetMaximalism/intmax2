@@ -12,6 +12,8 @@ use crate::api::error::ServerError;
 
 use super::types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse};
 
+pub const MAX_BATCH_SIZE: usize = 256;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum DataType {
