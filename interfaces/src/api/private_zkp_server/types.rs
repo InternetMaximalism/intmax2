@@ -54,8 +54,6 @@ impl BlsEncryption for ProofResultWithError {}
 pub struct CreateProveRequest {
     #[serde_as(as = "Base64")]
     pub encrypted_data: Vec<u8>,
-    pub public_key: String,      // todo: remove this field
-    pub transition_type: String, // todo: remove this field
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -14,6 +14,7 @@ use crate::{cli::client::get_client, env_var::EnvVar};
 use super::error::CliError;
 
 const TX_STATUS_POLLING_INTERVAL: u64 = 5;
+const BLOCK_SYNC_MARGIN: u64 = 30;
 
 pub async fn send_transfers(
     key: KeySet,
@@ -86,16 +87,27 @@ pub async fn send_transfers(
         .finalize_tx(&block_builder_url, key, &memo, &proposal)
         .await?;
 
+    let expiry_with_margin = if proposal.expiry > 0 {
+        proposal.expiry + BLOCK_SYNC_MARGIN
+    } else {
+        chrono::Utc::now().timestamp() as u64 + BLOCK_SYNC_MARGIN
+    };
+
     if wait {
         log::info!("Waiting for the block to be finalized");
 
         loop {
+            if expiry_with_margin < chrono::Utc::now().timestamp() as u64 {
+                log::error!("tx expired");
+                break;
+            }
             let status = client
                 .get_tx_status(key.pubkey, result.tx_tree_root)
                 .await?;
-            log::info!("Tx status: {:?}", status);
             match status {
-                TxStatus::Pending => {}
+                TxStatus::Pending => {
+                    log::info!("tx pending");
+                }
                 TxStatus::Success => {
                     log::info!("tx success");
                     break;
