@@ -13,6 +13,7 @@ envy = { workspace = true }
 serde = { workspace = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }
+serde_json = { workspace = true }
 cargo_metadata = "0.19.1"
 futures-core = "0.3"
 opentelemetry = { version = "0.27", default-features = false, features = ["trace"] }
@@ -23,6 +24,7 @@ tracing = "0.1.41"
 tracing-actix-web = { workspace = true }
 tracing-opentelemetry = "0.28"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+redis = { version = "0.23", features = ["tokio-comp"] }
 tokio = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }
