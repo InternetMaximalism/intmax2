@@ -8,7 +8,7 @@ use server_common::{
 };
 use tracing_actix_web::TracingLogger;
 use validity_prover::{
-    api::{state::State, witness_generator::validity_prover_scope},
+    api::{state::State, validity_prover::validity_prover_scope},
     Env,
 };
 
@@ -32,7 +32,7 @@ async fn main() -> std::io::Result<()> {
     })?;
 
     // Start a job
-    state.job();
+    state.job().await;
 
     let data = Data::new(state.clone());
 

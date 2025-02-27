@@ -23,7 +23,7 @@ use serde_qs::actix::QsQuery;
 #[get("/block-number")]
 pub async fn get_block_number(state: Data<State>) -> Result<Json<GetBlockNumberResponse>, Error> {
     let block_number = state
-        .witness_generator
+        .validity_prover
         .get_last_block_number()
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -35,7 +35,7 @@ pub async fn get_validity_proof_block_number(
     state: Data<State>,
 ) -> Result<Json<GetBlockNumberResponse>, Error> {
     let block_number = state
-        .witness_generator
+        .validity_prover
         .get_latest_validity_proof_block_number()
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -47,7 +47,7 @@ pub async fn get_next_deposit_index(
     state: Data<State>,
 ) -> Result<Json<GetNextDepositIndexResponse>, Error> {
     let deposit_index = state
-        .witness_generator
+        .validity_prover
         .get_next_deposit_index()
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -61,7 +61,7 @@ pub async fn get_account_info(
 ) -> Result<Json<GetAccountInfoResponse>, Error> {
     let query = query.into_inner();
     let account_info = state
-        .witness_generator
+        .validity_prover
         .get_account_info(query.pubkey)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -78,7 +78,7 @@ pub async fn get_account_info_batch(
         return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
     }
     let account_info = state
-        .witness_generator
+        .validity_prover
         .get_account_info_batch(&request.pubkeys)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -92,7 +92,7 @@ pub async fn get_update_witness(
 ) -> Result<Json<GetUpdateWitnessResponse>, Error> {
     let query = query.into_inner();
     let update_witness = state
-        .witness_generator
+        .validity_prover
         .get_update_witness(
             query.pubkey,
             query.root_block_number,
@@ -111,7 +111,7 @@ pub async fn get_validity_witness(
 ) -> Result<Json<GetValidityWitnessResponse>, Error> {
     let query = query.into_inner();
     let validity_witness = state
-        .witness_generator
+        .validity_prover
         .get_validity_witness(query.block_number)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -125,7 +125,7 @@ pub async fn get_validity_pis(
 ) -> Result<Json<ValidityPublicInputs>, Error> {
     let query = query.into_inner();
     let validity_witness = state
-        .witness_generator
+        .validity_prover
         .get_validity_witness(query.block_number)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -139,7 +139,7 @@ pub async fn get_deposit_info(
 ) -> Result<Json<GetDepositInfoResponse>, Error> {
     let query = query.into_inner();
     let deposit_info = state
-        .witness_generator
+        .validity_prover
         .get_deposit_info(query.deposit_hash)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -156,7 +156,7 @@ pub async fn get_deposit_info_batch(
         return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
     }
     let deposit_info = state
-        .witness_generator
+        .validity_prover
         .get_deposit_info_batch(&request.deposit_hashes)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -170,7 +170,7 @@ pub async fn get_block_number_by_tx_tree_root(
 ) -> Result<Json<GetBlockNumberByTxTreeRootResponse>, Error> {
     let query = query.into_inner();
     let block_number = state
-        .witness_generator
+        .validity_prover
         .get_block_number_by_tx_tree_root(query.tx_tree_root)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -187,7 +187,7 @@ pub async fn get_block_number_by_tx_tree_root_batch(
         return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
     }
     let block_numbers = state
-        .witness_generator
+        .validity_prover
         .get_block_number_by_tx_tree_root_batch(&request.tx_tree_roots)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -203,7 +203,7 @@ pub async fn get_block_merkle_proof(
 ) -> Result<Json<GetBlockMerkleProofResponse>, Error> {
     let query = query.into_inner();
     let block_merkle_proof = state
-        .witness_generator
+        .validity_prover
         .get_block_merkle_proof(query.root_block_number, query.leaf_block_number)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -217,7 +217,7 @@ pub async fn get_deposit_merkle_proof(
 ) -> Result<Json<GetDepositMerkleProofResponse>, Error> {
     let query = query.into_inner();
     let deposit_merkle_proof = state
-        .witness_generator
+        .validity_prover
         .get_deposit_merkle_proof(query.block_number, query.deposit_index)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;

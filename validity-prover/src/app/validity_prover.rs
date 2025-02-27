@@ -8,8 +8,14 @@ use std::{
 };
 
 use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
-use intmax2_interfaces::api::validity_prover::interface::{AccountInfo, DepositInfo};
+use intmax2_interfaces::{
+    api::validity_prover::interface::{
+        AccountInfo, DepositInfo, TransitionProofTask, TransitionProofTaskResult,
+    },
+    utils::circuit_verifiers::CircuitVerifiers,
+};
 use intmax2_zkp::{
+    circuits::validity::validity_circuit::ValidityCircuit,
     common::{
         block::Block,
         trees::{
@@ -30,7 +36,10 @@ use plonky2::{
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
 
-use server_common::db::{DbPool, DbPoolConfig};
+use server_common::{
+    db::{DbPool, DbPoolConfig},
+    redis::task_manager::TaskManager,
+};
 use tokio::time::interval;
 
 use super::{error::ValidityProverError, observer::Observer};
@@ -54,14 +63,18 @@ const ACCOUNT_DB_TAG: u32 = 1;
 const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
 
+const CLEANUP_INTERVAL: u64 = 10;
+
 #[derive(Clone)]
 pub struct Config {
     pub sync_interval: u64,
 }
 
 #[derive(Clone)]
-pub struct WitnessGenerator {
+pub struct ValidityProver {
     config: Config,
+    manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
+    validity_circuit: Arc<ValidityCircuit<F, C, D>>,
     observer: Observer,
     account_tree: SqlIndexedMerkleTree,
     block_tree: SqlIncrementalMerkleTree<Bytes32>,
@@ -69,11 +82,20 @@ pub struct WitnessGenerator {
     pool: DbPool,
 }
 
-impl WitnessGenerator {
+impl ValidityProver {
     pub async fn new(env: &Env) -> Result<Self, ValidityProverError> {
         let config = Config {
             sync_interval: env.sync_interval,
         };
+
+        let transition_vd = CircuitVerifiers::load().get_transition_vd();
+        let validity_circuit = Arc::new(ValidityCircuit::new(&transition_vd));
+        let manager = Arc::new(TaskManager::new(
+            &env.redis_url,
+            "validity_prover",
+            env.ttl as usize,
+            0, // dummy value
+        )?);
 
         let rollup_contract = RollupContract::new(
             &env.l2_rpc_url,
@@ -132,6 +154,8 @@ impl WitnessGenerator {
 
         Ok(Self {
             config,
+            manager,
+            validity_circuit,
             observer,
             pool,
             account_tree,
@@ -238,13 +262,6 @@ impl WitnessGenerator {
             )
             .execute(tx.as_mut())
             .await?;
-
-            sqlx::query!(
-                "INSERT INTO prover_tasks (block_number, assigned, completed) VALUES ($1, FALSE, FALSE)
-                 ON CONFLICT (block_number) DO NOTHING",
-                block_number as i32
-            )
-            .execute(tx.as_mut()).await?;
 
             let tx_tree_root = full_block.signature.tx_tree_root;
             if tx_tree_root != Bytes32::default()
@@ -513,11 +530,118 @@ impl WitnessGenerator {
         Ok(())
     }
 
-    pub fn job(self) {
+    pub async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
+        // Get the largest block_number and its proof from the validity_proofs table that already exists
+        let record = sqlx::query!(
+            r#"
+            SELECT block_number, proof
+            FROM validity_proofs
+            ORDER BY block_number DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        let (mut last_validity_proof_block_number, mut prev_proof) = match record {
+            Some(record) => (record.block_number as u32, {
+                let proof: ProofWithPublicInputs<F, C, D> = bincode::deserialize(&record.proof)?;
+                Some(proof)
+            }),
+            None => (0, None),
+        };
+
+        loop {
+            last_validity_proof_block_number += 1;
+
+            // get result from the task manager
+            let result = self
+                .manager
+                .get_result(last_validity_proof_block_number)
+                .await?;
+            if result.is_none() {
+                break;
+            }
+
+            let result = result.unwrap();
+            if let Some(error) = result.error {
+                return Err(ValidityProverError::TaskError(format!(
+                    "Error in block number {}: {}",
+                    last_validity_proof_block_number, error
+                )));
+            }
+            if result.proof.is_none() {
+                return Err(ValidityProverError::TaskError(format!(
+                    "Proof is missing for block number {}",
+                    last_validity_proof_block_number
+                )));
+            }
+            let transition_proof = result.proof.unwrap();
+            let validity_proof = self
+                .validity_circuit
+                .prove(&transition_proof, &prev_proof)
+                .map_err(|e| ValidityProverError::FailedToGenerateValidityProof(e.to_string()))?;
+            // Add a new validity proof to the validity_proofs table
+            sqlx::query!(
+                r#"
+                INSERT INTO validity_proofs (block_number, proof)
+                VALUES ($1, $2)
+                ON CONFLICT (block_number)
+                DO UPDATE SET proof = $2
+                "#,
+                last_validity_proof_block_number as i32,
+                bincode::serialize(&validity_proof)?,
+            )
+            .execute(&self.pool)
+            .await?;
+            prev_proof = Some(validity_proof);
+
+            // Remove the result from the task manager
+            self.manager
+                .remove_result(last_validity_proof_block_number)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    // This function is used to setup all tasks in the task manager
+    pub async fn setup_tasks(&self) -> Result<(), ValidityProverError> {
+        // clear all tasks
+        self.manager.clear_all().await?;
+
+        let last_validity_prover_block_number =
+            self.get_latest_validity_proof_block_number().await?;
+        let last_block_number = self.get_last_block_number().await?;
+
+        let mut prev_validity_pis = self
+            .get_validity_witness(last_validity_prover_block_number)
+            .await?
+            .to_validity_pis()
+            .unwrap();
+
+        for block_number in (last_validity_prover_block_number + 1)..=last_block_number {
+            let validity_witness = self.get_validity_witness(block_number).await?;
+            let task = TransitionProofTask {
+                block_number,
+                prev_validity_pis: prev_validity_pis.clone(),
+                validity_witness: validity_witness.clone(),
+            };
+            self.manager.add_task(block_number, &task).await?;
+
+            prev_validity_pis = validity_witness.to_validity_pis().unwrap();
+        }
+
+        Ok(())
+    }
+
+    pub async fn job(&self) -> Result<(), ValidityProverError> {
+        self.setup_tasks().await?;
+
         let is_syncing = Arc::new(AtomicBool::new(false));
         let is_syncing_clone = is_syncing.clone();
+        let s = self.clone();
         actix_web::rt::spawn(async move {
-            let mut interval = interval(Duration::from_secs(self.config.sync_interval));
+            let mut interval = interval(Duration::from_secs(s.config.sync_interval));
             loop {
                 interval.tick().await;
 
@@ -529,7 +653,7 @@ impl WitnessGenerator {
 
                 is_syncing_clone.store(true, Ordering::SeqCst);
 
-                match self.sync().await {
+                match s.sync().await {
                     Ok(_) => {
                         log::debug!("Sync task completed successfully");
                     }
@@ -541,5 +665,23 @@ impl WitnessGenerator {
                 is_syncing_clone.store(false, Ordering::SeqCst);
             }
         });
+
+        let manager = self.manager.clone();
+        let _cleanup_handler = tokio::spawn(async move {
+            loop {
+                manager.cleanup_inactive_workers().await.unwrap();
+                tokio::time::sleep(Duration::from_secs(CLEANUP_INTERVAL)).await;
+            }
+        });
+
+        let s = self.clone();
+        let _validity_prove_handler = tokio::spawn(async move {
+            loop {
+                s.generate_validity_proof().await.unwrap();
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }
+        });
+
+        Ok(())
     }
 }
