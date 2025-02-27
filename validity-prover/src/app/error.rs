@@ -1,5 +1,6 @@
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use server_common::redis::task_manager::TaskManagerError;
 
 use crate::trees::merkle_tree::error::MerkleTreeError;
 
@@ -80,8 +81,14 @@ pub enum ProverCoordinatorError {
     #[error("Database error: {0}")]
     DBError(#[from] sqlx::Error),
 
+    #[error("Task manager error: {0}")]
+    TaskManagerError(#[from] TaskManagerError),
+
     #[error("Deserialization error: {0}")]
     DeserializationError(#[from] bincode::Error),
+
+    #[error("Task error: {0}")]
+    TaskError(String),
 
     #[error("Failed to generate validity proof: {0}")]
     FailedToGenerateValidityProof(String),

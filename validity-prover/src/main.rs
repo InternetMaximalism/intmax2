@@ -8,7 +8,7 @@ use server_common::{
 };
 use tracing_actix_web::TracingLogger;
 use validity_prover::{
-    api::{coordinator::coordinator_scope, state::State, witness_generator::validity_prover_scope},
+    api::{state::State, witness_generator::validity_prover_scope},
     Env,
 };
 
@@ -44,7 +44,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(data.clone())
             .service(health_check)
             .service(validity_prover_scope())
-            .service(coordinator_scope())
     })
     .bind(format!("0.0.0.0:{}", env.port))?
     .run()
