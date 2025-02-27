@@ -40,6 +40,7 @@ pub enum TaskManagerError {
     SerdeError(#[from] serde_json::Error),
 }
 
+#[derive(Debug)]
 pub struct TaskManager<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> {
     prefix: String,
     ttl: usize,
