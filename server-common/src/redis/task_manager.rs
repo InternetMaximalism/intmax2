@@ -209,7 +209,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
                     // set expiration
                     conn.expire::<_, ()>(&key, self.ttl).await?;
 
-                    log::info!("re-queued task {} from worker {}", task_id, worker_id);
+                    log::error!("re-queued task {} from worker {}", task_id, worker_id);
                 }
 
                 // remove worker

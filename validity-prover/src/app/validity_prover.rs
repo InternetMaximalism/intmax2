@@ -94,7 +94,7 @@ impl ValidityProver {
             &env.redis_url,
             "validity_prover",
             env.ttl as usize,
-            0, // dummy value
+            10, // dummy value
         )?);
 
         let rollup_contract = RollupContract::new(
@@ -200,6 +200,14 @@ impl ValidityProver {
         let last_block_number = self.get_last_block_number().await?;
         let next_block_number = self.observer.get_next_block_number().await?;
 
+        let mut prev_validity_pis = if last_block_number == 0 {
+            ValidityWitness::genesis().to_validity_pis().unwrap()
+        } else {
+            self.get_validity_witness(last_block_number)
+                .await?
+                .to_validity_pis()
+                .unwrap()
+        };
         for block_number in (last_block_number + 1)..next_block_number {
             log::info!(
                 "Sync validity prover: syncing block number {}",
@@ -278,6 +286,19 @@ impl ValidityProver {
             }
 
             tx.commit().await?;
+
+            // Add a new task to the task manager
+            self.manager
+                .add_task(
+                    block_number,
+                    &TransitionProofTask {
+                        block_number,
+                        prev_validity_pis: prev_validity_pis.clone(),
+                        validity_witness: validity_witness.clone(),
+                    },
+                )
+                .await?;
+            prev_validity_pis = validity_witness.to_validity_pis().unwrap();
         }
         log::info!("End of sync validity prover");
         Ok(())
@@ -678,7 +699,7 @@ impl ValidityProver {
         let _validity_prove_handler = tokio::spawn(async move {
             loop {
                 s.generate_validity_proof().await.unwrap();
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                tokio::time::sleep(Duration::from_secs(2)).await;
             }
         });
 

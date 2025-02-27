@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use intmax2_client_sdk::external_api::utils::time::sleep_for;
 use intmax2_interfaces::api::validity_prover::interface::{
     TransitionProofTask, TransitionProofTaskResult,
 };
@@ -59,18 +58,27 @@ impl Worker {
         loop {
             let task = self.manager.assign_task(&self.worker_id).await?;
             if task.is_none() {
-                log::info!("No task assigned");
-                sleep_for(TASK_POLLING_INTERVAL).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(TASK_POLLING_INTERVAL)).await;
                 continue;
             }
 
             let (block_number, task) = task.unwrap();
             log::info!("Processing task {}", block_number);
 
-            let result = match self
-                .transition_processor
-                .prove(&task.prev_validity_pis, &task.validity_witness)
-            {
+            // Prove the transition on another thread
+            let transition_processor = self.transition_processor.clone();
+            let TransitionProofTask {
+                block_number: _,
+                prev_validity_pis,
+                validity_witness,
+            } = task.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                transition_processor.prove(&prev_validity_pis, &validity_witness)
+            })
+            .await
+            .unwrap();
+
+            let result = match result {
                 Ok(proof) => {
                     log::info!("Proof generated for block_number {}", block_number);
                     TransitionProofTaskResult {
@@ -112,9 +120,10 @@ impl Worker {
                 if let Err(e) = manager.submit_heartbeat(&worker_id).await {
                     eprintln!("Error: {:?}", e);
                 }
-                sleep_for(heartbeat_interval).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(heartbeat_interval)).await;
             }
         });
+        log::info!("Starting worker and heartbeat");
         tokio::try_join!(solve_handle, submit_heartbeat_handle).unwrap();
     }
 }
