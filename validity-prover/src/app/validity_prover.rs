@@ -7,6 +7,8 @@ use std::{
     time::Duration,
 };
 
+use futures::future;
+
 use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
 use intmax2_interfaces::{
     api::validity_prover::interface::{
@@ -360,11 +362,58 @@ impl ValidityProver {
         &self,
         pubkeys: &[U256],
     ) -> Result<Vec<AccountInfo>, ValidityProverError> {
-        let mut account_infos = Vec::new();
-        for pubkey in pubkeys {
-            let account_info = self.get_account_info(*pubkey).await?;
-            account_infos.push(account_info);
+        // early return for empty input
+        if pubkeys.is_empty() {
+            return Ok(Vec::new());
         }
+
+        // Get the current block number once for all queries
+        let block_number = self.get_last_block_number().await?;
+
+        // Process all pubkeys in a single batch operation
+        let mut account_infos = Vec::with_capacity(pubkeys.len());
+
+        // Get all account indices in a single batch operation if possible
+        // For now, we'll process them individually but in parallel
+        let mut futures = Vec::with_capacity(pubkeys.len());
+        for pubkey in pubkeys {
+            let account_tree = self.account_tree.clone();
+            let pubkey = *pubkey;
+            let block_number_u64 = block_number as u64;
+
+            // Create a future for each pubkey lookup
+            let future = async move {
+                let account_id = account_tree.index(block_number_u64, pubkey).await?;
+                let last_block_number = if let Some(index) = account_id {
+                    let account_leaf = account_tree.get_leaf(block_number_u64, index).await?;
+                    account_leaf.value as u32
+                } else {
+                    0
+                };
+
+                Ok::<(Option<u64>, u32), ValidityProverError>((account_id, last_block_number))
+            };
+
+            futures.push(future);
+        }
+
+        // Execute all futures concurrently
+        let results = futures::future::join_all(futures).await;
+
+        // Process results
+        for result in results {
+            match result {
+                Ok((account_id, last_block_number)) => {
+                    account_infos.push(AccountInfo {
+                        block_number,
+                        account_id,
+                        last_block_number,
+                    });
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
         Ok(account_infos)
     }
 
@@ -372,7 +421,11 @@ impl ValidityProver {
         &self,
         deposit_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ValidityProverError> {
-        let deposit_info = self.observer.get_deposit_info(deposit_hash).await?;
+        let deposit_info = self
+            .observer
+            .get_deposit_info(deposit_hash)
+            .await
+            .map_err(ValidityProverError::ObserverError)?;
         Ok(deposit_info)
     }
 
@@ -380,11 +433,40 @@ impl ValidityProver {
         &self,
         deposit_hashes: &[Bytes32],
     ) -> Result<Vec<Option<DepositInfo>>, ValidityProverError> {
-        let mut deposit_infos = Vec::new();
-        for deposit_hash in deposit_hashes {
-            let deposit_info = self.observer.get_deposit_info(*deposit_hash).await?;
-            deposit_infos.push(deposit_info);
+        // early return for empty input
+        if deposit_hashes.is_empty() {
+            return Ok(Vec::new());
         }
+
+        // Process all deposit hashes in parallel
+        let mut futures = Vec::with_capacity(deposit_hashes.len());
+        for deposit_hash in deposit_hashes {
+            let observer = self.observer.clone();
+            let deposit_hash = *deposit_hash;
+
+            // Create a future for each deposit hash lookup
+            let future = async move {
+                observer
+                    .get_deposit_info(deposit_hash)
+                    .await
+                    .map_err(ValidityProverError::ObserverError)
+            };
+
+            futures.push(future);
+        }
+
+        // Execute all futures concurrently
+        let results = future::join_all(futures).await;
+
+        // Process results
+        let mut deposit_infos = Vec::with_capacity(deposit_hashes.len());
+        for result in results {
+            match result {
+                Ok(deposit_info) => deposit_infos.push(deposit_info),
+                Err(e) => return Err(e),
+            }
+        }
+
         Ok(deposit_infos)
     }
 
@@ -411,31 +493,52 @@ impl ValidityProver {
             return Ok(Vec::new());
         }
 
-        let root_bytes: Vec<Vec<u8>> = tx_tree_roots.iter().map(|r| r.to_bytes_be()).collect();
-
-        let records = sqlx::query!(
-            r#"
-            SELECT tx_tree_root, block_number 
-            FROM tx_tree_roots 
-            WHERE tx_tree_root = ANY($1)
-            "#,
-            &root_bytes as &[Vec<u8>]
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let block_map: HashMap<Vec<u8>, i32> = records
-            .into_iter()
-            .map(|r| (r.tx_tree_root, r.block_number))
+        // Create a mapping to preserve the original order
+        let mut result_map: HashMap<Vec<u8>, Option<u32>> = tx_tree_roots
+            .iter()
+            .map(|root| (root.to_bytes_be(), None))
             .collect();
 
+        // Prepare the values for the SQL query
+        let values_params: Vec<String> = tx_tree_roots
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("(${})", i + 1))
+            .collect();
+
+        // Build the query with a VALUES clause
+        let query = format!(
+            r#"
+            WITH input_roots(tx_tree_root) AS (
+                VALUES {}
+            )
+            SELECT i.tx_tree_root, t.block_number
+            FROM input_roots i
+            LEFT JOIN tx_tree_roots t ON i.tx_tree_root = t.tx_tree_root
+            "#,
+            values_params.join(",")
+        );
+
+        // Prepare the query arguments
+        let mut query_builder = sqlx::query_as::<_, (Vec<u8>, Option<i32>)>(&query);
+        for root in tx_tree_roots {
+            query_builder = query_builder.bind(root.to_bytes_be());
+        }
+
+        // Execute the query
+        let records = query_builder.fetch_all(&self.pool).await?;
+
+        // Update the result map with the query results
+        for (root, block_number) in records {
+            if let Some(bn) = block_number {
+                result_map.insert(root, Some(bn as u32));
+            }
+        }
+
+        // Return results in the same order as the input
         Ok(tx_tree_roots
             .iter()
-            .map(|root| {
-                block_map
-                    .get(&root.to_bytes_be())
-                    .map(|&block_number| block_number as u32)
-            })
+            .map(|root| result_map[&root.to_bytes_be()])
             .collect())
     }
 
