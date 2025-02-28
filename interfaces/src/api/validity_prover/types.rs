@@ -102,12 +102,6 @@ pub struct GetValidityWitnessResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetValidityPisQuery {
-    pub block_number: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct GetBlockMerkleProofQuery {
     pub root_block_number: u32,
     pub leaf_block_number: u32,

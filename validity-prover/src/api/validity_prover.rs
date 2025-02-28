@@ -2,7 +2,7 @@ use crate::api::state::State;
 use actix_web::{
     get, post,
     web::{Data, Json},
-    Error,
+    Error, HttpResponse,
 };
 use intmax2_interfaces::api::validity_prover::{
     interface::MAX_BATCH_SIZE,
@@ -226,10 +226,21 @@ pub async fn get_deposit_merkle_proof(
     }))
 }
 
+#[get("/sync")]
+pub async fn sync(state: Data<State>) -> Result<HttpResponse, Error> {
+    state
+        .validity_prover
+        .sync()
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(HttpResponse::Ok().finish())
+}
+
 pub fn validity_prover_scope() -> actix_web::Scope {
     actix_web::web::scope("/validity-prover")
         .service(get_block_number)
         .service(get_validity_proof_block_number)
+        .service(sync)
         .service(get_next_deposit_index)
         .service(get_account_info)
         .service(get_account_info_batch)

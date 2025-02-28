@@ -337,15 +337,6 @@ impl ValidityProver {
         })
     }
 
-    pub async fn get_account_id(&self, pubkey: U256) -> Result<Option<u64>, ValidityProverError> {
-        let last_block_number = self.get_last_block_number().await?;
-        let index = self
-            .account_tree
-            .index(last_block_number as u64, pubkey)
-            .await?;
-        Ok(index)
-    }
-
     pub async fn get_account_info(&self, pubkey: U256) -> Result<AccountInfo, ValidityProverError> {
         let block_number = self.get_last_block_number().await?;
         let account_id = self.account_tree.index(block_number as u64, pubkey).await?;
