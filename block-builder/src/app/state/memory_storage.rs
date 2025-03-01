@@ -1,11 +1,14 @@
 use std::{collections::HashMap, sync::Arc};
 
-use intmax2_zkp::constants::NUM_SENDERS_IN_BLOCK;
+use intmax2_zkp::{common::block_builder::UserSignature, constants::NUM_SENDERS_IN_BLOCK};
 use tokio::sync::RwLock;
 
 use crate::app::types::{ProposalMemo, TxRequest};
 
-use super::models::{BlockPostTask, ProposingBlockState};
+use super::{
+    error::StateError,
+    models::{BlockPostTask, ProposingBlockState},
+};
 
 type AR<T> = Arc<RwLock<T>>;
 
@@ -13,9 +16,10 @@ pub struct InMemoryStorage {
     pub registration_tx_requests: AR<Vec<TxRequest>>, // registration tx requests
     pub non_registration_tx_requests: AR<Vec<TxRequest>>, // non-registration tx requests
     pub request_id_to_block_id: AR<HashMap<String, String>>, // request_id -> block_id
-    pub proposing_states: AR<HashMap<String, ProposingBlockState>>, // block_id -> ProposingBlockState
-    pub block_post_tasks_hi: AR<Vec<BlockPostTask>>,                // high priority tasks
-    pub block_post_tasks_lo: AR<Vec<BlockPostTask>>,                // low priority tasks
+    pub memos: AR<HashMap<String, ProposalMemo>>,     // block_id -> memo
+    pub signatures: AR<HashMap<String, Vec<UserSignature>>>, // block_id -> user signature
+    pub block_post_tasks_hi: AR<Vec<BlockPostTask>>,  // high priority tasks
+    pub block_post_tasks_lo: AR<Vec<BlockPostTask>>,  // low priority tasks
 }
 
 impl InMemoryStorage {
@@ -24,7 +28,8 @@ impl InMemoryStorage {
             registration_tx_requests: Arc::new(RwLock::new(Vec::new())),
             non_registration_tx_requests: Arc::new(RwLock::new(Vec::new())),
             request_id_to_block_id: Arc::new(RwLock::new(HashMap::new())),
-            proposing_states: Arc::new(RwLock::new(HashMap::new())),
+            memos: Arc::new(RwLock::new(HashMap::new())),
+            signatures: Arc::new(RwLock::new(HashMap::new())),
             block_post_tasks_hi: Arc::new(RwLock::new(Vec::new())),
             block_post_tasks_lo: Arc::new(RwLock::new(Vec::new())),
         }
@@ -61,16 +66,48 @@ impl InMemoryStorage {
             request_id_to_block_id.insert(tx_request.request_id.clone(), block_id.clone());
         }
 
-        // update proposing_states
-        let mut proposing_states = self.proposing_states.write().await;
-        proposing_states.insert(
-            block_id.clone(),
-            ProposingBlockState {
-                memo,
-                signatures: Vec::new(),
-            },
-        );
+        // update block_id -> memo
+        let mut memos = self.memos.write().await;
+        memos.insert(block_id.clone(), memo.clone());
     }
 
-    
+    pub async fn add_signature(
+        &self,
+        request_id: &str,
+        signature: UserSignature,
+    ) -> Result<(), StateError> {
+        // get block_id
+        let block_ids = self.request_id_to_block_id.read().await;
+        let block_id = block_ids
+            .get(request_id)
+            .ok_or(StateError::AddSignatureError(format!(
+                "block_id not found for request_id: {}",
+                request_id
+            )))?;
+
+        // get memo
+        let memos = self.memos.read().await;
+        let memo = memos
+            .get(block_id)
+            .ok_or(StateError::AddSignatureError(format!(
+                "memo not found for block_id: {}",
+                block_id
+            )))?;
+
+        // verify signature
+        signature
+            .verify(memo.tx_tree_root, memo.expiry, memo.pubkey_hash)
+            .map_err(|e| {
+                StateError::AddSignatureError(format!("signature verification failed: {}", e))
+            })?;
+
+        // add signature
+        let mut signatures = self.signatures.write().await;
+        let signatures = signatures.entry(block_id.clone()).or_insert_with(Vec::new);
+        signatures.push(signature);
+
+        Ok(())
+    }
+
+    pub async fn process_signatures(&self) {}
 }
