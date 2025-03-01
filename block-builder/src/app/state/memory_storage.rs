@@ -212,4 +212,26 @@ impl InMemoryStorage {
 
         Ok(())
     }
+
+    pub async fn process_block_post_tasks(&self) -> Option<BlockPostTask> {
+        // pop from block_post_tasks_hi
+        let block_post_task = {
+            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
+            block_post_tasks_hi.pop()
+        };
+        match block_post_task {
+            Some(block_post_task) => Some(block_post_task),
+            None => {
+                // if there is no high priority task, pop from block_post_tasks_lo
+                let block_post_task = {
+                    let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
+                    block_post_tasks_lo.pop()
+                };
+                match block_post_task {
+                    Some(block_post_task) => Some(block_post_task),
+                    None => return None,
+                }
+            }
+        }
+    }
 }
