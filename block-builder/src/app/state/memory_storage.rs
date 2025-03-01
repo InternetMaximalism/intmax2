@@ -5,28 +5,34 @@ use tokio::sync::RwLock;
 
 use crate::app::types::{ProposalMemo, TxRequest};
 
-use super::{
-    error::StateError,
-    models::{BlockPostTask, ProposingBlockState},
-};
+use super::{config::StateConfig, error::StateError, models::BlockPostTask};
 
 type AR<T> = Arc<RwLock<T>>;
 
 pub struct InMemoryStorage {
+    pub config: StateConfig,
+
     pub registration_tx_requests: AR<Vec<TxRequest>>, // registration tx requests
+    pub registration_tx_last_processed: AR<u64>,      // last processed timestamp
     pub non_registration_tx_requests: AR<Vec<TxRequest>>, // non-registration tx requests
+    pub non_registration_tx_last_processed: AR<u64>,  // last processed timestamp
+
     pub request_id_to_block_id: AR<HashMap<String, String>>, // request_id -> block_id
-    pub memos: AR<HashMap<String, ProposalMemo>>,     // block_id -> memo
+    pub memos: AR<HashMap<String, ProposalMemo>>,            // block_id -> memo
     pub signatures: AR<HashMap<String, Vec<UserSignature>>>, // block_id -> user signature
-    pub block_post_tasks_hi: AR<Vec<BlockPostTask>>,  // high priority tasks
-    pub block_post_tasks_lo: AR<Vec<BlockPostTask>>,  // low priority tasks
+    pub block_post_tasks_hi: AR<Vec<BlockPostTask>>,         // high priority tasks
+    pub block_post_tasks_lo: AR<Vec<BlockPostTask>>,         // low priority tasks
 }
 
 impl InMemoryStorage {
-    pub fn new() -> Self {
+    pub fn new(config: &StateConfig) -> Self {
         Self {
+            config: config.clone(),
             registration_tx_requests: Arc::new(RwLock::new(Vec::new())),
+            registration_tx_last_processed: Arc::new(RwLock::new(0)),
             non_registration_tx_requests: Arc::new(RwLock::new(Vec::new())),
+            non_registration_tx_last_processed: Arc::new(RwLock::new(0)),
+
             request_id_to_block_id: Arc::new(RwLock::new(HashMap::new())),
             memos: Arc::new(RwLock::new(HashMap::new())),
             signatures: Arc::new(RwLock::new(HashMap::new())),
@@ -45,24 +51,38 @@ impl InMemoryStorage {
         tx_requests.push(tx_request);
     }
 
-    pub async fn process_requests(&self, is_registration: bool, expiry: u64) {
+    pub async fn process_requests(&self, is_registration: bool) {
         let tx_requests = if is_registration {
             &self.registration_tx_requests
         } else {
             &self.non_registration_tx_requests
         };
+        let last_processed = if is_registration {
+            &self.registration_tx_last_processed
+        } else {
+            &self.non_registration_tx_last_processed
+        };
+
+        // If more than self.config.accepting_tx_interval seconds have passed since last_processed,
+        // or if there are NUM_SENDERS_IN_BLOCK tx_requests, process them.
+        let last_processed = *last_processed.read().await;
         let mut tx_requests = tx_requests.write().await;
-        let chunk: Vec<TxRequest> = tx_requests.drain(..NUM_SENDERS_IN_BLOCK).collect();
-        if chunk.is_empty() {
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        if (tx_requests.len() < NUM_SENDERS_IN_BLOCK
+            && current_time < last_processed + self.config.accepting_tx_interval)
+            || tx_requests.is_empty()
+        {
             return;
         }
 
-        let memo = ProposalMemo::from_tx_requests(is_registration, &tx_requests, expiry);
+        let tx_requests: Vec<TxRequest> = tx_requests.drain(..NUM_SENDERS_IN_BLOCK).collect();
+        let memo =
+            ProposalMemo::from_tx_requests(is_registration, &tx_requests, self.config.tx_timeout);
         let block_id = uuid::Uuid::new_v4().to_string();
 
         // update request_id -> block_id
         let mut request_id_to_block_id = self.request_id_to_block_id.write().await;
-        for tx_request in &chunk {
+        for tx_request in &tx_requests {
             request_id_to_block_id.insert(tx_request.request_id.clone(), block_id.clone());
         }
 
@@ -109,5 +129,7 @@ impl InMemoryStorage {
         Ok(())
     }
 
-    pub async fn process_signatures(&self) {}
+    pub async fn process_signatures(&self) {
+        // get memo
+    }
 }

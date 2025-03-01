@@ -1,6 +1,9 @@
 use intmax2_interfaces::api::block_builder::interface::FeeProof;
 use intmax2_zkp::{
-    common::{block_builder::BlockProposal, signature::utils::get_pubkey_hash, trees::tx_tree::TxTree, tx::Tx},
+    common::{
+        block_builder::BlockProposal, signature::utils::get_pubkey_hash, trees::tx_tree::TxTree,
+        tx::Tx,
+    },
     constants::{NUM_SENDERS_IN_BLOCK, TX_TREE_HEIGHT},
     ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
@@ -30,6 +33,7 @@ impl Default for TxRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProposalMemo {
+    pub created_at: u64,
     pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
     pub expiry: u64,
@@ -43,8 +47,9 @@ impl ProposalMemo {
     pub fn from_tx_requests(
         is_registration_block: bool,
         tx_requests: &[TxRequest],
-        expiry: u64,
+        tx_timeout: u64,
     ) -> Self {
+        let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
         let mut sorted_and_padded_txs = tx_requests.to_vec();
         sorted_and_padded_txs.sort_by(|a, b| b.pubkey.cmp(&a.pubkey));
         sorted_and_padded_txs.resize(NUM_SENDERS_IN_BLOCK, TxRequest::default());
@@ -78,7 +83,7 @@ impl ProposalMemo {
                 pubkeys_hash: pubkey_hash,
             });
         }
-        
+
         ProposalMemo {
             is_registration_block,
             tx_tree_root,
@@ -87,6 +92,7 @@ impl ProposalMemo {
             pubkey_hash,
             tx_requests: tx_requests.to_vec(),
             proposals,
+            created_at: chrono::Utc::now().timestamp() as u64,
         }
     }
 
