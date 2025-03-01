@@ -24,7 +24,6 @@ envy = { workspace = true }
 env_logger = { workspace = true }
 bincode = { workspace = true }
 thiserror = { workspace = true }
-hashbrown = { workspace = true }
 actix-web = { workspace = true }
 actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }

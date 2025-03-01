@@ -30,9 +30,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use super::{
-    block_post::BlockPostTask,
-    builder_state::ProposalMemo,
     error::{BlockBuilderError, FeeError},
+    state::models::BlockPostTask,
+    types::ProposalMemo,
 };
 
 /// Validate fee proof

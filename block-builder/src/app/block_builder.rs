@@ -25,10 +25,7 @@ use tokio::{
 };
 
 use crate::{
-    app::{
-        block_post::BlockPostTask,
-        fee::{collect_fee, validate_fee_proof, FeeCollection},
-    },
+    app::fee::{collect_fee, validate_fee_proof, FeeCollection},
     EnvVar,
 };
 
@@ -37,6 +34,7 @@ use super::{
     builder_state::BuilderState,
     error::BlockBuilderError,
     fee::{convert_fee_vec, parse_fee_str},
+    state::models::BlockPostTask,
 };
 
 pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
