@@ -268,11 +268,7 @@ impl PrivateZKPServerClient {
         let encrypted_data = bincode::serialize(&encrypted_request).map_err(|e| {
             ServerError::SerializeError(format!("Failed to serialize encrypted request: {:?}", e))
         })?;
-        let request = CreateProveRequest {
-            encrypted_data,
-            public_key: "0x".to_string(),
-            transition_type: "none".to_string(),
-        };
+        let request = CreateProveRequest { encrypted_data };
         let response: CreateProofResponse =
             post_request(&self.base_url, "/v1/proof/create", Some(&request)).await?;
         Ok(response.request_id)
@@ -317,7 +313,13 @@ impl PrivateZKPServerClient {
                     })?;
 
                 return Ok(proof_with_result);
+            } else if response.status == "error" {
+                return Err(ServerError::InvalidResponse(format!(
+                    "Proof request failed: {}",
+                    response.error.unwrap_or_default()
+                )));
             }
+
             if retries >= MAX_RETRIES {
                 return Err(ServerError::UnknownError(format!(
                     "Failed to get proof after {} retries",

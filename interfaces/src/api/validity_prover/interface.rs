@@ -7,7 +7,10 @@ use intmax2_zkp::{
     },
     ethereum_types::{bytes32::Bytes32, u256::U256},
 };
-use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
+use plonky2::{
+    field::goldilocks_field::GoldilocksField,
+    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::api::error::ServerError;
@@ -40,6 +43,14 @@ pub struct TransitionProofTask {
     pub block_number: u32,
     pub prev_validity_pis: ValidityPublicInputs,
     pub validity_witness: ValidityWitness,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitionProofTaskResult {
+    pub block_number: u32,
+    pub proof: Option<ProofWithPublicInputs<F, C, D>>,
+    pub error: Option<String>,
 }
 
 #[async_trait(?Send)]

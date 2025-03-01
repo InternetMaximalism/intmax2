@@ -27,6 +27,9 @@ pub enum ServerError {
     #[error("Proof verification error: {0}")]
     ProofVerificationError(String),
 
+    #[error("Invalid request: {0}")]
+    InvalidRequest(String),
+
     #[error("Invalid response: {0}")]
     InvalidResponse(String),
 

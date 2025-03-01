@@ -15,11 +15,11 @@ ethers = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 uuid = { workspace = true }
-clap = { version = "4.5.28", features = ["derive"] }
+clap = { version = "4.5.30", features = ["derive"] }
 anyhow = "1.0.93"
 num-bigint = "0.4.6"
 rand = "0.8.5"
-log = "0.4.25"
+log = "0.4.26"
 mockito = "1.6.1"
 hex = "0.4.3"
 envy = "0.4.2"

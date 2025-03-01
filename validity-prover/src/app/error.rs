@@ -1,5 +1,6 @@
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use server_common::redis::task_manager::TaskManagerError;
 
 use crate::trees::merkle_tree::error::MerkleTreeError;
 
@@ -41,6 +42,12 @@ pub enum ValidityProverError {
     #[error("{0}")] // TODO: Add more specific error messages
     AnyhowError(#[from] anyhow::Error),
 
+    #[error("Task manager error: {0}")]
+    TaskManagerError(#[from] TaskManagerError),
+
+    #[error("Task error: {0}")]
+    TaskError(String),
+
     #[error("Database error: {0}")]
     DBError(#[from] sqlx::Error),
 
@@ -52,6 +59,9 @@ pub enum ValidityProverError {
 
     #[error("Validity prove error: {0}")]
     ValidityProveError(String),
+
+    #[error("Failed to generate validity proof: {0}")]
+    FailedToGenerateValidityProof(String),
 
     #[error("Deposit tree root mismatch: expected {0}, got {1}")]
     DepositTreeRootMismatch(Bytes32, Bytes32),
@@ -79,6 +89,12 @@ pub enum ValidityProverError {
 pub enum ProverCoordinatorError {
     #[error("Database error: {0}")]
     DBError(#[from] sqlx::Error),
+
+    #[error("Task manager error: {0}")]
+    TaskManagerError(#[from] TaskManagerError),
+
+    #[error("Task error: {0}")]
+    TaskError(String),
 
     #[error("Deserialization error: {0}")]
     DeserializationError(#[from] bincode::Error),

@@ -1,28 +1,17 @@
-use crate::{
-    app::{prover_coordinator::ProverCoordinator, witness_generator::WitnessGenerator},
-    Env,
-};
+use crate::{app::validity_prover::ValidityProver, Env};
 
 #[derive(Clone)]
 pub struct State {
-    pub witness_generator: WitnessGenerator,
-    pub coordinator: ProverCoordinator,
+    pub validity_prover: ValidityProver,
 }
 
 impl State {
     pub async fn new(env: &Env) -> anyhow::Result<Self> {
-        let witness_generator = WitnessGenerator::new(env).await?;
-        let coordinator = ProverCoordinator::new(env).await?;
-
-        log::info!("State initialized");
-        Ok(Self {
-            witness_generator,
-            coordinator,
-        })
+        let validity_prover = ValidityProver::new(env).await?;
+        Ok(Self { validity_prover })
     }
 
-    pub fn job(&self) {
-        self.clone().witness_generator.job();
-        self.clone().coordinator.job();
+    pub async fn job(&self) {
+        self.clone().validity_prover.job().await.unwrap();
     }
 }

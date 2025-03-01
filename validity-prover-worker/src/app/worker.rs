@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use intmax2_client_sdk::external_api::validity_prover::ValidityProverClient;
-use intmax2_interfaces::api::validity_prover::interface::TransitionProofTask;
-use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
-use plonky2::{
-    field::goldilocks_field::GoldilocksField,
-    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
+use intmax2_interfaces::api::validity_prover::interface::{
+    TransitionProofTask, TransitionProofTaskResult,
 };
-use tokio::sync::RwLock;
+use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
+use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
+use server_common::redis::task_manager::TaskManager;
+use uuid::Uuid;
 
 use crate::EnvVar;
 
@@ -17,139 +16,114 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
-type Result<T> = std::result::Result<T, WorkerError>;
+const TASK_POLLING_INTERVAL: u64 = 1;
 
-#[derive(Clone)]
-struct Process {
-    task: TransitionProofTask,
-    transition_proof: Option<ProofWithPublicInputs<F, C, D>>,
-}
+type Result<T> = std::result::Result<T, WorkerError>;
 
 #[derive(Clone)]
 struct Config {
     heartbeat_interval: u64,
-    submit_interval: u64,
 }
 
 #[derive(Clone)]
 pub struct Worker {
     config: Config,
-    client: ValidityProverClient,
     transition_processor: Arc<TransitionProcessor<F, C, D>>,
-    process: Arc<RwLock<Option<Process>>>,
+    manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
+    worker_id: String,
 }
 
 impl Worker {
-    pub fn new(env: &EnvVar) -> Worker {
+    pub fn new(env: &EnvVar) -> Result<Worker> {
         let config = Config {
             heartbeat_interval: env.heartbeat_interval,
-            submit_interval: env.submit_interval,
         };
-        let client = ValidityProverClient::new(&env.validity_prover_base_url);
         let transition_processor = Arc::new(TransitionProcessor::new());
-        let task = Arc::new(RwLock::new(None));
-        Worker {
+        let manager = Arc::new(TaskManager::new(
+            &env.redis_url,
+            "validity_prover",
+            100, // dummy value
+            (env.heartbeat_interval * 3) as usize,
+        )?);
+        let worker_id = Uuid::new_v4().to_string();
+        Ok(Worker {
             config,
-            client,
             transition_processor,
-            process: task,
-        }
+            manager,
+            worker_id,
+        })
     }
 
     async fn work(&self) -> Result<()> {
-        if self.process.read().await.is_some() {
-            log::info!("Task already assigned");
-            return Ok(());
-        }
-        let task = self.client.assign_task().await?;
-        if task.is_none() {
-            log::info!("No task available");
-            return Ok(());
-        }
-        let task = task.unwrap();
-        log::info!("Task assigned for block_number {}", task.block_number);
-        let process = Process {
-            task: task.clone(),
-            transition_proof: None,
-        };
-        self.process.write().await.replace(process);
+        loop {
+            let task = self.manager.assign_task(&self.worker_id).await?;
+            if task.is_none() {
+                tokio::time::sleep(tokio::time::Duration::from_secs(TASK_POLLING_INTERVAL)).await;
+                continue;
+            }
 
-        // generate proof
-        let transition_proof = self
-            .transition_processor
-            .prove(&task.prev_validity_pis, &task.validity_witness)
-            .map_err(|e| WorkerError::TransitionProveFailed(format!("{:?}", e)))?;
-        self.process
-            .write()
+            let (block_number, task) = task.unwrap();
+            log::info!("Processing task {}", block_number);
+
+            // Prove the transition on another thread
+            let transition_processor = self.transition_processor.clone();
+            let TransitionProofTask {
+                block_number: _,
+                prev_validity_pis,
+                validity_witness,
+            } = task.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                transition_processor.prove(&prev_validity_pis, &validity_witness)
+            })
             .await
-            .as_mut()
-            .unwrap()
-            .transition_proof
-            .replace(transition_proof);
-        log::info!("Proof generated for block_number {}", task.block_number);
-        Ok(())
-    }
+            .unwrap();
 
-    async fn submit(&self) -> Result<()> {
-        let process = self.process.read().await.clone();
-        if process.is_none() {
-            log::info!("No process to submit");
-            return Ok(());
-        }
-        let process = process.unwrap();
-        if let Some(transition_proof) = &process.transition_proof {
-            // submit proof if available
-            self.client
-                .complete_task(process.task.block_number, transition_proof.clone())
+            let result = match result {
+                Ok(proof) => {
+                    log::info!("Proof generated for block_number {}", block_number);
+                    TransitionProofTaskResult {
+                        block_number,
+                        proof: Some(proof),
+                        error: None,
+                    }
+                }
+                Err(e) => {
+                    log::error!("Error while proving: {:?}", e);
+                    TransitionProofTaskResult {
+                        block_number,
+                        proof: None,
+                        error: Some(e.to_string()),
+                    }
+                }
+            };
+            self.manager
+                .complete_task(&self.worker_id, block_number, &task, &result)
                 .await?;
-            self.process.write().await.take(); // clear process
-            log::info!(
-                "Proof submitted for block_number {}",
-                process.task.block_number
-            );
-        } else {
-            // submit heartbeat if proof is not available
-            self.client.heartbeat(process.task.block_number).await?;
-            log::info!(
-                "Heartbeat submitted for block_number {}",
-                process.task.block_number
-            );
         }
-        Ok(())
     }
 
-    fn work_job(self) {
-        tokio::spawn(async move {
-            loop {
-                match self.work().await {
-                    Ok(_) => {}
-                    Err(e) => log::error!("Error while working: {:?}", e),
-                }
-                tokio::time::sleep(tokio::time::Duration::from_secs(
-                    self.config.heartbeat_interval,
-                ))
-                .await;
+    pub async fn run(&self) {
+        let worker = self.clone();
+        let solve_handle = tokio::spawn(async move {
+            log::info!("Starting worker");
+            if let Err(e) = worker.work().await {
+                eprintln!("Error: {:?}", e);
             }
         });
-    }
 
-    fn submit_job(self) {
-        tokio::spawn(async move {
+        let manager = self.manager.clone();
+        let worker_id = self.worker_id.clone();
+        let heartbeat_interval = self.config.heartbeat_interval;
+        let submit_heartbeat_handle = tokio::spawn(async move {
             loop {
-                match self.submit().await {
-                    Ok(_) => {}
-                    Err(e) => log::error!("Error while submitting: {:?}", e),
+                log::info!("Submitting heartbeat");
+                if let Err(e) = manager.submit_heartbeat(&worker_id).await {
+                    eprintln!("Error: {:?}", e);
                 }
-                tokio::time::sleep(tokio::time::Duration::from_secs(
-                    self.config.submit_interval,
-                ))
-                .await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(heartbeat_interval)).await;
             }
         });
-    }
-
-    pub fn run(&self) {
-        self.clone().work_job();
-        self.clone().submit_job();
+        log::info!("Starting worker and heartbeat");
+        tokio::try_join!(solve_handle, submit_heartbeat_handle).unwrap();
     }
 }

@@ -155,7 +155,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "mio",
- "socket2",
+ "socket2 0.5.8",
  "tokio",
  "tracing",
 ]
@@ -218,7 +218,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "smallvec",
- "socket2",
+ "socket2 0.5.8",
  "time",
  "url",
 ]
@@ -888,7 +888,7 @@ dependencies = [
 
 [[package]]
 name = "balance-prover"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1043,7 +1043,7 @@ dependencies = [
 
 [[package]]
 name = "block-builder"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1272,9 +1272,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.29"
+version = "4.5.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8acebd8ad879283633b343856142139f2da2317c96b05b4dd6181c61e2480184"
+checksum = "92b7b18d71fad5313a1e320fa9897994228ce274b60faa4d694fe0ea89cd9e6d"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1282,9 +1282,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.29"
+version = "4.5.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6ba32cbda51c7e1dfd49acc1457ba1a7dec5b64fe360e828acb13ca8dc9c2f9"
+checksum = "a35db2071778a7344791a4fb4f95308b5673d219dee3ae348b86642574ecc90c"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1388,8 +1388,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "combine"
+version = "4.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "memchr",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "common"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "dotenv",
  "envy",
@@ -3117,7 +3131,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2",
+ "socket2 0.5.8",
  "tokio",
  "tower-service",
  "tracing",
@@ -3218,7 +3232,7 @@ dependencies = [
  "http-body 1.0.1",
  "hyper 1.6.0",
  "pin-project-lite",
- "socket2",
+ "socket2 0.5.8",
  "tokio",
  "tower-service",
  "tracing",
@@ -3484,7 +3498,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-cli"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3517,7 +3531,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-client-sdk"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3528,7 +3542,6 @@ dependencies = [
  "base64 0.22.1",
  "bincode",
  "chrono",
- "clap",
  "config",
  "console",
  "dialoguer",
@@ -3568,7 +3581,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3606,7 +3619,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-wasm-lib"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3947,9 +3960,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.25"
+version = "0.4.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
+checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
 
 [[package]]
 name = "matchers"
@@ -5166,6 +5179,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "redis"
+version = "0.23.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f49cdc0bb3f412bf8e7d1bd90fe1d9eb10bc5c399ba90973c14662a27b3f8ba"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "combine",
+ "futures-util",
+ "itoa",
+ "percent-encoding",
+ "pin-project-lite",
+ "ryu",
+ "sha1_smol",
+ "socket2 0.4.10",
+ "tokio",
+ "tokio-util",
+ "url",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5883,7 +5917,7 @@ dependencies = [
 
 [[package]]
 name = "server-common"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -5897,7 +5931,9 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
+ "redis",
  "serde",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.11",
  "tokio",
@@ -5918,6 +5954,12 @@ dependencies = [
  "cpufeatures",
  "digest 0.10.7",
 ]
+
+[[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
 
 [[package]]
 name = "sha2"
@@ -6066,6 +6108,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "socket2"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -6359,7 +6411,7 @@ dependencies = [
 
 [[package]]
 name = "store-vault-server"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6623,7 +6675,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix",
  "actix-cors",
@@ -6800,7 +6852,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2",
+ "socket2 0.5.8",
  "tokio-macros",
  "windows-sys 0.52.0",
 ]
@@ -6940,7 +6992,7 @@ dependencies = [
  "percent-encoding",
  "pin-project",
  "prost",
- "socket2",
+ "socket2 0.5.8",
  "tokio",
  "tokio-stream",
  "tower 0.4.13",
@@ -7010,9 +7062,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-actix-web"
-version = "0.7.15"
+version = "0.7.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54a9f5c1aca50ebebf074ee665b9f99f2e84906dcf6b993a0d0090edb835166d"
+checksum = "332bbdf3bd208d1fe6446f8ffb4e8c2ae66e25da0fb38e0b69545e640ecee6a6"
 dependencies = [
  "actix-web",
  "mutually_exclusive_features",
@@ -7309,7 +7361,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7322,6 +7374,7 @@ dependencies = [
  "env_logger",
  "envy",
  "ethers",
+ "futures",
  "hashbrown 0.15.2",
  "intmax2-client-sdk",
  "intmax2-interfaces",
@@ -7344,7 +7397,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover-worker"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7851,7 +7904,7 @@ dependencies = [
 
 [[package]]
 name = "withdrawal-server"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "actix-cors",
  "actix-web",

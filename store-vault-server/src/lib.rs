@@ -9,5 +9,4 @@ pub struct EnvVar {
     pub database_url: String,
     pub database_max_connections: u32,
     pub database_timeout: u64,
-    pub max_pagination_limit: u32,
 }

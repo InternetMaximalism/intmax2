@@ -3,7 +3,7 @@ use intmax2_interfaces::{
     api::{
         error::ServerError,
         store_vault_server::{
-            interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+            interface::{DataType, SaveDataEntry, StoreVaultClientInterface, MAX_BATCH_SIZE},
             types::{
                 CursorOrder, DataWithMetaData, GetDataBatchRequest, GetDataBatchResponse,
                 GetDataSequenceRequest, GetDataSequenceResponse, GetMiscSequenceRequest,
@@ -105,17 +105,23 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         key: KeySet,
         entries: &[SaveDataEntry],
     ) -> Result<Vec<String>, ServerError> {
-        let request = SaveDataBatchRequest {
-            data: entries.to_vec(),
-        };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        let response: SaveDataBatchResponse = post_request(
-            &self.base_url,
-            "/store-vault-server/save-data-batch",
-            Some(&request_with_auth),
-        )
-        .await?;
-        Ok(response.uuids)
+        let mut all_uuids = vec![];
+
+        for chunk in entries.chunks(MAX_BATCH_SIZE) {
+            let request = SaveDataBatchRequest {
+                data: chunk.to_vec(),
+            };
+            let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+            let response: SaveDataBatchResponse = post_request(
+                &self.base_url,
+                "/store-vault-server/save-data-batch",
+                Some(&request_with_auth),
+            )
+            .await?;
+            all_uuids.extend(response.uuids);
+        }
+
+        Ok(all_uuids)
     }
 
     async fn get_data_batch(
@@ -124,18 +130,22 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         data_type: DataType,
         uuids: &[String],
     ) -> Result<Vec<DataWithMetaData>, ServerError> {
-        let request = GetDataBatchRequest {
-            data_type,
-            uuids: uuids.to_vec(),
-        };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        let response: GetDataBatchResponse = post_request(
-            &self.base_url,
-            "/store-vault-server/get-data-batch",
-            Some(&request_with_auth),
-        )
-        .await?;
-        Ok(response.data)
+        let mut all_data = vec![];
+        for chunk in uuids.chunks(MAX_BATCH_SIZE) {
+            let request = GetDataBatchRequest {
+                data_type,
+                uuids: chunk.to_vec(),
+            };
+            let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+            let response: GetDataBatchResponse = post_request(
+                &self.base_url,
+                "/store-vault-server/get-data-batch",
+                Some(&request_with_auth),
+            )
+            .await?;
+            all_data.extend(response.data);
+        }
+        Ok(all_data)
     }
 
     async fn get_data_sequence(
@@ -204,6 +214,13 @@ impl StoreVaultServerClient {
         cursor: &MetaDataCursor,
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        if let Some(limit) = cursor.limit {
+            if limit > MAX_BATCH_SIZE as u32 {
+                return Err(ServerError::InvalidRequest(
+                    "Limit exceeds max batch size".to_string(),
+                ));
+            }
+        }
         self.verify_auth_for_get_data_sequence(auth)
             .map_err(|e| ServerError::InvalidAuth(e.to_string()))?;
         let request_with_auth = WithAuth {
@@ -228,6 +245,13 @@ impl StoreVaultServerClient {
         cursor: &MetaDataCursor,
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        if let Some(limit) = cursor.limit {
+            if limit > MAX_BATCH_SIZE as u32 {
+                return Err(ServerError::InvalidRequest(
+                    "Limit exceeds max batch size".to_string(),
+                ));
+            }
+        }
         let request_with_auth = WithAuth {
             inner: GetMiscSequenceRequest {
                 topic,
