@@ -1,8 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
+use intmax2_zkp::constants::NUM_SENDERS_IN_BLOCK;
 use tokio::sync::RwLock;
 
-use crate::app::types::TxRequest;
+use crate::app::types::{ProposalMemo, TxRequest};
 
 use super::models::{BlockPostTask, ProposingBlockState};
 
@@ -39,18 +40,37 @@ impl InMemoryStorage {
         tx_requests.push(tx_request);
     }
 
-    pub async fn pop_tx_requests_chunk(
-        &self,
-        is_registration: bool,
-        chunk_size: usize,
-    ) -> Vec<TxRequest> {
+    pub async fn process_requests(&self, is_registration: bool, expiry: u64) {
         let tx_requests = if is_registration {
             &self.registration_tx_requests
         } else {
             &self.non_registration_tx_requests
         };
         let mut tx_requests = tx_requests.write().await;
-        let chunk = tx_requests.drain(..chunk_size).collect();
-        chunk
+        let chunk: Vec<TxRequest> = tx_requests.drain(..NUM_SENDERS_IN_BLOCK).collect();
+        if chunk.is_empty() {
+            return;
+        }
+
+        let memo = ProposalMemo::from_tx_requests(is_registration, &tx_requests, expiry);
+        let block_id = uuid::Uuid::new_v4().to_string();
+
+        // update request_id -> block_id
+        let mut request_id_to_block_id = self.request_id_to_block_id.write().await;
+        for tx_request in &chunk {
+            request_id_to_block_id.insert(tx_request.request_id.clone(), block_id.clone());
+        }
+
+        // update proposing_states
+        let mut proposing_states = self.proposing_states.write().await;
+        proposing_states.insert(
+            block_id.clone(),
+            ProposingBlockState {
+                memo,
+                signatures: Vec::new(),
+            },
+        );
     }
+
+    
 }
