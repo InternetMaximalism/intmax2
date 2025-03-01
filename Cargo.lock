@@ -3414,6 +3414,7 @@ dependencies = [
  "dialoguer",
  "dotenv",
  "env_logger",
+ "envy",
  "ethers",
  "getrandom 0.2.15",
  "gloo-timers 0.3.0",

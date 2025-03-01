@@ -36,6 +36,7 @@ use intmax2_zkp::{
 
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 
 use crate::{
     client::{
@@ -124,6 +125,11 @@ pub struct TxResult {
     pub withdrawal_uuids: Vec<String>,
     pub transfer_data_vec: Vec<TransferData>,
     pub withdrawal_data_vec: Vec<TransferData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EnvVar {
+    pub sleep_time_before_tx: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -295,6 +301,10 @@ where
 
         // sync balance proof
         self.sync(key).await?;
+        let env_var = envy::from_env::<EnvVar>().unwrap();
+        if let Some(sleep_time_before_tx) = env_var.sleep_time_before_tx {
+            sleep(std::time::Duration::from_secs(sleep_time_before_tx)).await;
+        }
 
         let user_data = self.get_user_data(key).await?;
 
@@ -312,6 +322,7 @@ where
 
         // generate spent proof
         let tx_nonce = user_data.full_private_state.nonce;
+        println!("tx_nonce: {}", tx_nonce);
         let spent_witness =
             generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers).await?;
         let spent_proof = self.balance_prover.prove_spent(key, &spent_witness).await?;
@@ -363,9 +374,11 @@ where
                     pubkey: key.pubkey,
                     encrypted_data: tx_data.encrypt(key.pubkey),
                 };
-                self.store_vault_server
+                let results = self
+                    .store_vault_server
                     .save_data_batch(key, &[entry])
                     .await?;
+                println!("result of save_data_batch: {:?}", results);
             }
             Some(fee_proof)
         } else {
