@@ -17,12 +17,12 @@ use intmax2_client_sdk::{
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;
 use tests::{
     accounts::{derive_withdrawal_intmax_keys, mnemonic_to_account},
-    address_to_generic_address, log_polling_futures, mul_u256, wait_for_balance_synchronization,
+    log_polling_futures, mul_u256, wait_for_balance_synchronization,
     withdraw_directly_with_error_handling,
 };
 
@@ -298,13 +298,15 @@ impl TestSystem {
                 .map(|(i, sender)| {
                     let f = async move {
                         log::info!("Starting withdrawal from {} (No.{})", sender.pubkey, i);
-                        let withdrawal_input = Transfer {
-                            recipient: address_to_generic_address(trash_account.eth_address),
-                            amount: U256::from(10),
-                            token_index: ETH_TOKEN_INDEX,
-                            salt: generate_salt(),
-                        };
-                        withdraw_directly_with_error_handling(*sender, withdrawal_input).await?;
+                        let to = Address::from_bytes_be(trash_account.eth_address.as_bytes());
+                        log::info!("withdrawal recipient: {}", to);
+                        withdraw_directly_with_error_handling(
+                            *sender,
+                            to,
+                            U256::from(10),
+                            ETH_TOKEN_INDEX,
+                        )
+                        .await?;
                         log::info!("Withdrawal completed from {} (No.{})", sender.pubkey, i);
 
                         Ok::<(), Box<dyn std::error::Error>>(())

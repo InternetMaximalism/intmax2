@@ -3512,7 +3512,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "url",
- "uuid 1.12.1",
+ "uuid 1.13.1",
 ]
 
 [[package]]
@@ -3593,7 +3593,7 @@ dependencies = [
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
  "plonky2_keccak",
  "plonky2_u32",
- "rand",
+ "rand 0.8.5",
  "rsa",
  "serde",
  "serde_bytes",

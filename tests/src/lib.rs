@@ -6,6 +6,7 @@ use intmax2_cli::cli::{
     get::{balance, BalanceInfo},
     send::send_transfers,
     sync::sync_withdrawals,
+    withdrawal::send_withdrawal,
 };
 use intmax2_client_sdk::{
     client::{error::ClientError, strategy::error::StrategyError, sync::error::SyncError},
@@ -25,6 +26,7 @@ pub mod ethereum;
 // dev environment
 const DEPOSIT_WAITING_DURATION: u64 = 20 * 60;
 const DEPOSIT_POLLING_DURATION: u64 = 60;
+const ETH_TOKEN_INDEX: u32 = 0;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
@@ -177,40 +179,61 @@ pub async fn deposit_native_token_with_error_handling(
 
 pub async fn withdraw_directly_with_error_handling(
     key: KeySet,
-    withdrawal_input: Transfer,
+    to: Address,
+    amount: U256,
+    token_index: u32,
 ) -> Result<(), CliError> {
-    if withdrawal_input.recipient.is_pubkey {
-        return Err(CliError::ParseError(format!(
-            "Invalid recipient Ethereum address: {}",
-            withdrawal_input.recipient.data.to_hex()
-        )));
+    // First attempt with the requested amount
+    let mut result =
+        withdraw_directly_with_error_handling_inner(key, to, amount, token_index).await;
+
+    // Handle fee payment if needed
+    if matches!(result, Err(CliError::SyncError(SyncError::FeeError(_)))) {
+        log::warn!("There is an unpaid fee.");
+
+        // Pay pending fees by sending zero-amount transactions until successful
+        while let Err(CliError::SyncError(SyncError::FeeError(_))) = result {
+            result =
+                withdraw_directly_with_error_handling_inner(key, to, U256::default(), token_index)
+                    .await;
+        }
+
+        // If fee payment failed with a different error, return that error
+        result?;
+
+        // Retry the original withdrawal
+        result = withdraw_directly_with_error_handling_inner(key, to, amount, token_index).await;
     }
 
+    result
+}
+
+async fn withdraw_directly_with_error_handling_inner(
+    key: KeySet,
+    to: Address,
+    amount: U256,
+    token_index: u32,
+) -> Result<(), CliError> {
     let retry_config = RetryConfig {
         max_retries: 100,
         initial_delay: 10000,
     };
-    let transfer_inputs = &[withdrawal_input];
+    let retry_condition = |_: &CliError| true;
     retry_if(
-        |_: &CliError| true,
-        || send_transfers(key, transfer_inputs, vec![], 0, true),
+        retry_condition,
+        || send_withdrawal(key, to, amount, token_index, ETH_TOKEN_INDEX, false, true),
         retry_config,
     )
     .await?;
 
-    // tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
-    // wait_for_balance_synchronization(key, Duration::from_secs(TRANSFER_POLLING_DURATION))
-    //     .await
-    //     .map_err(|err| {
-    //         println!(
-    //             "withdraw_native_token_with_error_handling before sync_withdrawals Error: {:?}",
-    //             err
-    //         );
-    //         err
-    //     })?;
-
+    let retry_config = RetryConfig {
+        max_retries: 5,
+        initial_delay: 10000,
+    };
+    let retry_condition =
+        |err: &CliError| !matches!(err, CliError::SyncError(SyncError::FeeError(_)));
     retry_if(
-        |_: &CliError| true,
+        retry_condition,
         || sync_withdrawals(key, Some(0)),
         retry_config,
     )

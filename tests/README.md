@@ -8,6 +8,8 @@ cargo test -r -p tests deploy_contracts -- --nocapture
 
 ## stress test
 
+NOTE: **The unauthorized execution of this code is prohibited.**
+
 ```sh
 NUM_OF_RECIPIENTS=64 RECIPIENT_OFFSET=0 cargo test -r test_bulk_transfers -- --nocapture
 ```
