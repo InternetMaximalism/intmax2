@@ -66,6 +66,9 @@ pub enum FeeError {
     #[error("Proof compression error: {0}")]
     ProofCompressionError(#[from] ProofCompressionError),
 
+    #[error("Server error: {0}")]
+    ServerError(#[from] ServerError),
+
     #[error("Fee verification error: {0}")]
     FeeVerificationError(String),
 

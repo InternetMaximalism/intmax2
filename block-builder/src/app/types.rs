@@ -34,6 +34,7 @@ impl Default for TxRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProposalMemo {
     pub created_at: u64,
+    pub block_id: String,
     pub is_registration_block: bool,
     pub tx_tree_root: Bytes32,
     pub expiry: u64,
@@ -93,6 +94,7 @@ impl ProposalMemo {
             tx_requests: tx_requests.to_vec(),
             proposals,
             created_at: chrono::Utc::now().timestamp() as u64,
+            block_id: Uuid::new_v4().to_string(),
         }
     }
 

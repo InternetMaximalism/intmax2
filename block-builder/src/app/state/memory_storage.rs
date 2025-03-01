@@ -1,11 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
+use intmax2_client_sdk::external_api::store_vault_server::StoreVaultServerClient;
 use intmax2_zkp::{common::block_builder::UserSignature, constants::NUM_SENDERS_IN_BLOCK};
 use tokio::sync::RwLock;
 
-use crate::app::types::{ProposalMemo, TxRequest};
+use crate::app::{
+    block_post::BlockPostTask,
+    fee::{collect_fee, FeeCollection},
+    types::{ProposalMemo, TxRequest},
+};
 
-use super::{config::StateConfig, error::StateError, models::BlockPostTask};
+use super::{config::StateConfig, error::StateError};
 
 type AR<T> = Arc<RwLock<T>>;
 
@@ -20,8 +25,10 @@ pub struct InMemoryStorage {
     pub request_id_to_block_id: AR<HashMap<String, String>>, // request_id -> block_id
     pub memos: AR<HashMap<String, ProposalMemo>>,            // block_id -> memo
     pub signatures: AR<HashMap<String, Vec<UserSignature>>>, // block_id -> user signature
-    pub block_post_tasks_hi: AR<Vec<BlockPostTask>>,         // high priority tasks
-    pub block_post_tasks_lo: AR<Vec<BlockPostTask>>,         // low priority tasks
+
+    pub fee_collection_tasks: AR<Vec<FeeCollection>>, // fee collection tasks
+    pub block_post_tasks_hi: AR<Vec<BlockPostTask>>,  // high priority tasks
+    pub block_post_tasks_lo: AR<Vec<BlockPostTask>>,  // low priority tasks
 }
 
 impl InMemoryStorage {
@@ -36,6 +43,8 @@ impl InMemoryStorage {
             request_id_to_block_id: Arc::new(RwLock::new(HashMap::new())),
             memos: Arc::new(RwLock::new(HashMap::new())),
             signatures: Arc::new(RwLock::new(HashMap::new())),
+
+            fee_collection_tasks: Arc::new(RwLock::new(Vec::new())),
             block_post_tasks_hi: Arc::new(RwLock::new(Vec::new())),
             block_post_tasks_lo: Arc::new(RwLock::new(Vec::new())),
         }
@@ -78,17 +87,16 @@ impl InMemoryStorage {
         let tx_requests: Vec<TxRequest> = tx_requests.drain(..NUM_SENDERS_IN_BLOCK).collect();
         let memo =
             ProposalMemo::from_tx_requests(is_registration, &tx_requests, self.config.tx_timeout);
-        let block_id = uuid::Uuid::new_v4().to_string();
 
         // update request_id -> block_id
         let mut request_id_to_block_id = self.request_id_to_block_id.write().await;
         for tx_request in &tx_requests {
-            request_id_to_block_id.insert(tx_request.request_id.clone(), block_id.clone());
+            request_id_to_block_id.insert(tx_request.request_id.clone(), memo.block_id.clone());
         }
 
         // update block_id -> memo
         let mut memos = self.memos.write().await;
-        memos.insert(block_id.clone(), memo.clone());
+        memos.insert(memo.block_id.clone(), memo.clone());
     }
 
     pub async fn add_signature(
@@ -130,6 +138,78 @@ impl InMemoryStorage {
     }
 
     pub async fn process_signatures(&self) {
-        // get memo
+        // get all memos
+        let memos = self.memos.read().await;
+        let memos = memos.values().collect::<Vec<_>>();
+
+        // get those that have passed self.config.proposing_block_interval
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        let target_memos = memos
+            .into_iter()
+            .filter(|memo| current_time > memo.created_at + self.config.proposing_block_interval)
+            .collect::<Vec<_>>();
+
+        for memo in target_memos {
+            // get signatures
+            let signatures = self.signatures.read().await;
+            let signatures = signatures
+                .get(&memo.block_id)
+                .cloned()
+                .unwrap_or(Vec::new());
+
+            // if there is no signature, skip
+            if signatures.is_empty() {
+                continue;
+            }
+
+            // add to block_post_tasks_hi
+            let block_post_task = BlockPostTask::from_memo(memo, &signatures);
+            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
+            block_post_tasks_hi.push(block_post_task);
+
+            // add fee collection task
+            if self.config.use_fee {
+                let fee_collection = FeeCollection {
+                    use_collateral: self.config.use_collateral,
+                    memo: memo.clone(),
+                    signatures,
+                };
+                let mut fee_collection_tasks = self.fee_collection_tasks.write().await;
+                fee_collection_tasks.push(fee_collection);
+            }
+
+            // remove memo and signatures
+            let mut memos = self.memos.write().await;
+            memos.remove(&memo.block_id);
+            let mut signatures = self.signatures.write().await;
+            signatures.remove(&memo.block_id);
+        }
+    }
+
+    pub async fn process_fee_collection(
+        &self,
+        store_vault_server_client: &StoreVaultServerClient,
+    ) -> Result<(), StateError> {
+        // get first fee collection task
+        let fee_collection = {
+            let mut fee_collection_tasks = self.fee_collection_tasks.write().await;
+            fee_collection_tasks.pop()
+        };
+        let fee_collection = match fee_collection {
+            Some(fee_collection) => fee_collection,
+            None => return Ok(()),
+        };
+        let block_post_tasks = collect_fee(
+            store_vault_server_client,
+            self.config.fee_beneficiary,
+            &fee_collection,
+        )
+        .await?;
+
+        // add to block_post_tasks_lo
+        let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
+        block_post_tasks_lo.extend(block_post_tasks);
+
+        Ok(())
     }
 }
