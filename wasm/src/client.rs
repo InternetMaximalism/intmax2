@@ -15,13 +15,6 @@ use intmax2_client_sdk::{
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-type BB = BlockBuilderClient;
-type S = StoreVaultServerClient;
-type V = ValidityProverClient;
-// type B = BalanceProverClient;
-type B = PrivateZKPServerClient;
-type W = WithdrawalServerClient;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[wasm_bindgen(getter_with_clone)]
@@ -137,12 +130,13 @@ impl Config {
     }
 }
 
-pub fn get_client(config: &Config) -> Client<BB, S, V, B, W> {
-    let block_builder = BB::new();
-    let store_vault_server = S::new(&config.store_vault_server_url);
-    let balance_prover = B::new(&config.balance_prover_url);
-    let validity_prover = V::new(&config.validity_prover_url);
-    let withdrawal_server = W::new(&config.withdrawal_server_url);
+pub fn get_client(config: &Config) -> Client {
+    let block_builder = Box::new(BlockBuilderClient::new());
+    let store_vault_server = Box::new(StoreVaultServerClient::new(&config.store_vault_server_url));
+
+    let validity_prover = Box::new(ValidityProverClient::new(&config.validity_prover_url));
+    let balance_prover = Box::new(PrivateZKPServerClient::new(&config.balance_prover_url));
+    let withdrawal_server = Box::new(WithdrawalServerClient::new(&config.withdrawal_server_url));
 
     let client_config = ClientConfig {
         deposit_timeout: config.deposit_timeout,
