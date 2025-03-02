@@ -43,9 +43,9 @@ pub enum ReceiveValidationError {
 }
 
 /// Validate the Transfer corresponding to the given transfer_uuid.
-pub async fn validate_receive<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn validate_receive(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     recipient_pubkey: U256,
     meta: &MetaData,
     transfer_data: &TransferData,
