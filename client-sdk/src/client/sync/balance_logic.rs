@@ -37,9 +37,9 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
-pub async fn receive_deposit<V: ValidityProverClientInterface, B: BalanceProverClientInterface>(
-    validity_prover: &V,
-    balance_prover: &B,
+pub async fn receive_deposit(
+    validity_prover: &dyn ValidityProverClientInterface,
+    balance_prover: &dyn BalanceProverClientInterface,
     key: KeySet,
     full_private_state: &mut FullPrivateState,
     new_salt: Salt,
@@ -98,9 +98,9 @@ pub async fn receive_deposit<V: ValidityProverClientInterface, B: BalanceProverC
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn receive_transfer<V: ValidityProverClientInterface, B: BalanceProverClientInterface>(
-    validity_prover: &V,
-    balance_prover: &B,
+pub async fn receive_transfer(
+    validity_prover: &dyn ValidityProverClientInterface,
+    balance_prover: &dyn BalanceProverClientInterface,
     key: KeySet,
     full_private_state: &mut FullPrivateState,
     new_salt: Salt,
@@ -176,12 +176,9 @@ pub async fn receive_transfer<V: ValidityProverClientInterface, B: BalanceProver
     Ok(balance_proof)
 }
 
-pub async fn update_send_by_sender<
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
->(
-    validity_prover: &V,
-    balance_prover: &B,
+pub async fn update_send_by_sender(
+    validity_prover: &dyn ValidityProverClientInterface,
+    balance_prover: &dyn BalanceProverClientInterface,
     key: KeySet,
     full_private_state: &mut FullPrivateState,
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -277,12 +274,9 @@ pub async fn update_send_by_sender<
 }
 
 /// Update balance proof to the tx specified by tx_block_number and common_tx_data by receiver side.
-pub async fn update_send_by_receiver<
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
->(
-    validity_prover: &V,
-    balance_prover: &B,
+pub async fn update_send_by_receiver(
+    validity_prover: &dyn ValidityProverClientInterface,
+    balance_prover: &dyn BalanceProverClientInterface,
     key: KeySet,
     sender: U256,
     tx_block_number: u32,
@@ -382,9 +376,9 @@ pub async fn update_send_by_receiver<
 /// Update prev_balance_proof to block_number or do noting if already synced later than block_number.
 ///
 /// Assumes that there are no send transactions between the block_number of prev_balance_proof and block_number.
-pub async fn update_no_send<V: ValidityProverClientInterface, B: BalanceProverClientInterface>(
-    validity_prover: &V,
-    balance_prover: &B,
+pub async fn update_no_send(
+    validity_prover: &dyn ValidityProverClientInterface,
+    balance_prover: &dyn BalanceProverClientInterface,
     key: KeySet,
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
     to_block_number: u32,

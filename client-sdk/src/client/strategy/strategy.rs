@@ -67,9 +67,9 @@ pub struct PendingInfo {
 }
 
 /// Determine the sequence of receives/send tx to be incorporated into the balance proof
-pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn determine_sequence(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
     deposit_timeout: u64,

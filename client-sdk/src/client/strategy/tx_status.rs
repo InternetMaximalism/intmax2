@@ -24,8 +24,8 @@ impl fmt::Display for TxStatus {
     }
 }
 
-pub async fn get_tx_status<V: ValidityProverClientInterface>(
-    validity_prover: &V,
+pub async fn get_tx_status(
+    validity_prover: &dyn ValidityProverClientInterface,
     sender: U256,
     tx_tree_root: Bytes32,
 ) -> Result<TxStatus, StrategyError> {
