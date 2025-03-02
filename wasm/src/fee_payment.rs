@@ -23,7 +23,7 @@ pub async fn generate_withdrawal_transfers(
     let withdrawal_transfer = Transfer::try_from(withdrawal_transfer.clone())?;
     let withdrawal_transfers =
         intmax2_client_sdk::client::fee_payment::generate_withdrawal_transfers(
-            &client.withdrawal_server,
+            client.withdrawal_server.as_ref(),
             &client.withdrawal_contract,
             &withdrawal_transfer,
             fee_token_index,

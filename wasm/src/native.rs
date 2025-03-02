@@ -12,12 +12,9 @@ use crate::{
 };
 use intmax2_client_sdk::external_api::store_vault_server::generate_auth_for_get_data_sequence;
 use intmax2_interfaces::{
-    api::{
-        store_vault_server::{
-            interface::DataType,
-            types::{CursorOrder, MetaDataCursor},
-        },
-        validity_prover::interface::ValidityProverClientInterface as _,
+    api::store_vault_server::{
+        interface::DataType,
+        types::{CursorOrder, MetaDataCursor},
     },
     data::{
         deposit_data::DepositData, encryption::BlsEncryption as _, transfer_data::TransferData,

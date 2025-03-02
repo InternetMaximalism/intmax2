@@ -1,6 +1,7 @@
 use intmax2_client_sdk::{
     client::{client::Client, config::ClientConfig},
     external_api::{
+        balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
         contract::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
@@ -12,26 +13,27 @@ use intmax2_client_sdk::{
         withdrawal_server::WithdrawalServerClient,
     },
 };
+use intmax2_interfaces::api::balance_prover::interface::BalanceProverClientInterface;
 
 use crate::env_var::EnvVar;
 
 use super::error::CliError;
 
-type BB = BlockBuilderClient;
-type S = StoreVaultServerClient;
-type V = ValidityProverClient;
-// type B = BalanceProverClient;
-type B = PrivateZKPServerClient;
-type W = WithdrawalServerClient;
-
-pub fn get_client() -> Result<Client<BB, S, V, B, W>, CliError> {
+pub fn get_client() -> Result<Client, CliError> {
     let env = envy::from_env::<EnvVar>()?;
-    let block_builder = BB::new();
-    let store_vault_server = S::new(&env.store_vault_server_base_url);
+    let block_builder = Box::new(BlockBuilderClient::new());
+    let store_vault_server = Box::new(StoreVaultServerClient::new(
+        &env.store_vault_server_base_url,
+    ));
 
-    let validity_prover = V::new(&env.validity_prover_base_url);
-    let balance_prover = B::new(&env.balance_prover_base_url);
-    let withdrawal_server = W::new(&env.withdrawal_server_base_url);
+    let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
+    let balance_prover: Box<dyn BalanceProverClientInterface> =
+        if env.use_private_zkp_server.unwrap_or(true) {
+            Box::new(PrivateZKPServerClient::new(&env.balance_prover_base_url))
+        } else {
+            Box::new(BalanceProverClient::new(&env.balance_prover_base_url))
+        };
+    let withdrawal_server = Box::new(WithdrawalServerClient::new(&env.withdrawal_server_base_url));
 
     let liquidity_contract = LiquidityContract::new(
         &env.l1_rpc_url,

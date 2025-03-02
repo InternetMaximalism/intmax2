@@ -29,9 +29,9 @@ pub struct TransferInfo {
     pub timeout: Vec<(MetaData, TransferData)>,
 }
 
-pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn fetch_transfer_info(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
     included_uuids: &[String],
     excluded_uuids: &[String],
@@ -41,7 +41,7 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
     let mut settled = Vec::new();
     let mut pending = Vec::new();
     let mut timeout = Vec::new();
-    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<_, TransferData>(
+    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TransferData>(
         store_vault_server,
         key,
         DataType::Transfer,
@@ -150,12 +150,9 @@ pub async fn fetch_transfer_info<S: StoreVaultClientInterface, V: ValidityProver
     ))
 }
 
-pub async fn fetch_all_unprocessed_transfer_info<
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
->(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn fetch_all_unprocessed_transfer_info(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
     process_status: &ProcessStatus,
     tx_timeout: u64,

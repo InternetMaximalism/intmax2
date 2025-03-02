@@ -1,14 +1,5 @@
 use intmax2_interfaces::{
-    api::{
-        balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
-        store_vault_server::{
-            interface::StoreVaultClientInterface,
-            types::{MetaDataCursor, MetaDataCursorResponse},
-        },
-        validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::WithdrawalServerClientInterface,
-    },
+    api::store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse},
     data::{
         deposit_data::DepositData,
         meta_data::{MetaData, MetaDataWithBlockNumber},
@@ -52,14 +43,8 @@ impl EntryStatus {
     }
 }
 
-pub async fn fetch_deposit_history<
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
->(
-    client: &Client<BB, S, V, B, W>,
+pub async fn fetch_deposit_history(
+    client: &Client,
     key: KeySet,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
@@ -67,8 +52,8 @@ pub async fn fetch_deposit_history<
 
     let mut history = Vec::new();
     let (all_deposit_info, cursor_response) = fetch_deposit_info(
-        &client.store_vault_server,
-        &client.validity_prover,
+        client.store_vault_server.as_ref(),
+        client.validity_prover.as_ref(),
         &client.liquidity_contract,
         key,
         &[],
@@ -110,14 +95,8 @@ pub async fn fetch_deposit_history<
     Ok((history, cursor_response))
 }
 
-pub async fn fetch_transfer_history<
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
->(
-    client: &Client<BB, S, V, B, W>,
+pub async fn fetch_transfer_history(
+    client: &Client,
     key: KeySet,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
@@ -125,8 +104,8 @@ pub async fn fetch_transfer_history<
 
     let mut history = Vec::new();
     let (all_transfers_info, cursor_response) = fetch_transfer_info(
-        &client.store_vault_server,
-        &client.validity_prover,
+        client.store_vault_server.as_ref(),
+        client.validity_prover.as_ref(),
         key,
         &[],
         &[],
@@ -167,14 +146,8 @@ pub async fn fetch_transfer_history<
     Ok((history, cursor_response))
 }
 
-pub async fn fetch_tx_history<
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
->(
-    client: &Client<BB, S, V, B, W>,
+pub async fn fetch_tx_history(
+    client: &Client,
     key: KeySet,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
@@ -182,8 +155,8 @@ pub async fn fetch_tx_history<
 
     let mut history = Vec::new();
     let (all_tx_info, cursor_response) = fetch_tx_info(
-        &client.store_vault_server,
-        &client.validity_prover,
+        client.store_vault_server.as_ref(),
+        client.validity_prover.as_ref(),
         key,
         &[],
         &[],

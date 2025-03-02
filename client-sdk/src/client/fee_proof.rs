@@ -29,9 +29,9 @@ use num_bigint::BigUint;
 use super::{error::ClientError, sync::utils::generate_spent_witness};
 
 #[allow(clippy::too_many_arguments)]
-pub async fn generate_fee_proof<S: StoreVaultClientInterface, B: BalanceProverClientInterface>(
-    store_vault_server: &S,
-    balance_prover: &B,
+pub async fn generate_fee_proof(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    balance_prover: &dyn BalanceProverClientInterface,
     tx_timeout: u64,
     key: KeySet,
     user_data: &UserData,

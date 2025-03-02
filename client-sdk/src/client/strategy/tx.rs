@@ -22,9 +22,9 @@ pub struct TxInfo {
     pub timeout: Vec<(MetaData, TxData)>,
 }
 
-pub async fn fetch_tx_info<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn fetch_tx_info(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
     included_uuids: &[String],
     excluded_uuids: &[String],
@@ -35,7 +35,7 @@ pub async fn fetch_tx_info<S: StoreVaultClientInterface, V: ValidityProverClient
     let mut pending = Vec::new();
     let mut timeout = Vec::new();
 
-    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<_, TxData>(
+    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TxData>(
         store_vault_server,
         key,
         DataType::Tx,
@@ -98,12 +98,9 @@ pub async fn fetch_tx_info<S: StoreVaultClientInterface, V: ValidityProverClient
     ))
 }
 
-pub async fn fetch_all_unprocessed_tx_info<
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
->(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn fetch_all_unprocessed_tx_info(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
     process_status: &ProcessStatus,
     tx_timeout: u64,

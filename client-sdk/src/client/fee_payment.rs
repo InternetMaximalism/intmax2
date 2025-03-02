@@ -65,8 +65,8 @@ pub struct WithdrawalTransfers {
 }
 
 /// quote withdrawal fee
-pub(crate) async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
-    withdrawal_server: &W,
+pub(crate) async fn quote_withdrawal_fee(
+    withdrawal_server: &dyn WithdrawalServerClientInterface,
     withdrawal_contract: &WithdrawalContract,
     withdrawal_token_index: u32,
     fee_token_index: u32,
@@ -85,8 +85,8 @@ pub(crate) async fn quote_withdrawal_fee<W: WithdrawalServerClientInterface>(
 }
 
 /// quote claim fee
-pub(crate) async fn quote_claim_fee<W: WithdrawalServerClientInterface>(
-    withdrawal_server: &W,
+pub(crate) async fn quote_claim_fee(
+    withdrawal_server: &dyn WithdrawalServerClientInterface,
     fee_token_index: u32,
 ) -> Result<(Option<U256>, Option<Fee>), SyncError> {
     let fee_info = withdrawal_server.get_claim_fee().await?;
@@ -146,8 +146,8 @@ pub fn generate_fee_payment_memo(
 }
 
 /// quote fee and generate transfers for withdrawal and claim
-pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
-    withdrawal_server: &W,
+pub async fn generate_withdrawal_transfers(
+    withdrawal_server: &dyn WithdrawalServerClientInterface,
     withdrawal_contract: &WithdrawalContract,
     withdrawal_transfer: &Transfer,
     fee_token_index: u32,
@@ -209,8 +209,8 @@ pub async fn generate_withdrawal_transfers<W: WithdrawalServerClientInterface>(
 }
 
 /// get unused payment memos
-pub async fn get_unused_payments<S: StoreVaultClientInterface>(
-    store_vault_server: &S,
+pub async fn get_unused_payments(
+    store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
     fee_type: FeeType,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
@@ -232,8 +232,8 @@ pub async fn get_unused_payments<S: StoreVaultClientInterface>(
 }
 
 /// consume payment memo
-pub async fn consume_payment<S: StoreVaultClientInterface>(
-    store_vault_server: &S,
+pub async fn consume_payment(
+    store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
     payment_memo: &PaymentMemo,
     reason: &str,
@@ -254,9 +254,9 @@ pub async fn consume_payment<S: StoreVaultClientInterface>(
 }
 
 /// select unused fees and validate them
-pub async fn select_unused_fees<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn select_unused_fees(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
     fee_beneficiary: U256,
     fee: Fee,

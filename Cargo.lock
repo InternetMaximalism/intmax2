@@ -7091,6 +7091,7 @@ dependencies = [
  "env_logger",
  "envy",
  "ethers",
+ "futures",
  "hashbrown 0.15.2",
  "intmax2-client-sdk",
  "intmax2-interfaces",

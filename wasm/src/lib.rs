@@ -1,9 +1,6 @@
 use client::{get_client, Config};
 use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
-use intmax2_interfaces::{
-    api::withdrawal_server::interface::WithdrawalServerClientInterface,
-    data::deposit_data::TokenType,
-};
+use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::transfer::Transfer,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},

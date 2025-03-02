@@ -58,4 +58,5 @@ export const config = new Config(
     env.ROLLUP_CONTRACT_ADDRESS,
     BigInt(env.ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER),
     env.WITHDRAWAL_CONTRACT_ADDRESS,
+    true
 );
