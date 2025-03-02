@@ -8,6 +8,7 @@ pub mod error;
 pub mod memory_storage;
 pub mod redis_storage;
 
+#[async_trait::async_trait(?Send)]
 pub trait Storage {
     /// Create a new storage instance
     fn new(config: &config::StateConfig) -> Self;

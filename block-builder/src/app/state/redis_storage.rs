@@ -65,6 +65,7 @@ impl RedisStorage {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Storage for RedisStorage {
     fn new(config: &StateConfig) -> Self {
         // Create a unique prefix for this instance to avoid key collisions
@@ -361,13 +362,19 @@ impl Storage for RedisStorage {
             }
             
             // Remove memo and signatures
-            if let Err(e) = conn.hdel::<_, _, ()>(&self.memos_key, &block_id).await {
-                log::error!("Failed to delete memo for block_id {}: {}", block_id, e);
-            }
+            let _: () = match conn.hdel::<_, _, i32>(&self.memos_key, &block_id).await {
+                Ok(_) => (),
+                Err(e) => {
+                    log::error!("Failed to delete memo for block_id {}: {}", block_id, e);
+                }
+            };
             
-            if let Err(e) = conn.del::<_, ()>(&signatures_key).await {
-                log::error!("Failed to delete signatures for block_id {}: {}", block_id, e);
-            }
+            let _: () = match conn.del::<_, i32>(&signatures_key).await {
+                Ok(_) => (),
+                Err(e) => {
+                    log::error!("Failed to delete signatures for block_id {}: {}", block_id, e);
+                }
+            };
         }
     }
 
@@ -439,9 +446,7 @@ impl Storage for RedisStorage {
                 }
             };
             
-            if serialized_task.is_none() {
-                return None;
-            }
+            serialized_task.as_ref()?;
             
             // Deserialize the task
             match serde_json::from_str::<SerializableBlockPostTask>(&serialized_task.unwrap()) {

@@ -36,6 +36,7 @@ pub struct InMemoryStorage {
     pub block_post_tasks_lo: ARQueue<BlockPostTask>,  // low priority tasks queue
 }
 
+#[async_trait::async_trait(?Send)]
 impl Storage for InMemoryStorage {
     fn new(config: &StateConfig) -> Self {
         Self {
@@ -234,13 +235,9 @@ impl Storage for InMemoryStorage {
             Some(block_post_task) => Some(block_post_task),
             None => {
                 // if there is no high priority task, pop from block_post_tasks_lo
-                let block_post_task = {
+                {
                     let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
                     block_post_tasks_lo.pop_front()
-                };
-                match block_post_task {
-                    Some(block_post_task) => Some(block_post_task),
-                    None => return None,
                 }
             }
         }
