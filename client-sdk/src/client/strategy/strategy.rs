@@ -19,6 +19,7 @@ use crate::{
         mining::{fetch_mining_info, MiningStatus},
         transfer::fetch_all_unprocessed_transfer_info,
         tx::fetch_all_unprocessed_tx_info,
+        tx_status::{get_tx_status, TxStatus},
         withdrawal::fetch_all_unprocessed_withdrawal_info,
     },
     external_api::contract::liquidity_contract::LiquidityContract,
@@ -76,6 +77,8 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
 ) -> Result<(Vec<Action>, PendingInfo), StrategyError> {
     log::info!("determine_sequence");
     let user_data = fetch_user_data(store_vault_server, key).await?;
+
+    let mut nonce = user_data.full_private_state.nonce;
     let mut balances = user_data.balances();
     if balances.is_insufficient() {
         return Err(StrategyError::BalanceInsufficientBeforeSync);
@@ -123,6 +126,13 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
     // Next, for each settled tx, take deposits and transfers that are strictly smaller than the block number of the tx
     let mut sequence = Vec::new();
     for (tx_meta, tx_data) in tx_info.settled.iter() {
+        // validate tx status
+        let tx_status = get_tx_status(validity_prover, key.pubkey, tx_data.tx_tree_root).await?;
+        if tx_status != TxStatus::Success {
+            log::warn!("tx {} is not success: {}", tx_meta.meta.uuid, tx_status);
+            continue;
+        }
+
         let receives = collect_receives(
             &Some((tx_meta.clone(), tx_data.clone())),
             &mut deposits,
@@ -134,7 +144,20 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
         for receive in &receives {
             receive.apply_to_balances(&mut balances);
         }
-        let is_insufficient = balances.sub_tx(tx_data);
+        let is_insufficient = if tx_data.spent_witness.tx.nonce == nonce {
+            nonce += 1;
+            balances.sub_tx(tx_data)
+        } else {
+            // ignore nonce mismatch tx
+            log::warn!(
+                "nonce mismatch tx {}: expected={}, actual={}",
+                tx_meta.meta.uuid,
+                nonce,
+                tx_data.spent_witness.tx.nonce
+            );
+            false
+        };
+
         if is_insufficient {
             if deposit_info.pending.is_empty() && transfer_info.pending.is_empty() {
                 // Unresolved balance shortage
