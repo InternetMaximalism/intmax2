@@ -44,7 +44,7 @@ struct SerializableBlockPostTask {
 pub struct RedisStorage {
     pub config: StateConfig,
     conn_manager: Arc<Mutex<ConnectionManager>>,
-    // Redis key prefixes
+    // Redis key names - shared across all block builder instances
     registration_tx_requests_key: String,
     registration_tx_last_processed_key: String,
     non_registration_tx_requests_key: String,
@@ -68,8 +68,8 @@ impl RedisStorage {
 #[async_trait::async_trait(?Send)]
 impl Storage for RedisStorage {
     fn new(config: &StateConfig) -> Self {
-        // Create a unique prefix for this instance to avoid key collisions
-        let prefix = format!("block_builder:{}:", config.block_builder_id);
+        // Create a common prefix for all block builder instances to share the same state
+        let prefix = "block_builder:shared:";
         
         // Create Redis client
         let redis_url = config.redis_url.clone().unwrap_or_else(|| "redis://127.0.0.1:6379".to_string());
@@ -84,7 +84,7 @@ impl Storage for RedisStorage {
             config: config.clone(),
             conn_manager: Arc::new(Mutex::new(conn_manager)),
             
-            // Define Redis keys with prefixes
+            // Define Redis keys with shared prefix
             registration_tx_requests_key: format!("{}registration_tx_requests", prefix),
             registration_tx_last_processed_key: format!("{}registration_tx_last_processed", prefix),
             non_registration_tx_requests_key: format!("{}non_registration_tx_requests", prefix),
@@ -114,8 +114,7 @@ impl Storage for RedisStorage {
             timestamp: chrono::Utc::now().timestamp() as u64,
         };
         
-        let serialized = serde_json::to_string(&serializable_request)
-            .map_err(|e| StateError::SerializationError(e.to_string()))?;
+        let serialized = serde_json::to_string(&serializable_request)?;
         
         let mut conn = self.get_conn().await?;
         
@@ -165,8 +164,7 @@ impl Storage for RedisStorage {
         // Deserialize requests
         let mut tx_requests = Vec::with_capacity(num_to_process);
         for serialized in &serialized_requests {
-            let serializable_request: SerializableTxRequest = serde_json::from_str(serialized)
-                .map_err(|e| StateError::DeserializationError(e.to_string()))?;
+            let serializable_request: SerializableTxRequest = serde_json::from_str(serialized)?;
             tx_requests.push(serializable_request.request);
         }
         
@@ -174,8 +172,7 @@ impl Storage for RedisStorage {
         let memo = ProposalMemo::from_tx_requests(is_registration, &tx_requests, self.config.tx_timeout);
         
         // Store memo
-        let serialized_memo = serde_json::to_string(&SerializableProposalMemo { memo: memo.clone() })
-            .map_err(|e| StateError::SerializationError(e.to_string()))?;
+        let serialized_memo = serde_json::to_string(&SerializableProposalMemo { memo: memo.clone() })?;
         
         let _: () = conn.hset(&self.memos_key, &memo.block_id, &serialized_memo).await?;
         
@@ -214,8 +211,7 @@ impl Storage for RedisStorage {
             StateError::AddSignatureError(format!("memo not found for block_id: {}", block_id))
         })?;
         
-        let memo = serde_json::from_str::<SerializableProposalMemo>(&serialized_memo)
-            .map_err(|e| StateError::DeserializationError(e.to_string()))?
+        let memo = serde_json::from_str::<SerializableProposalMemo>(&serialized_memo)?
             .memo;
         
         // Verify signature
@@ -226,8 +222,7 @@ impl Storage for RedisStorage {
             })?;
         
         // Serialize signature
-        let serialized_signature = serde_json::to_string(&SerializableUserSignature { signature })
-            .map_err(|e| StateError::SerializationError(e.to_string()))?;
+        let serialized_signature = serde_json::to_string(&SerializableUserSignature { signature })?;
         
         // Add signature to the list for this block_id
         let signatures_key = format!("{}:{}", self.signatures_key, block_id);
@@ -348,19 +343,13 @@ impl Storage for RedisStorage {
             }
             
             // Remove memo and signatures
-            let _: () = match conn.hdel::<_, _, i32>(&self.memos_key, &block_id).await {
-                Ok(_) => (),
-                Err(e) => {
-                    log::error!("Failed to delete memo for block_id {}: {}", block_id, e);
-                }
-            };
+            if let Err(e) = conn.hdel::<_, _, i32>(&self.memos_key, &block_id).await {
+                log::error!("Failed to delete memo for block_id {}: {}", block_id, e);
+            }
             
-            let _: () = match conn.del::<_, i32>(&signatures_key).await {
-                Ok(_) => (),
-                Err(e) => {
-                    log::error!("Failed to delete signatures for block_id {}: {}", block_id, e);
-                }
-            };
+            if let Err(e) = conn.del::<_, i32>(&signatures_key).await {
+                log::error!("Failed to delete signatures for block_id {}: {}", block_id, e);
+            }
         }
     }
 
@@ -370,17 +359,17 @@ impl Storage for RedisStorage {
     ) -> Result<(), StateError> {
         let mut conn = self.get_conn().await?;
         
-        // Get the first fee collection task
-        let serialized_fee_collection: Option<String> = conn.lpop(&self.fee_collection_tasks_key, None).await?;
+        // Use BLPOP with a short timeout to avoid race conditions between multiple instances
+        let serialized_fee_collection: Option<(String, String)> = conn.blpop(&self.fee_collection_tasks_key, 1).await?;
         
         // Return if there's no task
-        if serialized_fee_collection.is_none() {
-            return Ok(());
-        }
+        let serialized_fee_collection = match serialized_fee_collection {
+            Some((_, value)) => value,
+            None => return Ok(()),
+        };
         
         // Deserialize the fee collection task
-        let fee_collection = serde_json::from_str::<SerializableFeeCollection>(&serialized_fee_collection.unwrap())
-            .map_err(|e| StateError::DeserializationError(e.to_string()))?
+        let fee_collection = serde_json::from_str::<SerializableFeeCollection>(&serialized_fee_collection)?
             .fee_collection;
         
         // Process the fee collection
@@ -392,8 +381,7 @@ impl Storage for RedisStorage {
         
         // Add resulting block post tasks to low priority queue
         for task in block_post_tasks {
-            let serialized_task = serde_json::to_string(&SerializableBlockPostTask { task })
-                .map_err(|e| StateError::SerializationError(e.to_string()))?;
+            let serialized_task = serde_json::to_string(&SerializableBlockPostTask { task })?;
             
             let _: () = conn.rpush(&self.block_post_tasks_lo_key, &serialized_task).await?;
         }
@@ -410,9 +398,9 @@ impl Storage for RedisStorage {
             }
         };
         
-        // Try to get a task from high priority queue first
-        let serialized_task: Option<String> = match conn.lpop(&self.block_post_tasks_hi_key, None).await {
-            Ok(task) => task,
+        // Try to get a task from high priority queue first using BLPOP with a short timeout
+        let serialized_task: Option<(String, String)> = match conn.blpop(&self.block_post_tasks_hi_key, 1).await {
+            Ok(result) => result,
             Err(e) => {
                 log::error!("Failed to pop from high priority queue: {}", e);
                 return None;
@@ -420,33 +408,31 @@ impl Storage for RedisStorage {
         };
         
         // If no high priority task, try low priority queue
-        if serialized_task.is_none() {
-            let serialized_task: Option<String> = match conn.lpop(&self.block_post_tasks_lo_key, None).await {
-                Ok(task) => task,
-                Err(e) => {
-                    log::error!("Failed to pop from low priority queue: {}", e);
-                    return None;
-                }
-            };
-            
-            serialized_task.as_ref()?;
-            
-            // Deserialize the task
-            match serde_json::from_str::<SerializableBlockPostTask>(&serialized_task.unwrap()) {
-                Ok(task) => Some(task.task),
-                Err(e) => {
-                    log::error!("Failed to deserialize block post task: {}", e);
-                    None
+        let serialized_task = match serialized_task {
+            Some((_, value)) => value,
+            None => {
+                // Try low priority queue
+                let serialized_task: Option<(String, String)> = match conn.blpop(&self.block_post_tasks_lo_key, 1).await {
+                    Ok(result) => result,
+                    Err(e) => {
+                        log::error!("Failed to pop from low priority queue: {}", e);
+                        return None;
+                    }
+                };
+                
+                match serialized_task {
+                    Some((_, value)) => value,
+                    None => return None,
                 }
             }
-        } else {
-            // Deserialize the high priority task
-            match serde_json::from_str::<SerializableBlockPostTask>(&serialized_task.unwrap()) {
-                Ok(task) => Some(task.task),
-                Err(e) => {
-                    log::error!("Failed to deserialize block post task: {}", e);
-                    None
-                }
+        };
+        
+        // Deserialize the task
+        match serde_json::from_str::<SerializableBlockPostTask>(&serialized_task) {
+            Ok(task) => Some(task.task),
+            Err(e) => {
+                log::error!("Failed to deserialize block post task: {}", e);
+                None
             }
         }
     }

@@ -1,5 +1,6 @@
 use crate::app::error::FeeError;
 use redis::RedisError as RedisClientError;
+use serde_json::Error as SerdeJsonError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
@@ -12,9 +13,6 @@ pub enum StateError {
     #[error("Redis error: {0}")]
     RedisError(#[from] RedisClientError),
     
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-    
-    #[error("Deserialization error: {0}")]
-    DeserializationError(String),
+    #[error("Serialization/Deserialization error: {0}")]
+    SerdeError(#[from] SerdeJsonError),
 }
