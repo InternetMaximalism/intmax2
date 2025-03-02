@@ -13,14 +13,14 @@ use crate::app::{
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StateConfig, error::StateError, Storage};
+use super::{config::StorageConfig, error::StorageError, Storage};
 
 type AR<T> = Arc<RwLock<T>>;
 type ARQueue<T> = AR<VecDeque<T>>;
 type ARMap<K, V> = AR<HashMap<K, V>>;
 
 pub struct InMemoryStorage {
-    pub config: StateConfig,
+    pub config: StorageConfig,
 
     pub registration_tx_requests: ARQueue<TxRequest>, // registration tx requests queue
     pub registration_tx_last_processed: AR<u64>,      // last processed timestamp
@@ -36,9 +36,8 @@ pub struct InMemoryStorage {
     pub block_post_tasks_lo: ARQueue<BlockPostTask>,  // low priority tasks queue
 }
 
-#[async_trait::async_trait(?Send)]
-impl Storage for InMemoryStorage {
-    fn new(config: &StateConfig) -> Self {
+impl InMemoryStorage {
+    pub fn new(config: &StorageConfig) -> Self {
         Self {
             config: config.clone(),
             registration_tx_requests: Default::default(),
@@ -55,8 +54,15 @@ impl Storage for InMemoryStorage {
             block_post_tasks_lo: Default::default(),
         }
     }
+}
 
-    async fn add_tx(&self, is_registration: bool, tx_request: TxRequest) -> Result<(), StateError> {
+#[async_trait::async_trait(?Send)]
+impl Storage for InMemoryStorage {
+    async fn add_tx(
+        &self,
+        is_registration: bool,
+        tx_request: TxRequest,
+    ) -> Result<(), StorageError> {
         let tx_requests = if is_registration {
             &self.registration_tx_requests
         } else {
@@ -68,7 +74,7 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn process_requests(&self, is_registration: bool) -> Result<(), StateError> {
+    async fn process_requests(&self, is_registration: bool) -> Result<(), StorageError> {
         let tx_requests = if is_registration {
             &self.registration_tx_requests
         } else {
@@ -116,12 +122,12 @@ impl Storage for InMemoryStorage {
         &self,
         request_id: &str,
         signature: UserSignature,
-    ) -> Result<(), StateError> {
+    ) -> Result<(), StorageError> {
         // get block_id
         let block_ids = self.request_id_to_block_id.read().await;
         let block_id = block_ids
             .get(request_id)
-            .ok_or(StateError::AddSignatureError(format!(
+            .ok_or(StorageError::AddSignatureError(format!(
                 "block_id not found for request_id: {}",
                 request_id
             )))?;
@@ -130,7 +136,7 @@ impl Storage for InMemoryStorage {
         let memos = self.memos.read().await;
         let memo = memos
             .get(block_id)
-            .ok_or(StateError::AddSignatureError(format!(
+            .ok_or(StorageError::AddSignatureError(format!(
                 "memo not found for block_id: {}",
                 block_id
             )))?;
@@ -139,7 +145,7 @@ impl Storage for InMemoryStorage {
         signature
             .verify(memo.tx_tree_root, memo.expiry, memo.pubkey_hash)
             .map_err(|e| {
-                StateError::AddSignatureError(format!("signature verification failed: {}", e))
+                StorageError::AddSignatureError(format!("signature verification failed: {}", e))
             })?;
 
         // add signature
@@ -150,7 +156,7 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn process_signatures(&self) -> Result<(), StateError> {
+    async fn process_signatures(&self) -> Result<(), StorageError> {
         // get all memos
         let memos = self.memos.read().await;
         let memos = memos.values().collect::<Vec<_>>();
@@ -204,7 +210,7 @@ impl Storage for InMemoryStorage {
     async fn process_fee_collection(
         &self,
         store_vault_server_client: &StoreVaultServerClient,
-    ) -> Result<(), StateError> {
+    ) -> Result<(), StorageError> {
         // get first fee collection task
         let fee_collection = {
             let mut fee_collection_tasks = self.fee_collection_tasks.write().await;
@@ -228,7 +234,7 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StateError> {
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
         let block_post_task = {
             let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
             block_post_tasks_hi.pop_front()

@@ -9,36 +9,33 @@ pub mod memory_storage;
 pub mod redis_storage;
 
 #[async_trait::async_trait(?Send)]
-pub trait Storage {
-    /// Create a new storage instance
-    fn new(config: &config::StateConfig) -> Self;
-
+pub trait Storage: Sync + Send {
     /// Add a transaction request to the queue
     async fn add_tx(
         &self,
         is_registration: bool,
         tx_request: TxRequest,
-    ) -> Result<(), error::StateError>;
+    ) -> Result<(), error::StorageError>;
 
     /// Add a signature for a transaction request
     async fn add_signature(
         &self,
         request_id: &str,
         signature: UserSignature,
-    ) -> Result<(), error::StateError>;
+    ) -> Result<(), error::StorageError>;
 
     /// Dequeue a block post task
-    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, error::StateError>;
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, error::StorageError>;
 
     /// Process transaction requests in the queue
-    async fn process_requests(&self, is_registration: bool) -> Result<(), error::StateError>;
+    async fn process_requests(&self, is_registration: bool) -> Result<(), error::StorageError>;
 
     /// Process signatures and create block post tasks
-    async fn process_signatures(&self) -> Result<(), error::StateError>;
+    async fn process_signatures(&self) -> Result<(), error::StorageError>;
 
     /// Process fee collection tasks
     async fn process_fee_collection(
         &self,
         store_vault_server_client: &StoreVaultServerClient,
-    ) -> Result<(), error::StateError>;
+    ) -> Result<(), error::StorageError>;
 }

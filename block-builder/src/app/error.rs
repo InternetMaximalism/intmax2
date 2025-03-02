@@ -4,8 +4,13 @@ use intmax2_client_sdk::{
 use intmax2_interfaces::{api::error::ServerError, data::proof_compression::ProofCompressionError};
 use intmax2_zkp::ethereum_types::u256::U256;
 
+use super::storage::error::StorageError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum BlockBuilderError {
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
+
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),
 

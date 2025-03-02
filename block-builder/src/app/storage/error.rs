@@ -3,16 +3,16 @@ use redis::RedisError as RedisClientError;
 use serde_json::Error as SerdeJsonError;
 
 #[derive(Debug, thiserror::Error)]
-pub enum StateError {
+pub enum StorageError {
     #[error("Failed to add signature: {0}")]
     AddSignatureError(String),
 
     #[error("Fee error: {0}")]
     FeeError(#[from] FeeError),
-    
+
     #[error("Redis error: {0}")]
     RedisError(#[from] RedisClientError),
-    
+
     #[error("Serialization/Deserialization error: {0}")]
     SerdeError(#[from] SerdeJsonError),
 }
