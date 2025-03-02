@@ -17,8 +17,10 @@ pub trait Storage: Sync + Send {
         tx_request: TxRequest,
     ) -> Result<(), error::StorageError>;
 
-    async fn query_proposal(&self, request_id: &str)
-        -> Result<Option<BlockProposal>, error::StorageError>;
+    async fn query_proposal(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<BlockProposal>, error::StorageError>;
 
     /// Add a signature for a transaction request
     async fn add_signature(

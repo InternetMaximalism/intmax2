@@ -11,10 +11,13 @@ use intmax2_interfaces::api::{
     validity_prover::interface::ValidityProverClientInterface,
 };
 use intmax2_zkp::{
-    common::tx::Tx,
+    common::{
+        block_builder::{BlockProposal, UserSignature},
+        tx::Tx,
+    },
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -165,7 +168,7 @@ impl BlockBuilder {
         pubkey: U256,
         tx: Tx,
         fee_proof: &Option<FeeProof>,
-    ) -> Result<(), BlockBuilderError> {
+    ) -> Result<String, BlockBuilderError> {
         log::info!(
             "send_tx_request is_registration_block: {}",
             is_registration_block
@@ -205,98 +208,107 @@ impl BlockBuilder {
         )
         .await?;
 
+        let request_id = Uuid::new_v4().to_string();
         let tx_request = TxRequest {
             pubkey,
             account_id,
             tx,
             fee_proof: fee_proof.clone(),
-            request_id: Uuid::new_v4().to_string(),
+            request_id: request_id.clone(),
         };
         self.storage
             .add_tx(is_registration_block, tx_request)
             .await?;
 
+        Ok(request_id)
+    }
+
+    // Query the constructed proposal by the user.
+    pub async fn query_proposal(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<BlockProposal>, BlockBuilderError> {
+        log::info!("query_proposal request_id: {}", request_id);
+        let proposal = self.storage.query_proposal(request_id).await?;
+        Ok(proposal)
+    }
+
+    // Post the signature by the user.
+    pub async fn post_signature(
+        &self,
+        request_id: &str,
+        signature: UserSignature,
+    ) -> Result<(), BlockBuilderError> {
+        log::info!("post_signature request_id: {}", request_id);
+        self.storage.add_signature(request_id, signature).await?;
         Ok(())
     }
 
-    //     // Query the constructed proposal by the user.
-    //     pub async fn query_proposal(
-    //         &self,
-    //         is_registration_block: bool,
-    //         pubkey: U256,
-    //         tx: Tx,
-    //     ) -> Result<Option<BlockProposal>, BlockBuilderError> {
-    //         log::info!(
-    //             "query_proposal is_registration_block: {}",
-    //             is_registration_block
-    //         );
-    //         let state = self.state_read(is_registration_block).await;
-    //         if state.is_pausing() {
-    //             return Err(BlockBuilderError::BlockBuilderIsPausing);
-    //         }
-    //         if state.is_accepting_txs() && !state.is_request_contained(pubkey, tx) {
-    //             return Err(BlockBuilderError::TxRequestNotFound);
-    //         }
-    //         Ok(state.query_proposal(pubkey, tx))
-    //     }
+    // job
+    async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
+        self.registry_contract
+            .emit_heart_beat(
+                self.config.block_builder_private_key,
+                &self.config.block_builder_url,
+            )
+            .await?;
+        Ok(())
+    }
+
+    fn emit_heart_beat_job(self) {
+        let start_time = chrono::Utc::now().timestamp() as u64;
+        actix_web::rt::spawn(async move {
+            let now = chrono::Utc::now().timestamp() as u64;
+            let initial_heartbeat_time = start_time + self.config.initial_heart_beat_delay;
+            let delay_secs = if initial_heartbeat_time > now {
+                initial_heartbeat_time - now
+            } else {
+                0
+            };
+
+            // wait for the initial heart beat
+            tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+
+            // emit initial heart beat
+            match self.emit_heart_beat().await {
+                Ok(_) => log::info!("Initial heart beat emitted"),
+                Err(e) => log::error!("Error in emitting initial heart beat: {}", e),
+            }
+
+            // emit heart beat periodically
+            loop {
+                tokio::time::sleep(Duration::from_secs(self.config.heart_beat_interval)).await;
+                match self.emit_heart_beat().await {
+                    Ok(_) => log::info!("Heart beat emitted"),
+                    Err(e) => log::error!("Error in emitting heart beat: {}", e),
+                }
+            }
+        });
+    }
+
+    async fn check_new_deposits(&self) -> Result<bool, BlockBuilderError> {
+        log::info!("check_new_deposits");
+        let next_deposit_index = self.validity_prover_client.get_next_deposit_index().await?;
+        let current_next_deposit_index = *self.next_deposit_index.read().await; // release the lock immediately
+
+        // sanity check
+        if next_deposit_index < current_next_deposit_index {
+            return Err(BlockBuilderError::UnexpectedError(format!(
+                "next_deposit_index is smaller than the current one: {} < {}",
+                next_deposit_index, current_next_deposit_index
+            )));
+        }
+        if next_deposit_index == current_next_deposit_index {
+            return Ok(false);
+        }
+
+        // update the next deposit index
+        *self.next_deposit_index.write().await = next_deposit_index;
+
+        log::info!("new deposit found: {}", next_deposit_index);
+        Ok(true)
+    }
 }
-
-//     // Post the signature by the user.
-//     pub async fn post_signature(
-//         &self,
-//         is_registration_block: bool,
-//         tx: Tx,
-//         signature: UserSignature,
-//     ) -> Result<(), BlockBuilderError> {
-//         log::info!(
-//             "post_signature is_registration_block: {}",
-//             is_registration_block
-//         );
-//         let mut state = self.state_write(is_registration_block).await;
-//         if !state.is_proposing_block() {
-//             return Err(BlockBuilderError::NotProposing);
-//         }
-//         if state.is_request_contained(signature.pubkey, tx) {
-//             return Err(BlockBuilderError::TxRequestNotFound);
-//         }
-//         let memo = state.get_proposal_memo().unwrap();
-//         signature
-//             .verify(memo.tx_tree_root, memo.expiry, memo.pubkey_hash)
-//             .map_err(|e| BlockBuilderError::InvalidSignature(e.to_string()))?;
-//         // update state
-//         state.append_signature(signature);
-//         Ok(())
-//     }
-
-//     async fn check_new_deposits(&self) -> Result<bool, BlockBuilderError> {
-//         log::info!("check_new_deposits");
-//         let next_deposit_index = self.validity_prover_client.get_next_deposit_index().await?;
-//         let current_next_deposit_index = *self.next_deposit_index.read().await; // release the lock immediately
-
-//         // sanity check
-//         if next_deposit_index < current_next_deposit_index {
-//             return Err(BlockBuilderError::UnexpectedError(format!(
-//                 "next_deposit_index is smaller than the current one: {} < {}",
-//                 next_deposit_index, current_next_deposit_index
-//             )));
-//         }
-//         if next_deposit_index == current_next_deposit_index {
-//             return Ok(false);
-//         }
-
-//         // update the next deposit index
-//         *self.next_deposit_index.write().await = next_deposit_index;
-
-//         log::info!("new deposit found: {}", next_deposit_index);
-//         Ok(true)
-//     }
-
-//     /// Reset the block builder.
-//     async fn reset(&self, is_registration_block: bool) {
-//         log::info!("reset");
-//         let mut state = self.state_write(is_registration_block).await;
-//         *state = BuilderState::default();
-//     }
 
 //     // Cycle of the block builder.
 //     async fn cycle(&self, is_registration_block: bool) -> Result<(), BlockBuilderError> {
@@ -326,48 +338,6 @@ impl BlockBuilder {
 //         }
 
 //         Ok(())
-//     }
-
-//     // job
-//     async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
-//         self.registry_contract
-//             .emit_heart_beat(
-//                 self.config.block_builder_private_key,
-//                 &self.config.block_builder_url,
-//             )
-//             .await?;
-//         Ok(())
-//     }
-
-//     fn emit_heart_beat_job(self) {
-//         let start_time = chrono::Utc::now().timestamp() as u64;
-//         actix_web::rt::spawn(async move {
-//             let now = chrono::Utc::now().timestamp() as u64;
-//             let initial_heartbeat_time = start_time + self.config.initial_heart_beat_delay;
-//             let delay_secs = if initial_heartbeat_time > now {
-//                 initial_heartbeat_time - now
-//             } else {
-//                 0
-//             };
-
-//             // wait for the initial heart beat
-//             tokio::time::sleep(Duration::from_secs(delay_secs)).await;
-
-//             // emit initial heart beat
-//             match self.emit_heart_beat().await {
-//                 Ok(_) => log::info!("Initial heart beat emitted"),
-//                 Err(e) => log::error!("Error in emitting initial heart beat: {}", e),
-//             }
-
-//             // emit heart beat periodically
-//             loop {
-//                 tokio::time::sleep(Duration::from_secs(self.config.heart_beat_interval)).await;
-//                 match self.emit_heart_beat().await {
-//                     Ok(_) => log::info!("Heart beat emitted"),
-//                     Err(e) => log::error!("Error in emitting heart beat: {}", e),
-//                 }
-//             }
-//         });
 //     }
 
 //     async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
