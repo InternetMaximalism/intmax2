@@ -126,10 +126,10 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
     // Next, for each settled tx, take deposits and transfers that are strictly smaller than the block number of the tx
     let mut sequence = Vec::new();
     for (tx_meta, tx_data) in tx_info.settled.iter() {
-        // validate tx state
-        let tx_state = get_tx_status(validity_prover, key.pubkey, tx_data.tx_tree_root).await?;
-        if tx_state != TxStatus::Success {
-            log::warn!("tx {} is not success: {:?}", tx_meta.meta.uuid, tx_state);
+        // validate tx status
+        let tx_status = get_tx_status(validity_prover, key.pubkey, tx_data.tx_tree_root).await?;
+        if tx_status != TxStatus::Success {
+            log::warn!("tx {} is not success: {}", tx_meta.meta.uuid, tx_status);
             continue;
         }
 
