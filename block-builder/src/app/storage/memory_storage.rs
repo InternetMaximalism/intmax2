@@ -4,7 +4,10 @@ use std::{
 };
 
 use intmax2_client_sdk::external_api::store_vault_server::StoreVaultServerClient;
-use intmax2_zkp::{common::block_builder::UserSignature, constants::NUM_SENDERS_IN_BLOCK};
+use intmax2_zkp::{
+    common::block_builder::{BlockProposal, UserSignature},
+    constants::NUM_SENDERS_IN_BLOCK,
+};
 use tokio::sync::RwLock;
 
 use crate::app::{
@@ -116,6 +119,37 @@ impl Storage for InMemoryStorage {
         *last_processed.write().await = current_time;
 
         Ok(())
+    }
+
+    async fn query_proposal(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<BlockProposal>, StorageError> {
+        let block_ids = self.request_id_to_block_id.read().await;
+        let block_id = block_ids
+            .get(request_id)
+            .ok_or(StorageError::QueryProposalError(format!(
+                "block_id not found for request_id: {}",
+                request_id
+            )))?;
+        let memos = self.memos.read().await;
+        let memo = memos.get(block_id).cloned();
+        let proposal = if let Some(memo) = memo {
+            // find the position of the request_id in the memo
+            let position = memo
+                .tx_requests
+                .iter()
+                .position(|r| r.request_id == request_id)
+                .ok_or(StorageError::QueryProposalError(format!(
+                    "request_id {} not found in memo: {}",
+                    request_id, memo.block_id
+                )))?;
+            Some(memo.proposals[position].clone())
+        } else {
+            None
+        };
+
+        Ok(proposal)
     }
 
     async fn add_signature(

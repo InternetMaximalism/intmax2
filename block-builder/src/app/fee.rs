@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
 use ethers::core::rand;
 use intmax2_client_sdk::{
     client::strategy::common::fetch_sender_proof_set,
@@ -28,7 +29,6 @@ use intmax2_zkp::{
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
 
 /// Validate fee proof
 pub async fn validate_fee_proof(

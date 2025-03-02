@@ -7,6 +7,9 @@ pub enum StorageError {
     #[error("Failed to add signature: {0}")]
     AddSignatureError(String),
 
+    #[error("Failed query proposal: {0}")]
+    QueryProposalError(String),
+
     #[error("Fee error: {0}")]
     FeeError(#[from] FeeError),
 

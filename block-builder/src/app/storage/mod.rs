@@ -1,5 +1,5 @@
 use intmax2_client_sdk::external_api::store_vault_server::StoreVaultServerClient;
-use intmax2_zkp::common::block_builder::UserSignature;
+use intmax2_zkp::common::block_builder::{BlockProposal, UserSignature};
 
 use super::{block_post::BlockPostTask, types::TxRequest};
 
@@ -16,6 +16,9 @@ pub trait Storage: Sync + Send {
         is_registration: bool,
         tx_request: TxRequest,
     ) -> Result<(), error::StorageError>;
+
+    async fn query_proposal(&self, request_id: &str)
+        -> Result<Option<BlockProposal>, error::StorageError>;
 
     /// Add a signature for a transaction request
     async fn add_signature(
