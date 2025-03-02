@@ -17,7 +17,10 @@ use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonG
 use intmax2_zkp::common::signature::key_set::KeySet;
 
 use crate::{
-    client::strategy::withdrawal::fetch_withdrawal_info,
+    client::strategy::{
+        tx_status::{get_tx_status, TxStatus},
+        withdrawal::fetch_withdrawal_info,
+    },
     external_api::contract::liquidity_contract::LiquidityContract,
 };
 
@@ -92,6 +95,7 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
         .transpose()
         .map_err(|e| StrategyError::UserDataDecryptionError(e.to_string()))?
         .unwrap_or(UserData::new(key.pubkey));
+    let mut nonce = user_data.full_private_state.nonce;
     let mut balances = user_data.balances();
     if balances.is_insufficient() {
         return Err(StrategyError::BalanceInsufficientBeforeSync);
@@ -159,6 +163,14 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
     // Next, for each settled tx, take deposits and transfers that are strictly smaller than the block number of the tx
     let mut sequence = Vec::new();
     for (tx_meta, tx_data) in tx_info.settled.iter() {
+        // validate tx status
+        let tx_status =
+            get_tx_status(validity_prover, key.pubkey, tx_data.common.tx_tree_root).await?;
+        if tx_status != TxStatus::Success {
+            log::warn!("tx {} is not success: {}", tx_meta.uuid, tx_status);
+            continue;
+        }
+
         let receives = collect_receives(
             &Some((tx_meta.clone(), tx_data.clone())),
             &mut deposits,
@@ -170,7 +182,19 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
         for receive in &receives {
             receive.apply_to_balances(&mut balances);
         }
-        let is_insufficient = balances.sub_tx(tx_data);
+        let is_insufficient = if tx_data.spent_witness.tx.nonce == nonce {
+            nonce += 1;
+            balances.sub_tx(tx_data)
+        } else {
+            // ignore nonce mismatch tx
+            log::warn!(
+                "nonce mismatch tx {}: expected={}, actual={}",
+                tx_meta.uuid,
+                nonce,
+                tx_data.spent_witness.tx.nonce
+            );
+            false
+        };
         if is_insufficient {
             if deposit_info.pending.is_empty() && transfer_info.pending.is_empty() {
                 // Unresolved balance shortage

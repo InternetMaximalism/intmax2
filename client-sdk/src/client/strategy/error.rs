@@ -19,4 +19,7 @@ pub enum StrategyError {
 
     #[error("User data decryption error: {0}")]
     UserDataDecryptionError(String),
+
+    #[error("Unexpected error: {0}")]
+    UnexpectedError(String),
 }
