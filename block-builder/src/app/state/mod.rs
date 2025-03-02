@@ -20,15 +20,18 @@ pub trait Storage {
         tx_request: TxRequest,
     ) -> Result<(), error::StateError>;
 
-    /// Process transaction requests in the queue
-    async fn process_requests(&self, is_registration: bool) -> Result<(), error::StateError>;
-
     /// Add a signature for a transaction request
     async fn add_signature(
         &self,
         request_id: &str,
         signature: UserSignature,
     ) -> Result<(), error::StateError>;
+
+    /// Dequeue a block post task
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, error::StateError>;
+
+    /// Process transaction requests in the queue
+    async fn process_requests(&self, is_registration: bool) -> Result<(), error::StateError>;
 
     /// Process signatures and create block post tasks
     async fn process_signatures(&self) -> Result<(), error::StateError>;
@@ -38,7 +41,4 @@ pub trait Storage {
         &self,
         store_vault_server_client: &StoreVaultServerClient,
     ) -> Result<(), error::StateError>;
-
-    /// Dequeue a block post task
-    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, error::StateError>;
 }
