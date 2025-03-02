@@ -7,7 +7,10 @@
 use std::{sync::Arc, time::Duration};
 
 use intmax2_client_sdk::external_api::store_vault_server::StoreVaultServerClient;
-use intmax2_zkp::{common::block_builder::UserSignature, constants::NUM_SENDERS_IN_BLOCK};
+use intmax2_zkp::{
+    common::block_builder::{BlockProposal, UserSignature},
+    constants::NUM_SENDERS_IN_BLOCK,
+};
 use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisResult, Script};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::sleep};
@@ -345,6 +348,59 @@ impl Storage for RedisStorage {
                 }
             }
         }
+    }
+
+    /// Query a proposal for a transaction request
+    ///
+    /// This method retrieves a block proposal for a specific transaction request.
+    /// It looks up the block ID associated with the request ID, then retrieves
+    /// the memo for that block, and finally finds the proposal for the request.
+    ///
+    /// # Arguments
+    /// * `request_id` - ID of the transaction request
+    ///
+    /// # Returns
+    /// * `Some(BlockProposal)` if a proposal was found
+    /// * `None` if no proposal exists for this request
+    async fn query_proposal(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<BlockProposal>, StorageError> {
+        self.with_retry(|| async {
+            let mut conn = self.get_conn().await?;
+
+            // Get block_id for request_id
+            let block_id: Option<String> = conn
+                .hget(&self.request_id_to_block_id_key, request_id)
+                .await?;
+
+            let block_id = match block_id {
+                Some(id) => id,
+                None => return Ok(None), // No block ID found for this request
+            };
+
+            // Get memo for block_id
+            let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await?;
+
+            match serialized_memo {
+                Some(serialized) => {
+                    let memo: ProposalMemo = serde_json::from_str(&serialized)?;
+
+                    // Find the position of the request_id in the memo
+                    let position = memo
+                        .tx_requests
+                        .iter()
+                        .position(|r| r.request_id == request_id);
+
+                    match position {
+                        Some(pos) => Ok(Some(memo.proposals[pos].clone())),
+                        None => Ok(None), // Request ID not found in memo
+                    }
+                }
+                None => Ok(None), // No memo found for this block ID
+            }
+        })
+        .await
     }
 
     /// Process transaction requests and create proposal memos
