@@ -76,6 +76,8 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
 ) -> Result<(Vec<Action>, PendingInfo), StrategyError> {
     log::info!("determine_sequence");
     let user_data = fetch_user_data(store_vault_server, key).await?;
+
+    let mut nonce = user_data.full_private_state.nonce;
     let mut balances = user_data.balances();
     if balances.is_insufficient() {
         return Err(StrategyError::BalanceInsufficientBeforeSync);
@@ -134,7 +136,20 @@ pub async fn determine_sequence<S: StoreVaultClientInterface, V: ValidityProverC
         for receive in &receives {
             receive.apply_to_balances(&mut balances);
         }
-        let is_insufficient = balances.sub_tx(tx_data);
+        let is_insufficient = if tx_data.spent_witness.tx.nonce == nonce {
+            nonce += 1;
+            balances.sub_tx(tx_data)
+        } else {
+            // ignore nonce mismatch tx
+            log::warn!(
+                "nonce mismatch tx {}: expected={}, actual={}",
+                tx_meta.meta.uuid,
+                nonce,
+                tx_data.spent_witness.tx.nonce
+            );
+            false
+        };
+
         if is_insufficient {
             if deposit_info.pending.is_empty() && transfer_info.pending.is_empty() {
                 // Unresolved balance shortage

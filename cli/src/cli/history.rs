@@ -191,6 +191,10 @@ fn print_history_entry(entry: &HistoryEum) -> Result<(), CliError> {
             println!("{} [{}]", "SEND".bright_red().bold(), time.bright_blue(),);
             println!("  UUID: {}", meta.uuid);
             println!("  Status: {}", format_status(status));
+            println!(
+                "  Tx Nonce: {}",
+                tx.spent_witness.tx.nonce.to_string().cyan()
+            );
             println!("  Transfers:");
             for (i, transfer) in tx.spent_witness.transfers.iter().enumerate() {
                 if transfer == &Transfer::default() {
