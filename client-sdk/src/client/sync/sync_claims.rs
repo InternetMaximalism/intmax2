@@ -1,12 +1,5 @@
 use intmax2_interfaces::{
-    api::{
-        balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
-        store_vault_server::interface::StoreVaultClientInterface,
-        validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::{ClaimFeeInfo, WithdrawalServerClientInterface},
-    },
-    data::encryption::BlsEncryption as _,
+    api::withdrawal_server::interface::ClaimFeeInfo, data::encryption::BlsEncryption as _,
 };
 use intmax2_zkp::{
     common::{

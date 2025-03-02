@@ -1,11 +1,4 @@
 use intmax2_interfaces::{
-    api::{
-        balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
-        store_vault_server::interface::StoreVaultClientInterface,
-        validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::WithdrawalServerClientInterface,
-    },
     data::{
         deposit_data::DepositData, encryption::BlsEncryption as _,
         meta_data::MetaDataWithBlockNumber, proof_compression::CompressedBalanceProof,

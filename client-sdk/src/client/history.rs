@@ -1,14 +1,5 @@
 use intmax2_interfaces::{
-    api::{
-        balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
-        store_vault_server::{
-            interface::StoreVaultClientInterface,
-            types::{MetaDataCursor, MetaDataCursorResponse},
-        },
-        validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::WithdrawalServerClientInterface,
-    },
+    api::store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse},
     data::{
         deposit_data::DepositData,
         meta_data::{MetaData, MetaDataWithBlockNumber},
