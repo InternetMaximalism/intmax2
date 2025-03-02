@@ -117,12 +117,10 @@ impl Storage for RedisStorage {
         let serialized = serde_json::to_string(&serializable_request)
             .map_err(|e| StateError::SerializationError(e.to_string()))?;
         
-        let mut conn = self.get_conn().await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let mut conn = self.get_conn().await?;
         
         // Push to the list
-        let _: () = conn.rpush(key, serialized).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let _: () = conn.rpush(key, serialized).await?;
         
         Ok(())
     }
@@ -140,20 +138,17 @@ impl Storage for RedisStorage {
             &self.non_registration_tx_last_processed_key
         };
         
-        let mut conn = self.get_conn().await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let mut conn = self.get_conn().await?;
         
         // Get the last processed timestamp
-        let last_processed: Option<String> = conn.get(last_processed_key).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let last_processed: Option<String> = conn.get(last_processed_key).await?;
         
         let last_processed = last_processed
             .map(|s| s.parse::<u64>().unwrap_or(0))
             .unwrap_or(0);
         
         // Get the length of the queue
-        let queue_len: usize = conn.llen(requests_key).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let queue_len: usize = conn.llen(requests_key).await?;
         
         // Check if we should process requests
         let current_time = chrono::Utc::now().timestamp() as u64;
@@ -165,8 +160,7 @@ impl Storage for RedisStorage {
         
         // Get up to NUM_SENDERS_IN_BLOCK requests
         let num_to_process = std::cmp::min(queue_len, NUM_SENDERS_IN_BLOCK);
-        let serialized_requests: Vec<String> = conn.lrange(requests_key, 0, num_to_process as isize - 1).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let serialized_requests: Vec<String> = conn.lrange(requests_key, 0, num_to_process as isize - 1).await?;
         
         // Deserialize requests
         let mut tx_requests = Vec::with_capacity(num_to_process);
@@ -183,22 +177,18 @@ impl Storage for RedisStorage {
         let serialized_memo = serde_json::to_string(&SerializableProposalMemo { memo: memo.clone() })
             .map_err(|e| StateError::SerializationError(e.to_string()))?;
         
-        let _: () = conn.hset(&self.memos_key, &memo.block_id, &serialized_memo).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let _: () = conn.hset(&self.memos_key, &memo.block_id, &serialized_memo).await?;
         
         // Update request_id -> block_id mapping
         for tx_request in &tx_requests {
-            let _: () = conn.hset(&self.request_id_to_block_id_key, &tx_request.request_id, &memo.block_id).await
-                .map_err(|e| StateError::RedisError(e.to_string()))?;
+            let _: () = conn.hset(&self.request_id_to_block_id_key, &tx_request.request_id, &memo.block_id).await?;
         }
         
         // Remove processed requests from the queue
-        let _: () = conn.ltrim(requests_key, num_to_process as isize, -1).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let _: () = conn.ltrim(requests_key, num_to_process as isize, -1).await?;
         
         // Update last processed timestamp
-        let _: () = conn.set(last_processed_key, current_time.to_string()).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let _: () = conn.set(last_processed_key, current_time.to_string()).await?;
         
         Ok(())
     }
@@ -208,20 +198,17 @@ impl Storage for RedisStorage {
         request_id: &str,
         signature: UserSignature,
     ) -> Result<(), StateError> {
-        let mut conn = self.get_conn().await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let mut conn = self.get_conn().await?;
         
         // Get block_id for request_id
-        let block_id: Option<String> = conn.hget(&self.request_id_to_block_id_key, request_id).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let block_id: Option<String> = conn.hget(&self.request_id_to_block_id_key, request_id).await?;
         
         let block_id = block_id.ok_or_else(|| {
             StateError::AddSignatureError(format!("block_id not found for request_id: {}", request_id))
         })?;
         
         // Get memo for block_id
-        let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await?;
         
         let serialized_memo = serialized_memo.ok_or_else(|| {
             StateError::AddSignatureError(format!("memo not found for block_id: {}", block_id))
@@ -244,8 +231,7 @@ impl Storage for RedisStorage {
         
         // Add signature to the list for this block_id
         let signatures_key = format!("{}:{}", self.signatures_key, block_id);
-        let _: () = conn.rpush(&signatures_key, serialized_signature).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let _: () = conn.rpush(&signatures_key, serialized_signature).await?;
         
         Ok(())
     }
@@ -382,12 +368,10 @@ impl Storage for RedisStorage {
         &self,
         store_vault_server_client: &StoreVaultServerClient,
     ) -> Result<(), StateError> {
-        let mut conn = self.get_conn().await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let mut conn = self.get_conn().await?;
         
         // Get the first fee collection task
-        let serialized_fee_collection: Option<String> = conn.lpop(&self.fee_collection_tasks_key, None).await
-            .map_err(|e| StateError::RedisError(e.to_string()))?;
+        let serialized_fee_collection: Option<String> = conn.lpop(&self.fee_collection_tasks_key, None).await?;
         
         // Return if there's no task
         if serialized_fee_collection.is_none() {
@@ -411,8 +395,7 @@ impl Storage for RedisStorage {
             let serialized_task = serde_json::to_string(&SerializableBlockPostTask { task })
                 .map_err(|e| StateError::SerializationError(e.to_string()))?;
             
-            let _: () = conn.rpush(&self.block_post_tasks_lo_key, &serialized_task).await
-                .map_err(|e| StateError::RedisError(e.to_string()))?;
+            let _: () = conn.rpush(&self.block_post_tasks_lo_key, &serialized_task).await?;
         }
         
         Ok(())

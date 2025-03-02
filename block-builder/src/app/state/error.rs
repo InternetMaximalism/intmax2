@@ -1,4 +1,5 @@
 use crate::app::error::FeeError;
+use redis::RedisError as RedisClientError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
@@ -9,7 +10,7 @@ pub enum StateError {
     FeeError(#[from] FeeError),
     
     #[error("Redis error: {0}")]
-    RedisError(String),
+    RedisError(#[from] RedisClientError),
     
     #[error("Serialization error: {0}")]
     SerializationError(String),
