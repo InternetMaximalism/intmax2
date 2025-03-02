@@ -260,12 +260,9 @@ async fn collect_receives(
 }
 
 /// Determine the sequence of withdrawal tx
-pub async fn determine_withdrawals<
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
->(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn determine_withdrawals(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
     tx_timeout: u64,
 ) -> Result<
@@ -294,9 +291,9 @@ pub async fn determine_withdrawals<
 }
 
 /// Determine the
-pub async fn determine_claims<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn determine_claims(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
     tx_timeout: u64,

@@ -132,12 +132,9 @@ pub async fn fetch_withdrawal_info(
     ))
 }
 
-pub async fn fetch_all_unprocessed_withdrawal_info<
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
->(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn fetch_all_unprocessed_withdrawal_info(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
     process_status: &ProcessStatus,
     tx_timeout: u64,

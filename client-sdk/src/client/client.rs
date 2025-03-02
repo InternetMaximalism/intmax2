@@ -63,20 +63,14 @@ use super::{
     sync::utils::{generate_spent_witness, get_balance_proof},
 };
 
-pub struct Client<
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
-> {
+pub struct Client {
     pub config: ClientConfig,
 
-    pub block_builder: BB,
-    pub store_vault_server: S,
-    pub validity_prover: V,
-    pub balance_prover: B,
-    pub withdrawal_server: W,
+    pub block_builder: Box<dyn BlockBuilderClientInterface>,
+    pub store_vault_server: Box<dyn StoreVaultClientInterface>,
+    pub validity_prover: Box<dyn ValidityProverClientInterface>,
+    pub balance_prover: Box<dyn BalanceProverClientInterface>,
+    pub withdrawal_server: Box<dyn WithdrawalServerClientInterface>,
 
     pub liquidity_contract: LiquidityContract,
     pub rollup_contract: RollupContract,
@@ -127,14 +121,7 @@ pub struct TxResult {
     pub withdrawal_data_vec: Vec<TransferData>,
 }
 
-impl<BB, S, V, B, W> Client<BB, S, V, B, W>
-where
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
-{
+impl Client {
     /// Back up deposit information before calling the contract's deposit function
     #[allow(clippy::too_many_arguments)]
     pub async fn prepare_deposit(
@@ -319,8 +306,8 @@ where
 
         let fee_proof = if let Some(fee_index) = fee_index {
             let (fee_proof, collateral_spent_witness) = generate_fee_proof(
-                &self.store_vault_server,
-                &self.balance_prover,
+                self.store_vault_server.as_ref(),
+                self.balance_prover.as_ref(),
                 self.config.tx_timeout,
                 key,
                 &user_data,
@@ -603,7 +590,7 @@ where
         sender: U256,
         tx_tree_root: Bytes32,
     ) -> Result<TxStatus, ClientError> {
-        let status = get_tx_status(&self.validity_prover, sender, tx_tree_root).await?;
+        let status = get_tx_status(self.validity_prover.as_ref(), sender, tx_tree_root).await?;
         Ok(status)
     }
 
@@ -628,8 +615,8 @@ where
 
     pub async fn get_mining_list(&self, key: KeySet) -> Result<Vec<Mining>, ClientError> {
         let minings = fetch_mining_info(
-            &self.store_vault_server,
-            &self.validity_prover,
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
             &ProcessStatus::default(),
@@ -703,7 +690,7 @@ where
         fee_token_index: u32,
     ) -> Result<FeeQuote, ClientError> {
         let (beneficiary, fee) = quote_withdrawal_fee(
-            &self.withdrawal_server,
+            self.withdrawal_server.as_ref(),
             &self.withdrawal_contract,
             withdrawal_token_index,
             fee_token_index,
@@ -717,7 +704,8 @@ where
     }
 
     pub async fn quote_claim_fee(&self, fee_token_index: u32) -> Result<FeeQuote, ClientError> {
-        let (beneficiary, fee) = quote_claim_fee(&self.withdrawal_server, fee_token_index).await?;
+        let (beneficiary, fee) =
+            quote_claim_fee(self.withdrawal_server.as_ref(), fee_token_index).await?;
         Ok(FeeQuote {
             beneficiary,
             fee,
@@ -732,7 +720,7 @@ where
         with_claim_fee: bool,
     ) -> Result<WithdrawalTransfers, ClientError> {
         let withdrawal_transfers = generate_withdrawal_transfers(
-            &self.withdrawal_server,
+            self.withdrawal_server.as_ref(),
             &self.withdrawal_contract,
             withdrawal_transfer,
             fee_token_index,

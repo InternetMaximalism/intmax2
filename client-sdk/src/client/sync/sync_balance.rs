@@ -32,14 +32,7 @@ use crate::client::{
 
 use super::error::SyncError;
 
-impl<BB, S, V, B, W> Client<BB, S, V, B, W>
-where
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
-{
+impl Client {
     pub async fn get_user_data(&self, key: KeySet) -> Result<UserData, SyncError> {
         let (user_data, _) = self.get_user_data_and_digest(key).await?;
         Ok(user_data)
@@ -65,8 +58,8 @@ where
     /// Sync the client's balance proof with the latest block
     pub async fn sync(&self, key: KeySet) -> Result<(), SyncError> {
         let (sequence, pending_info) = determine_sequence(
-            &self.store_vault_server,
-            &self.validity_prover,
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
             self.config.deposit_timeout,
@@ -135,8 +128,8 @@ where
         let prev_balance_proof = get_balance_proof(&user_data)?;
         let new_salt = generate_salt();
         let new_balance_proof = receive_deposit(
-            &self.validity_prover,
-            &self.balance_prover,
+            self.validity_prover.as_ref(),
+            self.balance_prover.as_ref(),
             key,
             &mut user_data.full_private_state,
             new_salt,
@@ -192,8 +185,8 @@ where
 
         // sender balance proof after applying the tx
         let new_sender_balance_proof = match update_send_by_receiver(
-            &self.validity_prover,
-            &self.balance_prover,
+            self.validity_prover.as_ref(),
+            self.balance_prover.as_ref(),
             key,
             transfer_data.sender,
             meta.block_number,
@@ -215,8 +208,8 @@ where
 
         let new_salt = generate_salt();
         let new_balance_proof = receive_transfer(
-            &self.validity_prover,
-            &self.balance_prover,
+            self.validity_prover.as_ref(),
+            self.balance_prover.as_ref(),
             key,
             &mut user_data.full_private_state,
             new_salt,
@@ -255,8 +248,8 @@ where
         let (mut user_data, digest) = self.get_user_data_and_digest(key).await?;
         let prev_balance_proof = get_balance_proof(&user_data)?;
         let balance_proof = update_send_by_sender(
-            &self.validity_prover,
-            &self.balance_prover,
+            self.validity_prover.as_ref(),
+            self.balance_prover.as_ref(),
             key,
             &mut user_data.full_private_state,
             &prev_balance_proof,
@@ -313,8 +306,8 @@ where
         );
         let prev_balance_proof = get_balance_proof(&user_data)?;
         let new_balance_proof = update_no_send(
-            &self.validity_prover,
-            &self.balance_prover,
+            self.validity_prover.as_ref(),
+            self.balance_prover.as_ref(),
             key,
             &prev_balance_proof,
             to_block_number,

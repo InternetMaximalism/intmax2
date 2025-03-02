@@ -28,14 +28,7 @@ use crate::client::{
 
 use super::error::SyncError;
 
-impl<BB, S, V, B, W> Client<BB, S, V, B, W>
-where
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
-{
+impl Client {
     /// Sync the client's withdrawals and relays to the withdrawal server
     pub async fn sync_withdrawals(
         &self,
@@ -51,8 +44,8 @@ where
         }
         let fee_beneficiary = withdrawal_fee.beneficiary;
         let (withdrawals, pending) = determine_withdrawals(
-            &self.store_vault_server,
-            &self.validity_prover,
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
             key,
             self.config.tx_timeout,
         )
@@ -87,8 +80,8 @@ where
         log::info!("sync_withdrawal: {:?}", meta);
         // sender balance proof after applying the tx
         let balance_proof = match update_send_by_receiver(
-            &self.validity_prover,
-            &self.balance_prover,
+            self.validity_prover.as_ref(),
+            self.balance_prover.as_ref(),
             key,
             key.pubkey,
             meta.block_number,
@@ -136,8 +129,8 @@ where
             Some(fee) => {
                 let fee_beneficiary = fee_beneficiary.unwrap(); // already validated
                 select_unused_fees(
-                    &self.store_vault_server,
-                    &self.validity_prover,
+                    self.store_vault_server.as_ref(),
+                    self.validity_prover.as_ref(),
                     key,
                     fee_beneficiary,
                     fee.clone(),
@@ -167,7 +160,7 @@ where
         for used_fee in &collected_fees {
             // todo: batch consume
             consume_payment(
-                &self.store_vault_server,
+                self.store_vault_server.as_ref(),
                 key,
                 used_fee,
                 "used for withdrawal fee",
