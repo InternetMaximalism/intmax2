@@ -482,23 +482,23 @@ impl Storage for RedisStorage {
     /// This method processes signatures for memos that have reached their
     /// proposing interval. It creates block post tasks and fee collection
     /// tasks as needed.
-    async fn process_signatures(&self) {
+    async fn process_signatures(&self) -> Result<(), StateError> {
         // Try to acquire the lock
         let lock_acquired = match self.acquire_lock("process_signatures").await {
             Ok(acquired) => acquired,
             Err(e) => {
                 log::error!("Failed to acquire lock for process_signatures: {}", e);
-                return;
+                return Ok(());
             }
         };
         
         if !lock_acquired {
             // Another instance is already processing signatures
-            return;
+            return Ok(());
         }
         
         // Make sure we release the lock when we're done
-        let _result = self.with_retry(|| async {
+        let result = self.with_retry(|| async {
             let mut conn = self.get_conn().await?;
             
             // Get all memo keys
@@ -599,6 +599,8 @@ impl Storage for RedisStorage {
         
         // Release the lock regardless of the result
         let _ = self.release_lock("process_signatures").await;
+        
+        result
     }
 
     /// Process fee collection tasks
@@ -675,11 +677,11 @@ impl Storage for RedisStorage {
     /// # Returns
     /// * `Some(BlockPostTask)` if a task was dequeued
     /// * `None` if no tasks are available
-    async fn dequeue_block_post_task(&self) -> Option<BlockPostTask> {
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StateError> {
         // We don't need a distributed lock here since BLPOP is atomic
         // and each instance should be able to dequeue tasks
         
-        let result = self.with_retry(|| async {
+        self.with_retry(|| async {
             let mut conn = self.get_conn().await?;
             
             // Try to get a task from high priority queue first using BLPOP with a short timeout
@@ -707,14 +709,6 @@ impl Storage for RedisStorage {
                     Ok(None)
                 }
             }
-        }).await;
-        
-        match result {
-            Ok(task) => task,
-            Err(e) => {
-                log::error!("Error in dequeue_block_post_task: {}", e);
-                None
-            }
-        }
+        }).await
     }
 }

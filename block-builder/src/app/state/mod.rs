@@ -31,7 +31,7 @@ pub trait Storage {
     ) -> Result<(), error::StateError>;
 
     /// Process signatures and create block post tasks
-    async fn process_signatures(&self);
+    async fn process_signatures(&self) -> Result<(), error::StateError>;
 
     /// Process fee collection tasks
     async fn process_fee_collection(
@@ -40,5 +40,5 @@ pub trait Storage {
     ) -> Result<(), error::StateError>;
 
     /// Dequeue a block post task
-    async fn dequeue_block_post_task(&self) -> Option<BlockPostTask>;
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, error::StateError>;
 }

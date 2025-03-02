@@ -150,7 +150,7 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn process_signatures(&self) {
+    async fn process_signatures(&self) -> Result<(), StateError> {
         // get all memos
         let memos = self.memos.read().await;
         let memos = memos.values().collect::<Vec<_>>();
@@ -197,6 +197,8 @@ impl Storage for InMemoryStorage {
             let mut signatures = self.signatures.write().await;
             signatures.remove(&memo.block_id);
         }
+
+        Ok(())
     }
 
     async fn process_fee_collection(
@@ -226,12 +228,12 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn dequeue_block_post_task(&self) -> Option<BlockPostTask> {
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StateError> {
         let block_post_task = {
             let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
             block_post_tasks_hi.pop_front()
         };
-        match block_post_task {
+        let result = match block_post_task {
             Some(block_post_task) => Some(block_post_task),
             None => {
                 // if there is no high priority task, pop from block_post_tasks_lo
@@ -240,6 +242,7 @@ impl Storage for InMemoryStorage {
                     block_post_tasks_lo.pop_front()
                 }
             }
-        }
+        };
+        Ok(result)
     }
 }
