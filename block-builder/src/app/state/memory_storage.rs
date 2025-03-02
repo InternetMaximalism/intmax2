@@ -13,47 +13,49 @@ use crate::app::{
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StateConfig, error::StateError};
+use super::{config::StateConfig, error::StateError, Storage};
 
 type AR<T> = Arc<RwLock<T>>;
+type ARQueue<T> = AR<VecDeque<T>>;
+type ARMap<K, V> = AR<HashMap<K, V>>;
 
 pub struct InMemoryStorage {
     pub config: StateConfig,
 
-    pub registration_tx_requests: AR<VecDeque<TxRequest>>, // registration tx requests queue
-    pub registration_tx_last_processed: AR<u64>,           // last processed timestamp
-    pub non_registration_tx_requests: AR<VecDeque<TxRequest>>, // non-registration tx requests queue
-    pub non_registration_tx_last_processed: AR<u64>,       // last processed timestamp
+    pub registration_tx_requests: ARQueue<TxRequest>, // registration tx requests queue
+    pub registration_tx_last_processed: AR<u64>,      // last processed timestamp
+    pub non_registration_tx_requests: ARQueue<TxRequest>, // non-registration tx requests queue
+    pub non_registration_tx_last_processed: AR<u64>,  // last processed timestamp
 
-    pub request_id_to_block_id: AR<HashMap<String, String>>, // request_id -> block_id
-    pub memos: AR<HashMap<String, ProposalMemo>>,            // block_id -> memo
-    pub signatures: AR<HashMap<String, Vec<UserSignature>>>, // block_id -> user signature
+    pub request_id_to_block_id: ARMap<String, String>, // request_id -> block_id
+    pub memos: ARMap<String, ProposalMemo>,            // block_id -> memo
+    pub signatures: ARMap<String, Vec<UserSignature>>, // block_id -> user signature
 
-    pub fee_collection_tasks: AR<VecDeque<FeeCollection>>, // fee collection tasks queue
-    pub block_post_tasks_hi: AR<VecDeque<BlockPostTask>>,  // high priority tasks queue
-    pub block_post_tasks_lo: AR<VecDeque<BlockPostTask>>,  // low priority tasks queue
+    pub fee_collection_tasks: ARQueue<FeeCollection>, // fee collection tasks queue
+    pub block_post_tasks_hi: ARQueue<BlockPostTask>,  // high priority tasks queue
+    pub block_post_tasks_lo: ARQueue<BlockPostTask>,  // low priority tasks queue
 }
 
-impl InMemoryStorage {
-    pub fn new(config: &StateConfig) -> Self {
+impl Storage for InMemoryStorage {
+    fn new(config: &StateConfig) -> Self {
         Self {
             config: config.clone(),
-            registration_tx_requests: Arc::new(RwLock::new(VecDeque::new())),
-            registration_tx_last_processed: Arc::new(RwLock::new(0)),
-            non_registration_tx_requests: Arc::new(RwLock::new(VecDeque::new())),
-            non_registration_tx_last_processed: Arc::new(RwLock::new(0)),
+            registration_tx_requests: Default::default(),
+            registration_tx_last_processed: Default::default(),
+            non_registration_tx_requests: Default::default(),
+            non_registration_tx_last_processed: Default::default(),
 
-            request_id_to_block_id: Arc::new(RwLock::new(HashMap::new())),
-            memos: Arc::new(RwLock::new(HashMap::new())),
-            signatures: Arc::new(RwLock::new(HashMap::new())),
+            request_id_to_block_id: Default::default(),
+            memos: Default::default(),
+            signatures: Default::default(),
 
-            fee_collection_tasks: Arc::new(RwLock::new(VecDeque::new())),
-            block_post_tasks_hi: Arc::new(RwLock::new(VecDeque::new())),
-            block_post_tasks_lo: Arc::new(RwLock::new(VecDeque::new())),
+            fee_collection_tasks: Default::default(),
+            block_post_tasks_hi: Default::default(),
+            block_post_tasks_lo: Default::default(),
         }
     }
 
-    pub async fn add_tx(&self, is_registration: bool, tx_request: TxRequest) {
+    async fn add_tx(&self, is_registration: bool, tx_request: TxRequest) -> Result<(), StateError> {
         let tx_requests = if is_registration {
             &self.registration_tx_requests
         } else {
@@ -61,9 +63,11 @@ impl InMemoryStorage {
         };
         let mut tx_requests = tx_requests.write().await;
         tx_requests.push_back(tx_request);
+
+        Ok(())
     }
 
-    pub async fn process_requests(&self, is_registration: bool) {
+    async fn process_requests(&self, is_registration: bool) -> Result<(), StateError> {
         let tx_requests = if is_registration {
             &self.registration_tx_requests
         } else {
@@ -77,14 +81,14 @@ impl InMemoryStorage {
 
         // If more than self.config.accepting_tx_interval seconds have passed since last_processed,
         // or if there are NUM_SENDERS_IN_BLOCK tx_requests, process them.
-        let last_processed = *last_processed.read().await;
+        let last_processed_ = *last_processed.read().await;
         let mut tx_requests = tx_requests.write().await;
         let current_time = chrono::Utc::now().timestamp() as u64;
         if (tx_requests.len() < NUM_SENDERS_IN_BLOCK
-            && current_time < last_processed + self.config.accepting_tx_interval)
+            && current_time < last_processed_ + self.config.accepting_tx_interval)
             || tx_requests.is_empty()
         {
-            return;
+            return Ok(());
         }
 
         let tx_requests: Vec<TxRequest> = tx_requests.drain(..NUM_SENDERS_IN_BLOCK).collect();
@@ -100,9 +104,14 @@ impl InMemoryStorage {
         // update block_id -> memo
         let mut memos = self.memos.write().await;
         memos.insert(memo.block_id.clone(), memo.clone());
+
+        // update last_processed
+        *last_processed.write().await = current_time;
+
+        Ok(())
     }
 
-    pub async fn add_signature(
+    async fn add_signature(
         &self,
         request_id: &str,
         signature: UserSignature,
@@ -140,7 +149,7 @@ impl InMemoryStorage {
         Ok(())
     }
 
-    pub async fn process_signatures(&self) {
+    async fn process_signatures(&self) {
         // get all memos
         let memos = self.memos.read().await;
         let memos = memos.values().collect::<Vec<_>>();
@@ -189,7 +198,7 @@ impl InMemoryStorage {
         }
     }
 
-    pub async fn process_fee_collection(
+    async fn process_fee_collection(
         &self,
         store_vault_server_client: &StoreVaultServerClient,
     ) -> Result<(), StateError> {
@@ -216,8 +225,7 @@ impl InMemoryStorage {
         Ok(())
     }
 
-    pub async fn pop_block_post_task(&self) -> Option<BlockPostTask> {
-        // pop from block_post_tasks_hi
+    async fn dequeue_block_post_task(&self) -> Option<BlockPostTask> {
         let block_post_task = {
             let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
             block_post_tasks_hi.pop_front()

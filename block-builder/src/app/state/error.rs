@@ -7,4 +7,13 @@ pub enum StateError {
 
     #[error("Fee error: {0}")]
     FeeError(#[from] FeeError),
+    
+    #[error("Redis error: {0}")]
+    RedisError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Deserialization error: {0}")]
+    DeserializationError(String),
 }

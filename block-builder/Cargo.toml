@@ -29,3 +29,4 @@ actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
 serde_qs = { workspace = true }
 num-bigint = "0.4.6"
+redis = { version = "0.23.0", features = ["tokio-comp", "connection-manager"] }
