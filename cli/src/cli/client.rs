@@ -1,6 +1,7 @@
 use intmax2_client_sdk::{
     client::{client::Client, config::ClientConfig},
     external_api::{
+        balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
         contract::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
@@ -12,6 +13,7 @@ use intmax2_client_sdk::{
         withdrawal_server::WithdrawalServerClient,
     },
 };
+use intmax2_interfaces::api::balance_prover::interface::BalanceProverClientInterface;
 
 use crate::env_var::EnvVar;
 
@@ -25,7 +27,12 @@ pub fn get_client() -> Result<Client, CliError> {
     ));
 
     let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
-    let balance_prover = Box::new(PrivateZKPServerClient::new(&env.balance_prover_base_url));
+    let balance_prover: Box<dyn BalanceProverClientInterface> =
+        if env.use_private_zkp_server.unwrap_or(true) {
+            Box::new(PrivateZKPServerClient::new(&env.balance_prover_base_url))
+        } else {
+            Box::new(BalanceProverClient::new(&env.balance_prover_base_url))
+        };
     let withdrawal_server = Box::new(WithdrawalServerClient::new(&env.withdrawal_server_base_url));
 
     let liquidity_contract = LiquidityContract::new(
