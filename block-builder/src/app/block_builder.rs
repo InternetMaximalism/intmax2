@@ -8,7 +8,7 @@ use intmax2_client_sdk::external_api::{
 };
 use intmax2_interfaces::api::{
     block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
-    validity_prover::interface::ValidityProverClientInterface,
+    validity_prover::interface::{AccountInfo, ValidityProverClientInterface},
 };
 use intmax2_zkp::{
     common::{
@@ -217,8 +217,9 @@ impl BlockBuilder {
             is_registration_block
         );
 
-        // Verify account status
-        self.verify_account_status(is_registration_block, pubkey)
+        // Verify account info
+        let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
+        self.verify_account_info(is_registration_block, pubkey, &account_info)
             .await?;
 
         // Verify fee proof
@@ -227,7 +228,6 @@ impl BlockBuilder {
 
         // Create and add transaction request
         let request_id = Uuid::new_v4().to_string();
-        let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
         let tx_request = TxRequest {
             pubkey,
             account_id: account_info.account_id,
@@ -244,14 +244,13 @@ impl BlockBuilder {
     }
 
     /// Verify account status for a transaction
-    async fn verify_account_status(
+    async fn verify_account_info(
         &self,
         is_registration_block: bool,
         pubkey: U256,
+        account_info: &AccountInfo,
     ) -> Result<(), BlockBuilderError> {
-        let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
         let account_id = account_info.account_id;
-
         if is_registration_block {
             if let Some(account_id) = account_id {
                 return Err(BlockBuilderError::AccountAlreadyRegistered(
@@ -261,7 +260,6 @@ impl BlockBuilder {
         } else if account_id.is_none() {
             return Err(BlockBuilderError::AccountNotFound(pubkey));
         }
-
         Ok(())
     }
 
