@@ -879,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "balance-prover"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1016,7 +1016,7 @@ dependencies = [
 
 [[package]]
 name = "block-builder"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1356,7 +1356,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "dotenv",
  "envy",
@@ -3385,7 +3385,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-cli"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3418,7 +3418,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-client-sdk"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3468,7 +3468,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3506,7 +3506,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-wasm-lib"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "bincode",
@@ -5686,7 +5686,7 @@ dependencies = [
 
 [[package]]
 name = "server-common"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6143,7 +6143,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "store-vault-server"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6401,7 +6401,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix",
  "actix-cors",
@@ -7078,7 +7078,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7114,7 +7114,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover-worker"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7605,7 +7605,7 @@ dependencies = [
 
 [[package]]
 name = "withdrawal-server"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",

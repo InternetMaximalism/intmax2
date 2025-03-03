@@ -5,7 +5,10 @@ use actix_web::{
 };
 use intmax2_interfaces::api::block_builder::{
     interface::BlockBuilderFeeInfo,
-    types::{PostSignatureRequest, QueryProposalRequest, QueryProposalResponse, TxRequestRequest},
+    types::{
+        PostSignatureRequest, QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
+        TxRequestResponse,
+    },
 };
 use intmax2_zkp::common::block_builder::UserSignature;
 
@@ -21,9 +24,9 @@ pub async fn get_fee_info(state: Data<State>) -> Result<Json<BlockBuilderFeeInfo
 pub async fn tx_request(
     state: Data<State>,
     request: Json<TxRequestRequest>,
-) -> Result<Json<()>, Error> {
+) -> Result<Json<TxRequestResponse>, Error> {
     let request = request.into_inner();
-    state
+    let request_id = state
         .block_builder
         .send_tx_request(
             request.is_registration_block,
@@ -33,7 +36,7 @@ pub async fn tx_request(
         )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(()))
+    Ok(Json(TxRequestResponse { request_id }))
 }
 
 #[post("/query-proposal")]
@@ -44,7 +47,7 @@ pub async fn query_proposal(
     let request = request.into_inner();
     let block_proposal = state
         .block_builder
-        .query_proposal(request.is_registration_block, request.pubkey, request.tx)
+        .query_proposal(&request.request_id)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(QueryProposalResponse { block_proposal }))
@@ -62,7 +65,7 @@ pub async fn post_signature(
     };
     state
         .block_builder
-        .post_signature(request.is_registration_block, request.tx, user_signature)
+        .post_signature(&request.request_id, user_signature)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))

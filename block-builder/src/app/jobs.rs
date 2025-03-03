@@ -165,7 +165,7 @@ impl BlockBuilder {
         });
     }
 
-    pub async fn run(&self) {
+    pub fn run(&self) {
         self.clone().enqueue_empty_block_job();
         self.clone().post_block_job();
         self.clone().emit_heart_beat_job();
