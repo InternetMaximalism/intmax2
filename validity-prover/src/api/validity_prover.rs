@@ -64,7 +64,9 @@ pub async fn get_latest_included_deposit_index(
         .get_latest_included_deposit_index()
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetLatestIncludedDepositIndexResponse { deposit_index }))
+    Ok(Json(GetLatestIncludedDepositIndexResponse {
+        deposit_index,
+    }))
 }
 
 #[get("/get-account-info")]
