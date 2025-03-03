@@ -43,4 +43,6 @@ pub trait Storage: Sync + Send {
         &self,
         store_vault_server_client: &StoreVaultServerClient,
     ) -> Result<(), error::StorageError>;
+
+    async fn enqueue_empty_block(&self) -> Result<(), error::StorageError>;
 }

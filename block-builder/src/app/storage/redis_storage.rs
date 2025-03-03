@@ -838,4 +838,71 @@ impl Storage for RedisStorage {
         })
         .await
     }
+
+    /// Enqueue an empty block for deposit checking
+    ///
+    /// This method adds an empty block post task to the low priority queue
+    /// if enough time has passed since the last empty block was posted.
+    /// It's used to periodically check for deposits in the L1 contract.
+    async fn enqueue_empty_block(&self) -> Result<(), StorageError> {
+        // If deposit check is disabled, do nothing
+        if self.config.deposit_check_interval.is_none() {
+            return Ok(());
+        }
+
+        let deposit_check_interval = self.config.deposit_check_interval.unwrap();
+        
+        // Try to acquire a lock to prevent multiple instances from posting empty blocks
+        if !self.acquire_lock("enqueue_empty_block").await? {
+            // Another instance is already processing, just return
+            return Ok(());
+        }
+
+        // Make sure we release the lock when we're done
+        let result = self.with_retry(|| async {
+            let mut conn = self.get_conn().await?;
+            
+            // Key for storing the timestamp of the last empty block post
+            let empty_block_posted_at_key = format!("{}:empty_block_posted_at", self.prefix);
+            
+            // Get the timestamp of the last empty block post
+            let empty_block_posted_at: Option<String> = conn.get(&empty_block_posted_at_key).await?;
+            let empty_block_posted_at = empty_block_posted_at
+                .map(|s| s.parse::<u64>().unwrap_or(0))
+                .unwrap_or(0);
+            
+            let current_time = chrono::Utc::now().timestamp() as u64;
+            
+            // Check if enough time has passed since the last empty block post
+            if empty_block_posted_at > 0 && current_time < empty_block_posted_at + deposit_check_interval {
+                // Not enough time has passed, do nothing
+                return Ok(());
+            }
+            
+            // Create a default block post task (empty block)
+            let block_post_task = BlockPostTask::default();
+            let serialized_task = serde_json::to_string(&block_post_task)?;
+            
+            // Use a transaction to ensure atomicity
+            let mut pipe = redis::pipe();
+            pipe.atomic();
+            
+            // Add to low priority queue
+            pipe.rpush(&self.block_post_tasks_lo_key, &serialized_task);
+            
+            // Update the timestamp of the last empty block post
+            pipe.set(&empty_block_posted_at_key, current_time.to_string());
+            
+            // Execute the transaction
+            pipe.query_async::<_, ()>(&mut conn).await?;
+            
+            Ok(())
+        }).await;
+        
+        // Release the lock regardless of the result
+        let _ = self.release_lock("enqueue_empty_block").await;
+        
+        result
+    }
+    
 }

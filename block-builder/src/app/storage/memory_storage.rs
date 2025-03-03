@@ -30,6 +30,8 @@ pub struct InMemoryStorage {
     pub non_registration_tx_requests: ARQueue<TxRequest>, // non-registration tx requests queue
     pub non_registration_tx_last_processed: AR<u64>,  // last processed timestamp
 
+    pub empty_block_posted_at: AR<Option<u64>>, // timestamp of the last empty block post
+
     pub request_id_to_block_id: ARMap<String, String>, // request_id -> block_id
     pub memos: ARMap<String, ProposalMemo>,            // block_id -> memo
     pub signatures: ARMap<String, Vec<UserSignature>>, // block_id -> user signature
@@ -47,6 +49,8 @@ impl InMemoryStorage {
             registration_tx_last_processed: Default::default(),
             non_registration_tx_requests: Default::default(),
             non_registration_tx_last_processed: Default::default(),
+
+            empty_block_posted_at: Default::default(),
 
             request_id_to_block_id: Default::default(),
             memos: Default::default(),
@@ -284,5 +288,28 @@ impl Storage for InMemoryStorage {
             }
         };
         Ok(result)
+    }
+
+    async fn enqueue_empty_block(&self) -> Result<(), StorageError> {
+        if self.config.deposit_check_interval.is_none() {
+            // if deposit check is disabled, do nothing
+            return Ok(());
+        }
+        let deposit_check_interval = self.config.deposit_check_interval.unwrap();
+        let empty_block_posted_at = *self.empty_block_posted_at.read().await;
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        if let Some(empty_block_posted_at) = empty_block_posted_at {
+            if current_time < empty_block_posted_at + deposit_check_interval {
+                // if less than deposit_check_interval seconds have passed since the last empty block post, do nothing
+                return Ok(());
+            }
+        }
+        // post an empty block
+        *self.empty_block_posted_at.write().await = Some(current_time);
+        self.block_post_tasks_lo
+            .write()
+            .await
+            .push_back(BlockPostTask::default());
+        Ok(())
     }
 }

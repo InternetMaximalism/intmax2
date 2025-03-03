@@ -5,9 +5,11 @@ use intmax2_client_sdk::external_api::{
 use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInterface;
 use intmax2_zkp::{
     common::block_builder::{construct_signature, SenderWithSignature, UserSignature},
+    constants::NUM_SENDERS_IN_BLOCK,
     ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::{error::BlockBuilderError, types::ProposalMemo};
 
@@ -27,6 +29,23 @@ pub struct BlockPostTask {
     pub pubkey_hash: Bytes32,
     pub signatures: Vec<UserSignature>,
     pub block_id: String,
+}
+
+impl Default for BlockPostTask {
+    // empty block task
+    fn default() -> Self {
+        Self {
+            force_post: true,
+            is_registration_block: false,
+            tx_tree_root: Bytes32::default(),
+            expiry: 0,
+            pubkeys: Vec::new(),
+            account_ids: Some(AccountIdPacked::pack(&[1; NUM_SENDERS_IN_BLOCK])),
+            pubkey_hash: Bytes32::default(),
+            signatures: Vec::new(),
+            block_id: Uuid::new_v4().to_string(),
+        }
+    }
 }
 
 impl BlockPostTask {

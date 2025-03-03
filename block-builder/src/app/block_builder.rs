@@ -39,7 +39,7 @@ struct Config {
     block_builder_url: String,
     block_builder_private_key: H256,
     eth_allowance_for_block: U256,
-    deposit_check_interval: Option<u64>,
+
     initial_heart_beat_delay: u64,
     heart_beat_interval: u64,
 
@@ -59,8 +59,6 @@ pub struct BlockBuilder {
     registry_contract: BlockBuilderRegistryContract,
 
     storage: Box<dyn Storage>,
-    force_post: Arc<RwLock<bool>>,
-    next_deposit_index: Arc<RwLock<u32>>,
 }
 
 impl BlockBuilder {
@@ -118,6 +116,7 @@ impl BlockBuilder {
             tx_timeout: env.tx_timeout,
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
+            deposit_check_interval: env.deposit_check_interval,
             redis_url: env.redis_url.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
@@ -127,7 +126,6 @@ impl BlockBuilder {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
             eth_allowance_for_block,
-            deposit_check_interval: env.deposit_check_interval,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
             beneficiary_pubkey,
@@ -144,8 +142,6 @@ impl BlockBuilder {
             rollup_contract,
             registry_contract,
             storage,
-            force_post: Arc::new(RwLock::new(false)),
-            next_deposit_index: Arc::new(RwLock::new(0)),
         })
     }
 
@@ -286,27 +282,44 @@ impl BlockBuilder {
         });
     }
 
-    async fn check_new_deposits(&self) -> Result<bool, BlockBuilderError> {
-        log::info!("check_new_deposits");
-        let next_deposit_index = self.validity_prover_client.get_next_deposit_index().await?;
-        let current_next_deposit_index = *self.next_deposit_index.read().await; // release the lock immediately
+    async fn post_empty_block(&self) -> Result<(), BlockBuilderError> {
+        // Enqueue an empty block for deposit checking
+        self.storage.enqueue_empty_block().await?;
+        Ok(())
+            .get_latest_included_deposit_index()
+            .await?;
 
-        // sanity check
-        if next_deposit_index < current_next_deposit_index {
-            return Err(BlockBuilderError::UnexpectedError(format!(
-                "next_deposit_index is smaller than the current one: {} < {}",
-                next_deposit_index, current_next_deposit_index
-            )));
-        }
-        if next_deposit_index == current_next_deposit_index {
-            return Ok(false);
-        }
+        let does_new_deposits_exist =
+            if let Some(latest_included_deposit_index) = latest_included_deposit_index {
+                next_deposit_index > latest_included_deposit_index + 1
+            } else {
+                next_deposit_index > 0
+            };
 
-        // update the next deposit index
-        *self.next_deposit_index.write().await = next_deposit_index;
+        // if does_new_deposits_exist && self.storage.acquire_empty_block_lock().await? {
+        //     self.storage.
+        // }
 
-        log::info!("new deposit found: {}", next_deposit_index);
-        Ok(true)
+
+        todo!()
+    }
+
+    fn post_empty_block_job(self, deposit_check_interval: u64) {
+        actix_web::rt::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(deposit_check_interval)).await;
+                match self.does_new_deposits_exist().await {
+                    Ok(new_deposits_exist) => {
+                        if new_deposits_exist {
+                            *self.force_post.write().await = true;
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Error in checking new deposits: {}", e);
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -382,24 +395,6 @@ impl BlockBuilder {
 //                     }
 //                 }
 //                 sleep(Duration::from_secs(10)).await;
-//             }
-//         });
-//     }
-
-//     fn post_empty_block_job(self, deposit_check_interval: u64) {
-//         actix_web::rt::spawn(async move {
-//             loop {
-//                 tokio::time::sleep(Duration::from_secs(deposit_check_interval)).await;
-//                 match self.check_new_deposits().await {
-//                     Ok(new_deposits_exist) => {
-//                         if new_deposits_exist {
-//                             *self.force_post.write().await = true;
-//                         }
-//                     }
-//                     Err(e) => {
-//                         log::error!("Error in checking new deposits: {}", e);
-//                     }
-//                 }
 //             }
 //         });
 //     }
