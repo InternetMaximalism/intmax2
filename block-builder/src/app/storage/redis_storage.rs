@@ -21,7 +21,7 @@ use crate::app::{
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StorageConfig, error::StorageError, Storage};
+use super::{config::StorageConfig, error::StorageError, Storage, StorageFactory};
 
 //-----------------------------------------------------------------------------
 // Constants
@@ -299,6 +299,17 @@ impl RedisStorage {
             block_post_tasks_hi_key: format!("{}:block_post_tasks_hi", prefix),
             block_post_tasks_lo_key: format!("{}:block_post_tasks_lo", prefix),
         }
+    }
+}
+
+//-----------------------------------------------------------------------------
+// StorageFactory Trait Implementation
+//-----------------------------------------------------------------------------
+
+#[async_trait::async_trait(?Send)]
+impl StorageFactory for RedisStorage {
+    async fn new(config: &StorageConfig) -> Self {
+        Self::new(config).await
     }
 }
 

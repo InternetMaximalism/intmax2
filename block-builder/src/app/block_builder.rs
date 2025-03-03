@@ -28,7 +28,7 @@ use crate::{
 use super::{
     error::BlockBuilderError,
     fee::{convert_fee_vec, parse_fee_str},
-    storage::{config::StorageConfig, redis_storage::RedisStorage, Storage},
+    storage::{self, config::StorageConfig, Storage},
 };
 
 pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
@@ -120,8 +120,8 @@ impl BlockBuilder {
             redis_url: env.redis_url.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
-        let redis_storage = RedisStorage::new(&storage_config).await;
-        let storage: Arc<Box<dyn Storage>> = Arc::new(Box::new(redis_storage));
+        let storage: Arc<Box<dyn Storage>> =
+            Arc::new(storage::create_storage(&storage_config).await);
 
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
