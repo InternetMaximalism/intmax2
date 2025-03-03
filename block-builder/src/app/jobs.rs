@@ -62,7 +62,15 @@ impl BlockBuilder {
             } else {
                 next_deposit_index > 0
             };
+
         if does_new_deposits_exist {
+            log::info!(
+                "new deposits exist because next_deposit_index={}, latest_included_deposit_index={},",
+                next_deposit_index,
+                latest_included_deposit_index
+                    .map(|i| i as i64)
+                    .unwrap_or(-1)
+            );
             self.storage.enqueue_empty_block().await?;
         }
         Ok(())

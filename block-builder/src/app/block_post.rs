@@ -39,7 +39,7 @@ impl Default for BlockPostTask {
             is_registration_block: false,
             tx_tree_root: Bytes32::default(),
             expiry: 0,
-            pubkeys: Vec::new(),
+            pubkeys: vec![U256::dummy_pubkey(); NUM_SENDERS_IN_BLOCK],
             account_ids: Some(AccountIdPacked::pack(&[1; NUM_SENDERS_IN_BLOCK])),
             pubkey_hash: Bytes32::default(),
             signatures: Vec::new(),

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index\n            FROM deposit_leaf_events\n            WHERE (eth_block_number, eth_tx_index) <= ($1, $2)\n            ORDER BY deposit_index\n            LIMIT 1\n            ",
+  "query": "\n            SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index\n            FROM deposit_leaf_events\n            WHERE (eth_block_number, eth_tx_index) <= ($1, $2)\n            ORDER BY deposit_index DESC\n            LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -37,5 +37,5 @@
       false
     ]
   },
-  "hash": "d6574723b88127f033b0d4cc4de621c344b946a1e59975a6d712faa95fa5146b"
+  "hash": "3e79d4fe805d6d3433a58e2bf950b6ad3ebbe4b996406a2b65fa77639cc84eb2"
 }

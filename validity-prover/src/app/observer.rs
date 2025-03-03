@@ -222,7 +222,7 @@ impl Observer {
             SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index
             FROM deposit_leaf_events
             WHERE (eth_block_number, eth_tx_index) <= ($1, $2)
-            ORDER BY deposit_index
+            ORDER BY deposit_index DESC
             LIMIT 1
             "#,
             latest_block.eth_block_number as i64,
