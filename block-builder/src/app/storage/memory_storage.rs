@@ -105,7 +105,10 @@ impl Storage for InMemoryStorage {
             return Ok(());
         }
 
-        let tx_requests: Vec<TxRequest> = tx_requests.drain(..NUM_SENDERS_IN_BLOCK).collect();
+        log::info!("process_requests is_registration: {}", is_registration);
+
+        let num_tx_requests = tx_requests.len().min(NUM_SENDERS_IN_BLOCK);
+        let tx_requests: Vec<TxRequest> = tx_requests.drain(..num_tx_requests).collect();
         let memo =
             ProposalMemo::from_tx_requests(is_registration, &tx_requests, self.config.tx_timeout);
 
@@ -130,12 +133,11 @@ impl Storage for InMemoryStorage {
         request_id: &str,
     ) -> Result<Option<BlockProposal>, StorageError> {
         let block_ids = self.request_id_to_block_id.read().await;
-        let block_id = block_ids
-            .get(request_id)
-            .ok_or(StorageError::QueryProposalError(format!(
-                "block_id not found for request_id: {}",
-                request_id
-            )))?;
+        let block_id = block_ids.get(request_id);
+        if block_id.is_none() {
+            return Ok(None);
+        }
+        let block_id = block_id.unwrap();
         let memos = self.memos.read().await;
         let memo = memos.get(block_id).cloned();
         let proposal = if let Some(memo) = memo {
@@ -196,23 +198,31 @@ impl Storage for InMemoryStorage {
 
     async fn process_signatures(&self) -> Result<(), StorageError> {
         // get all memos
-        let memos = self.memos.read().await;
-        let memos = memos.values().collect::<Vec<_>>();
-
-        // get those that have passed self.config.proposing_block_interval
-        let current_time = chrono::Utc::now().timestamp() as u64;
-        let target_memos = memos
-            .into_iter()
-            .filter(|memo| current_time > memo.created_at + self.config.proposing_block_interval)
-            .collect::<Vec<_>>();
+        let target_memos = {
+            let memos = self.memos.read().await;
+            let memos = memos.values().cloned().collect::<Vec<_>>();
+            // get those that have passed self.config.proposing_block_interval
+            let current_time = chrono::Utc::now().timestamp() as u64;
+            memos
+                .into_iter()
+                .filter(|memo| {
+                    current_time > memo.created_at + self.config.proposing_block_interval
+                })
+                .collect::<Vec<_>>()
+        };
 
         for memo in target_memos {
+            log::info!("process_signatures block_id: {}", memo.block_id);
             // get signatures
-            let signatures = self.signatures.read().await;
-            let signatures = signatures
-                .get(&memo.block_id)
-                .cloned()
-                .unwrap_or(Vec::new());
+            let signatures = {
+                let signatures_guard = self.signatures.read().await;
+                signatures_guard
+                    .get(&memo.block_id)
+                    .cloned()
+                    .unwrap_or(Vec::new())
+            };
+
+            log::info!("num signatures: {}", signatures.len());
 
             // if there is no signature, skip
             if signatures.is_empty() {
@@ -220,7 +230,7 @@ impl Storage for InMemoryStorage {
             }
 
             // add to block_post_tasks_hi
-            let block_post_task = BlockPostTask::from_memo(memo, &signatures);
+            let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
             let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
             block_post_tasks_hi.push_back(block_post_task);
 
@@ -236,10 +246,14 @@ impl Storage for InMemoryStorage {
             }
 
             // remove memo and signatures
-            let mut memos = self.memos.write().await;
-            memos.remove(&memo.block_id);
-            let mut signatures = self.signatures.write().await;
-            signatures.remove(&memo.block_id);
+            {
+                let mut memos = self.memos.write().await;
+                memos.remove(&memo.block_id);
+            }
+            {
+                let mut signatures = self.signatures.write().await;
+                signatures.remove(&memo.block_id);
+            }
         }
 
         Ok(())
@@ -275,6 +289,7 @@ impl Storage for InMemoryStorage {
     async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
         let block_post_task = {
             let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
+            log::info!("num block_post_tasks_hi: {}", block_post_tasks_hi.len());
             block_post_tasks_hi.pop_front()
         };
         let result = match block_post_task {
@@ -283,6 +298,7 @@ impl Storage for InMemoryStorage {
                 // if there is no high priority task, pop from block_post_tasks_lo
                 {
                     let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
+                    log::info!("num block_post_tasks_lo: {}", block_post_tasks_lo.len());
                     block_post_tasks_lo.pop_front()
                 }
             }

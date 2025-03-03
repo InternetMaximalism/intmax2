@@ -142,6 +142,7 @@ impl BlockBuilder {
             return Ok(());
         }
         let block_post_task = block_post_task.unwrap();
+        log::info!("Posting block: {}", block_post_task.block_id);
         match post_block(
             self.config.block_builder_private_key,
             self.config.eth_allowance_for_block,
