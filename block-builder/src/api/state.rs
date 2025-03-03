@@ -3,7 +3,7 @@ use crate::{
     EnvVar,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct State {
     pub block_builder: BlockBuilder,
 }

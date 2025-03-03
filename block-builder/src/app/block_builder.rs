@@ -17,8 +17,7 @@ use intmax2_zkp::{
     },
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::sync::RwLock;
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 use crate::{

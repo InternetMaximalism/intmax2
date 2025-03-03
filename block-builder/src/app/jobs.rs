@@ -1,34 +1,11 @@
-use ethers::types::H256;
-use intmax2_client_sdk::external_api::{
-    contract::{
-        block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
-    },
-    store_vault_server::StoreVaultServerClient,
-    validity_prover::ValidityProverClient,
-};
-use intmax2_interfaces::api::{
-    block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
-    validity_prover::interface::ValidityProverClientInterface,
-};
-use intmax2_zkp::{
-    common::{
-        block_builder::{BlockProposal, UserSignature},
-        tx::Tx,
-    },
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
-};
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::{sync::RwLock, time::sleep};
-use uuid::Uuid;
+use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInterface;
+use std::time::Duration;
+use tokio::time::sleep;
 
-use super::{
-    block_builder::BlockBuilder,
-    block_post::{self, post_block},
-    error::BlockBuilderError,
-};
+use super::{block_builder::BlockBuilder, block_post::post_block, error::BlockBuilderError};
 
-pub const POST_BLOCK_POLLING_INTERVAL: u64 = 2;
 pub const DEPOSIT_CHECK_POLLING_INTERVAL: u64 = 2;
+pub const GENERAL_POLLING_INTERVAL: u64 = 2;
 
 impl BlockBuilder {
     async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
@@ -91,7 +68,7 @@ impl BlockBuilder {
         Ok(())
     }
 
-    fn post_empty_block_job(self) {
+    fn enqueue_empty_block_job(self) {
         actix_web::rt::spawn(async move {
             loop {
                 match self.enqueue_empty_block().await {
@@ -105,12 +82,53 @@ impl BlockBuilder {
         });
     }
 
+    fn process_requests_job(self, is_registration: bool) {
+        actix_web::rt::spawn(async move {
+            loop {
+                match self.storage.process_requests(is_registration).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("Error in processing requests: {}", e);
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(GENERAL_POLLING_INTERVAL)).await;
+            }
+        });
+    }
 
-    
+    fn process_signatures_job(self) {
+        actix_web::rt::spawn(async move {
+            loop {
+                match self.storage.process_signatures().await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("Error in processing signatures: {}", e);
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(GENERAL_POLLING_INTERVAL)).await;
+            }
+        });
+    }
 
+    fn process_fee_collection_job(self) {
+        actix_web::rt::spawn(async move {
+            loop {
+                match self
+                    .storage
+                    .process_fee_collection(&self.store_vault_server_client)
+                    .await
+                {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("Error in processing fee collection: {}", e);
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(GENERAL_POLLING_INTERVAL)).await;
+            }
+        });
+    }
 
-
-    async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
+    async fn post_block(&self) -> Result<(), BlockBuilderError> {
         let block_post_task = self.storage.dequeue_block_post_task().await?;
         if block_post_task.is_none() {
             return Ok(());
@@ -136,20 +154,24 @@ impl BlockBuilder {
     fn post_block_job(self) {
         actix_web::rt::spawn(async move {
             loop {
-                match self.post_block_inner().await {
+                match self.post_block().await {
                     Ok(_) => {}
                     Err(e) => {
                         log::error!("Error in post block job: {}", e);
                     }
                 }
-                sleep(Duration::from_secs(POST_BLOCK_POLLING_INTERVAL)).await;
+                sleep(Duration::from_secs(GENERAL_POLLING_INTERVAL)).await;
             }
         });
     }
 
-    pub fn run(&self) {
-        self.clone().post_empty_block_job();
+    pub async fn run(&self) {
+        self.clone().enqueue_empty_block_job();
         self.clone().post_block_job();
         self.clone().emit_heart_beat_job();
+        self.clone().process_requests_job(true);
+        self.clone().process_requests_job(false);
+        self.clone().process_signatures_job();
+        self.clone().process_fee_collection_job();
     }
 }

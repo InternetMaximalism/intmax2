@@ -5,13 +5,9 @@ use actix_web::{
 };
 use intmax2_interfaces::api::block_builder::{
     interface::BlockBuilderFeeInfo,
-    types::{
-        GetBlockBuilderStatusQuery, GetBlockBuilderStatusResponse, PostSignatureRequest,
-        QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
-    },
+    types::{PostSignatureRequest, QueryProposalRequest, QueryProposalResponse, TxRequestRequest},
 };
 use intmax2_zkp::common::block_builder::UserSignature;
-use serde_qs::actix::QsQuery;
 
 use crate::api::state::State;
 
@@ -19,18 +15,6 @@ use crate::api::state::State;
 pub async fn get_fee_info(state: Data<State>) -> Result<Json<BlockBuilderFeeInfo>, Error> {
     let fee_info = state.block_builder.get_fee_info();
     Ok(Json(fee_info))
-}
-
-#[get("/status")]
-pub async fn get_status(
-    state: Data<State>,
-    query: QsQuery<GetBlockBuilderStatusQuery>,
-) -> Result<Json<GetBlockBuilderStatusResponse>, Error> {
-    let status = state
-        .block_builder
-        .get_status(query.is_registration_block)
-        .await;
-    Ok(Json(GetBlockBuilderStatusResponse { status }))
 }
 
 #[post("/tx-request")]
@@ -87,7 +71,6 @@ pub async fn post_signature(
 pub fn block_builder_scope() -> actix_web::Scope {
     actix_web::web::scope("/block-builder")
         .service(get_fee_info)
-        .service(get_status)
         .service(tx_request)
         .service(query_proposal)
         .service(post_signature)
