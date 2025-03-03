@@ -289,7 +289,6 @@ impl Storage for InMemoryStorage {
     async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
         let block_post_task = {
             let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
-            log::info!("num block_post_tasks_hi: {}", block_post_tasks_hi.len());
             block_post_tasks_hi.pop_front()
         };
         let result = match block_post_task {
@@ -298,7 +297,6 @@ impl Storage for InMemoryStorage {
                 // if there is no high priority task, pop from block_post_tasks_lo
                 {
                     let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
-                    log::info!("num block_post_tasks_lo: {}", block_post_tasks_lo.len());
                     block_post_tasks_lo.pop_front()
                 }
             }
