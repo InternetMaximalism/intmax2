@@ -35,30 +35,31 @@ use super::{
 pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
 
 #[derive(Debug, Clone)]
-struct Config {
-    block_builder_url: String,
-    block_builder_private_key: H256,
-    eth_allowance_for_block: U256,
+pub struct Config {
+    pub block_builder_url: String,
+    pub block_builder_private_key: H256,
+    pub eth_allowance_for_block: U256,
 
-    initial_heart_beat_delay: u64,
-    heart_beat_interval: u64,
+    pub initial_heart_beat_delay: u64,
+    pub heart_beat_interval: u64,
 
     // fees
-    beneficiary_pubkey: Option<U256>,
-    registration_fee: Option<HashMap<u32, U256>>,
-    non_registration_fee: Option<HashMap<u32, U256>>,
-    registration_collateral_fee: Option<HashMap<u32, U256>>,
-    non_registration_collateral_fee: Option<HashMap<u32, U256>>,
+    pub beneficiary_pubkey: Option<U256>,
+    pub registration_fee: Option<HashMap<u32, U256>>,
+    pub non_registration_fee: Option<HashMap<u32, U256>>,
+    pub registration_collateral_fee: Option<HashMap<u32, U256>>,
+    pub non_registration_collateral_fee: Option<HashMap<u32, U256>>,
 }
 
+#[derive(Clone)]
 pub struct BlockBuilder {
-    config: Config,
-    store_vault_server_client: StoreVaultServerClient,
-    validity_prover_client: ValidityProverClient,
-    rollup_contract: RollupContract,
-    registry_contract: BlockBuilderRegistryContract,
+    pub config: Config,
+    pub store_vault_server_client: StoreVaultServerClient,
+    pub validity_prover_client: ValidityProverClient,
+    pub rollup_contract: RollupContract,
+    pub registry_contract: BlockBuilderRegistryContract,
 
-    storage: Box<dyn Storage>,
+    pub storage: Arc<Box<dyn Storage>>,
 }
 
 impl BlockBuilder {
@@ -120,7 +121,8 @@ impl BlockBuilder {
             redis_url: env.redis_url.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
-        let storage = Box::new(InMemoryStorage::new(&storage_config));
+        let storage: Arc<Box<dyn Storage>> =
+            Arc::new(Box::new(InMemoryStorage::new(&storage_config)));
 
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
@@ -239,194 +241,4 @@ impl BlockBuilder {
         self.storage.add_signature(request_id, signature).await?;
         Ok(())
     }
-
-    // job
-    async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
-        self.registry_contract
-            .emit_heart_beat(
-                self.config.block_builder_private_key,
-                &self.config.block_builder_url,
-            )
-            .await?;
-        Ok(())
-    }
-
-    fn emit_heart_beat_job(self) {
-        let start_time = chrono::Utc::now().timestamp() as u64;
-        actix_web::rt::spawn(async move {
-            let now = chrono::Utc::now().timestamp() as u64;
-            let initial_heartbeat_time = start_time + self.config.initial_heart_beat_delay;
-            let delay_secs = if initial_heartbeat_time > now {
-                initial_heartbeat_time - now
-            } else {
-                0
-            };
-
-            // wait for the initial heart beat
-            tokio::time::sleep(Duration::from_secs(delay_secs)).await;
-
-            // emit initial heart beat
-            match self.emit_heart_beat().await {
-                Ok(_) => log::info!("Initial heart beat emitted"),
-                Err(e) => log::error!("Error in emitting initial heart beat: {}", e),
-            }
-
-            // emit heart beat periodically
-            loop {
-                tokio::time::sleep(Duration::from_secs(self.config.heart_beat_interval)).await;
-                match self.emit_heart_beat().await {
-                    Ok(_) => log::info!("Heart beat emitted"),
-                    Err(e) => log::error!("Error in emitting heart beat: {}", e),
-                }
-            }
-        });
-    }
-
-    async fn post_empty_block(&self) -> Result<(), BlockBuilderError> {
-        // Enqueue an empty block for deposit checking
-        self.storage.enqueue_empty_block().await?;
-        Ok(())
-            .get_latest_included_deposit_index()
-            .await?;
-
-        let does_new_deposits_exist =
-            if let Some(latest_included_deposit_index) = latest_included_deposit_index {
-                next_deposit_index > latest_included_deposit_index + 1
-            } else {
-                next_deposit_index > 0
-            };
-
-        // if does_new_deposits_exist && self.storage.acquire_empty_block_lock().await? {
-        //     self.storage.
-        // }
-
-
-        todo!()
-    }
-
-    fn post_empty_block_job(self, deposit_check_interval: u64) {
-        actix_web::rt::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(deposit_check_interval)).await;
-                match self.does_new_deposits_exist().await {
-                    Ok(new_deposits_exist) => {
-                        if new_deposits_exist {
-                            *self.force_post.write().await = true;
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("Error in checking new deposits: {}", e);
-                    }
-                }
-            }
-        });
-    }
 }
-
-//     // Cycle of the block builder.
-//     async fn cycle(&self, is_registration_block: bool) -> Result<(), BlockBuilderError> {
-//         log::info!("cycle is_registration_block: {}", is_registration_block);
-//         self.start_accepting_txs(is_registration_block).await?;
-
-//         tokio::time::sleep(Duration::from_secs(self.config.accepting_tx_interval)).await;
-
-//         let num_tx_requests = self.num_tx_requests(is_registration_block).await?;
-//         let force_post = *self.force_post.read().await;
-//         if num_tx_requests == 0 && (is_registration_block || !force_post) {
-//             log::info!("No tx requests, not constructing block");
-//             self.reset(is_registration_block).await;
-//             return Ok(());
-//         }
-
-//         self.construct_block(is_registration_block).await?;
-
-//         tokio::time::sleep(Duration::from_secs(self.config.proposing_block_interval)).await;
-
-//         let force_post = *self.force_post.read().await;
-//         self.post_block(is_registration_block, force_post).await?;
-
-//         let force_post = *self.force_post.read().await;
-//         if force_post {
-//             *self.force_post.write().await = false;
-//         }
-
-//         Ok(())
-//     }
-
-//     async fn post_block_inner(&self) -> Result<(), BlockBuilderError> {
-//         let mut rx_high = self.rx_high.lock().await;
-//         let mut rx_low = self.rx_low.lock().await;
-//         let block_post_task = tokio::select! {
-//             Some(t) =  rx_high.recv() => {
-//                 t
-//             }
-//             Some(t) = rx_low.recv()  => {
-//                 t
-//             }
-//             else => {
-//                 return Err(BlockBuilderError::QueueError("No block post task".to_string()));
-//             }
-//         };
-
-//         match post_block(
-//             self.config.block_builder_private_key,
-//             self.config.eth_allowance_for_block,
-//             &self.rollup_contract,
-//             &self.validity_prover_client,
-//             block_post_task,
-//         )
-//         .await
-//         {
-//             Ok(_) => {}
-//             Err(e) => {
-//                 log::error!("Error in posting block: {}", e);
-//             }
-//         }
-//         Ok(())
-//     }
-
-//     fn post_block_job(self) {
-//         actix_web::rt::spawn(async move {
-//             loop {
-//                 match self.post_block_inner().await {
-//                     Ok(_) => {}
-//                     Err(e) => {
-//                         log::error!("Error in post block job: {}", e);
-//                     }
-//                 }
-//                 sleep(Duration::from_secs(10)).await;
-//             }
-//         });
-//     }
-
-//     fn cycle_job(self, is_registration_block: bool) {
-//         actix_web::rt::spawn(async move {
-//             loop {
-//                 match self.cycle(is_registration_block).await {
-//                     Ok(_) => {
-//                         log::info!(
-//                             "Cycle successful for registration block: {}",
-//                             is_registration_block
-//                         );
-//                     }
-//                     Err(e) => {
-//                         log::error!("Error in block builder: {}", e);
-//                         self.reset(is_registration_block).await;
-//                         *self.force_post.write().await = false;
-//                         sleep(Duration::from_secs(10)).await;
-//                     }
-//                 }
-//             }
-//         });
-//     }
-
-//     pub fn run(&self) {
-//         if let Some(deposit_check_interval) = self.config.deposit_check_interval {
-//             self.clone().post_empty_block_job(deposit_check_interval);
-//         }
-//         self.clone().post_block_job();
-//         self.clone().cycle_job(true);
-//         self.clone().cycle_job(false);
-//         self.clone().emit_heart_beat_job();
-//     }
-// }
