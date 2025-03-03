@@ -62,7 +62,9 @@ pub struct BlockBuilder {
 }
 
 impl BlockBuilder {
+    /// Create a new BlockBuilder instance
     pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
+        // Initialize clients
         let store_vault_server_client =
             StoreVaultServerClient::new(&env.store_vault_server_base_url);
         let validity_prover_client = ValidityProverClient::new(&env.validity_prover_base_url);
@@ -78,12 +80,31 @@ impl BlockBuilder {
             env.block_builder_registry_contract_address,
         );
 
+        // Parse and process configuration
+        let config = Self::create_config(env)?;
+
+        // Create storage
+        let storage = Self::create_storage(env, config.beneficiary_pubkey).await?;
+
+        Ok(Self {
+            config,
+            store_vault_server_client,
+            validity_prover_client,
+            rollup_contract,
+            registry_contract,
+            storage,
+        })
+    }
+
+    /// Create configuration from environment variables
+    fn create_config(env: &EnvVar) -> Result<Config, BlockBuilderError> {
         let eth_allowance_for_block = {
             let u = ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
             let mut buf = [0u8; 32];
             u.to_big_endian(&mut buf);
             U256::from_bytes_be(&buf)
         };
+
         let registration_fee = env
             .registration_fee
             .as_ref()
@@ -99,7 +120,7 @@ impl BlockBuilder {
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
-        let non_registration_collateral_fee = env
+        let _non_registration_collateral_fee = env
             .non_registration_collateral_fee
             .as_ref()
             .map(|fee| parse_fee_str(fee))
@@ -108,20 +129,6 @@ impl BlockBuilder {
         let beneficiary_pubkey = env
             .beneficiary_pubkey
             .map(|pubkey| U256::from_bytes_be(pubkey.as_bytes()));
-
-        let storage_config = StorageConfig {
-            use_fee: registration_fee.is_some() || non_registration_fee.is_some(),
-            use_collateral: registration_collateral_fee.is_some() || non_registration_fee.is_some(),
-            fee_beneficiary: beneficiary_pubkey.unwrap_or_default(),
-            tx_timeout: env.tx_timeout,
-            accepting_tx_interval: env.accepting_tx_interval,
-            proposing_block_interval: env.proposing_block_interval,
-            deposit_check_interval: env.deposit_check_interval,
-            redis_url: env.redis_url.clone(),
-            block_builder_id: Uuid::new_v4().to_string(),
-        };
-        let storage: Arc<Box<dyn Storage>> =
-            Arc::new(storage::create_storage(&storage_config).await);
 
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
@@ -133,19 +140,58 @@ impl BlockBuilder {
             registration_fee,
             non_registration_fee,
             registration_collateral_fee,
-            non_registration_collateral_fee,
+            non_registration_collateral_fee: _non_registration_collateral_fee,
         };
 
-        Ok(Self {
-            config,
-            store_vault_server_client,
-            validity_prover_client,
-            rollup_contract,
-            registry_contract,
-            storage,
-        })
+        Ok(config)
     }
 
+    /// Create storage based on configuration
+    async fn create_storage(
+        env: &EnvVar,
+        beneficiary_pubkey: Option<U256>,
+    ) -> Result<Arc<Box<dyn Storage>>, BlockBuilderError> {
+        // Parse fee configuration
+        let registration_fee = env
+            .registration_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let non_registration_fee = env
+            .non_registration_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let registration_collateral_fee = env
+            .registration_collateral_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+        let _non_registration_collateral_fee = env
+            .non_registration_collateral_fee
+            .as_ref()
+            .map(|fee| parse_fee_str(fee))
+            .transpose()?;
+
+        // Create storage configuration
+        let storage_config = StorageConfig {
+            use_fee: registration_fee.is_some() || non_registration_fee.is_some(),
+            use_collateral: registration_collateral_fee.is_some() || non_registration_fee.is_some(),
+            fee_beneficiary: beneficiary_pubkey.unwrap_or_default(),
+            tx_timeout: env.tx_timeout,
+            accepting_tx_interval: env.accepting_tx_interval,
+            proposing_block_interval: env.proposing_block_interval,
+            deposit_check_interval: env.deposit_check_interval,
+            redis_url: env.redis_url.clone(),
+            block_builder_id: Uuid::new_v4().to_string(),
+        };
+
+        let storage = storage::create_storage(&storage_config).await;
+
+        Ok(Arc::new(storage))
+    }
+
+    /// Get fee information for the block builder
     pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
         BlockBuilderFeeInfo {
             beneficiary: self.config.beneficiary_pubkey,
@@ -158,7 +204,7 @@ impl BlockBuilder {
         }
     }
 
-    // Send a tx request by the user.
+    /// Send a transaction request by the user
     pub async fn send_tx_request(
         &self,
         is_registration_block: bool,
@@ -171,9 +217,41 @@ impl BlockBuilder {
             is_registration_block
         );
 
-        // registration check
+        // Verify account status
+        self.verify_account_status(is_registration_block, pubkey)
+            .await?;
+
+        // Verify fee proof
+        self.verify_fee_proof(is_registration_block, pubkey, fee_proof)
+            .await?;
+
+        // Create and add transaction request
+        let request_id = Uuid::new_v4().to_string();
+        let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
+        let tx_request = TxRequest {
+            pubkey,
+            account_id: account_info.account_id,
+            tx,
+            fee_proof: fee_proof.clone(),
+            request_id: request_id.clone(),
+        };
+
+        self.storage
+            .add_tx(is_registration_block, tx_request)
+            .await?;
+
+        Ok(request_id)
+    }
+
+    /// Verify account status for a transaction
+    async fn verify_account_status(
+        &self,
+        is_registration_block: bool,
+        pubkey: U256,
+    ) -> Result<(), BlockBuilderError> {
         let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
         let account_id = account_info.account_id;
+
         if is_registration_block {
             if let Some(account_id) = account_id {
                 return Err(BlockBuilderError::AccountAlreadyRegistered(
@@ -184,17 +262,28 @@ impl BlockBuilder {
             return Err(BlockBuilderError::AccountNotFound(pubkey));
         }
 
-        // fee check
+        Ok(())
+    }
+
+    /// Verify fee proof for a transaction
+    async fn verify_fee_proof(
+        &self,
+        is_registration_block: bool,
+        pubkey: U256,
+        fee_proof: &Option<FeeProof>,
+    ) -> Result<(), BlockBuilderError> {
         let required_fee = if is_registration_block {
             self.config.registration_fee.as_ref()
         } else {
             self.config.non_registration_fee.as_ref()
         };
+
         let required_collateral_fee = if is_registration_block {
             self.config.registration_collateral_fee.as_ref()
         } else {
             self.config.non_registration_collateral_fee.as_ref()
         };
+
         validate_fee_proof(
             &self.store_vault_server_client,
             self.config.beneficiary_pubkey,
@@ -203,24 +292,11 @@ impl BlockBuilder {
             pubkey,
             fee_proof,
         )
-        .await?;
-
-        let request_id = Uuid::new_v4().to_string();
-        let tx_request = TxRequest {
-            pubkey,
-            account_id,
-            tx,
-            fee_proof: fee_proof.clone(),
-            request_id: request_id.clone(),
-        };
-        self.storage
-            .add_tx(is_registration_block, tx_request)
-            .await?;
-
-        Ok(request_id)
+        .await
+        .map_err(BlockBuilderError::FeeError)
     }
 
-    // Query the constructed proposal by the user.
+    /// Query the constructed proposal by the user
     pub async fn query_proposal(
         &self,
         request_id: &str,
@@ -230,7 +306,7 @@ impl BlockBuilder {
         Ok(proposal)
     }
 
-    // Post the signature by the user.
+    /// Post the signature by the user
     pub async fn post_signature(
         &self,
         request_id: &str,
