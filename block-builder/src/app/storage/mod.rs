@@ -55,19 +55,15 @@ pub trait Storage: Sync + Send {
     async fn enqueue_empty_block(&self) -> Result<(), error::StorageError>;
 }
 
-/// Trait that combines Storage and StorageFactory
-pub trait StorageWithFactory: Storage + StorageFactory {}
-
-/// Blanket implementation for any type that implements both Storage and StorageFactory
-impl<T: Storage + StorageFactory> StorageWithFactory for T {}
-
 /// Create a storage implementation based on the configuration
 ///
 /// Returns RedisStorage if redis_url is set in the config, otherwise returns InMemoryStorage
 pub async fn create_storage(config: &StorageConfig) -> Box<dyn Storage> {
     if config.redis_url.is_some() {
+        log::info!("use redis storage");
         Box::new(redis_storage::RedisStorage::new(config).await)
     } else {
+        log::info!("use in-memory storage");
         Box::new(memory_storage::InMemoryStorage::new(config).await)
     }
 }

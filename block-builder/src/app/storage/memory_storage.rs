@@ -16,7 +16,7 @@ use crate::app::{
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StorageConfig, error::StorageError, Storage, StorageFactory};
+use super::{config::StorageConfig, error::StorageError, Storage};
 
 type AR<T> = Arc<RwLock<T>>;
 type ARQueue<T> = AR<VecDeque<T>>;
@@ -60,13 +60,6 @@ impl InMemoryStorage {
             block_post_tasks_hi: Default::default(),
             block_post_tasks_lo: Default::default(),
         }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl StorageFactory for InMemoryStorage {
-    async fn new(config: &StorageConfig) -> Self {
-        Self::new(config).await
     }
 }
 

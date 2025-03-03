@@ -21,7 +21,7 @@ use crate::app::{
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StorageConfig, error::StorageError, Storage, StorageFactory};
+use super::{config::StorageConfig, error::StorageError, Storage};
 
 //-----------------------------------------------------------------------------
 // Constants
@@ -263,10 +263,7 @@ impl RedisStorage {
         let prefix = "block_builder:shared";
 
         // Create Redis client with fallback to localhost if URL not provided
-        let redis_url = config
-            .redis_url
-            .clone()
-            .unwrap_or_else(|| "redis://127.0.0.1:6379".to_string());
+        let redis_url = config.redis_url.clone().expect("redis_url not found");
         let client = Client::open(redis_url).expect("Failed to create Redis client");
 
         // Create connection manager asynchronously
@@ -299,17 +296,6 @@ impl RedisStorage {
             block_post_tasks_hi_key: format!("{}:block_post_tasks_hi", prefix),
             block_post_tasks_lo_key: format!("{}:block_post_tasks_lo", prefix),
         }
-    }
-}
-
-//-----------------------------------------------------------------------------
-// StorageFactory Trait Implementation
-//-----------------------------------------------------------------------------
-
-#[async_trait::async_trait(?Send)]
-impl StorageFactory for RedisStorage {
-    async fn new(config: &StorageConfig) -> Self {
-        Self::new(config).await
     }
 }
 
