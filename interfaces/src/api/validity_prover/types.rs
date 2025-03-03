@@ -27,6 +27,12 @@ pub struct GetNextDepositIndexResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GetLatestIncludedDepositIndexResponse {
+    pub deposit_index: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetUpdateWitnessQuery {
     pub pubkey: U256,
     pub root_block_number: u32,

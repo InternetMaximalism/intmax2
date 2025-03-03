@@ -623,6 +623,13 @@ impl ValidityProver {
         Ok(deposit_index)
     }
 
+    pub async fn get_latest_included_deposit_index(
+        &self,
+    ) -> Result<Option<u32>, ValidityProverError> {
+        let deposit_index = self.observer.get_latest_included_deposit_index().await?;
+        Ok(deposit_index)
+    }
+
     pub async fn get_deposit_merkle_proof(
         &self,
         block_number: u32,
