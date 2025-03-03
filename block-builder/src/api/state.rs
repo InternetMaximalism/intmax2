@@ -9,8 +9,8 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
-        let block_builder = BlockBuilder::new(env)?;
+    pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
+        let block_builder = BlockBuilder::new(env).await?;
         Ok(State { block_builder })
     }
 

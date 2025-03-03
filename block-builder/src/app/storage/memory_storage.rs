@@ -42,7 +42,7 @@ pub struct InMemoryStorage {
 }
 
 impl InMemoryStorage {
-    pub fn new(config: &StorageConfig) -> Self {
+    pub async fn new(config: &StorageConfig) -> Self {
         Self {
             config: config.clone(),
             registration_tx_requests: Default::default(),

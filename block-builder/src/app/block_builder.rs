@@ -62,7 +62,7 @@ pub struct BlockBuilder {
 }
 
 impl BlockBuilder {
-    pub fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
+    pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
         let store_vault_server_client =
             StoreVaultServerClient::new(&env.store_vault_server_base_url);
         let validity_prover_client = ValidityProverClient::new(&env.validity_prover_base_url);
@@ -120,7 +120,8 @@ impl BlockBuilder {
             redis_url: env.redis_url.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
-        let storage: Arc<Box<dyn Storage>> = Arc::new(Box::new(RedisStorage::new(&storage_config)));
+        let redis_storage = RedisStorage::new(&storage_config).await;
+        let storage: Arc<Box<dyn Storage>> = Arc::new(Box::new(redis_storage));
 
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
