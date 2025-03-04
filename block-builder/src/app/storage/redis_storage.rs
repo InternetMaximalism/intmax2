@@ -11,6 +11,7 @@ use intmax2_zkp::{
     common::block_builder::{BlockProposal, UserSignature},
     constants::NUM_SENDERS_IN_BLOCK,
 };
+
 use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisResult, Script};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::sleep};
@@ -265,6 +266,7 @@ impl RedisStorage {
         // Create Redis client with fallback to localhost if URL not provided
         let redis_url = config.redis_url.clone().expect("redis_url not found");
         let client = Client::open(redis_url).expect("Failed to create Redis client");
+
         // Create connection manager asynchronously
         let conn_manager = ConnectionManager::new(client)
             .await
