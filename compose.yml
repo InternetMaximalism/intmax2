@@ -15,13 +15,13 @@ services:
 
   tempo:
     image: grafana/tempo:latest
-    command: ["-config.file=/etc/tempo.yaml"]
+    command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./docker/tempo.local.yaml:/etc/tempo.yaml
     ports:
-      - "4317:4317"  # OTLP gRPC
-      - "4318:4318"  # OTLP HTTP
-      - "3200:3200"  # Tempo endpoint
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "3200:3200" # Tempo endpoint
 
   grafana:
     image: grafana/grafana:latest

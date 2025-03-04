@@ -52,9 +52,9 @@ impl Display for MiningStatus {
     }
 }
 
-pub async fn fetch_mining_info<S: StoreVaultClientInterface, V: ValidityProverClientInterface>(
-    store_vault_server: &S,
-    validity_prover: &V,
+pub async fn fetch_mining_info(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
     claim_status: &ProcessStatus,
@@ -170,8 +170,8 @@ pub fn validate_mining_deposit_criteria(token_type: TokenType, amount: U256) -> 
     candidates.contains(&amount)
 }
 
-async fn fetch_block<V: ValidityProverClientInterface>(
-    validity_prover: &V,
+async fn fetch_block(
+    validity_prover: &dyn ValidityProverClientInterface,
     block_number: u32,
 ) -> Result<Block, StrategyError> {
     let validity_witness = validity_prover.get_validity_witness(block_number).await?;

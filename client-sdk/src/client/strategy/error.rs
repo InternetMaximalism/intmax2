@@ -37,4 +37,7 @@ pub enum StrategyError {
 
     #[error("Pending tx error: {0}")]
     PendingTxError(String),
+
+    #[error("Unexpected error: {0}")]
+    UnexpectedError(String),
 }

@@ -4,7 +4,7 @@ use intmax2_zkp::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::interface::{BlockBuilderStatus, FeeProof};
+use super::interface::FeeProof;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,10 +17,14 @@ pub struct TxRequestRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TxRequestResponse {
+    pub request_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QueryProposalRequest {
-    pub is_registration_block: bool,
-    pub pubkey: U256,
-    pub tx: Tx,
+    pub request_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,20 +36,7 @@ pub struct QueryProposalResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PostSignatureRequest {
-    pub is_registration_block: bool,
+    pub request_id: String,
     pub pubkey: U256,
-    pub tx: Tx,
     pub signature: FlatG2,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetBlockBuilderStatusQuery {
-    pub is_registration_block: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetBlockBuilderStatusResponse {
-    pub status: BlockBuilderStatus,
 }

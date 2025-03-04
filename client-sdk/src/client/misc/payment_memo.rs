@@ -23,11 +23,8 @@ pub struct PaymentMemo {
 
 impl BlsEncryption for PaymentMemo {}
 
-pub async fn save_payment_memo<
-    S: StoreVaultClientInterface,
-    M: Default + Clone + Serialize + DeserializeOwned,
->(
-    store_vault_server: &S,
+pub async fn save_payment_memo<M: Default + Clone + Serialize + DeserializeOwned>(
+    store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
     memo_name: &str,
     payment_memo: &PaymentMemo,
@@ -39,8 +36,8 @@ pub async fn save_payment_memo<
     Ok(uuid)
 }
 
-pub async fn get_all_payment_memos<S: StoreVaultClientInterface>(
-    store_vault_server: &S,
+pub async fn get_all_payment_memos(
+    store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
     memo_name: &str,
 ) -> Result<Vec<PaymentMemo>, SyncError> {

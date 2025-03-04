@@ -193,22 +193,8 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             .await?;
         Ok((data, cursor))
     }
-}
 
-impl StoreVaultServerClient {
-    fn verify_auth_for_get_data_sequence(&self, auth: &Auth) -> anyhow::Result<()> {
-        let dummy_request = GetDataSequenceRequest {
-            data_type: DataType::Deposit,
-            cursor: MetaDataCursor {
-                cursor: None,
-                order: CursorOrder::Asc,
-                limit: None,
-            },
-        };
-        dummy_request.verify(auth)
-    }
-
-    pub async fn get_data_sequence_with_auth(
+    async fn get_data_sequence_with_auth(
         &self,
         data_type: DataType,
         cursor: &MetaDataCursor,
@@ -239,7 +225,7 @@ impl StoreVaultServerClient {
         Ok((response.data, response.cursor_response))
     }
 
-    pub async fn get_misc_sequence_native_with_auth(
+    async fn get_misc_sequence_native_with_auth(
         &self,
         topic: Bytes32,
         cursor: &MetaDataCursor,
@@ -266,6 +252,20 @@ impl StoreVaultServerClient {
         )
         .await?;
         Ok((response.data, response.cursor_response))
+    }
+}
+
+impl StoreVaultServerClient {
+    fn verify_auth_for_get_data_sequence(&self, auth: &Auth) -> anyhow::Result<()> {
+        let dummy_request = GetDataSequenceRequest {
+            data_type: DataType::Deposit,
+            cursor: MetaDataCursor {
+                cursor: None,
+                order: CursorOrder::Asc,
+                limit: None,
+            },
+        };
+        dummy_request.verify(auth)
     }
 }
 

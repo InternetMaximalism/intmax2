@@ -6,12 +6,11 @@ use actix_web::{
 use intmax2_interfaces::api::block_builder::{
     interface::BlockBuilderFeeInfo,
     types::{
-        GetBlockBuilderStatusQuery, GetBlockBuilderStatusResponse, PostSignatureRequest,
-        QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
+        PostSignatureRequest, QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
+        TxRequestResponse,
     },
 };
 use intmax2_zkp::common::block_builder::UserSignature;
-use serde_qs::actix::QsQuery;
 
 use crate::api::state::State;
 
@@ -21,25 +20,13 @@ pub async fn get_fee_info(state: Data<State>) -> Result<Json<BlockBuilderFeeInfo
     Ok(Json(fee_info))
 }
 
-#[get("/status")]
-pub async fn get_status(
-    state: Data<State>,
-    query: QsQuery<GetBlockBuilderStatusQuery>,
-) -> Result<Json<GetBlockBuilderStatusResponse>, Error> {
-    let status = state
-        .block_builder
-        .get_status(query.is_registration_block)
-        .await;
-    Ok(Json(GetBlockBuilderStatusResponse { status }))
-}
-
 #[post("/tx-request")]
 pub async fn tx_request(
     state: Data<State>,
     request: Json<TxRequestRequest>,
-) -> Result<Json<()>, Error> {
+) -> Result<Json<TxRequestResponse>, Error> {
     let request = request.into_inner();
-    state
+    let request_id = state
         .block_builder
         .send_tx_request(
             request.is_registration_block,
@@ -49,7 +36,7 @@ pub async fn tx_request(
         )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(()))
+    Ok(Json(TxRequestResponse { request_id }))
 }
 
 #[post("/query-proposal")]
@@ -60,7 +47,7 @@ pub async fn query_proposal(
     let request = request.into_inner();
     let block_proposal = state
         .block_builder
-        .query_proposal(request.is_registration_block, request.pubkey, request.tx)
+        .query_proposal(&request.request_id)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(QueryProposalResponse { block_proposal }))
@@ -78,7 +65,7 @@ pub async fn post_signature(
     };
     state
         .block_builder
-        .post_signature(request.is_registration_block, request.tx, user_signature)
+        .post_signature(&request.request_id, user_signature)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))
@@ -87,7 +74,6 @@ pub async fn post_signature(
 pub fn block_builder_scope() -> actix_web::Scope {
     actix_web::web::scope("/block-builder")
         .service(get_fee_info)
-        .service(get_status)
         .service(tx_request)
         .service(query_proposal)
         .service(post_signature)

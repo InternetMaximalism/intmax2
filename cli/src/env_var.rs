@@ -12,6 +12,7 @@ pub struct EnvVar {
     pub store_vault_server_base_url: String,
     pub validity_prover_base_url: String,
     pub balance_prover_base_url: String,
+    pub use_private_zkp_server: Option<bool>,
     pub withdrawal_server_base_url: String,
     pub deposit_timeout: u64,
     pub tx_timeout: u64,

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
 use ethers::core::rand;
 use intmax2_client_sdk::{
     client::strategy::common::fetch_sender_proof_set,
@@ -27,13 +28,7 @@ use intmax2_zkp::{
 };
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
-
-use super::{
-    block_post::BlockPostTask,
-    builder_state::ProposalMemo,
-    error::{BlockBuilderError, FeeError},
-};
+use uuid::Uuid;
 
 /// Validate fee proof
 pub async fn validate_fee_proof(
@@ -244,11 +239,12 @@ pub struct FeeCollection {
 
 /// Collect fee from the senders
 pub async fn collect_fee(
-    tx: &mpsc::Sender<BlockPostTask>,
     store_vault_server_client: &StoreVaultServerClient,
     beneficiary_pubkey: U256,
     fee_collection: &FeeCollection,
-) -> Result<(), BlockBuilderError> {
+) -> Result<Vec<BlockPostTask>, FeeError> {
+    let mut block_post_tasks = Vec::new();
+
     log::info!(
         "collect_fee: use_collateral {}",
         fee_collection.use_collateral
@@ -260,9 +256,7 @@ pub async fn collect_fee(
         let fee_proof = request
             .fee_proof
             .as_ref()
-            .ok_or(BlockBuilderError::FeeError(FeeError::InvalidFee(
-                "Fee proof is missing".to_string(),
-            )))?;
+            .ok_or(FeeError::InvalidFee("Fee proof is missing".to_string()))?;
 
         // check if the sender returned the signature
         let signature = fee_collection
@@ -298,9 +292,9 @@ pub async fn collect_fee(
                 fee_proof
                     .collateral_block
                     .as_ref()
-                    .ok_or(BlockBuilderError::FeeError(FeeError::InvalidFee(
+                    .ok_or(FeeError::InvalidFee(
                         "Collateral block is missing".to_string(),
-                    )))?;
+                    ))?;
 
             let transfer_data = &collateral_block.fee_transfer_data;
             let mut pubkeys = vec![request.pubkey];
@@ -321,10 +315,10 @@ pub async fn collect_fee(
             signature
                 .verify(transfer_data.tx_tree_root, expiry, pubkey_hash)
                 .map_err(|e| {
-                    BlockBuilderError::FeeError(FeeError::SignatureVerificationError(format!(
+                    FeeError::SignatureVerificationError(format!(
                         "Failed to verify signature: {}",
                         e
-                    )))
+                    ))
                 })?;
 
             // save transfer data
@@ -339,17 +333,16 @@ pub async fn collect_fee(
                 account_ids,
                 pubkey_hash,
                 signatures: vec![signature],
+                block_id: Uuid::new_v4().to_string(),
             };
-            tx.send(block_post).await.map_err(|e| {
-                BlockBuilderError::UnexpectedError(format!("Failed to send block post task: {}", e))
-            })?;
+            block_post_tasks.push(block_post);
             log::warn!("sender {}'s collateral block is queued", request.pubkey);
         }
     }
 
     if transfer_data_vec.is_empty() {
         // early return if no fee to collect
-        return Ok(());
+        return Ok(block_post_tasks);
     }
 
     // save transfer data to the store vault server
@@ -365,7 +358,7 @@ pub async fn collect_fee(
     let _uuids = store_vault_server_client
         .save_data_batch(dummy_key, &entries)
         .await?;
-    Ok(())
+    Ok(block_post_tasks)
 }
 
 pub fn convert_fee_vec(fee: &Option<HashMap<u32, U256>>) -> Option<Vec<Fee>> {

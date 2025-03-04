@@ -9,10 +9,7 @@ use crate::{
     utils::str_privkey_to_keyset,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::{
-        interface::StoreVaultClientInterface as _,
-        types::{CursorOrder, MetaDataCursor},
-    },
+    api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{encryption::BlsEncryption as _, generic_misc_data::GenericMiscData},
 };
 

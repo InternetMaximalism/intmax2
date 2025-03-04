@@ -27,6 +27,7 @@ async fn main() -> std::io::Result<()> {
     );
 
     let state = State::new(&env)
+        .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("state error: {}", e)))?;
     state.run();
 

@@ -14,8 +14,8 @@ use num_bigint::BigUint;
 
 use super::error::StrategyError;
 
-pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: BlsEncryption + Validation>(
-    store_vault_server: &S,
+pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
+    store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
     data_type: DataType,
     included_uuids: &[String],
@@ -65,8 +65,8 @@ pub async fn fetch_decrypt_validate<S: StoreVaultClientInterface, T: BlsEncrypti
     Ok((data_with_meta, cursor_response))
 }
 
-pub async fn fetch_sender_proof_set<S: StoreVaultClientInterface>(
-    store_vault_server: &S,
+pub async fn fetch_sender_proof_set(
+    store_vault_server: &dyn StoreVaultClientInterface,
     ephemeral_key: U256,
 ) -> Result<SenderProofSet, StrategyError> {
     let key = KeySet::new(BigUint::from(ephemeral_key).into());
@@ -75,8 +75,8 @@ pub async fn fetch_sender_proof_set<S: StoreVaultClientInterface>(
     Ok(sender_proof_set)
 }
 
-pub async fn fetch_user_data<S: StoreVaultClientInterface>(
-    store_vault_server: &S,
+pub async fn fetch_user_data(
+    store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
 ) -> Result<UserData, StrategyError> {
     let user_data = store_vault_server

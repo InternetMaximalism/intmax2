@@ -353,15 +353,15 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "alloy-primitives"
-version = "0.8.21"
+version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "478bedf4d24e71ea48428d1bc278553bd7c6ae07c30ca063beb0b09fe58a9e74"
+checksum = "8c66bb6715b7499ea755bde4c96223ae8eb74e05c014ab38b9db602879ffb825"
 dependencies = [
  "alloy-rlp",
  "bytes",
  "cfg-if",
  "const-hex",
- "derive_more 1.0.0",
+ "derive_more 2.0.1",
  "foldhash",
  "getrandom 0.2.15",
  "hashbrown 0.15.2",
@@ -456,9 +456,15 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.95"
+version = "1.0.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
+checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
+
+[[package]]
+name = "arc-swap"
+version = "1.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
 name = "approx"
@@ -872,6 +878,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "backon"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49fef586913a57ff189f25c9b3d034356a5bf6b3fa9a7f067588fe1698ba1f5d"
+dependencies = [
+ "fastrand",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -888,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "balance-prover"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1043,18 +1058,18 @@ dependencies = [
 
 [[package]]
 name = "block-builder"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
  "anyhow",
+ "async-trait",
  "bincode",
  "chrono",
  "dotenv",
  "env_logger",
  "envy",
  "ethers",
- "hashbrown 0.15.2",
  "intmax2-client-sdk",
  "intmax2-interfaces",
  "intmax2-zkp",
@@ -1062,6 +1077,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "plonky2",
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
+ "redis 0.29.1",
  "reqwest 0.12.12",
  "serde",
  "serde_json",
@@ -1215,20 +1231,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo_metadata"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8769706aad5d996120af43197bf46ef6ad0fda35216b4505f926a365a232d924"
-dependencies = [
- "camino",
- "cargo-platform",
- "semver 1.0.25",
- "serde",
- "serde_json",
- "thiserror 2.0.11",
-]
-
-[[package]]
 name = "cc"
 version = "1.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1247,9 +1249,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chrono"
-version = "0.4.39"
+version = "0.4.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
+checksum = "1a7964611d71df112cb1730f2ee67324fcf4d0fc6606acbbe9bfe06df124637c"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
@@ -1257,7 +1259,7 @@ dependencies = [
  "num-traits",
  "serde",
  "wasm-bindgen",
- "windows-targets 0.52.6",
+ "windows-link",
 ]
 
 [[package]]
@@ -1272,9 +1274,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.30"
+version = "4.5.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92b7b18d71fad5313a1e320fa9897994228ce274b60faa4d694fe0ea89cd9e6d"
+checksum = "027bb0d98429ae334a8698531da7077bdf906419543a35a55c2cb1b66437d767"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1282,9 +1284,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.30"
+version = "4.5.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a35db2071778a7344791a4fb4f95308b5673d219dee3ae348b86642574ecc90c"
+checksum = "5589e0cba072e0f3d23791efac0fd8627b49c829c196a492e88168e6a669d863"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1403,7 +1405,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "dotenv",
  "envy",
@@ -1814,7 +1816,16 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a9b99b9cbbe49445b21764dc0625032a89b145a2642e67603e1c936f5458d05"
 dependencies = [
- "derive_more-impl",
+ "derive_more-impl 1.0.0",
+]
+
+[[package]]
+name = "derive_more"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
+dependencies = [
+ "derive_more-impl 2.0.1",
 ]
 
 [[package]]
@@ -1822,6 +1833,17 @@ name = "derive_more-impl"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
+]
+
+[[package]]
+name = "derive_more-impl"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2292,7 +2314,7 @@ checksum = "82d80cc6ad30b14a48ab786523af33b37f28a8623fc06afd55324816ef18fb1f"
 dependencies = [
  "arrayvec",
  "bytes",
- "cargo_metadata 0.18.1",
+ "cargo_metadata",
  "chrono",
  "const-hex",
  "elliptic-curve",
@@ -3498,7 +3520,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-cli"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3531,7 +3553,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-client-sdk"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3581,7 +3603,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3619,7 +3641,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-wasm-lib"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "bincode",
@@ -4097,9 +4119,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dab59f8e050d5df8e4dd87d9206fb6f65a483e20ac9fda365ade4fab353196c"
+checksum = "87de3442987e9dbec73158d5c715e7ad9072fda936bb03d19d7fa10e00520f0e"
 dependencies = [
  "libc",
  "log",
@@ -5200,6 +5222,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "redis"
+version = "0.29.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8034fb926579ff49d3fe58d288d5dcb580bf11e9bccd33224b45adebf0fd0c23"
+dependencies = [
+ "arc-swap",
+ "backon",
+ "bytes",
+ "combine",
+ "futures-channel",
+ "futures-util",
+ "itoa",
+ "native-tls",
+ "num-bigint 0.4.6",
+ "percent-encoding",
+ "pin-project-lite",
+ "ryu",
+ "sha1_smol",
+ "socket2 0.5.8",
+ "tokio",
+ "tokio-native-tls",
+ "tokio-util",
+ "url",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5917,11 +5965,10 @@ dependencies = [
 
 [[package]]
 name = "server-common"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
- "cargo_metadata 0.19.1",
  "common",
  "dotenv",
  "envy",
@@ -5931,7 +5978,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
- "redis",
+ "redis 0.23.3",
  "serde",
  "serde_json",
  "sqlx",
@@ -6411,7 +6458,7 @@ dependencies = [
 
 [[package]]
 name = "store-vault-server"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6675,7 +6722,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix",
  "actix-cors",
@@ -7361,7 +7408,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7397,7 +7444,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover-worker"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7697,6 +7744,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-link"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6dccfd733ce2b1753b03b6d3c65edf020262ea35e20ccdf3e288043e6dd620e3"
+
+[[package]]
 name = "windows-registry"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7904,7 +7957,7 @@ dependencies = [
 
 [[package]]
 name = "withdrawal-server"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "actix-cors",
  "actix-web",

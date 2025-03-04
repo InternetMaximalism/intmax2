@@ -1,6 +1,7 @@
 use intmax2_client_sdk::{
     client::{client::Client, config::ClientConfig},
     external_api::{
+        balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
         contract::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
@@ -12,15 +13,9 @@ use intmax2_client_sdk::{
         withdrawal_server::WithdrawalServerClient,
     },
 };
+use intmax2_interfaces::api::balance_prover::interface::BalanceProverClientInterface;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::wasm_bindgen;
-
-type BB = BlockBuilderClient;
-type S = StoreVaultServerClient;
-type V = ValidityProverClient;
-// type B = BalanceProverClient;
-type B = PrivateZKPServerClient;
-type W = WithdrawalServerClient;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,6 +79,8 @@ pub struct Config {
 
     /// Address of the withdrawal contract
     pub withdrawal_contract_address: String,
+
+    pub use_private_zkp_server: bool,
 }
 
 #[wasm_bindgen]
@@ -112,6 +109,7 @@ impl Config {
         rollup_contract_address: String,
         rollup_contract_deployed_block_number: u64,
         withdrawal_contract_address: String,
+        use_private_zkp_server: bool,
     ) -> Config {
         Config {
             store_vault_server_url,
@@ -133,16 +131,22 @@ impl Config {
             rollup_contract_address,
             rollup_contract_deployed_block_number,
             withdrawal_contract_address,
+            use_private_zkp_server,
         }
     }
 }
 
-pub fn get_client(config: &Config) -> Client<BB, S, V, B, W> {
-    let block_builder = BB::new();
-    let store_vault_server = S::new(&config.store_vault_server_url);
-    let balance_prover = B::new(&config.balance_prover_url);
-    let validity_prover = V::new(&config.validity_prover_url);
-    let withdrawal_server = W::new(&config.withdrawal_server_url);
+pub fn get_client(config: &Config) -> Client {
+    let block_builder = Box::new(BlockBuilderClient::new());
+    let store_vault_server = Box::new(StoreVaultServerClient::new(&config.store_vault_server_url));
+
+    let validity_prover = Box::new(ValidityProverClient::new(&config.validity_prover_url));
+    let balance_prover: Box<dyn BalanceProverClientInterface> = if config.use_private_zkp_server {
+        Box::new(PrivateZKPServerClient::new(&config.balance_prover_url))
+    } else {
+        Box::new(BalanceProverClient::new(&config.balance_prover_url))
+    };
+    let withdrawal_server = Box::new(WithdrawalServerClient::new(&config.withdrawal_server_url));
 
     let client_config = ClientConfig {
         deposit_timeout: config.deposit_timeout,

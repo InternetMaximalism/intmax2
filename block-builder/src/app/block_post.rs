@@ -5,11 +5,13 @@ use intmax2_client_sdk::external_api::{
 use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInterface;
 use intmax2_zkp::{
     common::block_builder::{construct_signature, SenderWithSignature, UserSignature},
+    constants::NUM_SENDERS_IN_BLOCK,
     ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use super::error::BlockBuilderError;
+use super::{error::BlockBuilderError, types::ProposalMemo};
 
 const PENALTY_FEE_POLLING_INTERVAL: u64 = 2;
 const VALIDITY_PROVER_SYNC_POLLING_INTERVAL: u64 = 5;
@@ -26,6 +28,40 @@ pub struct BlockPostTask {
     pub account_ids: Option<AccountIdPacked>,
     pub pubkey_hash: Bytes32,
     pub signatures: Vec<UserSignature>,
+    pub block_id: String,
+}
+
+impl Default for BlockPostTask {
+    // empty block task
+    fn default() -> Self {
+        Self {
+            force_post: true,
+            is_registration_block: false,
+            tx_tree_root: Bytes32::default(),
+            expiry: 0,
+            pubkeys: vec![U256::dummy_pubkey(); NUM_SENDERS_IN_BLOCK],
+            account_ids: Some(AccountIdPacked::pack(&[1; NUM_SENDERS_IN_BLOCK])),
+            pubkey_hash: Bytes32::default(),
+            signatures: Vec::new(),
+            block_id: Uuid::new_v4().to_string(),
+        }
+    }
+}
+
+impl BlockPostTask {
+    pub fn from_memo(memo: &ProposalMemo, signatures: &[UserSignature]) -> Self {
+        Self {
+            force_post: false,
+            is_registration_block: memo.is_registration_block,
+            tx_tree_root: memo.tx_tree_root,
+            expiry: memo.expiry,
+            pubkeys: memo.pubkeys.clone(),
+            account_ids: memo.get_account_ids(),
+            pubkey_hash: memo.pubkey_hash,
+            signatures: signatures.to_vec(),
+            block_id: memo.block_id.clone(),
+        }
+    }
 }
 
 pub(crate) async fn post_block(

@@ -97,8 +97,8 @@ pub fn get_balance_proof(
 const MAX_VALIDITY_PROVER_SYNC_TRIES: u32 = 20;
 const VALIDITY_PROVER_SYNC_SLEEP_TIME: u64 = 5;
 
-pub async fn wait_till_validity_prover_synced<V: ValidityProverClientInterface>(
-    validity_prover: &V,
+pub async fn wait_till_validity_prover_synced(
+    validity_prover: &dyn ValidityProverClientInterface,
     block_number: u32,
 ) -> Result<(), SyncError> {
     let mut tries = 0;

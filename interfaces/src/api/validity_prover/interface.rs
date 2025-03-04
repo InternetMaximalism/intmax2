@@ -61,6 +61,8 @@ pub trait ValidityProverClientInterface {
 
     async fn get_next_deposit_index(&self) -> Result<u32, ServerError>;
 
+    async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ServerError>;
+
     async fn get_update_witness(
         &self,
         pubkey: U256,

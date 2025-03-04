@@ -8,7 +8,7 @@ use intmax2_zkp::{
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
-use crate::api::error::ServerError;
+use crate::{api::error::ServerError, utils::signature::Auth};
 
 use super::types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse};
 
@@ -122,6 +122,20 @@ pub trait StoreVaultClientInterface {
         key: KeySet,
         topic: Bytes32,
         cursor: &MetaDataCursor,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError>;
+
+    async fn get_data_sequence_with_auth(
+        &self,
+        data_type: DataType,
+        cursor: &MetaDataCursor,
+        auth: &Auth,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError>;
+
+    async fn get_misc_sequence_native_with_auth(
+        &self,
+        topic: Bytes32,
+        cursor: &MetaDataCursor,
+        auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError>;
 }
 

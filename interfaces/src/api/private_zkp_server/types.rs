@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use intmax2_zkp::ethereum_types::u256::U256;
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
@@ -25,6 +27,21 @@ pub enum ProveType {
     SingleWithdrawal,
     SingleClaim,
     Dummy, // for testing
+}
+
+impl Display for ProveType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProveType::Spent => write!(f, "spent"),
+            ProveType::Send => write!(f, "send"),
+            ProveType::Update => write!(f, "update"),
+            ProveType::ReceiveTransfer => write!(f, "receiveTransfer"),
+            ProveType::ReceiveDeposit => write!(f, "receiveDeposit"),
+            ProveType::SingleWithdrawal => write!(f, "singleWithdrawal"),
+            ProveType::SingleClaim => write!(f, "singleClaim"),
+            ProveType::Dummy => write!(f, "dummy"),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

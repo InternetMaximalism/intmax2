@@ -1,12 +1,5 @@
 use intmax2_interfaces::{
-    api::{
-        balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::BlockBuilderClientInterface,
-        store_vault_server::interface::StoreVaultClientInterface,
-        validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::{ClaimFeeInfo, WithdrawalServerClientInterface},
-    },
-    data::encryption::BlsEncryption as _,
+    api::withdrawal_server::interface::ClaimFeeInfo, data::encryption::BlsEncryption as _,
 };
 use intmax2_zkp::{
     common::{
@@ -28,14 +21,7 @@ use crate::client::{
 
 use super::{error::SyncError, utils::quote_withdrawal_claim_fee};
 
-impl<BB, S, V, B, W> Client<BB, S, V, B, W>
-where
-    BB: BlockBuilderClientInterface,
-    S: StoreVaultClientInterface,
-    V: ValidityProverClientInterface,
-    B: BalanceProverClientInterface,
-    W: WithdrawalServerClientInterface,
-{
+impl Client {
     /// Sync the client's withdrawals and relays to the withdrawal server
     pub async fn sync_claims(
         &self,
@@ -49,8 +35,8 @@ where
             return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
         }
         let minings = determine_claims(
-            &self.store_vault_server,
-            &self.validity_prover,
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
             self.config.tx_timeout,
@@ -72,7 +58,8 @@ where
                 }
             };
 
-            wait_till_validity_prover_synced(&self.validity_prover, claim_block_number).await?;
+            wait_till_validity_prover_synced(self.validity_prover.as_ref(), claim_block_number)
+                .await?;
 
             // collect witnesses
             let deposit_block_number = mining.block.block_number;
@@ -134,8 +121,8 @@ where
                 Some(fee) => {
                     let fee_beneficiary = fee_info.beneficiary.unwrap(); // already validated
                     select_unused_fees(
-                        &self.store_vault_server,
-                        &self.validity_prover,
+                        self.store_vault_server.as_ref(),
+                        self.validity_prover.as_ref(),
                         key,
                         fee_beneficiary,
                         fee.clone(),
@@ -165,7 +152,7 @@ where
             for used_fee in &collected_fees {
                 // todo: batch consume
                 consume_payment(
-                    &self.store_vault_server,
+                    self.store_vault_server.as_ref(),
                     key,
                     used_fee,
                     "used for claim fee",

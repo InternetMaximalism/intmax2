@@ -10,8 +10,9 @@ use intmax2_interfaces::api::{
             GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
             GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
             GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
-            GetDepositMerkleProofResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
-            GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
+            GetDepositMerkleProofResponse, GetLatestIncludedDepositIndexResponse,
+            GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
+            GetValidityWitnessQuery, GetValidityWitnessResponse,
         },
     },
 };
@@ -70,6 +71,16 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetNextDepositIndexResponse =
             get_request::<(), _>(&self.base_url, "/validity-prover/next-deposit-index", None)
                 .await?;
+        Ok(response.deposit_index)
+    }
+
+    async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ServerError> {
+        let response: GetLatestIncludedDepositIndexResponse = get_request::<(), _>(
+            &self.base_url,
+            "/validity-prover/latest-included-deposit-index",
+            None,
+        )
+        .await?;
         Ok(response.deposit_index)
     }
 

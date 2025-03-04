@@ -1,9 +1,6 @@
 use client::{get_client, Config};
 use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
-use intmax2_interfaces::{
-    api::withdrawal_server::interface::WithdrawalServerClientInterface,
-    data::deposit_data::TokenType,
-};
+use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::transfer::Transfer,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
@@ -144,10 +141,8 @@ pub async fn query_and_finalize(
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
     let tx_request_memo = tx_request_memo.to_tx_request_memo()?;
-    let is_registration_block = tx_request_memo.is_registration_block;
-    let tx = tx_request_memo.tx;
     let proposal = client
-        .query_proposal(block_builder_url, key, is_registration_block, tx)
+        .query_proposal(block_builder_url, &tx_request_memo.request_id)
         .await?;
     let tx_result = client
         .finalize_tx(block_builder_url, key, &tx_request_memo, &proposal)
