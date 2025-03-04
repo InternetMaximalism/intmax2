@@ -3,14 +3,14 @@ use crate::{
     EnvVar,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct State {
     pub block_builder: BlockBuilder,
 }
 
 impl State {
-    pub fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
-        let block_builder = BlockBuilder::new(env)?;
+    pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
+        let block_builder = BlockBuilder::new(env).await?;
         Ok(State { block_builder })
     }
 

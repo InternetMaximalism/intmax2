@@ -141,10 +141,8 @@ pub async fn query_and_finalize(
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
     let tx_request_memo = tx_request_memo.to_tx_request_memo()?;
-    let is_registration_block = tx_request_memo.is_registration_block;
-    let tx = tx_request_memo.tx;
     let proposal = client
-        .query_proposal(block_builder_url, key, is_registration_block, tx)
+        .query_proposal(block_builder_url, &tx_request_memo.request_id)
         .await?;
     let tx_result = client
         .finalize_tx(block_builder_url, key, &tx_request_memo, &proposal)

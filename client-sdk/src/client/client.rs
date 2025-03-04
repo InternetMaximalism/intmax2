@@ -87,6 +87,7 @@ pub struct PaymentMemoEntry {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxRequestMemo {
+    pub request_id: String,
     pub is_registration_block: bool,
     pub tx: Tx,
     pub transfers: Vec<Transfer>,
@@ -343,7 +344,7 @@ impl Client {
         };
         // send tx request
         let mut retries = 0;
-        loop {
+        let request_id = loop {
             let result = self
                 .block_builder
                 .send_tx_request(
@@ -355,7 +356,7 @@ impl Client {
                 )
                 .await;
             match result {
-                Ok(_) => break,
+                Ok(request_id) => break request_id,
                 Err(e) => {
                     if retries >= self.config.block_builder_request_limit {
                         return Err(ClientError::SendTxRequestError(format!(
@@ -372,8 +373,9 @@ impl Client {
                     sleep_for(self.config.block_builder_request_interval).await;
                 }
             }
-        }
+        };
         let memo = TxRequestMemo {
+            request_id,
             is_registration_block,
             tx,
             transfers,
@@ -388,15 +390,13 @@ impl Client {
     pub async fn query_proposal(
         &self,
         block_builder_url: &str,
-        key: KeySet,
-        is_registration_block: bool,
-        tx: Tx,
+        request_id: &str,
     ) -> Result<BlockProposal, ClientError> {
         let mut tries = 0;
         let proposal = loop {
             let proposal = self
                 .block_builder
-                .query_proposal(block_builder_url, is_registration_block, key.pubkey, tx)
+                .query_proposal(block_builder_url, request_id)
                 .await?;
             if let Some(proposal) = proposal {
                 break proposal;
@@ -516,9 +516,8 @@ impl Client {
         self.block_builder
             .post_signature(
                 block_builder_url,
-                memo.is_registration_block,
-                signature.pubkey,
-                memo.tx,
+                &memo.request_id,
+                key.pubkey,
                 signature.signature,
             )
             .await?;

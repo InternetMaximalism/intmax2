@@ -58,13 +58,6 @@ pub trait BlockBuilderClientInterface {
         block_builder_url: &str,
     ) -> Result<BlockBuilderFeeInfo, ServerError>;
 
-    // Get the status of the block builder
-    async fn get_status(
-        &self,
-        block_builder_url: &str,
-        is_registration_block: bool,
-    ) -> Result<BlockBuilderStatus, ServerError>;
-
     // Send tx request to the block builder
     async fn send_tx_request(
         &self,
@@ -73,24 +66,21 @@ pub trait BlockBuilderClientInterface {
         pubkey: U256,
         tx: Tx,
         fee_proof: Option<FeeProof>,
-    ) -> Result<(), ServerError>;
+    ) -> Result<String, ServerError>;
 
     // Query tx tree root proposal from the block builder
     async fn query_proposal(
         &self,
         block_builder_url: &str,
-        is_registration_block: bool,
-        pubkey: U256,
-        tx: Tx,
+        request_id: &str,
     ) -> Result<Option<BlockProposal>, ServerError>;
 
     // Send signature to the block builder
     async fn post_signature(
         &self,
         block_builder_url: &str,
-        is_registration_block: bool,
+        request_id: &str,
         pubkey: U256,
-        tx: Tx,
         signature: FlatG2,
     ) -> Result<(), ServerError>;
 }

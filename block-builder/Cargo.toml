@@ -24,9 +24,10 @@ envy = { workspace = true }
 env_logger = { workspace = true }
 bincode = { workspace = true }
 thiserror = { workspace = true }
-hashbrown = { workspace = true }
 actix-web = { workspace = true }
 actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
 serde_qs = { workspace = true }
 num-bigint = "0.4.6"
+redis = { version = "0.23.0", features = ["tokio-comp", "connection-manager"] }
+async-trait = "0.1.77"

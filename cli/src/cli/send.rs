@@ -69,9 +69,6 @@ pub async fn send_transfers(
         )
         .await?;
 
-    let is_registration_block = memo.is_registration_block;
-    let tx = memo.tx;
-
     log::info!("Waiting for block builder to build the block");
     tokio::time::sleep(std::time::Duration::from_secs(
         env.block_builder_query_wait_time,
@@ -79,7 +76,7 @@ pub async fn send_transfers(
     .await;
 
     let proposal = client
-        .query_proposal(&block_builder_url, key, is_registration_block, tx)
+        .query_proposal(&block_builder_url, &memo.request_id)
         .await?;
 
     log::info!("Finalizing tx");

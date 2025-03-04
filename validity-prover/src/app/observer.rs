@@ -205,6 +205,35 @@ impl Observer {
         }
     }
 
+    /// get the latest value of the deposit index included in the block
+    pub async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ObserverError> {
+        let next_block_number = self.get_next_block_number().await?;
+        if next_block_number < 2 {
+            // no blocks or genesis block does not have any deposits
+            return Ok(None);
+        }
+
+        let latest_block = self
+            .get_full_block_with_meta(next_block_number - 1)
+            .await?
+            .ok_or(ObserverError::BlockNotFound(next_block_number - 1))?;
+        let deposit = sqlx::query!(
+            r#"
+            SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index
+            FROM deposit_leaf_events
+            WHERE (eth_block_number, eth_tx_index) <= ($1, $2)
+            ORDER BY deposit_index DESC
+            LIMIT 1
+            "#,
+            latest_block.eth_block_number as i64,
+            latest_block.eth_tx_index as i64,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(deposit.map(|d| d.deposit_index as u32))
+    }
+
     pub async fn get_deposit_info(
         &self,
         deposit_hash: Bytes32,
