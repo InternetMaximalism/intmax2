@@ -23,14 +23,12 @@ use intmax2_zkp::{
 use serde::Deserialize;
 use tests::{
     accounts::{derive_intmax_keys, mnemonic_to_account},
-    address_to_generic_address, mul_u256, transfer_with_error_handling,
-    wait_for_balance_synchronization,
+    mul_u256, transfer_with_error_handling, wait_for_balance_synchronization,
 };
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
     pub master_mnemonic: String,
-    pub private_key: String,
     pub transfer_admin_private_key: String,
     pub num_of_recipients: Option<u32>,
     pub recipient_offset: Option<u32>,
@@ -65,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     log::info!("Start soak test");
-    let private_key = H256::from_slice(&hex::decode(config.private_key)?);
+    let private_key = H256::from_slice(&hex::decode(config.transfer_admin_private_key)?);
     let admin_key = privkey_to_keyset(private_key);
 
     let config_server_base_url = config.config_server_base_url.to_string();
@@ -289,7 +287,7 @@ impl TestSystem {
                 .enumerate()
                 .map(|(i, sender)| async move {
                     let transfers = [Transfer {
-                        recipient: address_to_generic_address(trash_account.eth_address),
+                        recipient: GenericAddress::from_pubkey(trash_account.intmax_key.pubkey),
                         amount: U256::from(10),
                         token_index: ETH_TOKEN_INDEX,
                         salt: generate_salt(),
