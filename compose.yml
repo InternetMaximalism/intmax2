@@ -30,7 +30,19 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      
+  redis:
+    image: redis:latest
+    container_name: intmax_redis
+    command: redis-server --port 6379
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
 
 volumes:
   postgres_data:
     name: postgres_data
+  redis-data:
+    name: redis_data
