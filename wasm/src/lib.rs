@@ -2,8 +2,9 @@ use client::{get_client, Config};
 use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
-    common::transfer::Transfer,
+    common::{deposit::Deposit, transfer::Transfer},
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    utils::leafable::Leafable,
 };
 use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
@@ -45,6 +46,32 @@ pub async fn generate_intmax_account_from_eth_key(
         privkey: private_key.to_hex(),
         pubkey: key_set.pubkey.to_hex(),
     })
+}
+
+/// Get the hash of the deposit.
+#[wasm_bindgen]
+pub fn get_deposit_hash(
+    depositor: &str,
+    recipient_salt_hash: &str,
+    token_index: u32,
+    amount: &str,
+    is_eligible: bool,
+) -> Result<String, JsError> {
+    init_logger();
+    let depositor = parse_address(depositor)?;
+    let recipient_salt_hash = parse_h256_as_u256(recipient_salt_hash)?;
+    let amount = parse_u256(amount)?;
+    let is_eligible = is_eligible as u32;
+
+    let deposit = Deposit {
+        depositor,
+        pubkey_salt_hash: recipient_salt_hash.into(),
+        amount,
+        token_index,
+        is_eligible: is_eligible != 0,
+    };
+    let deposit_hash = deposit.hash();
+    Ok(deposit_hash.to_hex())
 }
 
 /// Function to take a backup before calling the deposit function of the liquidity contract.
