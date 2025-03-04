@@ -265,17 +265,12 @@ impl RedisStorage {
         // Create Redis client with fallback to localhost if URL not provided
         let redis_url = config.redis_url.clone().expect("redis_url not found");
         let client = Client::open(redis_url).expect("Failed to create Redis client");
-
-        // connection check
-        {
-            let mut conn = client.get_multiplexed_async_connection().await.expect("Failed to get Redis connection");
-            let _: () = conn.ping().await.expect("Failed to ping Redis server");
-        }
-
         // Create connection manager asynchronously
         let conn_manager = ConnectionManager::new(client)
             .await
             .expect("Failed to create Redis connection manager");
+
+        log::info!("Redis storage initialized");
 
         Self {
             config: config.clone(),
