@@ -119,6 +119,21 @@ pub async fn determine_sequence(
         tx_timeout,
     )
     .await?;
+    log::info!(
+        "num of deposits: pending={}, settled={}",
+        deposit_info.pending.len(),
+        deposit_info.settled.len()
+    );
+    log::info!(
+        "num of transfers: pending={}, settled={}",
+        transfer_info.pending.len(),
+        transfer_info.settled.len()
+    );
+    log::info!(
+        "num of txs: pending={}, settled={}",
+        tx_info.pending.len(),
+        tx_info.settled.len()
+    );
 
     let mut deposits = deposit_info.settled;
     let mut transfers = transfer_info.settled;
