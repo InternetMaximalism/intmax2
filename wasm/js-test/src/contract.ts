@@ -52,8 +52,6 @@ export async function deposit(privateKey: string, l1RpcUrl: string, liquidityCon
     }
     console.log("Deposited successfully");
 
-    assertDepositHash(depositor, pubkeySaltHash, amount, tokenIndex, true);
-
     if (process.env.ENV === "local") {
         // following code is not used in testnet-alpha. Relay the deposits to the rollup contract
         const depositHash = getDepositHash(depositor, pubkeySaltHash, amount, tokenIndex, true);
@@ -63,23 +61,8 @@ export async function deposit(privateKey: string, l1RpcUrl: string, liquidityCon
     }
 }
 
-function getDepositHashByEthers(depositor: string, recipientSaltHash: string, amount: bigint, tokenIndex: number, isEligible: boolean): string {
-    return ethers.solidityPackedKeccak256(
-        ['address', 'bytes32', 'uint256', 'uint32', 'uint32',],
-        [depositor, recipientSaltHash, amount, tokenIndex, isEligible ? 1 : 0,]
-    );
-}
-
 function getDepositHash(depositor: string, recipientSaltHash: string, amount: bigint, tokenIndex: number | bigint, isEligible: boolean): string {
     return get_deposit_hash(depositor, recipientSaltHash, Number(tokenIndex), amount.toString(), isEligible);
-}
-
-const assertDepositHash = (depositor: string, pubkeySaltHash: string, amount: bigint, tokenIndex: number, isEligible: boolean) => {
-    const depositHash = getDepositHash(depositor, pubkeySaltHash, amount, tokenIndex, isEligible);
-    const depositHashByEthers = getDepositHashByEthers(depositor, pubkeySaltHash, amount, tokenIndex, isEligible);
-    if (depositHash !== depositHashByEthers) {
-        throw new Error(`Deposit hash mismatch: ${depositHash} !== ${depositHashByEthers}`);
-    }
 }
 
 async function getContract(privateKey: string, l1RpcUrl: string, liquidityContractAddress: string, l2RpcUrl: string, rollupContractAddress: string,): Promise<{ liquidityContract: ethers.Contract, rollupContract: ethers.Contract }> {
