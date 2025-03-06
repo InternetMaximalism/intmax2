@@ -1,9 +1,3 @@
-//! Redis-based implementation of the Storage trait for block builder state.
-//!
-//! This module provides a distributed storage solution that allows multiple block builder
-//! instances to safely share state using Redis. It implements distributed locking,
-//! atomic operations, and retry mechanisms to ensure data consistency in a scaled-out environment.
-
 use std::{sync::Arc, time::Duration};
 
 use intmax2_client_sdk::external_api::store_vault_server::StoreVaultServerClient;
@@ -24,41 +18,25 @@ use crate::app::{
 
 use super::{config::StorageConfig, error::StorageError, Storage};
 
-//-----------------------------------------------------------------------------
-// Constants
-//-----------------------------------------------------------------------------
-
-/// Maximum number of retry attempts for Redis operations
+/// Max retry attempts for Redis operations
 const MAX_RETRIES: usize = 3;
 
-/// Delay between retry attempts in milliseconds (increases with each retry)
+/// Delay between retries in ms (increases with each retry)
 const RETRY_DELAY_MS: u64 = 100;
 
 /// Timeout for distributed locks in seconds
 const LOCK_TIMEOUT_SECONDS: usize = 10;
 
-//-----------------------------------------------------------------------------
-// Helper Types
-//-----------------------------------------------------------------------------
-
-/// Wrapper for transaction requests with timestamp information
+/// Transaction request with timestamp
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct TxRequestWithTimestamp {
-    /// The original transaction request
+    /// Original transaction request
     request: TxRequest,
 
-    /// Timestamp when the request was received (Unix timestamp)
+    /// Received timestamp (Unix timestamp)
     timestamp: u64,
 }
 
-//-----------------------------------------------------------------------------
-// RedisStorage Implementation
-//-----------------------------------------------------------------------------
-
-/// Redis-based implementation of the Storage trait
-///
-/// This implementation allows multiple block builder instances to share state
-/// using Redis as a distributed storage and coordination mechanism.
 pub struct RedisStorage {
     /// Configuration for the storage system
     pub config: StorageConfig,
@@ -66,9 +44,6 @@ pub struct RedisStorage {
     /// Connection manager for Redis (thread-safe)
     conn_manager: Arc<Mutex<ConnectionManager>>,
 
-    //-------------------------------------------------------------------------
-    // Redis key names - shared across all block builder instances
-    //-------------------------------------------------------------------------
     /// Common prefix for all Redis keys
     prefix: String,
 
@@ -108,29 +83,28 @@ impl RedisStorage {
     // Helper Methods
     //-------------------------------------------------------------------------
 
-    /// Get a connection from the connection pool
+    /// Get a connection from the pool
     ///
-    /// This method acquires a lock on the connection manager and returns a clone
-    /// of the connection, which can be used for Redis operations.
+    /// Acquires a lock and returns a connection clone for Redis operations.
     async fn get_conn(&self) -> RedisResult<ConnectionManager> {
+        log::info!("Getting Redis connection");
         let conn = self.conn_manager.lock().await;
         Ok(conn.clone())
     }
 
     /// Acquire a distributed lock
     ///
-    /// This method implements a distributed lock using Redis's SET NX command.
-    /// It sets a key with the instance ID as the value, which ensures that only
-    /// one instance can hold the lock at a time.
+    /// Uses Redis SET NX to ensure only one instance holds the lock.
     ///
     /// # Arguments
-    /// * `lock_name` - Name of the lock to acquire
+    /// * `lock_name` - Lock name to acquire
     ///
     /// # Returns
-    /// * `Ok(true)` if the lock was acquired
-    /// * `Ok(false)` if the lock is already held by another instance
-    /// * `Err` if there was an error communicating with Redis
+    /// * `Ok(true)` - Lock acquired
+    /// * `Ok(false)` - Lock held by another instance
+    /// * `Err` - Redis communication error
     async fn acquire_lock(&self, lock_name: &str) -> Result<bool, StorageError> {
+        log::info!("Acquiring lock: {}", lock_name);
         let mut conn = self.get_conn().await?;
         let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
         let instance_id = &self.config.block_builder_id;
@@ -143,17 +117,22 @@ impl RedisStorage {
             let _: () = conn.expire(&lock_key, LOCK_TIMEOUT_SECONDS as i64).await?;
         }
 
+        if result {
+            log::info!("Lock acquired: {}", lock_name);
+        } else {
+            log::info!("Lock already held: {}", lock_name);
+        }
         Ok(result)
     }
 
     /// Release a distributed lock
     ///
-    /// This method releases a previously acquired lock, but only if it's owned
-    /// by this instance. It uses a Lua script to ensure atomicity.
+    /// Releases lock only if owned by this instance using Lua for atomicity.
     ///
     /// # Arguments
-    /// * `lock_name` - Name of the lock to release
+    /// * `lock_name` - Lock name to release
     async fn release_lock(&self, lock_name: &str) -> Result<(), StorageError> {
+        log::info!("Releasing lock: {}", lock_name);
         let mut conn = self.get_conn().await?;
         let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
         let instance_id = &self.config.block_builder_id;
@@ -174,21 +153,16 @@ impl RedisStorage {
             .arg(instance_id)
             .invoke_async(&mut conn)
             .await?;
+        log::info!("Lock released: {}", lock_name);
         Ok(())
     }
 
-    /// Execute an operation with automatic retries
+    /// Execute operation with automatic retries
     ///
-    /// This method wraps an async operation and automatically retries it if it fails,
-    /// with exponential backoff. It's used to make Redis operations more resilient.
-    ///
-    /// # Type Parameters
-    /// * `F` - Type of the operation function
-    /// * `T` - Return type of the operation
-    /// * `Fut` - Future type returned by the operation
+    /// Retries failed operations with exponential backoff for resilience.
     ///
     /// # Arguments
-    /// * `operation` - The operation to execute with retries
+    /// * `operation` - Operation to execute with retries
     async fn with_retry<F, T, Fut>(&self, mut operation: F) -> Result<T, StorageError>
     where
         F: FnMut() -> Fut,
@@ -217,19 +191,31 @@ impl RedisStorage {
         }
     }
 
-    /// Add a transaction to the appropriate queue
+    /// Add transaction to queue (internal method)
     ///
-    /// This is an internal method used by `add_tx` to add a transaction to either
-    /// the registration or non-registration queue.
+    /// Used by `add_tx` to add transaction to registration or non-registration queue.
     ///
     /// # Arguments
-    /// * `is_registration` - Whether this is a registration transaction
-    /// * `tx_request` - The transaction request to add
+    /// * `is_registration` - If this is a registration transaction
+    /// * `tx_request` - Transaction request to add
     async fn add_tx_inner(
         &self,
         is_registration: bool,
         tx_request: TxRequest,
     ) -> Result<(), StorageError> {
+        // Store request_id for logging
+        let request_id = tx_request.request_id.clone();
+
+        log::info!(
+            "Adding transaction to {} queue: {}",
+            if is_registration {
+                "registration"
+            } else {
+                "non-registration"
+            },
+            request_id
+        );
+
         // Select the appropriate queue based on transaction type
         let key = if is_registration {
             &self.registration_tx_requests_key
@@ -252,14 +238,23 @@ impl RedisStorage {
         // Push to the list (queue)
         let _: () = conn.rpush(key, serialized).await?;
 
+        log::info!(
+            "Transaction added to {} queue: {}",
+            if is_registration {
+                "registration"
+            } else {
+                "non-registration"
+            },
+            request_id
+        );
         Ok(())
     }
 
-    /// Create a new RedisStorage instance
+    /// Create new RedisStorage instance
     ///
-    /// This initializes the Redis connection and sets up all the keys used for
-    /// shared state across block builder instances.
+    /// Initializes Redis connection and sets up keys for shared state.
     pub async fn new(config: &StorageConfig) -> Self {
+        log::info!("Initializing Redis storage");
         // Create a common prefix for all block builder instances to share the same state
         let prefix = "block_builder:shared";
 
@@ -302,27 +297,29 @@ impl RedisStorage {
     }
 }
 
-//-----------------------------------------------------------------------------
-// Storage Trait Implementation
-//-----------------------------------------------------------------------------
-
-/// Suppress warning about Redis's never type fallback
-#[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait::async_trait(?Send)]
 impl Storage for RedisStorage {
-    /// Add a transaction to the appropriate queue
+    /// Add transaction to queue
     ///
-    /// This method adds a transaction request to either the registration or
-    /// non-registration queue, depending on the transaction type.
+    /// Adds transaction to registration or non-registration queue.
     ///
     /// # Arguments
-    /// * `is_registration` - Whether this is a registration transaction
-    /// * `tx_request` - The transaction request to add
+    /// * `is_registration` - If this is a registration transaction
+    /// * `tx_request` - Transaction request to add
     async fn add_tx(
         &self,
         is_registration: bool,
         tx_request: TxRequest,
     ) -> Result<(), StorageError> {
+        log::info!(
+            "Adding transaction to {} queue with retries: {}",
+            if is_registration {
+                "registration"
+            } else {
+                "non-registration"
+            },
+            tx_request.request_id
+        );
         // Implement retry logic directly for this method
         let mut retries = 0;
         loop {
@@ -348,22 +345,21 @@ impl Storage for RedisStorage {
         }
     }
 
-    /// Query a proposal for a transaction request
+    /// Query proposal for transaction request
     ///
-    /// This method retrieves a block proposal for a specific transaction request.
-    /// It looks up the block ID associated with the request ID, then retrieves
-    /// the memo for that block, and finally finds the proposal for the request.
+    /// Retrieves block proposal by looking up block ID from request ID.
     ///
     /// # Arguments
-    /// * `request_id` - ID of the transaction request
+    /// * `request_id` - Transaction request ID
     ///
     /// # Returns
-    /// * `Some(BlockProposal)` if a proposal was found
-    /// * `None` if no proposal exists for this request
+    /// * `Some(BlockProposal)` - Proposal found
+    /// * `None` - No proposal exists
     async fn query_proposal(
         &self,
         request_id: &str,
     ) -> Result<Option<BlockProposal>, StorageError> {
+        log::info!("Querying proposal for request: {}", request_id);
         self.with_retry(|| async {
             let mut conn = self.get_conn().await?;
 
@@ -399,17 +395,27 @@ impl Storage for RedisStorage {
             }
         })
         .await
+        .inspect(|result| match &result {
+            Some(_) => log::info!("Proposal found for request: {}", request_id),
+            None => log::info!("No proposal found for request: {}", request_id),
+        })
     }
 
-    /// Process transaction requests and create proposal memos
+    /// Process transaction requests and create memos
     ///
-    /// This method processes a batch of transaction requests from the queue,
-    /// creates a proposal memo, and stores it for later use. It uses distributed
-    /// locking to ensure that only one instance processes requests at a time.
+    /// Processes request batch, creates proposal memo, and stores it with locking.
     ///
     /// # Arguments
-    /// * `is_registration` - Whether to process registration or non-registration transactions
+    /// * `is_registration` - Process registration or non-registration transactions
     async fn process_requests(&self, is_registration: bool) -> Result<(), StorageError> {
+        log::info!(
+            "Processing {} transaction requests",
+            if is_registration {
+                "registration"
+            } else {
+                "non-registration"
+            }
+        );
         // Use a lock to prevent multiple instances from processing the same requests
         let lock_name = if is_registration {
             "process_registration_requests"
@@ -523,22 +529,30 @@ impl Storage for RedisStorage {
             log::error!("Failed to release lock for {}: {}", lock_name, e);
         }
 
+        log::info!(
+            "Finished processing {} transaction requests",
+            if is_registration {
+                "registration"
+            } else {
+                "non-registration"
+            }
+        );
         result
     }
 
-    /// Add a user signature for a transaction request
+    /// Add user signature for transaction request
     ///
-    /// This method adds a user signature for a specific transaction request.
-    /// It verifies the signature against the memo before adding it.
+    /// Verifies signature against memo before adding it.
     ///
     /// # Arguments
-    /// * `request_id` - ID of the transaction request
+    /// * `request_id` - Transaction request ID
     /// * `signature` - User signature to add
     async fn add_signature(
         &self,
         request_id: &str,
         signature: UserSignature,
     ) -> Result<(), StorageError> {
+        log::info!("Adding signature for request: {}", request_id);
         self.with_retry(|| async {
             let mut conn = self.get_conn().await?;
 
@@ -583,14 +597,16 @@ impl Storage for RedisStorage {
             Ok(())
         })
         .await
+        .map(|_| {
+            log::info!("Signature added for request: {}", request_id);
+        })
     }
 
     /// Process signatures and create block post tasks
     ///
-    /// This method processes signatures for memos that have reached their
-    /// proposing interval. It creates block post tasks and fee collection
-    /// tasks as needed.
+    /// Processes signatures for ready memos and creates necessary tasks.
     async fn process_signatures(&self) -> Result<(), StorageError> {
+        log::info!("Processing signatures");
         // Try to acquire the lock
         let lock_acquired = match self.acquire_lock("process_signatures").await {
             Ok(acquired) => acquired,
@@ -727,21 +743,21 @@ impl Storage for RedisStorage {
             log::error!("Failed to release lock for process_signatures: {}", e);
         }
 
+        log::info!("Finished processing signatures");
         result
     }
 
     /// Process fee collection tasks
     ///
-    /// This method processes fee collection tasks and creates block post tasks
-    /// for fee collection. It uses distributed locking to ensure that only one
-    /// instance processes fee collection at a time.
+    /// Processes fee collection and creates block post tasks with locking.
     ///
     /// # Arguments
-    /// * `store_vault_server_client` - Client for the store vault server
+    /// * `store_vault_server_client` - Store vault server client
     async fn process_fee_collection(
         &self,
         store_vault_server_client: &StoreVaultServerClient,
     ) -> Result<(), StorageError> {
+        log::info!("Processing fee collection tasks");
         // Try to acquire the lock
         if !self.acquire_lock("process_fee_collection").await? {
             // Another instance is already processing, just return
@@ -802,19 +818,19 @@ impl Storage for RedisStorage {
             log::error!("Failed to release lock for process_fee_collection: {}", e);
         }
 
+        log::info!("Finished processing fee collection tasks");
         result
     }
 
-    /// Dequeue a block post task
+    /// Dequeue block post task
     ///
-    /// This method dequeues a block post task from either the high priority
-    /// or low priority queue. It tries the high priority queue first, and
-    /// falls back to the low priority queue if no tasks are available.
+    /// Gets task from high priority queue first, then low priority if none available.
     ///
     /// # Returns
-    /// * `Some(BlockPostTask)` if a task was dequeued
-    /// * `None` if no tasks are available
+    /// * `Some(BlockPostTask)` - Task dequeued
+    /// * `None` - No tasks available
     async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
+        log::info!("Dequeuing block post task");
         // We don't need a distributed lock here since BLPOP is atomic
         // and each instance should be able to dequeue tasks
 
@@ -850,14 +866,17 @@ impl Storage for RedisStorage {
             }
         })
         .await
+        .inspect(|result| match &result {
+            Some(task) => log::info!("Block post task dequeued: {}", task.block_id),
+            None => log::info!("No block post tasks available"),
+        })
     }
 
-    /// Enqueue an empty block for deposit checking
+    /// Enqueue empty block for deposit checking
     ///
-    /// This method adds an empty block post task to the low priority queue
-    /// if enough time has passed since the last empty block was posted.
-    /// It's used to periodically check for deposits in the L1 contract.
+    /// Adds empty block task if enough time passed since last check.
     async fn enqueue_empty_block(&self) -> Result<(), StorageError> {
+        log::info!("Checking if empty block should be enqueued");
         // If deposit check is disabled, do nothing
         if self.config.deposit_check_interval.is_none() {
             return Ok(());
@@ -925,6 +944,7 @@ impl Storage for RedisStorage {
             log::error!("Failed to release lock for enqueue_empty_block: {}", e);
         }
 
+        log::info!("Finished empty block check");
         result
     }
 }
