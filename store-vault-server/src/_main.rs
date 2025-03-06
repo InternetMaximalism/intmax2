@@ -11,7 +11,6 @@ use std::io::{self};
 use store_vault_server::{
     api::{routes::store_vault_server_scope, state::State},
     app::store_vault_server::StoreVaultServer,
-    // middleware::authorization::authorization_middleware,
     EnvVar,
 };
 use tracing_actix_web::TracingLogger;
@@ -42,7 +41,6 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(TracingLogger::<logger::CustomRootSpanBuilder>::new())
-            // .wrap(from_fn(authorization_middleware))
             .app_data(JsonConfig::default().limit(35_000_000))
             .app_data(state.clone())
             .service(health_check)

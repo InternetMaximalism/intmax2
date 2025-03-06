@@ -31,11 +31,12 @@ impl StoreVaultServer {
         Ok(Self { pool })
     }
 
-    pub async fn save_user_data(
+    pub async fn save_snapshot(
         &self,
+        topic: &str,
         pubkey: U256,
         prev_digest: Option<Bytes32>,
-        encrypted_data: &[u8],
+        data: &[u8],
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         let result = self.get_user_data_and_digest(&mut tx, pubkey).await?;
@@ -87,21 +88,23 @@ impl StoreVaultServer {
         Ok(result.map(|(data, _)| data))
     }
 
-    async fn get_user_data_and_digest(
+    async fn get_snapshot_and_digest(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
+        topic: &str,
         pubkey: U256,
     ) -> Result<Option<(Vec<u8>, Bytes32)>> {
         let pubkey_hex = pubkey.to_hex();
         let record = sqlx::query!(
             r#"
-            SELECT encrypted_data, digest FROM encrypted_user_data WHERE pubkey = $1
+            SELECT data, digest FROM snapshot_data WHERE pubkey = $1 AND topic = $2
             "#,
-            pubkey_hex
+            pubkey_hex,
+            topic
         )
         .fetch_optional(tx.as_mut())
         .await?;
-        Ok(record.map(|r| (r.encrypted_data, Bytes32::from_bytes_be(&r.digest))))
+        Ok(record.map(|r| (r.data, Bytes32::from_hex(&r.digest)?)))
     }
 
     pub async fn save_sender_proof_set(
