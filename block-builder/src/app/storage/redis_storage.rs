@@ -27,6 +27,9 @@ const RETRY_DELAY_MS: u64 = 100;
 /// Timeout for distributed locks in seconds
 const LOCK_TIMEOUT_SECONDS: usize = 10;
 
+/// TTL for general Redis keys in seconds
+const GENERAL_KEY_TTL_SECONDS: usize = 1200; // 20min
+
 /// Transaction request with timestamp
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct TxRequestWithTimestamp {
@@ -234,6 +237,9 @@ impl RedisStorage {
 
         // Push to the list (queue)
         let _: () = conn.rpush(key, serialized).await?;
+
+        // Set TTL for the queue
+        let _: () = conn.expire(key, GENERAL_KEY_TTL_SECONDS as i64).await?;
 
         log::info!(
             "Transaction added to {} queue: {}",
@@ -495,6 +501,8 @@ impl Storage for RedisStorage {
 
                 // Store memo by block ID
                 pipe.hset(&self.memos_key, &memo.block_id, &serialized_memo);
+                // Set TTL for memos hash
+                pipe.expire(&self.memos_key, GENERAL_KEY_TTL_SECONDS as i64);
 
                 // Update request_id -> block_id mapping for each transaction
                 for tx_request in &tx_requests {
@@ -504,12 +512,19 @@ impl Storage for RedisStorage {
                         &memo.block_id,
                     );
                 }
+                // Set TTL for request_id_to_block_id hash
+                pipe.expire(
+                    &self.request_id_to_block_id_key,
+                    GENERAL_KEY_TTL_SECONDS as i64,
+                );
 
                 // Remove processed requests from the queue
                 pipe.ltrim(requests_key, num_to_process as isize, -1);
 
                 // Update last processed timestamp
                 pipe.set(last_processed_key, current_time.to_string());
+                // Set TTL for last processed timestamp key
+                pipe.expire(last_processed_key, GENERAL_KEY_TTL_SECONDS as i64);
 
                 // Execute the transaction
                 let _: () = pipe.query_async(&mut conn).await?;
@@ -590,6 +605,11 @@ impl Storage for RedisStorage {
             // Add signature to the list for this block_id
             let signatures_key = format!("{}:{}", self.signatures_key, block_id);
             let _: () = conn.rpush(&signatures_key, serialized_signature).await?;
+
+            // Set TTL for signatures key
+            let _: () = conn
+                .expire(&signatures_key, GENERAL_KEY_TTL_SECONDS as i64)
+                .await?;
 
             Ok(())
         })
@@ -692,6 +712,11 @@ impl Storage for RedisStorage {
 
                     // Add to high priority queue
                     pipe.rpush(&self.block_post_tasks_hi_key, &serialized_task);
+                    // Set TTL for high priority queue
+                    pipe.expire(
+                        &self.block_post_tasks_hi_key,
+                        GENERAL_KEY_TTL_SECONDS as i64,
+                    );
 
                     // Add fee collection task if needed
                     if self.config.use_fee {
@@ -711,6 +736,11 @@ impl Storage for RedisStorage {
                         };
 
                         pipe.rpush(&self.fee_collection_tasks_key, &serialized_fee_collection);
+                        // Set TTL for fee collection tasks queue
+                        pipe.expire(
+                            &self.fee_collection_tasks_key,
+                            GENERAL_KEY_TTL_SECONDS as i64,
+                        );
                     }
 
                     // Remove memo and signatures
@@ -798,6 +828,11 @@ impl Storage for RedisStorage {
                         let serialized_task = serde_json::to_string(&task)?;
                         pipe.rpush(&self.block_post_tasks_lo_key, &serialized_task);
                     }
+                    // Set TTL for low priority queue
+                    pipe.expire(
+                        &self.block_post_tasks_lo_key,
+                        GENERAL_KEY_TTL_SECONDS as i64,
+                    );
 
                     // Execute the transaction
                     let _: () = pipe.query_async(&mut conn).await?;
@@ -922,9 +957,16 @@ impl Storage for RedisStorage {
 
                 // Add to low priority queue
                 pipe.rpush(&self.block_post_tasks_lo_key, &serialized_task);
+                // Set TTL for low priority queue
+                pipe.expire(
+                    &self.block_post_tasks_lo_key,
+                    GENERAL_KEY_TTL_SECONDS as i64,
+                );
 
                 // Update the timestamp of the last empty block post
                 pipe.set(&empty_block_posted_at_key, current_time.to_string());
+                // Set TTL for empty block posted timestamp key
+                pipe.expire(&empty_block_posted_at_key, GENERAL_KEY_TTL_SECONDS as i64);
 
                 // Execute the transaction
                 let _: () = pipe.query_async(&mut conn).await?;
