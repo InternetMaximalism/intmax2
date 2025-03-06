@@ -16,24 +16,15 @@ async function main() {
   console.log("privateKey: ", privateKey);
   console.log("publicKey: ", publicKey);
 
+  const balance = await getEthBalance(ethKey, env.L1_RPC_URL);
+  console.log("eth balance: ", balance);
+
   // deposit to the account
   const tokenType = 0; // 0: native token, 1: ERC20, 2: ERC721, 3: ERC1155
   const tokenAddress = "0x0000000000000000000000000000000000000000";
   const tokenId = "0"; // Use "0" for fungible tokens
   const amount = "1000000000000000"; // in wei
-
-  const balance = await getEthBalance(ethKey, env.L1_RPC_URL);
-  console.log("balance: ", balance);
-
-  const depositResult = await prepare_deposit(config, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId, false);
-  const pubkeySaltHash = depositResult.deposit_data.pubkey_salt_hash;
-  console.log("pubkeySaltHash: ", pubkeySaltHash);
-
-  await deposit(ethKey, env.L1_RPC_URL, env.LIQUIDITY_CONTRACT_ADDRESS, env.L2_RPC_URL, env.ROLLUP_CONTRACT_ADDRESS, BigInt(amount), tokenType, tokenAddress, tokenId, pubkeySaltHash, ethAddress);
-
-  // wait for the validity prover syncs
-  console.log("Waiting for the validity prover to sync...");
-  await sleep(40);
+  await depositWrapper(config, ethKey, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId);
 
   // sync the account's balance proof 
   await syncBalanceProof(config, privateKey);
@@ -49,8 +40,8 @@ async function main() {
   // send a transfer tx
   const someonesKey = await generate_intmax_account_from_eth_key(generateRandomHex(32));
   const genericAddress = new JsGenericAddress(true, someonesKey.pubkey);
-  const salt = generateRandomHex(32);
-  const transfer = new JsTransfer(genericAddress, 0, "1", salt);
+
+  const transfer = new JsTransfer(genericAddress, 0, "1", generateRandomHex(32));
   const feeTokenIndex = 0; // use native token for fee
 
   await sendTx(config, env.BLOCK_BUILDER_BASE_URL, publicKey, privateKey, [transfer], [], feeTokenIndex);
@@ -106,6 +97,15 @@ async function main() {
     const contract_withdrawal = withdrawal.contract_withdrawal;
     console.log(`Withdrawal: amount: ${contract_withdrawal.amount}, token_index: ${contract_withdrawal.token_index}, status: ${withdrawal.status}`);
   }
+}
+
+async function depositWrapper(config: Config, ethKey: string, ethAddress: string, publicKey: string, amount: string, tokenType: number, tokenAddress: string, tokenId: string) {
+  const depositResult = await prepare_deposit(config, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId, false);
+  const pubkeySaltHash = depositResult.deposit_data.pubkey_salt_hash;
+  await deposit(ethKey, env.L1_RPC_URL, env.LIQUIDITY_CONTRACT_ADDRESS, env.L2_RPC_URL, env.ROLLUP_CONTRACT_ADDRESS, BigInt(amount), tokenType, tokenAddress, tokenId, pubkeySaltHash, ethAddress);
+  // wait for the validity prover syncs
+  console.log("Waiting for the validity prover to sync...");
+  await sleep(40);
 }
 
 async function syncBalanceProof(config: Config, privateKey: string) {

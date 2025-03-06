@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import * as RollupArtifact from '../abi/Rollup.json';
 import * as LiquidityArtifact from '../abi/Liquidity.json';
-import { JsContractWithdrawal } from '../pkg/intmax2_wasm_lib';
+import { get_deposit_hash, JsContractWithdrawal } from '../pkg/intmax2_wasm_lib';
 
 export async function claimWithdrawals(privateKey: string, l1RpcUrl: string, liquidityContractAddress: string, contractWithdrawals: JsContractWithdrawal[]) {
     const { liquidityContract } = await getContract(privateKey, l1RpcUrl, liquidityContractAddress, "", "");
@@ -61,11 +61,8 @@ export async function deposit(privateKey: string, l1RpcUrl: string, liquidityCon
     }
 }
 
-function getDepositHash(depositor: string, recipientSaltHash: string, amount: bigint, tokenIndex: number, isEligible: boolean): string {
-    return ethers.solidityPackedKeccak256(
-        ['address', 'bytes32', 'uint256', 'uint32', 'uint32',],
-        [depositor, recipientSaltHash, amount, tokenIndex, isEligible ? 1 : 0,]
-    );
+function getDepositHash(depositor: string, recipientSaltHash: string, amount: bigint, tokenIndex: number | bigint, isEligible: boolean): string {
+    return get_deposit_hash(depositor, recipientSaltHash, Number(tokenIndex), amount.toString(), isEligible);
 }
 
 async function getContract(privateKey: string, l1RpcUrl: string, liquidityContractAddress: string, l2RpcUrl: string, rollupContractAddress: string,): Promise<{ liquidityContract: ethers.Contract, rollupContract: ethers.Contract }> {
