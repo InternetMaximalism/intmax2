@@ -87,7 +87,6 @@ impl RedisStorage {
     ///
     /// Acquires a lock and returns a connection clone for Redis operations.
     async fn get_conn(&self) -> RedisResult<ConnectionManager> {
-        log::info!("Getting Redis connection");
         let conn = self.conn_manager.lock().await;
         Ok(conn.clone())
     }
@@ -104,7 +103,6 @@ impl RedisStorage {
     /// * `Ok(false)` - Lock held by another instance
     /// * `Err` - Redis communication error
     async fn acquire_lock(&self, lock_name: &str) -> Result<bool, StorageError> {
-        log::info!("Acquiring lock: {}", lock_name);
         let mut conn = self.get_conn().await?;
         let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
         let instance_id = &self.config.block_builder_id;
@@ -132,7 +130,6 @@ impl RedisStorage {
     /// # Arguments
     /// * `lock_name` - Lock name to release
     async fn release_lock(&self, lock_name: &str) -> Result<(), StorageError> {
-        log::info!("Releasing lock: {}", lock_name);
         let mut conn = self.get_conn().await?;
         let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
         let instance_id = &self.config.block_builder_id;
