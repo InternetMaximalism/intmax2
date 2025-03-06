@@ -424,7 +424,7 @@ impl Storage for RedisStorage {
         }
 
         // Make sure we release the lock when we're done
-        let _result = self
+        let result = self
             .with_retry(|| async {
                 // Select the appropriate keys based on transaction type
                 let requests_key = if is_registration {
@@ -516,9 +516,14 @@ impl Storage for RedisStorage {
             .await;
 
         // Release the lock regardless of the result
-        let _ = self.release_lock(lock_name).await;
+        let release_result = self.release_lock(lock_name).await;
 
-        _result
+        // If releasing the lock failed, log the error but still return the original result
+        if let Err(e) = release_result {
+            log::error!("Failed to release lock for {}: {}", lock_name, e);
+        }
+
+        result
     }
 
     /// Add a user signature for a transaction request
@@ -715,7 +720,12 @@ impl Storage for RedisStorage {
             .await;
 
         // Release the lock regardless of the result
-        let _ = self.release_lock("process_signatures").await;
+        let release_result = self.release_lock("process_signatures").await;
+
+        // If releasing the lock failed, log the error but still return the original result
+        if let Err(e) = release_result {
+            log::error!("Failed to release lock for process_signatures: {}", e);
+        }
 
         result
     }
@@ -739,7 +749,7 @@ impl Storage for RedisStorage {
         }
 
         // Make sure we release the lock when we're done
-        let _result = self
+        let result = self
             .with_retry(|| async {
                 let mut conn = self.get_conn().await?;
 
@@ -785,9 +795,14 @@ impl Storage for RedisStorage {
             .await;
 
         // Release the lock regardless of the result
-        let _ = self.release_lock("process_fee_collection").await;
+        let release_result = self.release_lock("process_fee_collection").await;
 
-        _result
+        // If releasing the lock failed, log the error but still return the original result
+        if let Err(e) = release_result {
+            log::error!("Failed to release lock for process_fee_collection: {}", e);
+        }
+
+        result
     }
 
     /// Dequeue a block post task
@@ -903,7 +918,12 @@ impl Storage for RedisStorage {
             .await;
 
         // Release the lock regardless of the result
-        let _ = self.release_lock("enqueue_empty_block").await;
+        let release_result = self.release_lock("enqueue_empty_block").await;
+
+        // If releasing the lock failed, log the error but still return the original result
+        if let Err(e) = release_result {
+            log::error!("Failed to release lock for enqueue_empty_block: {}", e);
+        }
 
         result
     }
