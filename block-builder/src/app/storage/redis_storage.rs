@@ -109,21 +109,22 @@ impl RedisStorage {
         let mut conn = self.get_conn().await?;
         let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
         let instance_id = &self.config.block_builder_id;
+        let result: Option<String> = redis::cmd("SET")
+            .arg(&lock_key)
+            .arg(instance_id)
+            .arg("NX") // set if not exists
+            .arg("EX") // expire in seconds
+            .arg(LOCK_TIMEOUT_SECONDS)
+            .query_async(&mut conn)
+            .await?;
 
-        // Use SET NX with expiration to implement a distributed lock
-        let result: bool = conn.set_nx(&lock_key, instance_id).await?;
-        if result {
-            // Set expiration separately if we got the lock
-            // This prevents lock leakage if the instance crashes
-            let _: () = conn.expire(&lock_key, LOCK_TIMEOUT_SECONDS as i64).await?;
-        }
-
-        if result {
+        if result.is_some() {
             log::info!("Lock acquired: {}", lock_name);
+            Ok(true)
         } else {
-            log::info!("Lock already held: {}", lock_name);
+            log::info!("Lock already held: {}", lock_name,);
+            Ok(false)
         }
-        Ok(result)
     }
 
     /// Release a distributed lock
