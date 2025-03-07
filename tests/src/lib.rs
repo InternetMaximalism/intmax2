@@ -159,12 +159,13 @@ pub async fn deposit_native_token_with_error_handling(
     )
     .await?;
     log::info!(
-        "Complete transfer from {} ({} s)",
+        "Complete deposit from {} ({} s)",
         recipient_key.pubkey,
         timer.elapsed().as_secs()
     );
 
     // Wait for messaging to Scroll network
+    log::info!("Waiting for messaging to Scroll network...");
     tokio::time::sleep(Duration::from_secs(DEPOSIT_WAITING_DURATION)).await;
 
     wait_for_balance_synchronization(recipient_key, Duration::from_secs(DEPOSIT_POLLING_DURATION))
@@ -291,6 +292,19 @@ where
             num_using_accounts
         );
     }
+}
+
+/// Get the balance of the specified token index for a recipient
+pub async fn get_eth_balance_on_intmax(key: KeySet) -> Result<U256, Box<dyn std::error::Error>> {
+    let balances = wait_for_balance_synchronization(key, Duration::from_secs(5)).await?;
+    for balance_info in balances {
+        if balance_info.token_index == ETH_TOKEN_INDEX {
+            return Ok(balance_info.amount);
+        }
+    }
+
+    // If ETH balance not found, treat as zero
+    Ok(U256::from(0))
 }
 
 // const NUM_TRANSFER_LOOPS: usize = 2;

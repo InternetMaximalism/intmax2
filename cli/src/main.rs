@@ -6,7 +6,7 @@ use intmax2_cli::{
         claim::claim_withdrawals,
         deposit::deposit,
         error::CliError,
-        get::{balance, claim_status, mining_list, withdrawal_status},
+        get::{balance, claim_status, log_balance, mining_list, withdrawal_status},
         history::history,
         send::send_transfers,
         sync::{resync, sync_claims, sync_withdrawals},
@@ -170,7 +170,8 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         }
         Commands::Balance { private_key } => {
             let key = privkey_to_keyset(private_key);
-            balance(key).await?;
+            let balances = balance(key).await?;
+            log_balance(balances);
         }
         Commands::History {
             private_key,

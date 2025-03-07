@@ -45,7 +45,7 @@ pub async fn balance(key: KeySet) -> Result<Vec<BalanceInfo>, CliError> {
     Ok(total_balance)
 }
 
-pub async fn log_balance(total_balance: Vec<BalanceInfo>) -> Result<(), CliError> {
+pub fn log_balance(total_balance: Vec<BalanceInfo>) {
     println!("Balances:");
     for balance in total_balance {
         println!("Token #{}:", balance.token_index);
@@ -58,8 +58,6 @@ pub async fn log_balance(total_balance: Vec<BalanceInfo>) -> Result<(), CliError
             println!("\tToken ID: {}", token_id);
         }
     }
-
-    Ok(())
 }
 
 pub async fn withdrawal_status(key: KeySet) -> Result<(), CliError> {
