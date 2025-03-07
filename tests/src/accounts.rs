@@ -108,12 +108,19 @@ pub fn derive_deposit_keys(
     Ok(intmax_senders)
 }
 
+pub const WITHDRAWAL_ACCOUNT_INDEX: u32 = 3;
+
 pub fn derive_withdrawal_intmax_keys(
     master_mnemonic_phrase: &str,
     num_of_keys: u32,
     offset: u32,
 ) -> Result<Vec<KeySet>, Box<dyn std::error::Error>> {
-    derive_custom_intmax_keys(master_mnemonic_phrase, 3, num_of_keys, offset)
+    derive_custom_intmax_keys(
+        master_mnemonic_phrase,
+        WITHDRAWAL_ACCOUNT_INDEX,
+        num_of_keys,
+        offset,
+    )
 }
 
 pub fn derive_custom_intmax_keys(

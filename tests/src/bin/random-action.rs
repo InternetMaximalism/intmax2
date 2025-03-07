@@ -25,6 +25,7 @@ use tests::{
 
 const ETH_TOKEN_INDEX: u32 = 0;
 const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
+const LOOP_INTERVAL: u64 = 10;
 
 #[derive(Debug, Deserialize)]
 struct EnvVar {
@@ -73,10 +74,10 @@ impl TestSystem {
         let sender_key = keys[0];
         let recipient_key = keys[1];
         match action {
-            Action::Deposit => self
-                .execute_deposit(sender_key, recipient_key.intmax_key)
-                .await
-                .unwrap(),
+            Action::Deposit => {
+                self.execute_deposit(sender_key, recipient_key.intmax_key)
+                    .await?
+            }
             Action::Transfer => {
                 self.execute_transfer(sender_key.intmax_key, recipient_key.intmax_key)
                     .await?
@@ -326,7 +327,6 @@ async fn transfer_from(
     send_transfers(sender, &transfers, vec![], ETH_TOKEN_INDEX, true).await
 }
 
-/// Double spend risk test: Test sending multiple transactions with the same nonce
 async fn test_random_action() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Starting random action test");
 
@@ -334,9 +334,20 @@ async fn test_random_action() -> Result<(), Box<dyn std::error::Error>> {
     let sender_keys = derive_custom_keys(&master_mnemonic, RANDOM_ACTION_ACCOUNT_INDEX, 2, 0)?;
 
     let test_system = TestSystem::new();
-    test_system.execute_random_action(&sender_keys).await?;
 
-    log::info!("test completed");
+    for loop_count in 1.. {
+        match test_system.execute_random_action(&sender_keys).await {
+            Ok(_) => {
+                log::info!("{}-th test completed", loop_count);
+            }
+            Err(e) => {
+                log::warn!("{}-th test failed: {:?}", loop_count, e);
+            }
+        }
+
+        tokio::time::sleep(Duration::from_secs(LOOP_INTERVAL)).await;
+    }
+
     Ok(())
 }
 

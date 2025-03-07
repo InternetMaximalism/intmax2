@@ -21,7 +21,7 @@ use intmax2_zkp::{
 };
 use serde::Deserialize;
 use tests::{
-    accounts::{derive_withdrawal_intmax_keys, mnemonic_to_account},
+    accounts::{derive_custom_intmax_keys, mnemonic_to_account, WITHDRAWAL_ACCOUNT_INDEX},
     log_polling_futures, mul_u256, wait_for_balance_synchronization,
     withdraw_directly_with_error_handling,
 };
@@ -31,7 +31,7 @@ pub struct EnvVar {
     pub master_mnemonic: String,
     pub withdrawal_admin_private_key: String, // INTMAX private key
     pub num_of_recipients: Option<u32>,
-    pub recipient_offset: Option<u32>,
+    pub account_index: Option<u32>,
     pub balance_prover_base_url: String,
     pub l1_chain_id: u64,
 
@@ -47,7 +47,7 @@ fn default_url() -> String {
 }
 
 const ETH_TOKEN_INDEX: u32 = 0;
-const WITHDRAWAL_TIMEOUT: u64 = 10 * 60;
+const WITHDRAWAL_TIMEOUT: u64 = 30 * 60;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,6 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let system = TestSystem::new(
         admin_intmax_key,
         config.master_mnemonic,
+        config.account_index.unwrap_or(WITHDRAWAL_ACCOUNT_INDEX),
         config_server_base_url,
         config.eth_refill_offset,
     );
@@ -97,6 +98,7 @@ async fn get_config(base_url: &str) -> Result<TestConfig, Box<dyn std::error::Er
 struct TestSystem {
     admin_intmax_key: KeySet,
     master_mnemonic_phrase: String,
+    account_index: u32,
     config_server_base_url: String,
     accounts: Arc<Mutex<Vec<KeySet>>>,
     eth_refill_offset: usize,
@@ -106,12 +108,14 @@ impl TestSystem {
     pub fn new(
         admin_intmax_key: KeySet,
         master_mnemonic_phrase: String,
+        account_index: u32,
         config_server_base_url: String,
         eth_refill_offset: usize,
     ) -> Self {
         Self {
             admin_intmax_key,
             master_mnemonic_phrase,
+            account_index,
             accounts: Arc::new(Mutex::new(Vec::new())),
             config_server_base_url,
             eth_refill_offset,
@@ -150,8 +154,10 @@ impl TestSystem {
 
         // Create new account and receive initial balance from admin
         let master_mnemonic_phrase = self.master_mnemonic_phrase.clone();
-        let new_accounts = derive_withdrawal_intmax_keys(
+        println!("account_index: {}", self.account_index);
+        let new_accounts = derive_custom_intmax_keys(
             &master_mnemonic_phrase,
+            self.account_index,
             num_of_keys as u32,
             accounts_len as u32,
         )?;
@@ -177,8 +183,10 @@ impl TestSystem {
 
         // Create new account and receive initial balance from admin
         let master_mnemonic_phrase = self.master_mnemonic_phrase.clone();
-        let new_accounts = derive_withdrawal_intmax_keys(
+        println!("account_index: {}", self.account_index);
+        let new_accounts = derive_custom_intmax_keys(
             &master_mnemonic_phrase,
+            self.account_index,
             num_of_keys as u32,
             accounts_len as u32,
         )?;

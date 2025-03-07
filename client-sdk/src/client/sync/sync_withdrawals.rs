@@ -148,7 +148,11 @@ impl Client {
                 Some(fee_token_index),
                 &fee_transfer_uuids,
             )
-            .await?;
+            .await
+            .map_err(|e| {
+                log::error!("Failed to request withdrawal {}: {:?}", key.pubkey, e);
+                e
+            })?;
 
         // consume fees
         for used_fee in &collected_fees {

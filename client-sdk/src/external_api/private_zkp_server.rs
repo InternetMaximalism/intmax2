@@ -42,8 +42,8 @@ use crate::external_api::utils::time::sleep_for;
 
 use super::utils::query::{get_request, post_request};
 
-const MAX_RETRIES: usize = 10;
-const RETRY_INTERVAL: usize = 5; // seconds
+const MAX_RETRIES: usize = 30;
+const RETRY_INTERVAL: usize = 10; // seconds
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
