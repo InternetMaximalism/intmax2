@@ -7,8 +7,6 @@ use std::{
     time::Duration,
 };
 
-use futures::future;
-
 use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
 use intmax2_interfaces::{
     api::validity_prover::interface::{
@@ -69,7 +67,7 @@ const CLEANUP_INTERVAL: u64 = 10;
 
 #[derive(Clone)]
 pub struct Config {
-    pub sync_interval: u64,
+    pub sync_interval: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -95,7 +93,7 @@ impl ValidityProver {
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
-            env.ttl as usize,
+            env.task_ttl as usize,
             10, // dummy value
         )?);
 
@@ -429,47 +427,6 @@ impl ValidityProver {
         Ok(deposit_info)
     }
 
-    pub async fn get_deposit_info_batch(
-        &self,
-        deposit_hashes: &[Bytes32],
-    ) -> Result<Vec<Option<DepositInfo>>, ValidityProverError> {
-        // early return for empty input
-        if deposit_hashes.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Process all deposit hashes in parallel
-        let mut futures = Vec::with_capacity(deposit_hashes.len());
-        for deposit_hash in deposit_hashes {
-            let observer = self.observer.clone();
-            let deposit_hash = *deposit_hash;
-
-            // Create a future for each deposit hash lookup
-            let future = async move {
-                observer
-                    .get_deposit_info(deposit_hash)
-                    .await
-                    .map_err(ValidityProverError::ObserverError)
-            };
-
-            futures.push(future);
-        }
-
-        // Execute all futures concurrently
-        let results = future::join_all(futures).await;
-
-        // Process results
-        let mut deposit_infos = Vec::with_capacity(deposit_hashes.len());
-        for result in results {
-            match result {
-                Ok(deposit_info) => deposit_infos.push(deposit_info),
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok(deposit_infos)
-    }
-
     pub async fn get_block_number_by_tx_tree_root(
         &self,
         tx_tree_root: Bytes32,
@@ -757,13 +714,19 @@ impl ValidityProver {
     }
 
     pub async fn job(&self) -> Result<(), ValidityProverError> {
+        if self.config.sync_interval.is_none() {
+            // If sync_interval is not set, we don't run the sync task
+            return Ok(());
+        }
+        let sync_interval = self.config.sync_interval.unwrap();
+
         self.setup_tasks().await?;
 
         let is_syncing = Arc::new(AtomicBool::new(false));
         let is_syncing_clone = is_syncing.clone();
         let s = self.clone();
         actix_web::rt::spawn(async move {
-            let mut interval = interval(Duration::from_secs(s.config.sync_interval));
+            let mut interval = interval(Duration::from_secs(sync_interval));
             loop {
                 interval.tick().await;
 
