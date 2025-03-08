@@ -27,7 +27,6 @@ use tests::{
 
 const ETH_TOKEN_INDEX: u32 = 0;
 const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
-const LOOP_INTERVAL: u64 = 10;
 
 #[derive(Debug, Deserialize)]
 struct EnvVar {
@@ -415,8 +414,6 @@ impl AsyncTask for RandomActionTask {
                 log::warn!("(id: {}) failed: {:?}", id, e);
             }
         }
-
-        tokio::time::sleep(Duration::from_secs(LOOP_INTERVAL)).await;
 
         Ok(())
     }
