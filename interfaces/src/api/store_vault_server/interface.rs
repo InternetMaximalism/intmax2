@@ -65,10 +65,10 @@ impl FromStr for DataType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveDataEntry {
-    pub data_type: DataType,
+    pub topic: String,
     pub pubkey: U256,
     #[serde_as(as = "Base64")]
-    pub encrypted_data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 #[async_trait(?Send)]
