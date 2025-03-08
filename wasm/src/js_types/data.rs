@@ -216,10 +216,10 @@ impl From<UserData> for JsUserData {
                 .as_ref()
                 .map(|x| x.timestamp)
                 .unwrap_or(0),
-            processed_deposit_uuids: user_data.deposit_status.processed_uuids.clone(),
-            processed_transfer_uuids: user_data.transfer_status.processed_uuids.clone(),
-            processed_tx_uuids: user_data.tx_status.processed_uuids.clone(),
-            processed_withdrawal_uuids: user_data.withdrawal_status.processed_uuids.clone(),
+            processed_deposit_uuids: user_data.deposit_status.processed_digests.clone(),
+            processed_transfer_uuids: user_data.transfer_status.processed_digests.clone(),
+            processed_tx_uuids: user_data.tx_status.processed_digests.clone(),
+            processed_withdrawal_uuids: user_data.withdrawal_status.processed_digests.clone(),
         }
     }
 }

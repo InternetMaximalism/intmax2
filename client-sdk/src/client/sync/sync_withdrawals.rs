@@ -179,7 +179,7 @@ impl Client {
         pending_withdrawal_uuids: Vec<String>,
     ) -> Result<(), SyncError> {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
-        user_data.withdrawal_status.pending_uuids = pending_withdrawal_uuids;
+        user_data.withdrawal_status.pending_digests = pending_withdrawal_uuids;
         self.store_vault_server
             .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
             .await?;

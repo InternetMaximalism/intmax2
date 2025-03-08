@@ -8,7 +8,7 @@ use intmax2_zkp::{
         transfer::Transfer,
         trees::asset_tree::AssetLeaf,
     },
-    ethereum_types::u256::U256,
+    ethereum_types::{bytes32::Bytes32, u256::U256},
     utils::poseidon_hash_out::PoseidonHashOut,
 };
 
@@ -37,15 +37,15 @@ pub struct UserData {
 pub struct ProcessStatus {
     // Last processed meta data
     pub last_processed_meta_data: Option<MetaData>,
-    pub processed_uuids: Vec<String>,
-    pub pending_uuids: Vec<String>,
+    pub processed_digests: Vec<Bytes32>,
+    pub pending_digests: Vec<Bytes32>,
 }
 
 impl ProcessStatus {
     pub fn process(&mut self, meta: MetaData) {
         self.last_processed_meta_data = Some(meta.clone());
-        self.pending_uuids.retain(|uuid| uuid != &meta.uuid);
-        self.processed_uuids.push(meta.uuid);
+        self.pending_digests.retain(|digest| digest != &meta.digest);
+        self.processed_digests.push(meta.digest);
     }
 }
 

@@ -66,7 +66,7 @@ pub async fn fetch_deposit_history(
         history.push(HistoryEntry {
             data: settled,
             status: EntryStatus::from_settled(
-                &user_data.deposit_status.processed_uuids,
+                &user_data.deposit_status.processed_digests,
                 meta.clone(),
             ),
             meta: meta.meta,
@@ -117,7 +117,7 @@ pub async fn fetch_transfer_history(
         history.push(HistoryEntry {
             data: settled,
             status: EntryStatus::from_settled(
-                &user_data.transfer_status.processed_uuids,
+                &user_data.transfer_status.processed_digests,
                 meta.clone(),
             ),
             meta: meta.meta,
@@ -167,7 +167,7 @@ pub async fn fetch_tx_history(
     for (meta, settled) in all_tx_info.settled {
         history.push(HistoryEntry {
             data: settled,
-            status: EntryStatus::from_settled(&user_data.tx_status.processed_uuids, meta.clone()),
+            status: EntryStatus::from_settled(&user_data.tx_status.processed_digests, meta.clone()),
             meta: meta.meta.clone(),
         });
     }

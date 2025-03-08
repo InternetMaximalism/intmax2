@@ -144,7 +144,7 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
         order: CursorOrder::Asc,
         limit: None,
     };
-    let mut included_uuids = process_status.processed_uuids.clone(); // cleared after first fetch
+    let mut included_uuids = process_status.processed_digests.clone(); // cleared after first fetch
 
     let mut settled = Vec::new();
     let mut pending = Vec::new();
@@ -162,7 +162,7 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
             validity_prover,
             key,
             &included_uuids,
-            &process_status.processed_uuids,
+            &process_status.processed_digests,
             &cursor,
             tx_timeout,
         )
