@@ -200,7 +200,6 @@ impl State {
                 .validity_prover
                 .get_deposit_info(request.deposit_hash)
                 .await?;
-            log::error!("cache {:?}", &deposit_info);
             // the result is mutable
             self.cache
                 .set_with_ttl::<V>(&key, &deposit_info, self.config.dynamic_ttl)
@@ -225,7 +224,6 @@ impl State {
             .into_iter()
             .collect::<anyhow::Result<Vec<_>>>()?;
         let deposit_info = responses.into_iter().map(|r| r.deposit_info).collect();
-        log::error!("cache {:?}", &deposit_info);
         Ok(GetDepositInfoBatchResponse { deposit_info })
     }
 
