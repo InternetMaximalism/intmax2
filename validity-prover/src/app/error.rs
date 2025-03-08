@@ -39,9 +39,6 @@ pub enum ValidityProverError {
     #[error("Merkle tree error: {0}")]
     MerkleTreeError(#[from] MerkleTreeError),
 
-    #[error("{0}")] // TODO: Add more specific error messages
-    AnyhowError(#[from] anyhow::Error),
-
     #[error("Task manager error: {0}")]
     TaskManagerError(#[from] TaskManagerError),
 

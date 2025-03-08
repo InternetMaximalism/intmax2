@@ -44,7 +44,7 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
         .filter_map(|data_with_meta| {
             let DataWithMetaData { meta, data } = data_with_meta;
             if excluded_uuids.contains(&meta.uuid) {
-                log::warn!("{} {} is in excluded", data_type, meta.uuid);
+                log::warn!("{} {} is excluded", data_type, meta.uuid);
                 return None;
             }
             match T::decrypt(&data, key) {

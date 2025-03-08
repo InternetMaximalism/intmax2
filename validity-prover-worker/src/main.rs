@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
 use server_common::logger::init_logger;
 use validity_prover_worker::{app::worker::Worker, EnvVar};
 
@@ -7,8 +10,19 @@ async fn main() -> anyhow::Result<()> {
     init_logger()?;
 
     let env = envy::from_env::<EnvVar>().unwrap();
-    let worker = Worker::new(&env)?;
-    worker.run().await;
+    let transition_processor = Arc::new(TransitionProcessor::new());
+    log::info!("initialized transition processor");
+
+    let mut handles = vec![];
+    for _ in 0..env.num_process {
+        let worker = Worker::new(&env, transition_processor.clone())?;
+        handles.extend(worker.run().await);
+    }
+
+    let result = futures::future::join_all(handles).await;
+    for res in result {
+        res?;
+    }
 
     Ok(())
 }

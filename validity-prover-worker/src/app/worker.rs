@@ -6,6 +6,7 @@ use intmax2_interfaces::api::validity_prover::interface::{
 use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
 use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
 use server_common::redis::task_manager::TaskManager;
+use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::EnvVar;
@@ -34,11 +35,14 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(env: &EnvVar) -> Result<Worker> {
+    pub fn new(
+        env: &EnvVar,
+        transition_processor: Arc<TransitionProcessor<F, C, D>>,
+    ) -> Result<Worker> {
         let config = Config {
             heartbeat_interval: env.heartbeat_interval,
         };
-        let transition_processor = Arc::new(TransitionProcessor::new());
+
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
@@ -63,7 +67,11 @@ impl Worker {
             }
 
             let (block_number, task) = task.unwrap();
-            log::info!("Processing task {}", block_number);
+            log::info!(
+                "Processing block {} by worker {}",
+                block_number,
+                self.worker_id
+            );
 
             // Prove the transition on another thread
             let transition_processor = self.transition_processor.clone();
@@ -80,7 +88,11 @@ impl Worker {
 
             let result = match result {
                 Ok(proof) => {
-                    log::info!("Proof generated for block_number {}", block_number);
+                    log::info!(
+                        "Proof generated for block_number {} by worker {}",
+                        block_number,
+                        self.worker_id
+                    );
                     TransitionProofTaskResult {
                         block_number,
                         proof: Some(proof),
@@ -88,7 +100,7 @@ impl Worker {
                     }
                 }
                 Err(e) => {
-                    log::error!("Error while proving: {:?}", e);
+                    log::error!("Error while proving: {:?} by worker {}", e, self.worker_id);
                     TransitionProofTaskResult {
                         block_number,
                         proof: None,
@@ -102,28 +114,26 @@ impl Worker {
         }
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&self) -> Vec<JoinHandle<()>> {
         let worker = self.clone();
         let solve_handle = tokio::spawn(async move {
-            log::info!("Starting worker");
             if let Err(e) = worker.work().await {
                 eprintln!("Error: {:?}", e);
             }
         });
-
         let manager = self.manager.clone();
         let worker_id = self.worker_id.clone();
         let heartbeat_interval = self.config.heartbeat_interval;
         let submit_heartbeat_handle = tokio::spawn(async move {
             loop {
-                log::info!("Submitting heartbeat");
+                log::info!("Submitting heartbeat for worker {}", worker_id);
                 if let Err(e) = manager.submit_heartbeat(&worker_id).await {
                     eprintln!("Error: {:?}", e);
                 }
                 tokio::time::sleep(tokio::time::Duration::from_secs(heartbeat_interval)).await;
             }
         });
-        log::info!("Starting worker and heartbeat");
-        tokio::try_join!(solve_handle, submit_heartbeat_handle).unwrap();
+        log::info!("Starting worker with id {}", self.worker_id);
+        vec![solve_handle, submit_heartbeat_handle]
     }
 }
