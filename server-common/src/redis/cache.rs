@@ -116,6 +116,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_redis_cache() {
         let redis_url =
             env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
