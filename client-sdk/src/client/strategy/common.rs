@@ -8,7 +8,10 @@ use intmax2_interfaces::{
         user_data::UserData, validation::Validation,
     },
 };
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u256::U256},
+};
 use itertools::Itertools as _;
 use num_bigint::BigUint;
 
@@ -18,16 +21,16 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
     store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
     data_type: DataType,
-    included_uuids: &[String],
-    excluded_uuids: &[String],
+    included_digests: &[Bytes32],
+    excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<(MetaData, T)>, MetaDataCursorResponse), StrategyError> {
     // fetch pending data
-    let encrypted_included_data_with_meta = if included_uuids.is_empty() {
+    let encrypted_included_data_with_meta = if included_digests.is_empty() {
         Vec::new()
     } else {
         store_vault_server
-            .get_data_batch(key, data_type, included_uuids)
+            .get_data_batch(key, data_type, included_digests)
             .await?
     };
 
@@ -43,7 +46,7 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
         .unique_by(|data_with_meta| data_with_meta.meta.uuid.clone()) // remove duplicates
         .filter_map(|data_with_meta| {
             let DataWithMetaData { meta, data } = data_with_meta;
-            if excluded_uuids.contains(&meta.uuid) {
+            if excluded_digests.contains(&meta.uuid) {
                 log::warn!("{} {} is excluded", data_type, meta.uuid);
                 return None;
             }

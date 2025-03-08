@@ -33,8 +33,8 @@ pub async fn fetch_transfer_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
-    included_uuids: &[String],
-    excluded_uuids: &[String],
+    included_digests: &[String],
+    excluded_digests: &[String],
     cursor: &MetaDataCursor,
     tx_timeout: u64,
 ) -> Result<(TransferInfo, MetaDataCursorResponse), StrategyError> {
@@ -45,8 +45,8 @@ pub async fn fetch_transfer_info(
         store_vault_server,
         key,
         DataType::Transfer,
-        included_uuids,
-        excluded_uuids,
+        included_digests,
+        excluded_digests,
         cursor,
     )
     .await?;
@@ -162,7 +162,7 @@ pub async fn fetch_all_unprocessed_transfer_info(
         order: CursorOrder::Asc,
         limit: None,
     };
-    let mut included_uuids = process_status.processed_digests.clone(); // cleared after first fetch
+    let mut included_digests = process_status.processed_digests.clone(); // cleared after first fetch
 
     let mut settled = Vec::new();
     let mut pending = Vec::new();
@@ -179,14 +179,14 @@ pub async fn fetch_all_unprocessed_transfer_info(
             store_vault_server,
             validity_prover,
             key,
-            &included_uuids,
+            &included_digests,
             &process_status.processed_digests,
             &cursor,
             tx_timeout,
         )
         .await?;
-        if !included_uuids.is_empty() {
-            included_uuids = Vec::new(); // clear included_uuids after first fetch
+        if !included_digests.is_empty() {
+            included_digests = Vec::new(); // clear included_digests after first fetch
         }
 
         settled.extend(settled_part);

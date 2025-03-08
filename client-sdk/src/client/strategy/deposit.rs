@@ -31,8 +31,8 @@ pub async fn fetch_deposit_info(
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
-    included_uuids: &[String],
-    excluded_uuids: &[String],
+    included_digests: &[String],
+    excluded_digests: &[String],
     cursor: &MetaDataCursor,
     deposit_timeout: u64,
 ) -> Result<(DepositInfo, MetaDataCursorResponse), StrategyError> {
@@ -43,8 +43,8 @@ pub async fn fetch_deposit_info(
         store_vault_server,
         key,
         DataType::Deposit,
-        included_uuids,
-        excluded_uuids,
+        included_digests,
+        excluded_digests,
         cursor,
     )
     .await?;
@@ -140,7 +140,7 @@ pub async fn fetch_all_unprocessed_deposit_info(
         order: CursorOrder::Asc,
         limit: None,
     };
-    let mut included_uuids = process_status.processed_digests.clone(); // cleared after first fetch
+    let mut included_digests = process_status.processed_digests.clone(); // cleared after first fetch
 
     let mut settled = Vec::new();
     let mut pending = Vec::new();
@@ -158,14 +158,14 @@ pub async fn fetch_all_unprocessed_deposit_info(
             validity_prover,
             liquidity_contract,
             key,
-            &included_uuids,
+            &included_digests,
             &process_status.processed_digests,
             &cursor,
             deposit_timeout,
         )
         .await?;
-        if !included_uuids.is_empty() {
-            included_uuids = Vec::new(); // clear included_uuids after first fetch
+        if !included_digests.is_empty() {
+            included_digests = Vec::new(); // clear included_digests after first fetch
         }
 
         settled.extend(settled_part);

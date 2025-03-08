@@ -1,3 +1,4 @@
+pub mod data_type;
 pub mod deposit_data;
 pub mod encryption;
 pub mod error;

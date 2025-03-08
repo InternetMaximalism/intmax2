@@ -3,7 +3,7 @@ use std::{
     str::FromStr,
 };
 
-use super::interface::{DataType, SaveDataEntry};
+use super::interface::SaveDataEntry;
 use crate::{data::meta_data::MetaData, utils::signature::Signable};
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use serde::{Deserialize, Serialize};
@@ -19,16 +19,17 @@ fn content_prefix(path: &str) -> Vec<u8> {
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SaveUserDataRequest {
+pub struct SaveSnapshotRequest {
+    pub topic: String,
+    pub prev_digest: Option<Bytes32>,
     #[serde_as(as = "Base64")]
     pub data: Vec<u8>,
-    pub prev_digest: Option<Bytes32>,
 }
 
-impl Signable for SaveUserDataRequest {
+impl Signable for SaveSnapshotRequest {
     fn content(&self) -> Vec<u8> {
         [
-            content_prefix("save_user_data"),
+            content_prefix("save_snapshot"),
             bincode::serialize(&(self.data.clone(), self.prev_digest)).unwrap(),
         ]
         .concat()
@@ -37,56 +38,26 @@ impl Signable for SaveUserDataRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetUserDataRequest;
-
-impl Signable for GetUserDataRequest {
-    fn content(&self) -> Vec<u8> {
-        content_prefix("get_user_data")
-    }
+pub struct GetSnapshotRequest {
+    pub topic: String,
 }
 
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetUserDataResponse {
-    #[serde_as(as = "Option<Base64>")]
-    pub data: Option<Vec<u8>>,
-}
-
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SaveSenderProofSetRequest {
-    #[serde_as(as = "Base64")]
-    pub data: Vec<u8>,
-}
-
-impl Signable for SaveSenderProofSetRequest {
+impl Signable for GetSnapshotRequest {
     fn content(&self) -> Vec<u8> {
         [
-            content_prefix("save_sender_proof_set"),
-            bincode::serialize(&self.data).unwrap(),
+            content_prefix("get_snapshot"),
+            bincode::serialize(&self.topic).unwrap(),
         ]
         .concat()
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetSenderProofSetRequest;
-
-impl Signable for GetSenderProofSetRequest {
-    fn content(&self) -> Vec<u8> {
-        content_prefix("get_sender_proof_set")
-    }
-}
-
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetSenderProofSetResponse {
-    #[serde_as(as = "Base64")]
-    pub data: Vec<u8>,
+pub struct GetSnapshotResponse {
+    #[serde_as(as = "Option<Base64>")]
+    pub data: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,14 +79,14 @@ impl Signable for SaveDataBatchRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveDataBatchResponse {
-    pub uuids: Vec<String>,
+    pub digests: Vec<Bytes32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDataBatchRequest {
-    pub data_type: DataType,
-    pub uuids: Vec<String>,
+    pub topic: String,
+    pub digests: Vec<Bytes32>,
 }
 
 impl Signable for GetDataBatchRequest {
@@ -134,7 +105,7 @@ pub struct GetDataBatchResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDataSequenceRequest {
-    pub data_type: DataType,
+    pub topic: String,
     pub cursor: MetaDataCursor,
 }
 
@@ -212,54 +183,4 @@ pub struct DataWithTimestamp {
     pub timestamp: u64,
     #[serde_as(as = "Base64")]
     pub data: Vec<u8>,
-}
-
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SaveMiscRequest {
-    #[serde_as(as = "Base64")]
-    pub data: Vec<u8>,
-    pub topic: Bytes32,
-}
-
-impl Signable for SaveMiscRequest {
-    fn content(&self) -> Vec<u8> {
-        [
-            content_prefix("save_misc"),
-            bincode::serialize(&self.data).unwrap(),
-        ]
-        .concat()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SaveMiscResponse {
-    pub uuid: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetMiscSequenceRequest {
-    pub topic: Bytes32,
-    pub cursor: MetaDataCursor,
-}
-
-impl Signable for GetMiscSequenceRequest {
-    fn content(&self) -> Vec<u8> {
-        // to reuse the signature, we exclude cursor from the content intentionally
-        [
-            content_prefix("get_misc_sequence"),
-            bincode::serialize(&self.topic.clone()).unwrap(),
-        ]
-        .concat()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetMiscSequenceResponse {
-    pub data: Vec<DataWithMetaData>,
-    pub cursor_response: MetaDataCursorResponse,
 }

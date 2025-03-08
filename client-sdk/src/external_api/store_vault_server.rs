@@ -8,7 +8,7 @@ use intmax2_interfaces::{
                 CursorOrder, DataWithMetaData, GetDataBatchRequest, GetDataBatchResponse,
                 GetDataSequenceRequest, GetDataSequenceResponse, GetMiscSequenceRequest,
                 GetMiscSequenceResponse, GetSenderProofSetRequest, GetSenderProofSetResponse,
-                GetUserDataRequest, GetUserDataResponse, MetaDataCursor, MetaDataCursorResponse,
+                GetSnapshotRequest, GetSnapshotResponse, MetaDataCursor, MetaDataCursorResponse,
                 SaveDataBatchRequest, SaveDataBatchResponse, SaveMiscRequest, SaveMiscResponse,
                 SaveSenderProofSetRequest, SaveUserDataRequest,
             },
@@ -59,9 +59,9 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
     }
 
     async fn get_user_data(&self, key: KeySet) -> Result<Option<Vec<u8>>, ServerError> {
-        let request = GetUserDataRequest;
+        let request = GetSnapshotRequest;
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        let response: GetUserDataResponse = post_request(
+        let response: GetSnapshotResponse = post_request(
             &self.base_url,
             "/store-vault-server/get-user-data",
             Some(&request_with_auth),

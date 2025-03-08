@@ -192,14 +192,14 @@ impl StoreVaultServer {
                 let cursor_meta = cursor.cursor.clone().unwrap_or_default();
                 sqlx::query!(
                     r#"
-    SELECT digest, data, timestamp
-    FROM historical_data
-    WHERE topic = $1
-    AND pubkey = $2
-    AND (timestamp > $3 OR (timestamp = $3 AND digest > $4))
-    ORDER BY timestamp ASC, digest ASC
-    LIMIT $5
-    "#,
+                    SELECT digest, data, timestamp
+                    FROM historical_data
+                    WHERE topic = $1
+                    AND pubkey = $2
+                    AND (timestamp > $3 OR (timestamp = $3 AND digest > $4))
+                    ORDER BY timestamp ASC, digest ASC
+                    LIMIT $5
+                    "#,
                     topic,
                     pubkey_hex,
                     cursor_meta.timestamp as i64,
