@@ -8,7 +8,7 @@ pub mod trees;
 #[derive(Deserialize)]
 pub struct Env {
     pub port: u16,
-    pub sync_interval: u64,
+    pub sync_interval: Option<u64>,
     pub l2_rpc_url: String,
     pub l2_chain_id: u64,
     pub rollup_contract_address: Address,

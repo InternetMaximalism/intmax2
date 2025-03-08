@@ -67,7 +67,7 @@ const CLEANUP_INTERVAL: u64 = 10;
 
 #[derive(Clone)]
 pub struct Config {
-    pub sync_interval: u64,
+    pub sync_interval: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -714,13 +714,19 @@ impl ValidityProver {
     }
 
     pub async fn job(&self) -> Result<(), ValidityProverError> {
+        if self.config.sync_interval.is_none() {
+            // If sync_interval is not set, we don't run the sync task
+            return Ok(());
+        }
+        let sync_interval = self.config.sync_interval.unwrap();
+
         self.setup_tasks().await?;
 
         let is_syncing = Arc::new(AtomicBool::new(false));
         let is_syncing_clone = is_syncing.clone();
         let s = self.clone();
         actix_web::rt::spawn(async move {
-            let mut interval = interval(Duration::from_secs(s.config.sync_interval));
+            let mut interval = interval(Duration::from_secs(sync_interval));
             loop {
                 interval.tick().await;
 
