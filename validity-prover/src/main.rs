@@ -34,7 +34,7 @@ async fn main() -> std::io::Result<()> {
     // Start a job
     state.job().await;
 
-    let data = Data::new(state.clone());
+    let data = Data::new(state);
 
     HttpServer::new(move || {
         let cors = Cors::permissive();
