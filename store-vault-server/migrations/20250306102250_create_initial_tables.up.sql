@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS snapshot_data (
     digest VARCHAR(66) NOT NULL,
     topic VARCHAR(255) NOT NULL,
     data BYTEA NOT NULL,
-    timestamp BIGINT NOT NULL
+    timestamp BIGINT NOT NULL,
+    UNIQUE (pubkey, topic)
 );
 
 CREATE TABLE IF NOT EXISTS historical_data (
