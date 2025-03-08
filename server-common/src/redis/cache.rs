@@ -37,8 +37,14 @@ impl RedisCache {
     {
         let mut conn = self.get_connection().await?;
         let key = format!("{}:{}", self.prefix, key);
-        let result: Option<String> = conn.get(&key).await?;
 
+        // Check if the key exists
+        let ttl: i64 = conn.ttl(&key).await?;
+        if ttl < 0 {
+            return Ok(None);
+        }
+
+        let result: Option<String> = conn.get(&key).await?;
         match result {
             Some(data) => {
                 let value = serde_json::from_str(&data)?;
