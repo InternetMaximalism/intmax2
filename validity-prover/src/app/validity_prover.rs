@@ -93,7 +93,7 @@ impl ValidityProver {
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
-            env.ttl as usize,
+            env.task_ttl as usize,
             10, // dummy value
         )?);
 

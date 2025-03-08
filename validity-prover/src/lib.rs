@@ -19,8 +19,9 @@ pub struct Env {
 
     // Prover coordinator
     pub redis_url: String,
-    pub ttl: u64,
-    // pub heartbeat_timeout: u64,
-    // pub cleanup_interval: u64,
-    // pub validity_proof_interval: u64,
+    pub task_ttl: u64,
+
+    // Cache
+    pub dynamic_cache_ttl: u64,
+    pub static_cache_ttl: u64,
 }
