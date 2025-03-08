@@ -1,4 +1,5 @@
 use std::{
+    env::VarError,
     ops::{Add, Sub},
     str::FromStr,
     time::Duration,
@@ -19,8 +20,9 @@ use tests::{
     accounts::{derive_custom_keys, private_key_to_account, Account},
     deposit_native_token_with_error_handling,
     ethereum::transfer_eth_on_ethereum,
-    get_eth_balance_on_intmax, wait_for_balance_synchronization,
-    withdraw_directly_with_error_handling,
+    get_eth_balance_on_intmax,
+    task::{process_queue, AsyncTask},
+    wait_for_balance_synchronization, withdraw_directly_with_error_handling,
 };
 
 const ETH_TOKEN_INDEX: u32 = 0;
@@ -69,20 +71,34 @@ impl TestSystem {
         keys: &[Account],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let action = Action::random();
-        log::info!("Action: {:?}", action);
-
-        let sender_key = keys[0];
-        let recipient_key = keys[1];
+        let switch_recipient = rand::thread_rng().gen_bool(0.5);
+        let sender_key = if switch_recipient { keys[1] } else { keys[0] };
+        let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
         match action {
             Action::Deposit => {
+                log::info!(
+                    "Deposit: {:?} -> {}",
+                    sender_key.eth_address,
+                    recipient_key.intmax_key.pubkey.to_hex()
+                );
                 self.execute_deposit(sender_key, recipient_key.intmax_key)
                     .await?
             }
             Action::Transfer => {
+                log::info!(
+                    "Transfer: {} -> {}",
+                    sender_key.intmax_key.pubkey.to_hex(),
+                    recipient_key.intmax_key.pubkey.to_hex()
+                );
                 self.execute_transfer(sender_key.intmax_key, recipient_key.intmax_key)
                     .await?
             }
             Action::Withdrawal => {
+                log::info!(
+                    "Withdrawal: {} -> {:?}",
+                    sender_key.intmax_key.pubkey.to_hex(),
+                    recipient_key.eth_address
+                );
                 self.execute_withdrawal(sender_key.intmax_key, recipient_key)
                     .await?
             }
@@ -98,12 +114,17 @@ impl TestSystem {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let sender_initial_balance =
             get_eth_balance(&self.l1_rpc_url, sender_key.eth_address).await?;
-        log::info!("Sender's pubkey: {}", sender_key.eth_private_key);
-        log::info!("Sender's initial balance: {}", sender_initial_balance);
+        log::info!(
+            "initial balance of sender {}: {}",
+            sender_key.eth_address,
+            sender_initial_balance
+        );
         let recipient_initial_balance = get_eth_balance_on_intmax(recipient_key).await?;
-        log::info!("Recipient's pubkey: {}", recipient_key.pubkey.to_hex());
-        log::info!("Recipient's initial balance: {}", recipient_initial_balance);
-
+        log::info!(
+            "initial balance of recipient {}: {}",
+            recipient_key.pubkey.to_hex(),
+            recipient_initial_balance
+        );
         let transfer_amount = ethers::types::U256::from(10000);
         let fee = ethers::types::U256::from_str("0x38d7ea4c68000").unwrap();
         let transfer_amount_with_fee = transfer_amount.add(fee);
@@ -127,6 +148,7 @@ impl TestSystem {
             sender_key.eth_private_key,
             recipient_key,
             U256::from(10),
+            Some(Duration::from_secs(10)),
         )
         .await?;
         log::info!("Deposit completed {}", sender_key.eth_address);
@@ -134,16 +156,22 @@ impl TestSystem {
         // Check final balances
         let sender_final_balance =
             get_eth_balance(&self.l1_rpc_url, sender_key.eth_address).await?;
-        log::info!("Sender's final balance: {}", sender_final_balance);
+        log::info!(
+            "final balance of sender {}: {}",
+            sender_key.eth_address,
+            sender_final_balance
+        );
         let recipient_final_balance = get_eth_balance_on_intmax(recipient_key).await?;
-        log::info!("Recipient's final balance: {}", recipient_final_balance);
-
-        // Expected result: Recipient's balance should increase by only one transfer amount
+        log::info!(
+            "final balance of recipient {}: {}",
+            recipient_key.pubkey.to_hex(),
+            recipient_final_balance
+        );
         let expected_recipient_balance =
             recipient_initial_balance + U256::from_hex(&transfer_amount.encode_hex()).unwrap();
 
         if recipient_final_balance == expected_recipient_balance {
-            log::info!("Only one of the two transfer transactions was processed");
+            log::info!("transfer transaction was processed");
         } else {
             log::warn!("Recipient's balance does not match expected value");
             log::warn!(
@@ -162,13 +190,19 @@ impl TestSystem {
         recipient_key: KeySet,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let sender_initial_balance = get_eth_balance_on_intmax(sender_key).await?;
-        log::info!("Sender's pubkey: {}", sender_key.pubkey.to_hex());
-        log::info!("Sender's initial balance: {}", sender_initial_balance);
+        log::info!(
+            "initial balance of sender {}: {}",
+            sender_key.pubkey.to_hex(),
+            sender_initial_balance
+        );
         let recipient_initial_balance = get_eth_balance_on_intmax(recipient_key).await?;
-        log::info!("Recipient's pubkey: {}", recipient_key.pubkey.to_hex());
-        log::info!("Recipient's initial balance: {}", recipient_initial_balance);
+        log::info!(
+            "initial balance of recipient {}: {}",
+            recipient_key.pubkey.to_hex(),
+            recipient_initial_balance
+        );
 
-        let transfer_amount = U256::from(10000);
+        let transfer_amount = U256::from(17);
         let fee = U256::from(1000);
         let transfer_amount_with_fee = transfer_amount.add(fee);
 
@@ -198,10 +232,17 @@ impl TestSystem {
 
         // Check final balances
         let sender_final_balance = get_eth_balance_on_intmax(sender_key).await?;
-        log::info!("Sender's final balance: {}", sender_final_balance);
+        log::info!(
+            "final balance of sender {}: {}",
+            sender_key.pubkey.to_hex(),
+            sender_final_balance
+        );
         let recipient_final_balance = get_eth_balance_on_intmax(recipient_key).await?;
-        log::info!("Recipient's final balance: {}", recipient_final_balance);
-
+        log::info!(
+            "final balance of recipient {}: {}",
+            recipient_key.pubkey.to_hex(),
+            recipient_final_balance
+        );
         // Expected result: Recipient's balance should increase by only one transfer amount
         let expected_recipient_balance = recipient_initial_balance + transfer_amount;
 
@@ -225,14 +266,20 @@ impl TestSystem {
         recipient_account: Account,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let sender_initial_balance = get_eth_balance_on_intmax(sender_key).await?;
-        log::info!("Sender's pubkey: {}", sender_key.pubkey.to_hex());
-        log::info!("Sender's privkey: {}", sender_key.privkey);
-        log::info!("Sender's initial balance: {}", sender_initial_balance);
+        log::info!(
+            "initial balance of sender {}: {}",
+            sender_key.pubkey.to_hex(),
+            sender_initial_balance
+        );
         let recipient_initial_balance =
             get_eth_balance(&self.l1_rpc_url, recipient_account.eth_address).await?;
-        log::info!("Recipient's initial balance: {}", recipient_initial_balance);
+        log::info!(
+            "initial balance of recipient {}: {}",
+            recipient_account.eth_address,
+            recipient_initial_balance
+        );
 
-        let transfer_amount = U256::from(10);
+        let transfer_amount = U256::from(19);
         let fee = U256::from(1000);
         let transfer_amount_with_fee = transfer_amount.add(fee);
 
@@ -262,10 +309,18 @@ impl TestSystem {
 
         // Check final balances
         let sender_final_balance = get_eth_balance_on_intmax(sender_key).await?;
-        log::info!("Sender's final balance: {}", sender_final_balance);
+        log::info!(
+            "final balance of sender {}: {}",
+            sender_key.pubkey.to_hex(),
+            sender_final_balance
+        );
         let recipient_final_balance =
             get_eth_balance(&self.l1_rpc_url, recipient_account.eth_address).await?;
-        log::info!("Recipient's final balance: {}", recipient_final_balance);
+        log::info!(
+            "final balance of recipient {}: {}",
+            recipient_account.eth_address,
+            recipient_final_balance
+        );
 
         Ok::<(), Box<dyn std::error::Error>>(())
     }
@@ -327,28 +382,44 @@ async fn transfer_from(
     send_transfers(sender, &transfers, vec![], ETH_TOKEN_INDEX, true).await
 }
 
-async fn test_random_action() -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Starting random action test");
+#[derive(Debug)]
+struct RandomActionTask;
 
-    let master_mnemonic = std::env::var("MASTER_MNEMONIC").expect("MASTER_MNEMONIC must be set");
-    let sender_keys = derive_custom_keys(&master_mnemonic, RANDOM_ACTION_ACCOUNT_INDEX, 2, 0)?;
+#[async_trait::async_trait(?Send)]
+impl AsyncTask for RandomActionTask {
+    type Output = ();
+    type Error = VarError;
 
-    let test_system = TestSystem::new();
+    async fn execute(id: usize) -> Result<Self::Output, Self::Error> {
+        log::info!("Starting random action test");
 
-    for loop_count in 1.. {
-        match test_system.execute_random_action(&sender_keys).await {
+        let master_mnemonic =
+            std::env::var("MASTER_MNEMONIC").expect("MASTER_MNEMONIC must be set");
+        let sender_keys = derive_custom_keys(
+            &master_mnemonic,
+            RANDOM_ACTION_ACCOUNT_INDEX,
+            2,
+            (id * 2) as u32,
+        )
+        .unwrap();
+
+        let test_system = TestSystem::new();
+        let result = test_system
+            .execute_random_action(sender_keys.as_slice())
+            .await;
+        match result {
             Ok(_) => {
-                log::info!("{}-th test completed", loop_count);
+                log::info!("(id: {}) test completed", id);
             }
             Err(e) => {
-                log::warn!("{}-th test failed: {:?}", loop_count, e);
+                log::warn!("(id: {}) failed: {:?}", id, e);
             }
         }
 
         tokio::time::sleep(Duration::from_secs(LOOP_INTERVAL)).await;
-    }
 
-    Ok(())
+        Ok(())
+    }
 }
 
 #[tokio::main]
@@ -365,5 +436,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    test_random_action().await
+    process_queue::<RandomActionTask>(30, 20).await;
+
+    Ok(())
 }

@@ -22,6 +22,7 @@ use std::{future::Future, time::Duration};
 
 pub mod accounts;
 pub mod ethereum;
+pub mod task;
 
 // dev environment
 const DEPOSIT_WAITING_DURATION: u64 = 20 * 60;
@@ -140,6 +141,7 @@ pub async fn deposit_native_token_with_error_handling(
     depositor_eth_private_key: H256,
     recipient_key: KeySet,
     amount: U256,
+    waiting_duration: Option<Duration>,
 ) -> Result<(), CliError> {
     let token_type = TokenType::NATIVE;
     // let amount = ethers::types::U256::from(10);
@@ -166,7 +168,8 @@ pub async fn deposit_native_token_with_error_handling(
 
     // Wait for messaging to Scroll network
     log::info!("Waiting for messaging to Scroll network...");
-    tokio::time::sleep(Duration::from_secs(DEPOSIT_WAITING_DURATION)).await;
+    tokio::time::sleep(waiting_duration.unwrap_or(Duration::from_secs(DEPOSIT_WAITING_DURATION)))
+        .await;
 
     wait_for_balance_synchronization(recipient_key, Duration::from_secs(DEPOSIT_POLLING_DURATION))
         .await
