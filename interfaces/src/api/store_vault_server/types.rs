@@ -208,6 +208,15 @@ pub struct DataWithMetaData {
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DataWithTimestamp {
+    pub timestamp: u64,
+    #[serde_as(as = "Base64")]
+    pub data: Vec<u8>,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SaveMiscRequest {
     #[serde_as(as = "Base64")]
     pub data: Vec<u8>,

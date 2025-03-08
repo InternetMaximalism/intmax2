@@ -1,10 +1,11 @@
+use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaData {
     pub timestamp: u64,
-    pub uuid: String,
+    pub digest: Bytes32,
 }
 
 impl MetaData {
