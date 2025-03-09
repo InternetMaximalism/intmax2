@@ -38,7 +38,7 @@ pub trait StoreVaultClientInterface {
         &self,
         key: KeySet,
         entries: &[SaveDataEntry],
-    ) -> Result<Vec<String>, ServerError>;
+    ) -> Result<Vec<Bytes32>, ServerError>;
 
     async fn get_data_batch(
         &self,
