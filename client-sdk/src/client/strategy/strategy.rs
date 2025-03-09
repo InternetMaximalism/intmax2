@@ -10,7 +10,10 @@ use intmax2_interfaces::{
 };
 use itertools::Itertools;
 
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
+};
 
 use crate::{
     client::strategy::{
@@ -62,8 +65,8 @@ impl ReceiveAction {
 
 #[derive(Debug, Clone, Default)]
 pub struct PendingInfo {
-    pub pending_deposit_uuids: Vec<String>,
-    pub pending_transfer_uuids: Vec<String>,
+    pub pending_deposit_digests: Vec<Bytes32>,
+    pub pending_transfer_digests: Vec<Bytes32>,
 }
 
 /// Determine the sequence of receives/send tx to be incorporated into the balance proof
@@ -97,7 +100,7 @@ pub async fn determine_sequence(
     if let Some((meta, _tx_data)) = tx_info.pending.first() {
         return Err(StrategyError::PendingTxError(format!(
             "pending tx: {:?}",
-            meta.uuid
+            meta.digest
         )));
     }
 
@@ -144,7 +147,7 @@ pub async fn determine_sequence(
         // validate tx status
         let tx_status = get_tx_status(validity_prover, key.pubkey, tx_data.tx_tree_root).await?;
         if tx_status != TxStatus::Success {
-            log::warn!("tx {} is not success: {}", tx_meta.meta.uuid, tx_status);
+            log::warn!("tx {} is not success: {}", tx_meta.meta.digest, tx_status);
             continue;
         }
 
@@ -166,7 +169,7 @@ pub async fn determine_sequence(
             // ignore nonce mismatch tx
             log::warn!(
                 "nonce mismatch tx {}: expected={}, actual={}",
-                tx_meta.meta.uuid,
+                tx_meta.meta.digest,
                 nonce,
                 tx_data.spent_witness.tx.nonce
             );
@@ -182,7 +185,7 @@ pub async fn determine_sequence(
                 // TODO: Processing when the balance shortage is not resolved even if the pending deposit/transfer is incorporated
                 return Err(StrategyError::PendingReceivesError(format!(
                     "pending receives to proceed tx: {:?}",
-                    tx_meta.meta.uuid
+                    tx_meta.meta.digest
                 )));
             }
         }
@@ -197,22 +200,22 @@ pub async fn determine_sequence(
     let receives = collect_receives(&None, &mut deposits, &mut transfers).await?;
     sequence.push(Action::Receive(receives));
 
-    let pending_deposit_uuids = deposit_info
+    let pending_deposit_digests = deposit_info
         .pending
         .iter()
-        .map(|(meta, _)| meta.uuid.clone())
+        .map(|(meta, _)| meta.digest)
         .collect();
-    let pending_transfer_uuids = transfer_info
+    let pending_transfer_digests = transfer_info
         .pending
         .iter()
-        .map(|(meta, _)| meta.uuid.clone())
+        .map(|(meta, _)| meta.digest)
         .collect();
 
     Ok((
         sequence,
         PendingInfo {
-            pending_deposit_uuids,
-            pending_transfer_uuids,
+            pending_deposit_digests,
+            pending_transfer_digests,
         },
     ))
 }
@@ -268,7 +271,7 @@ async fn collect_receives(
     // sort by block number first, then by uuid to make the order deterministic
     receives.sort_by_key(|action| {
         let meta = action.meta();
-        (meta.block_number, meta.meta.uuid.clone())
+        (meta.block_number, meta.meta.digest.to_hex())
     });
 
     Ok(receives)
@@ -283,7 +286,7 @@ pub async fn determine_withdrawals(
 ) -> Result<
     (
         Vec<(MetaDataWithBlockNumber, TransferData)>,
-        Vec<String>, // pending withdrawals
+        Vec<Bytes32>, // pending withdrawals
     ),
     StrategyError,
 > {
@@ -297,12 +300,12 @@ pub async fn determine_withdrawals(
         tx_timeout,
     )
     .await?;
-    let pending_withdrawal_uuids = withdrawal_info
+    let pending_withdrawal_digests = withdrawal_info
         .pending
         .iter()
-        .map(|(meta, _)| meta.uuid.clone())
+        .map(|(meta, _)| meta.digest)
         .collect();
-    Ok((withdrawal_info.settled, pending_withdrawal_uuids))
+    Ok((withdrawal_info.settled, pending_withdrawal_digests))
 }
 
 /// Determine the

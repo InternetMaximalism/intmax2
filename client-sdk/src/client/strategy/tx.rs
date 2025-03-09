@@ -2,18 +2,19 @@ use super::{common::fetch_decrypt_validate, error::StrategyError};
 use intmax2_interfaces::{
     api::{
         store_vault_server::{
-            interface::{DataType, StoreVaultClientInterface},
+            interface::StoreVaultClientInterface,
             types::{CursorOrder, MetaDataCursor, MetaDataCursorResponse},
         },
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
+        data_type::DataType,
         meta_data::{MetaData, MetaDataWithBlockNumber},
         tx_data::TxData,
         user_data::ProcessStatus,
     },
 };
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _}};
 
 #[derive(Debug, Clone)]
 pub struct TxInfo {
@@ -26,8 +27,8 @@ pub async fn fetch_tx_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
-    included_digests: &[String],
-    excluded_digests: &[String],
+    included_digests: &[Bytes32],
+    excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
     tx_timeout: u64,
 ) -> Result<(TxInfo, MetaDataCursorResponse), StrategyError> {
@@ -67,21 +68,21 @@ pub async fn fetch_tx_info(
             }
             None if meta.timestamp + tx_timeout < current_time => {
                 // Transaction has timed out
-                log::error!("Tx {} is timeout", meta.uuid);
+                log::error!("Tx {} is timeout", meta.digest);
                 timeout.push((meta, tx_data));
             }
             None => {
                 // Transaction is still pending
-                log::info!("Tx {} is pending", meta.uuid);
+                log::info!("Tx {} is pending", meta.digest);
                 pending.push((meta, tx_data));
             }
         }
     }
 
     // sort
-    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.uuid.clone()));
-    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
-    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
+    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.digest.to_hex()));
+    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
+    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
     if cursor.order == CursorOrder::Desc {
         settled.reverse();
         pending.reverse();

@@ -335,8 +335,8 @@ impl Client {
         pending_info: PendingInfo,
     ) -> Result<(), SyncError> {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
-        user_data.deposit_status.pending_digests = pending_info.pending_deposit_uuids;
-        user_data.transfer_status.pending_digests = pending_info.pending_transfer_uuids;
+        user_data.deposit_status.pending_digests = pending_info.pending_deposit_digests;
+        user_data.transfer_status.pending_digests = pending_info.pending_transfer_digests;
         self.store_vault_server
             .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
             .await?;

@@ -2,12 +2,13 @@ use super::{common::fetch_decrypt_validate, error::StrategyError};
 use intmax2_interfaces::{
     api::{
         store_vault_server::{
-            interface::{DataType, StoreVaultClientInterface},
+            interface::StoreVaultClientInterface,
             types::{CursorOrder, MetaDataCursor, MetaDataCursorResponse},
         },
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
+        data_type::DataType,
         encryption::BlsEncryption,
         meta_data::{MetaData, MetaDataWithBlockNumber},
         sender_proof_set::SenderProofSet,
@@ -15,7 +16,10 @@ use intmax2_interfaces::{
         user_data::ProcessStatus,
     },
 };
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
+};
 use num_bigint::BigUint;
 
 #[derive(Debug, Clone)]
@@ -29,8 +33,8 @@ pub async fn fetch_withdrawal_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
-    included_digests: &[String],
-    excluded_digests: &[String],
+    included_digests: &[Bytes32],
+    excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
     tx_timeout: u64,
 ) -> Result<(WithdrawalInfo, MetaDataCursorResponse), StrategyError> {
@@ -55,14 +59,16 @@ pub async fn fetch_withdrawal_info(
             KeySet::new(BigUint::from(transfer_data.sender_proof_set_ephemeral_key).into());
 
         // Fetch encrypted sender proof set
-        let encrypted_sender_proof_set =
-            match store_vault_server.get_sender_proof_set(ephemeral_key).await {
-                Ok(data) => data,
-                Err(e) => {
-                    log::error!("failed to fetch sender proof set: {}", e);
-                    continue;
-                }
-            };
+        let encrypted_sender_proof_set = match store_vault_server
+            .get_snapshot(ephemeral_key, &DataType::SenderProofSet.to_topic())
+            .await?
+        {
+            Some(data) => data,
+            None => {
+                log::error!("sender proof set not found for withdrawal {}", meta.digest);
+                continue;
+            }
+        };
 
         // Decrypt sender proof set
         let sender_proof_set =
@@ -101,21 +107,21 @@ pub async fn fetch_withdrawal_info(
             }
             None if meta.timestamp + tx_timeout < current_time => {
                 // Transfer has timed out
-                log::error!("Withdrawal {} is timeout", meta.uuid);
+                log::error!("Withdrawal {} is timeout", meta.digest);
                 timeout.push((meta, transfer_data));
             }
             None => {
                 // Transfer is still pending
-                log::info!("Withdrawal {} is pending", meta.uuid);
+                log::info!("Withdrawal {} is pending", meta.digest);
                 pending.push((meta, transfer_data));
             }
         }
     }
 
     // sort
-    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.uuid.clone()));
-    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
-    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
+    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.digest.to_hex()));
+    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
+    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
     if cursor.order == CursorOrder::Desc {
         settled.reverse();
         pending.reverse();
