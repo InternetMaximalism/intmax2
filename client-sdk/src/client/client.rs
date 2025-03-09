@@ -3,7 +3,7 @@ use intmax2_interfaces::{
         balance_prover::interface::BalanceProverClientInterface,
         block_builder::interface::{BlockBuilderClientInterface, Fee},
         store_vault_server::{
-            interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+            interface::{SaveDataEntry, StoreVaultClientInterface},
             types::{MetaDataCursor, MetaDataCursorResponse},
         },
         validity_prover::interface::ValidityProverClientInterface,
@@ -12,14 +12,7 @@ use intmax2_interfaces::{
         },
     },
     data::{
-        deposit_data::{DepositData, TokenType},
-        encryption::BlsEncryption as _,
-        meta_data::MetaData,
-        proof_compression::{CompressedBalanceProof, CompressedSpentProof},
-        sender_proof_set::SenderProofSet,
-        transfer_data::TransferData,
-        tx_data::TxData,
-        user_data::{Balances, ProcessStatus},
+        data_type::DataType, deposit_data::{DepositData, TokenType}, encryption::BlsEncryption as _, meta_data::MetaData, proof_compression::{CompressedBalanceProof, CompressedSpentProof}, sender_proof_set::SenderProofSet, transfer_data::TransferData, tx_data::TxData, user_data::{Balances, ProcessStatus}
     },
 };
 use intmax2_zkp::{

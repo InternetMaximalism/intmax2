@@ -1,11 +1,11 @@
 use intmax2_interfaces::{
     api::store_vault_server::{
-        interface::{DataType, StoreVaultClientInterface},
+        interface::StoreVaultClientInterface,
         types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
     },
     data::{
-        encryption::BlsEncryption, meta_data::MetaData, sender_proof_set::SenderProofSet,
-        user_data::UserData, validation::Validation,
+        data_type::DataType, encryption::BlsEncryption, meta_data::MetaData,
+        sender_proof_set::SenderProofSet, user_data::UserData, validation::Validation,
     },
 };
 use intmax2_zkp::{
@@ -26,28 +26,24 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<(MetaData, T)>, MetaDataCursorResponse), StrategyError> {
     // fetch pending data
-    let encrypted_included_data_with_meta = if included_digests.is_empty() {
-        Vec::new()
-    } else {
-        store_vault_server
-            .get_data_batch(key, data_type, included_digests)
-            .await?
-    };
+    let encrypted_included_data_with_meta = store_vault_server
+        .get_data_batch(key, &data_type.to_topic(), included_digests)
+        .await?;
 
     // fetch unprocessed data
     let (encrypted_unprocessed_data_with_meta, cursor_response) = store_vault_server
-        .get_data_sequence(key, data_type, cursor)
+        .get_data_sequence(key, &data_type.to_topic(), cursor)
         .await?;
 
     // decrypt
     let data_with_meta = encrypted_included_data_with_meta
         .into_iter()
         .chain(encrypted_unprocessed_data_with_meta.into_iter())
-        .unique_by(|data_with_meta| data_with_meta.meta.uuid.clone()) // remove duplicates
+        .unique_by(|data_with_meta| data_with_meta.meta.digest) // remove duplicates
         .filter_map(|data_with_meta| {
             let DataWithMetaData { meta, data } = data_with_meta;
-            if excluded_digests.contains(&meta.uuid) {
-                log::warn!("{} {} is excluded", data_type, meta.uuid);
+            if excluded_digests.contains(&meta.digest) {
+                log::warn!("{} {} is excluded", data_type, meta.digest);
                 return None;
             }
             match T::decrypt(&data, key) {
@@ -73,7 +69,10 @@ pub async fn fetch_sender_proof_set(
     ephemeral_key: U256,
 ) -> Result<SenderProofSet, StrategyError> {
     let key = KeySet::new(BigUint::from(ephemeral_key).into());
-    let encrypted_sender_proof_set = store_vault_server.get_sender_proof_set(key).await?;
+    let encrypted_sender_proof_set = store_vault_server
+        .get_snapshot(key, &DataType::SenderProofSet.to_topic())
+        .await?
+        .ok_or(StrategyError::SenderProofSetNotFound)?;
     let sender_proof_set = SenderProofSet::decrypt(&encrypted_sender_proof_set, key)?;
     Ok(sender_proof_set)
 }
@@ -83,7 +82,7 @@ pub async fn fetch_user_data(
     key: KeySet,
 ) -> Result<UserData, StrategyError> {
     let user_data = store_vault_server
-        .get_user_data(key)
+        .get_snapshot(key, &DataType::UserData.to_topic())
         .await?
         .map(|encrypted| UserData::decrypt(&encrypted, key))
         .transpose()
