@@ -9,11 +9,11 @@ use intmax2_client_sdk::{
 use intmax2_interfaces::{
     api::{
         block_builder::interface::{Fee, FeeProof},
-        store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+        store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
-        encryption::BlsEncryption, sender_proof_set::SenderProofSet, transfer_data::TransferData,
-        validation::Validation,
+        data_type::DataType, encryption::BlsEncryption, sender_proof_set::SenderProofSet,
+        transfer_data::TransferData, validation::Validation,
     },
 };
 use intmax2_zkp::{
@@ -349,9 +349,9 @@ pub async fn collect_fee(
     let entries = transfer_data_vec
         .iter()
         .map(|transfer_data| SaveDataEntry {
-            data_type: DataType::Transfer,
+            topic: DataType::Transfer.to_topic(),
             pubkey: beneficiary_pubkey,
-            encrypted_data: transfer_data.encrypt(beneficiary_pubkey),
+            data: transfer_data.encrypt(beneficiary_pubkey),
         })
         .collect::<Vec<_>>();
     let dummy_key = KeySet::rand(&mut rand::thread_rng());
