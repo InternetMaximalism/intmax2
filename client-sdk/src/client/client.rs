@@ -174,12 +174,9 @@ impl Client {
             .store_vault_server
             .save_data_batch(ephemeral_key, &[save_entry])
             .await?;
-        let deposit_digest = digests
-            .first()
-            .ok_or(ClientError::UnexpectedError(
-                "deposit_digest not found".to_string(),
-            ))?
-            .clone();
+        let deposit_digest = *digests.first().ok_or(ClientError::UnexpectedError(
+            "deposit_digest not found".to_string(),
+        ))?;
         let result = DepositResult {
             deposit_data,
             deposit_digest,
@@ -562,11 +559,11 @@ impl Client {
                 .ok_or(ClientError::UnexpectedError(
                     "transfer_data not found".to_string(),
                 ))?;
-            let transfer_digest = transfer_digests[position].clone();
+            let transfer_digest = transfer_digests[position];
             let payment_memo = PaymentMemo {
                 meta: MetaData {
                     timestamp: chrono::Utc::now().timestamp() as u64,
-                    digest: transfer_digest.clone(),
+                    digest: transfer_digest,
                 },
                 transfer_data: transfer_data.clone(),
                 memo: memo_entry.memo.clone(),
@@ -584,8 +581,8 @@ impl Client {
 
         let result = TxResult {
             tx_tree_root: proposal.tx_tree_root,
-            transfer_digests: transfer_digests,
-            withdrawal_digests: withdrawal_digests,
+            transfer_digests,
+            withdrawal_digests,
             transfer_data_vec,
             withdrawal_data_vec,
         };
