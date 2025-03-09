@@ -77,7 +77,11 @@ pub async fn determine_sequence(
 ) -> Result<(Vec<Action>, PendingInfo), StrategyError> {
     log::info!("determine_sequence");
     let user_data = fetch_user_data(store_vault_server, key).await?;
+    log::info!("Finish to fetch user data");
 
+    fail::fail_point!("balance-insufficient-before-sync", |_| {
+        Err(StrategyError::BalanceInsufficientBeforeSync)
+    });
     let mut nonce = user_data.full_private_state.nonce;
     let mut balances = user_data.balances();
     if balances.is_insufficient() {
@@ -94,6 +98,9 @@ pub async fn determine_sequence(
     .await?;
 
     //  First, if there is a pending tx, return a pending error
+    fail::fail_point!("pending-tx-error", |_| {
+        Err(StrategyError::PendingTxError("pending tx".to_string()))
+    });
     if let Some((meta, _tx_data)) = tx_info.pending.first() {
         return Err(StrategyError::PendingTxError(format!(
             "pending tx: {:?}",

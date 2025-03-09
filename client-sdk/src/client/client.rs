@@ -199,6 +199,35 @@ impl Client {
         fee: Option<Fee>,
         collateral_fee: Option<Fee>,
     ) -> Result<TxRequestMemo, ClientError> {
+        fail::fail_point!("send-tx-request-empty-transfers", |_| {
+            Err(ClientError::TransferLenError(
+                "transfers is empty".to_string(),
+            ))
+        });
+        fail::fail_point!("send-tx-request-too-many-transfers", |_| {
+            Err(ClientError::TransferLenError(
+                "transfers is too many".to_string(),
+            ))
+        });
+        fail::fail_point!("send-tx-request-missing-fee-beneficiary", |_| {
+            Err(ClientError::BlockBuilderFeeError(
+                "fee_beneficiary is required".to_string(),
+            ))
+        });
+        fail::fail_point!("send-tx-request-invalid-memo-index", |_| {
+            Err(ClientError::PaymentMemoError(
+                "memo.transfer_index is out of range".to_string(),
+            ))
+        });
+        fail::fail_point!("send-tx-request-insufficient-balance", |_| {
+            Err(ClientError::BalanceError(
+                "Insufficient balance: 0 < 100 for token #0".to_string(),
+            ))
+        });
+        fail::fail_point!("send-tx-request-zero-balance-account", |_| {
+            Err(ClientError::CannotSendTxByZeroBalanceAccount)
+        });
+
         log::info!(
             "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {:?}, fee {:?}, collateral_fee {:?}",
             key.pubkey,
@@ -392,6 +421,12 @@ impl Client {
         block_builder_url: &str,
         request_id: &str,
     ) -> Result<BlockProposal, ClientError> {
+        fail::fail_point!("query-proposal-limit-exceeded", |_| {
+            Err(ClientError::FailedToGetProposal(
+                "block builder query limit exceeded".to_string(),
+            ))
+        });
+
         let mut tries = 0;
         let proposal = loop {
             let proposal = self
@@ -424,6 +459,27 @@ impl Client {
         memo: &TxRequestMemo,
         proposal: &BlockProposal,
     ) -> Result<TxResult, ClientError> {
+        fail::fail_point!("finalize-tx-zero-expiry", |_| {
+            Err(ClientError::InvalidBlockProposal(
+                "expiry 0 is not allowed".to_string(),
+            ))
+        });
+        fail::fail_point!("finalize-tx-proposal-expired", |_| {
+            Err(ClientError::InvalidBlockProposal(
+                "proposal expired".to_string(),
+            ))
+        });
+        fail::fail_point!("finalize-tx-expiry-too-far", |_| {
+            Err(ClientError::InvalidBlockProposal(
+                "proposal expiry too far".to_string(),
+            ))
+        });
+        fail::fail_point!("finalize-tx-transfer-data-not-found", |_| {
+            Err(ClientError::UnexpectedError(
+                "transfer_data not found".to_string(),
+            ))
+        });
+
         // verify proposal
         proposal
             .verify(memo.tx)
@@ -590,6 +646,12 @@ impl Client {
         tx_tree_root: Bytes32,
     ) -> Result<TxStatus, ClientError> {
         let status = get_tx_status(self.validity_prover.as_ref(), sender, tx_tree_root).await?;
+        fail::fail_point!("get_tx_status_returns_always_pending", |_| {
+            Ok(TxStatus::Pending)
+        });
+        fail::fail_point!("get_tx_status_returns_failed", |_| {
+            Ok(TxStatus::Failed("Transaction failed".to_string()))
+        });
         Ok(status)
     }
 
@@ -661,6 +723,17 @@ impl Client {
         pubkey: U256,
         fee_token_index: u32,
     ) -> Result<FeeQuote, ClientError> {
+        fail::fail_point!("quote-transfer-fee-beneficiary-missing", |_| {
+            Err(ClientError::BlockBuilderFeeError(
+                "beneficiary is required".to_string(),
+            ))
+        });
+        fail::fail_point!("quote-transfer-fee-collateral-without-fee", |_| {
+            Err(ClientError::BlockBuilderFeeError(
+                "collateral fee is required but fee is not found".to_string(),
+            ))
+        });
+
         let account_info = self.validity_prover.get_account_info(pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;

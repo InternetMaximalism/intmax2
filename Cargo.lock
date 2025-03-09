@@ -2489,6 +2489,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fail"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe5e43d0f78a42ad591453aedb1d7ae631ce7ee445c7643691055a9ed8d3b01c"
+dependencies = [
+ "log",
+ "once_cell",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3532,6 +3543,7 @@ dependencies = [
  "env_logger",
  "envy",
  "ethers",
+ "fail",
  "hex",
  "intmax2-client-sdk",
  "intmax2-interfaces",
@@ -3570,6 +3582,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "ethers",
+ "fail",
  "getrandom 0.2.15",
  "gloo-timers 0.3.0",
  "hashbrown 0.15.2",
@@ -6735,6 +6748,7 @@ dependencies = [
  "env_logger",
  "envy",
  "ethers",
+ "fail",
  "futures",
  "hashbrown 0.15.2",
  "intmax2-cli",

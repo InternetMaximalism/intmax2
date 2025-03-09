@@ -39,6 +39,9 @@ pub async fn process_queue<T: AsyncTask + 'static>(
     total_tasks: usize,
     max_concurrent: usize,
 ) -> Vec<T::Output> {
+    #[cfg(feature = "failpoints")]
+    assert_eq!(max_concurrent, 1, "When the failpoints feature is enabled, please set the maximum degree of parallelism to 1.");
+
     let semaphore = Arc::new(Semaphore::new(max_concurrent));
     let queue = Arc::new(Mutex::new(TaskQueue::<T>::new(total_tasks)));
     let queue_clone = queue.clone();

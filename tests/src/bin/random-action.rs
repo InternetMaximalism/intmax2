@@ -6,6 +6,7 @@ use std::{
 };
 
 use ethers::{abi::AbiEncode, types::H256};
+use fail::FailScenario;
 use intmax2_cli::cli::{error::CliError, send::send_transfers};
 use intmax2_client_sdk::{
     client::sync::utils::generate_salt, external_api::contract::utils::get_eth_balance,
@@ -32,6 +33,8 @@ const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
 struct EnvVar {
     l1_rpc_url: String,
     transfer_admin_private_key: String,
+    max_concurrent: Option<usize>,
+    max_using_account: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -49,10 +52,47 @@ enum Action {
 
 impl Action {
     fn random() -> Self {
-        let actions = [Action::Deposit, Action::Transfer, Action::Withdrawal];
+        let actions = [
+            Action::Deposit,
+            Action::Transfer,
+            Action::Transfer,
+            Action::Transfer,
+            Action::Withdrawal,
+            Action::Withdrawal,
+        ];
         actions[rand::thread_rng().gen_range(0..actions.len())]
     }
 }
+
+// Failpoints that are safe to use with each action
+const TRANSFER_SAFE_FAILPOINTS: &[&str] = &[
+    "quote-transfer-fee-error",
+    "quote-transfer-fee-beneficiary-missing",
+    "quote-transfer-fee-collateral-without-fee",
+    "send-tx-request-error",
+    "send-tx-request-missing-fee-beneficiary",
+    "send-tx-request-invalid-memo-index",
+    "after-send-tx-request",
+    "query-proposal-error",
+    "query-proposal-limit-exceeded",
+    "finalize-tx-error",
+    "finalize-tx-zero-expiry",
+    "finalize-tx-proposal-expired",
+    "finalize-tx-expiry-too-far",
+    "finalize-tx-transfer-data-not-found",
+    "after-finalize-tx",
+    "during-tx-status-polling",
+    "tx-expired",
+    "get-tx-status-error",
+    "get_tx_status_returns_always_pending",
+    "get_tx_status_returns_failed",
+    "validity-witness-not-found",
+    "sender-leaf-not-found",
+    "sender-did-not-return-sig",
+    "block-is-not-valid",
+    "balance-insufficient-before-sync",
+    "pending-tx-error",
+];
 
 impl TestSystem {
     fn new() -> Self {
@@ -65,6 +105,34 @@ impl TestSystem {
         }
     }
 
+    // Function to randomly enable a failpoint
+    fn enable_random_failpoint(action: Action) -> Option<FailScenario<'static>> {
+        // 50% chance to enable a failpoint
+        if cfg!(feature = "failpoints") && rand::thread_rng().gen_bool(0.5) {
+            let failpoints = match action {
+                Action::Transfer => TRANSFER_SAFE_FAILPOINTS,
+                // For now, only use failpoints with Transfer action
+                _ => return None,
+            };
+            if failpoints.is_empty() {
+                return None;
+            }
+
+            let failpoint = failpoints[rand::thread_rng().gen_range(0..failpoints.len())];
+            log::info!("Enabling failpoint: {}", failpoint);
+
+            // Create and return the failpoint scenario
+            let new_failpoints = format!("{}=return", failpoint);
+            std::env::set_var("FAILPOINTS", new_failpoints);
+            log::info!("scenario changed: {:?}", std::env::var("FAILPOINTS"));
+            let scenario = FailScenario::setup();
+            log::info!("Create scenario");
+            Some(scenario)
+        } else {
+            None
+        }
+    }
+
     async fn execute_random_action(
         &self,
         keys: &[Account],
@@ -73,7 +141,11 @@ impl TestSystem {
         let switch_recipient = rand::thread_rng().gen_bool(0.5);
         let sender_key = if switch_recipient { keys[1] } else { keys[0] };
         let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
-        match action {
+
+        // Enable a random failpoint if applicable
+        let scenario = Self::enable_random_failpoint(action);
+
+        let result = match action {
             Action::Deposit => {
                 log::info!(
                     "Deposit: {:?} -> {}",
@@ -81,7 +153,7 @@ impl TestSystem {
                     recipient_key.intmax_key.pubkey.to_hex()
                 );
                 self.execute_deposit(sender_key, recipient_key.intmax_key)
-                    .await?
+                    .await
             }
             Action::Transfer => {
                 log::info!(
@@ -90,7 +162,7 @@ impl TestSystem {
                     recipient_key.intmax_key.pubkey.to_hex()
                 );
                 self.execute_transfer(sender_key.intmax_key, recipient_key.intmax_key)
-                    .await?
+                    .await
             }
             Action::Withdrawal => {
                 log::info!(
@@ -99,11 +171,23 @@ impl TestSystem {
                     recipient_key.eth_address
                 );
                 self.execute_withdrawal(sender_key.intmax_key, recipient_key)
-                    .await?
+                    .await
             }
+        };
+
+        // Clean up the failpoint if one was enabled
+        if let Some(scenario) = scenario {
+            scenario.teardown();
         }
 
-        Ok(())
+        // Log the result
+        match &result {
+            Ok(_) => log::info!("Action completed successfully"),
+            Err(e) => log::warn!("Action failed with error: {:?}", e),
+        }
+
+        // Return the result
+        result
     }
 
     async fn execute_deposit(
@@ -227,7 +311,10 @@ impl TestSystem {
         };
 
         let result = send_transfers(sender_key, &[transfer], vec![], ETH_TOKEN_INDEX, true).await;
-        log::info!("Transaction Result {:?}", result);
+        match &result {
+            Ok(_) => log::info!("Transaction completed successfully"),
+            Err(e) => log::warn!("Transaction failed with error: {:?}", e),
+        }
 
         // Check final balances
         let sender_final_balance = get_eth_balance_on_intmax(sender_key).await?;
@@ -242,21 +329,26 @@ impl TestSystem {
             recipient_key.pubkey.to_hex(),
             recipient_final_balance
         );
-        // Expected result: Recipient's balance should increase by only one transfer amount
-        let expected_recipient_balance = recipient_initial_balance + transfer_amount;
 
-        if recipient_final_balance == expected_recipient_balance {
-            log::info!("Only one of the two transfer transactions was processed");
-        } else {
-            log::warn!("Recipient's balance does not match expected value");
-            log::warn!(
-                "Expected: {}, Actual: {}",
-                expected_recipient_balance,
-                recipient_final_balance
-            );
+        // Only check balance if the transaction succeeded
+        if result.is_ok() {
+            // Expected result: Recipient's balance should increase by only one transfer amount
+            let expected_recipient_balance = recipient_initial_balance + transfer_amount;
+
+            if recipient_final_balance == expected_recipient_balance {
+                log::info!("Only one of the two transfer transactions was processed");
+            } else {
+                log::warn!("Recipient's balance does not match expected value");
+                log::warn!(
+                    "Expected: {}, Actual: {}",
+                    expected_recipient_balance,
+                    recipient_final_balance
+                );
+            }
         }
 
-        Ok(())
+        // Return the result of send_transfers
+        result.map_err(|e| e.into())
     }
 
     async fn execute_withdrawal(
@@ -428,12 +520,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli_env_path = current_dir.join("./cli/.env");
     println!("cli_env_path: {}", cli_env_path.to_string_lossy());
     dotenv::from_path(cli_env_path)?;
-    // let config = envy::from_env::<EnvVar>().unwrap();
+    let config = envy::from_env::<EnvVar>().unwrap();
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    process_queue::<RandomActionTask>(30, 20).await;
+    // Run more iterations to test more failpoints
+    process_queue::<RandomActionTask>(
+        config.max_using_account.unwrap_or(10),
+        config.max_concurrent.unwrap_or(1),
+    )
+    .await;
 
     Ok(())
 }

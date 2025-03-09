@@ -38,6 +38,11 @@ pub async fn get_tx_status(
     }
     let block_number = block_number.unwrap();
     let validity_witness = validity_prover.get_validity_witness(block_number).await?;
+    fail::fail_point!("validity-witness-not-found", |_| {
+        Err(StrategyError::UnexpectedError(format!(
+            "failed to convert to validity pis"
+        )))
+    });
     let validity_pis = validity_witness.to_validity_pis().map_err(|e| {
         StrategyError::UnexpectedError(format!("failed to convert to validity pis: {}", e))
     })?;
@@ -49,17 +54,28 @@ pub async fn get_tx_status(
         .leaves()
         .into_iter()
         .find(|leaf| leaf.sender == sender);
+    fail::fail_point!("sender-leaf-not-found", |_| {
+        Ok(TxStatus::Failed("sender leaf not found".to_string()))
+    });
     let sender_leaf = match sender_leaf {
         Some(leaf) => leaf,
         None => return Ok(TxStatus::Failed("sender leaf not found".to_string())),
     };
 
+    fail::fail_point!("sender-did-not-return-sig", |_| {
+        Ok(TxStatus::Failed(
+            "sender did'nt returned signature".to_string(),
+        ))
+    });
     if !sender_leaf.did_return_sig {
         return Ok(TxStatus::Failed(
             "sender did'nt returned signature".to_string(),
         ));
     }
 
+    fail::fail_point!("block-is-not-valid", |_| {
+        Ok(TxStatus::Failed("block is not valid".to_string()))
+    });
     if !validity_pis.is_valid_block {
         return Ok(TxStatus::Failed("block is not valid".to_string()));
     }

@@ -51,3 +51,17 @@ curl -X POST http://localhost:8080/config \
 -H "Content-Type: application/json" \
 -d '{"concurrent_limit": 800, "end": "false"}'
 ```
+
+## random-action
+
+```sh
+cargo run -r --bin random-action
+```
+
+When the failpoints feature is enabled, please execute the following command:
+
+```sh
+cargo run -r --bin random-action --features failpoints
+```
+
+NOTE: Please set the maximum degree of parallelism to 1.

@@ -1,3 +1,4 @@
+use fail;
 use intmax2_client_sdk::{
     client::{client::PaymentMemoEntry, strategy::tx_status::TxStatus},
     external_api::{indexer::IndexerClient, utils::time::sleep_for},
@@ -34,6 +35,11 @@ pub async fn send_transfers(
     } else {
         // get block builder info
         let indexer = IndexerClient::new(&env.indexer_base_url.to_string());
+        fail::fail_point!("indexer-get-block-builder-info-empty", |_| {
+            Err(CliError::UnexpectedError(
+                "Block builder info is empty".to_string(),
+            ))
+        });
         let block_builder_info = indexer.get_block_builder_info().await?;
         if block_builder_info.is_empty() {
             return Err(CliError::UnexpectedError(
@@ -43,6 +49,11 @@ pub async fn send_transfers(
         block_builder_info.first().unwrap().url.clone()
     };
 
+    fail::fail_point!("quote-transfer-fee-error", |_| {
+        Err(CliError::UnexpectedError(
+            "Failed to quote transfer fee".to_string(),
+        ))
+    });
     let fee_quote = client
         .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
         .await?;
@@ -57,6 +68,12 @@ pub async fn send_transfers(
             collateral_fee.token_index
         );
     }
+
+    fail::fail_point!("send-tx-request-error", |_| {
+        Err(CliError::UnexpectedError(
+            "Failed to send transaction request".to_string(),
+        ))
+    });
     let memo = client
         .send_tx_request(
             &block_builder_url,
@@ -69,20 +86,42 @@ pub async fn send_transfers(
         )
         .await?;
 
+    fail::fail_point!("after-send-tx-request", |_| {
+        Err(CliError::UnexpectedError(
+            "Failpoint triggered after send_tx_request".to_string(),
+        ))
+    });
+
     log::info!("Waiting for block builder to build the block");
     tokio::time::sleep(std::time::Duration::from_secs(
         env.block_builder_query_wait_time,
     ))
     .await;
 
+    fail::fail_point!("query-proposal-error", |_| {
+        Err(CliError::UnexpectedError(
+            "Failed to query proposal".to_string(),
+        ))
+    });
     let proposal = client
         .query_proposal(&block_builder_url, &memo.request_id)
         .await?;
 
     log::info!("Finalizing tx");
+    fail::fail_point!("finalize-tx-error", |_| {
+        Err(CliError::UnexpectedError(
+            "Failed to finalize transaction".to_string(),
+        ))
+    });
     let result = client
         .finalize_tx(&block_builder_url, key, &memo, &proposal)
         .await?;
+
+    fail::fail_point!("after-finalize-tx", |_| {
+        Err(CliError::UnexpectedError(
+            "Failpoint triggered after finalize_tx".to_string(),
+        ))
+    });
 
     let expiry_with_margin = if proposal.expiry > 0 {
         proposal.expiry + BLOCK_SYNC_MARGIN
@@ -94,10 +133,21 @@ pub async fn send_transfers(
         log::info!("Waiting for the block to be finalized");
 
         loop {
+            fail::fail_point!("during-tx-status-polling", |_| {
+                Err(CliError::UnexpectedError(
+                    "Failpoint triggered during transaction status polling".to_string(),
+                ))
+            });
             if expiry_with_margin < chrono::Utc::now().timestamp() as u64 {
                 log::error!("tx expired");
                 break;
             }
+
+            fail::fail_point!("get-tx-status-error", |_| {
+                Err(CliError::UnexpectedError(
+                    "Failed to get transaction status".to_string(),
+                ))
+            });
             let status = client
                 .get_tx_status(key.pubkey, result.tx_tree_root)
                 .await?;

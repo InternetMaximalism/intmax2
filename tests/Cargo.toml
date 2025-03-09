@@ -35,3 +35,7 @@ chrono.workspace = true
 regex = "1.11.1"
 statrs = "0.18.0"
 async-trait = "0.1.87"
+fail = "0.5.1"
+
+[features]
+failpoints = ["fail/failpoints"]
