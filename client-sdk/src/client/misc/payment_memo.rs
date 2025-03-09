@@ -1,17 +1,17 @@
+use crate::client::{error::ClientError, sync::error::SyncError};
 use intmax2_interfaces::{
     api::store_vault_server::{
-        interface::StoreVaultClientInterface,
+        interface::{SaveDataEntry, StoreVaultClientInterface},
         types::{CursorOrder, MetaDataCursor},
     },
     data::{encryption::BlsEncryption, meta_data::MetaData, transfer_data::TransferData},
 };
-
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::client::{error::ClientError, sync::error::SyncError};
-
-use super::get_topic;
+pub fn get_topic(input: &str) -> String {
+    format!("v1/aa/misc:{}", input)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", bound(deserialize = ""))]
@@ -28,12 +28,15 @@ pub async fn save_payment_memo<M: Default + Clone + Serialize + DeserializeOwned
     key: KeySet,
     memo_name: &str,
     payment_memo: &PaymentMemo,
-) -> Result<String, ClientError> {
+) -> Result<Bytes32, ClientError> {
     let topic = get_topic(memo_name);
-    let uuid = store_vault_server
-        .save_misc(key, topic, &payment_memo.encrypt(key.pubkey))
-        .await?;
-    Ok(uuid)
+    let entry = SaveDataEntry {
+        topic,
+        pubkey: key.pubkey,
+        data: payment_memo.encrypt(key.pubkey),
+    };
+    let digests = store_vault_server.save_data_batch(key, &[entry]).await?;
+    Ok(digests[0])
 }
 
 pub async fn get_all_payment_memos(
@@ -42,14 +45,13 @@ pub async fn get_all_payment_memos(
     memo_name: &str,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
     let topic = get_topic(memo_name);
-
     let mut encrypted_memos = vec![];
     let mut cursor = None;
     loop {
         let (encrypted_memos_partial, cursor_response) = store_vault_server
-            .get_misc_sequence(
+            .get_data_sequence(
                 key,
-                topic,
+                &topic,
                 &MetaDataCursor {
                     cursor: cursor.clone(),
                     order: CursorOrder::Asc,
