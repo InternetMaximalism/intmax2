@@ -148,16 +148,16 @@ pub struct JsUserData {
     /// The last unix timestamp of processed withdrawals
     pub withdrawal_lpt: u64,
 
-    /// Uuids of processed deposits
+    /// Digests of processed deposits
     pub processed_deposit_digests: Vec<String>,
 
-    /// Uuids of processed transfers
+    /// Digests of processed transfers
     pub processed_transfer_digests: Vec<String>,
 
-    /// Uuids of processed txs
+    /// Digests of processed txs
     pub processed_tx_digests: Vec<String>,
 
-    /// Uuids of processed withdrawals
+    /// Digests of processed withdrawals
     pub processed_withdrawal_digests: Vec<String>,
 }
 
