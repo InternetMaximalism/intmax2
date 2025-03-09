@@ -1,18 +1,22 @@
 use intmax2_interfaces::{
     api::{
         store_vault_server::{
-            interface::{DataType, StoreVaultClientInterface},
+            interface::StoreVaultClientInterface,
             types::{CursorOrder, MetaDataCursor, MetaDataCursorResponse},
         },
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
+        data_type::DataType,
         deposit_data::DepositData,
         meta_data::{MetaData, MetaDataWithBlockNumber},
         user_data::ProcessStatus,
     },
 };
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
+};
 
 use crate::external_api::contract::liquidity_contract::LiquidityContract;
 
@@ -31,8 +35,8 @@ pub async fn fetch_deposit_info(
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
-    included_digests: &[String],
-    excluded_digests: &[String],
+    included_digests: &[Bytes32],
+    excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
     deposit_timeout: u64,
 ) -> Result<(DepositInfo, MetaDataCursorResponse), StrategyError> {
@@ -93,24 +97,24 @@ pub async fn fetch_deposit_info(
             None if meta.timestamp + deposit_timeout < chrono::Utc::now().timestamp() as u64 => {
                 // Deposit has timed out
                 log::error!(
-                    "Deposit uuid: {}, hash: {} is timeout",
-                    meta.uuid,
+                    "Deposit digest: {}, deposit_hash: {} is timeout",
+                    meta.digest,
                     deposit_data.deposit_hash().unwrap()
                 );
                 timeout.push((meta, deposit_data));
             }
             None => {
                 // Deposit is still pending
-                log::info!("Deposit {} is pending", meta.uuid);
+                log::info!("Deposit {} is pending", meta.digest);
                 pending.push((meta, deposit_data));
             }
         }
     }
 
     // sort
-    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.uuid.clone()));
-    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
-    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.uuid.clone()));
+    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.digest.to_hex()));
+    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
+    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
     if cursor.order == CursorOrder::Desc {
         settled.reverse();
         pending.reverse();
