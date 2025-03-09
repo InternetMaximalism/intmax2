@@ -12,13 +12,10 @@ use crate::{
 };
 use intmax2_client_sdk::external_api::store_vault_server::generate_auth_for_get_data_sequence;
 use intmax2_interfaces::{
-    api::store_vault_server::{
-        interface::DataType,
-        types::{CursorOrder, MetaDataCursor},
-    },
+    api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{
-        deposit_data::DepositData, encryption::BlsEncryption as _, transfer_data::TransferData,
-        tx_data::TxData,
+        data_type::DataType, deposit_data::DepositData, encryption::BlsEncryption as _,
+        transfer_data::TransferData, tx_data::TxData,
     },
     utils::signature::Auth,
 };
@@ -87,7 +84,7 @@ pub async fn fetch_encrypted_data(
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
     let mut data_array = Vec::new();
     let (deposit_data, _) = sv
-        .get_data_sequence_with_auth(DataType::Deposit, &cursor, &auth)
+        .get_data_sequence_with_auth(&DataType::Deposit.to_topic(), &cursor, &auth)
         .await?;
     data_array.extend(
         deposit_data
@@ -95,7 +92,7 @@ pub async fn fetch_encrypted_data(
             .map(|data| JsEncryptedData::new(DataType::Deposit, data)),
     );
     let (transfer_data, _) = sv
-        .get_data_sequence_with_auth(DataType::Transfer, &cursor, &auth)
+        .get_data_sequence_with_auth(&DataType::Transfer.to_topic(), &cursor, &auth)
         .await?;
     data_array.extend(
         transfer_data
@@ -103,14 +100,14 @@ pub async fn fetch_encrypted_data(
             .map(|data| JsEncryptedData::new(DataType::Transfer, data)),
     );
     let (tx_data, _) = sv
-        .get_data_sequence_with_auth(DataType::Tx, &cursor, &auth)
+        .get_data_sequence_with_auth(&DataType::Tx.to_topic(), &cursor, &auth)
         .await?;
     data_array.extend(
         tx_data
             .into_iter()
             .map(|data| JsEncryptedData::new(DataType::Tx, data)),
     );
-    data_array.sort_by_key(|data| (data.timestamp, data.uuid.clone()));
+    data_array.sort_by_key(|data| (data.timestamp, data.digest.clone()));
     if cursor.order == CursorOrder::Desc {
         data_array.reverse();
     }

@@ -41,7 +41,7 @@ impl TryFrom<JsMetaDataCursor> for MetaDataCursor {
 
     fn try_from(cursor: JsMetaDataCursor) -> Result<Self, Self::Error> {
         Ok(Self {
-            cursor: cursor.cursor.map(MetaData::from),
+            cursor: cursor.cursor.map(MetaData::try_from).transpose()?,
             order: cursor
                 .order
                 .parse()
@@ -81,12 +81,17 @@ impl From<MetaDataCursorResponse> for JsMetaDataCursorResponse {
     }
 }
 
-impl From<JsMetaDataCursorResponse> for MetaDataCursorResponse {
-    fn from(cursor_response: JsMetaDataCursorResponse) -> Self {
-        Self {
-            next_cursor: cursor_response.next_cursor.map(MetaData::from),
+impl TryFrom<JsMetaDataCursorResponse> for MetaDataCursorResponse {
+    type Error = JsError;
+
+    fn try_from(cursor_response: JsMetaDataCursorResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            next_cursor: cursor_response
+                .next_cursor
+                .map(MetaData::try_from)
+                .transpose()?,
             has_more: cursor_response.has_more,
             total_count: cursor_response.total_count,
-        }
+        })
     }
 }

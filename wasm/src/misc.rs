@@ -1,5 +1,4 @@
-use ethers::core::k256::sha2::{self, Digest as _};
-use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait};
+use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -9,7 +8,10 @@ use crate::{
     utils::str_privkey_to_keyset,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::types::{CursorOrder, MetaDataCursor},
+    api::store_vault_server::{
+        interface::SaveDataEntry,
+        types::{CursorOrder, MetaDataCursor},
+    },
     data::{encryption::BlsEncryption as _, generic_misc_data::GenericMiscData},
 };
 
@@ -31,9 +33,8 @@ impl JsDerive {
     }
 }
 
-fn derive_topic() -> Bytes32 {
-    let result: [u8; 32] = sha2::Sha256::digest(b"derive_path").into();
-    Bytes32::from_bytes_be(&result)
+fn derive_path_topic() -> String {
+    "v1/aa/derive_path".to_string()
 }
 
 #[wasm_bindgen]
@@ -48,12 +49,17 @@ pub async fn save_derive_path(
     let generic_misc_data = GenericMiscData {
         data: bincode::serialize(derive).unwrap(),
     };
-    let encrypted_data = generic_misc_data.encrypt(key.pubkey);
-    let uuid = client
+
+    let entry = SaveDataEntry {
+        topic: derive_path_topic(),
+        pubkey: key.pubkey,
+        data: generic_misc_data.encrypt(key.pubkey),
+    };
+    let digests = client
         .store_vault_server
-        .save_misc(key, derive_topic(), &encrypted_data)
+        .save_data_batch(key, &[entry])
         .await?;
-    Ok(uuid)
+    Ok(digests[0].to_hex())
 }
 
 #[wasm_bindgen]
@@ -74,7 +80,7 @@ pub async fn get_derive_path_list(
     loop {
         let (encrypted_data_partial, cursor_response) = client
             .store_vault_server
-            .get_misc_sequence(key, derive_topic(), &cursor)
+            .get_data_sequence(key, &derive_path_topic(), &cursor)
             .await?;
         encrypted_data.extend(encrypted_data_partial);
         if !cursor_response.has_more {

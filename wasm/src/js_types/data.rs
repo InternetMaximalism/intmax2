@@ -86,14 +86,14 @@ impl From<TxData> for JsTxData {
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsDepositResult {
     pub deposit_data: JsDepositData,
-    pub deposit_uuid: String,
+    pub deposit_digest: String,
 }
 
 impl From<DepositResult> for JsDepositResult {
     fn from(deposit_result: DepositResult) -> Self {
         Self {
             deposit_data: deposit_result.deposit_data.into(),
-            deposit_uuid: deposit_result.deposit_uuid.to_string(),
+            deposit_digest: deposit_result.deposit_digest.to_string(),
         }
     }
 }
@@ -102,16 +102,24 @@ impl From<DepositResult> for JsDepositResult {
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTxResult {
     pub tx_tree_root: String,
-    pub transfer_uuids: Vec<String>,
-    pub withdrawal_uuids: Vec<String>,
+    pub transfer_digests: Vec<String>,
+    pub withdrawal_digests: Vec<String>,
 }
 
 impl From<TxResult> for JsTxResult {
     fn from(tx_result: TxResult) -> Self {
         Self {
             tx_tree_root: tx_result.tx_tree_root.to_hex(),
-            transfer_uuids: tx_result.transfer_uuids,
-            withdrawal_uuids: tx_result.withdrawal_uuids,
+            transfer_digests: tx_result
+                .transfer_digests
+                .into_iter()
+                .map(|x| x.to_hex())
+                .collect(),
+            withdrawal_digests: tx_result
+                .withdrawal_digests
+                .into_iter()
+                .map(|x| x.to_hex())
+                .collect(),
         }
     }
 }
@@ -141,16 +149,16 @@ pub struct JsUserData {
     pub withdrawal_lpt: u64,
 
     /// Uuids of processed deposits
-    pub processed_deposit_uuids: Vec<String>,
+    pub processed_deposit_digests: Vec<String>,
 
     /// Uuids of processed transfers
-    pub processed_transfer_uuids: Vec<String>,
+    pub processed_transfer_digests: Vec<String>,
 
     /// Uuids of processed txs
-    pub processed_tx_uuids: Vec<String>,
+    pub processed_tx_digests: Vec<String>,
 
     /// Uuids of processed withdrawals
-    pub processed_withdrawal_uuids: Vec<String>,
+    pub processed_withdrawal_digests: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,10 +224,30 @@ impl From<UserData> for JsUserData {
                 .as_ref()
                 .map(|x| x.timestamp)
                 .unwrap_or(0),
-            processed_deposit_uuids: user_data.deposit_status.processed_digests.clone(),
-            processed_transfer_uuids: user_data.transfer_status.processed_digests.clone(),
-            processed_tx_uuids: user_data.tx_status.processed_digests.clone(),
-            processed_withdrawal_uuids: user_data.withdrawal_status.processed_digests.clone(),
+            processed_deposit_digests: user_data
+                .deposit_status
+                .processed_digests
+                .into_iter()
+                .map(|x| x.to_hex())
+                .collect(),
+            processed_transfer_digests: user_data
+                .transfer_status
+                .processed_digests
+                .into_iter()
+                .map(|x| x.to_hex())
+                .collect(),
+            processed_tx_digests: user_data
+                .tx_status
+                .processed_digests
+                .into_iter()
+                .map(|x| x.to_hex())
+                .collect(),
+            processed_withdrawal_digests: user_data
+                .withdrawal_status
+                .processed_digests
+                .into_iter()
+                .map(|x| x.to_hex())
+                .collect(),
         }
     }
 }
