@@ -31,6 +31,7 @@ pub async fn save_snapshot(
     let request = &request.inner;
 
     // validate rights
+    validate_topic_length(&request.topic)?;
     let rw_rights = extract_rights(&request.topic)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
     match rw_rights.write_rights {
@@ -89,6 +90,7 @@ pub async fn get_snapshot(
     let request = &request.inner;
 
     // validate rights
+    validate_topic_length(&request.topic)?;
     let rw_rights = extract_rights(&request.topic)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
     match rw_rights.read_rights {
@@ -130,6 +132,7 @@ pub async fn save_data_batch(
     }
 
     for entry in entries {
+        validate_topic_length(&entry.topic)?;
         let rw_rights = extract_rights(&entry.topic)
             .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
         match rw_rights.write_rights {
@@ -182,6 +185,7 @@ pub async fn get_data_batch(
     }
 
     // validate rights
+    validate_topic_length(&request.topic)?;
     let rw_rights = extract_rights(&request.topic)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
     match rw_rights.read_rights {
@@ -224,6 +228,7 @@ pub async fn get_data_sequence(
         }
     }
     // validate rights
+    validate_topic_length(&request.topic)?;
     let rw_rights = extract_rights(&request.topic)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
     match rw_rights.read_rights {
@@ -256,4 +261,11 @@ pub fn store_vault_server_scope() -> actix_web::Scope {
         .service(save_data_batch)
         .service(get_data_batch)
         .service(get_data_sequence)
+}
+
+fn validate_topic_length(topic: &str) -> Result<(), actix_web::Error> {
+    if topic.len() >= 256 {
+        return Err(actix_web::error::ErrorBadRequest("Topic too long"));
+    }
+    Ok(())
 }
