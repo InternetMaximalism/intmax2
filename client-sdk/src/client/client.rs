@@ -294,13 +294,13 @@ impl Client {
             prev_balance_proof,
         };
         let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
-        let entry = SaveDataEntry {
-            topic: DataType::SenderProofSet.to_topic(),
-            pubkey: ephemeral_key.pubkey,
-            data: sender_proof_set.encrypt(ephemeral_key.pubkey),
-        };
         self.store_vault_server
-            .save_data_batch(ephemeral_key, &[entry])
+            .save_snapshot(
+                ephemeral_key,
+                &DataType::SenderProofSet.to_topic(),
+                None,
+                &sender_proof_set.encrypt(ephemeral_key.pubkey),
+            )
             .await?;
         let sender_proof_set_ephemeral_key: U256 =
             BigUint::from(ephemeral_key.privkey).try_into().unwrap();
