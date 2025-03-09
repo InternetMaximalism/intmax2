@@ -1,10 +1,7 @@
 use intmax2_interfaces::{
     api::store_vault_server::{
         interface::{SaveDataEntry, MAX_BATCH_SIZE},
-        types::{
-            CursorOrder, DataWithMetaData, DataWithTimestamp, MetaDataCursor,
-            MetaDataCursorResponse,
-        },
+        types::{CursorOrder, DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
     },
     data::meta_data::MetaData,
     utils::digest::get_digest,
@@ -112,14 +109,15 @@ impl StoreVaultServer {
         Ok(record.map(|r| (r.data, Bytes32::from_hex(&r.digest).unwrap())))
     }
 
-    pub async fn batch_save_data(&self, entries: &[SaveDataEntry]) -> Result<()> {
+    pub async fn batch_save_data(&self, entries: &[SaveDataEntry]) -> Result<Vec<Bytes32>> {
         // Prepare values for bulk insert
         let topics: Vec<String> = entries.iter().map(|entry| entry.topic.clone()).collect();
         let pubkeys: Vec<String> = entries.iter().map(|entry| entry.pubkey.to_hex()).collect();
-        let digests: Vec<String> = entries
+        let digests: Vec<Bytes32> = entries
             .iter()
-            .map(|entry| get_digest(&entry.data).to_hex())
+            .map(|entry| get_digest(&entry.data))
             .collect();
+        let digests_hex: Vec<String> = digests.iter().map(|d| d.to_hex()).collect();
         let data: Vec<Vec<u8>> = entries.iter().map(|entry| entry.data.clone()).collect();
         let timestamps = vec![chrono::Utc::now().timestamp(); entries.len()];
 
@@ -134,7 +132,7 @@ impl StoreVaultServer {
                 UNNEST($5::bigint[])
             ON CONFLICT (digest) DO NOTHING
             "#,
-            &digests,
+            &digests_hex,
             &pubkeys,
             &topics,
             &data,
@@ -143,7 +141,7 @@ impl StoreVaultServer {
         .execute(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(digests)
     }
 
     pub async fn get_data_batch(
@@ -151,12 +149,12 @@ impl StoreVaultServer {
         topic: &str,
         pubkey: U256,
         digests: &[Bytes32],
-    ) -> Result<Vec<DataWithTimestamp>> {
+    ) -> Result<Vec<DataWithMetaData>> {
         let pubkey_hex = pubkey.to_hex();
         let digests_hex: Vec<String> = digests.iter().map(|d| d.to_hex()).collect();
         let records = sqlx::query!(
             r#"
-            SELECT data, timestamp
+            SELECT data, timestamp, digest
             FROM historical_data
             WHERE topic = $1 AND pubkey = $2 AND digest = ANY($3)
             "#,
@@ -167,11 +165,14 @@ impl StoreVaultServer {
         .fetch_all(&self.pool)
         .await?;
 
-        let result: Vec<DataWithTimestamp> = records
+        let result: Vec<DataWithMetaData> = records
             .into_iter()
-            .map(|r| DataWithTimestamp {
+            .map(|r| DataWithMetaData {
                 data: r.data,
-                timestamp: r.timestamp as u64,
+                meta: MetaData {
+                    digest: Bytes32::from_hex(&r.digest).unwrap(),
+                    timestamp: r.timestamp as u64,
+                },
             })
             .collect();
 
