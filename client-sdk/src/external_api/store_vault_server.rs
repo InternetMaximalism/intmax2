@@ -45,6 +45,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
     ) -> Result<(), ServerError> {
         let request = SaveSnapshotRequest {
             data: data.to_vec(),
+            pubkey: key.pubkey,
             topic: topic.to_string(),
             prev_digest,
         };
@@ -61,6 +62,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
     async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
         let request = GetSnapshotRequest {
             topic: topic.to_string(),
+            pubkey: key.pubkey,
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
         let response: GetSnapshotResponse = post_request(
@@ -106,6 +108,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             let request = GetDataBatchRequest {
                 topic: topic.to_string(),
                 digests: chunk.to_vec(),
+                pubkey: key.pubkey,
             };
             let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
             let response: GetDataBatchResponse = post_request(
@@ -150,6 +153,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         let request_with_auth = WithAuth {
             inner: GetDataSequenceRequest {
                 topic: topic.to_string(),
+                pubkey: auth.pubkey,
                 cursor: cursor.clone(),
             },
             auth: auth.clone(),
@@ -168,6 +172,7 @@ impl StoreVaultServerClient {
     fn verify_auth_for_get_data_sequence(&self, auth: &Auth) -> anyhow::Result<()> {
         let dummy_request = GetDataSequenceRequest {
             topic: "dummy".to_string(),
+            pubkey: auth.pubkey,
             cursor: MetaDataCursor {
                 cursor: None,
                 order: CursorOrder::Asc,
@@ -182,6 +187,7 @@ pub fn generate_auth_for_get_data_sequence(key: KeySet) -> Auth {
     // because auth is not dependent on the datatype and cursor, we can use a dummy request
     let dummy_request = GetDataSequenceRequest {
         topic: "dummy".to_string(),
+        pubkey: key.pubkey,
         cursor: MetaDataCursor {
             cursor: None,
             order: CursorOrder::Asc,

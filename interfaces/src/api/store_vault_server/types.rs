@@ -5,7 +5,7 @@ use std::{
 
 use super::interface::SaveDataEntry;
 use crate::{data::meta_data::MetaData, utils::signature::Signable};
-use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256};
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
@@ -21,6 +21,7 @@ fn content_prefix(path: &str) -> Vec<u8> {
 #[serde(rename_all = "camelCase")]
 pub struct SaveSnapshotRequest {
     pub topic: String,
+    pub pubkey: U256,
     pub prev_digest: Option<Bytes32>,
     #[serde_as(as = "Base64")]
     pub data: Vec<u8>,
@@ -30,7 +31,7 @@ impl Signable for SaveSnapshotRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("save_snapshot"),
-            bincode::serialize(&(self.data.clone(), self.prev_digest)).unwrap(),
+            bincode::serialize(&(self.data.clone(), self.pubkey, self.prev_digest)).unwrap(),
         ]
         .concat()
     }
@@ -39,6 +40,7 @@ impl Signable for SaveSnapshotRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetSnapshotRequest {
+    pub pubkey: U256,
     pub topic: String,
 }
 
@@ -46,7 +48,7 @@ impl Signable for GetSnapshotRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("get_snapshot"),
-            bincode::serialize(&self.topic).unwrap(),
+            bincode::serialize(&(&self.topic, self.pubkey)).unwrap(),
         ]
         .concat()
     }
@@ -86,6 +88,7 @@ pub struct SaveDataBatchResponse {
 #[serde(rename_all = "camelCase")]
 pub struct GetDataBatchRequest {
     pub topic: String,
+    pub pubkey: U256,
     pub digests: Vec<Bytes32>,
 }
 
@@ -106,6 +109,7 @@ pub struct GetDataBatchResponse {
 #[serde(rename_all = "camelCase")]
 pub struct GetDataSequenceRequest {
     pub topic: String,
+    pub pubkey: U256,
     pub cursor: MetaDataCursor,
 }
 
