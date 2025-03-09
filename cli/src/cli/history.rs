@@ -10,9 +10,8 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{signature::key_set::KeySet, transfer::Transfer},
-    ethereum_types::u32limb_trait::U32LimbTrait as _,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
 };
-use uuid::Uuid;
 
 use crate::cli::client::get_client;
 
@@ -26,7 +25,7 @@ pub async fn history(
     let cursor = MetaDataCursor {
         cursor: from_timestamp.map(|timestamp| MetaData {
             timestamp,
-            uuid: Uuid::default().to_string(),
+            digest: Bytes32::default(),
         }),
         order: order.clone(),
         limit: None,
@@ -61,9 +60,9 @@ pub async fn history(
     }
 
     history.sort_by_key(|entry| match entry {
-        HistoryEum::Deposit { meta, .. } => (meta.timestamp, meta.uuid.clone()),
-        HistoryEum::Receive { meta, .. } => (meta.timestamp, meta.uuid.clone()),
-        HistoryEum::Send { meta, .. } => (meta.timestamp, meta.uuid.clone()),
+        HistoryEum::Deposit { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
+        HistoryEum::Receive { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
+        HistoryEum::Send { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
     });
     if order == CursorOrder::Desc {
         history.reverse();
@@ -139,7 +138,7 @@ fn print_history_entry(entry: &HistoryEum) -> Result<(), CliError> {
                 "DEPOSIT".bright_green().bold(),
                 time.bright_blue(),
             );
-            println!("  UUID: {}", meta.uuid);
+            println!("  Digest: {}", meta.digest);
             println!("  Status: {}", format_status(status));
             println!("  Token: {}", deposit.token_type.to_string().yellow(),);
             println!(
@@ -174,7 +173,7 @@ fn print_history_entry(entry: &HistoryEum) -> Result<(), CliError> {
                 "RECEIVE".bright_purple().bold(),
                 time.bright_blue(),
             );
-            println!("  UUID: {}", meta.uuid);
+            println!("  Digest: {}", meta.digest);
             println!("  Status: {}", format_status(status));
             println!("  From: {}", transfer.sender.to_hex().yellow());
             println!(
@@ -189,7 +188,7 @@ fn print_history_entry(entry: &HistoryEum) -> Result<(), CliError> {
         HistoryEum::Send { tx, status, meta } => {
             let time = format_timestamp(meta.timestamp);
             println!("{} [{}]", "SEND".bright_red().bold(), time.bright_blue(),);
-            println!("  UUID: {}", meta.uuid);
+            println!("  Digest: {}", meta.digest);
             println!("  Status: {}", format_status(status));
             println!(
                 "  Tx Nonce: {}",
