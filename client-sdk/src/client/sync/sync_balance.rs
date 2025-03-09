@@ -1,6 +1,6 @@
 use intmax2_interfaces::{
     data::{
-        deposit_data::DepositData, encryption::BlsEncryption as _,
+        data_type::DataType, deposit_data::DepositData, encryption::BlsEncryption as _,
         meta_data::MetaDataWithBlockNumber, proof_compression::CompressedBalanceProof,
         transfer_data::TransferData, tx_data::TxData, user_data::UserData,
     },
@@ -36,7 +36,10 @@ impl Client {
         &self,
         key: KeySet,
     ) -> Result<(UserData, Option<Bytes32>), SyncError> {
-        let encrypted_data = self.store_vault_server.get_user_data(key).await?;
+        let encrypted_data = self
+            .store_vault_server
+            .get_snapshot(key, &DataType::UserData.to_topic())
+            .await?;
         let digest = encrypted_data
             .as_ref()
             .map(|encrypted| get_digest(encrypted));
@@ -112,7 +115,7 @@ impl Client {
         {
             log::error!(
                 "Ignore deposit: {} because of nullifier: {} already exists",
-                meta.meta.uuid,
+                meta.meta.digest,
                 nullifier
             );
             return Ok(());
@@ -143,7 +146,12 @@ impl Client {
         user_data.deposit_status.process(meta.meta);
         // save user data
         self.store_vault_server
-            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
+            .save_snapshot(
+                key,
+                &DataType::UserData.to_topic(),
+                prev_digest,
+                &user_data.encrypt(key.pubkey),
+            )
             .await?;
         Ok(())
     }
@@ -167,7 +175,7 @@ impl Client {
         {
             log::error!(
                 "Ignore tx: {} because of nullifier: {} already exists",
-                meta.meta.uuid,
+                meta.meta.digest,
                 nullifier
             );
             return Ok(());
@@ -191,7 +199,7 @@ impl Client {
             Err(SyncError::InvalidTransferError(e)) => {
                 log::error!(
                     "Ignore tx: {} because of invalid transfer: {}",
-                    meta.meta.uuid,
+                    meta.meta.digest,
                     e
                 );
                 return Ok(());
@@ -225,7 +233,12 @@ impl Client {
 
         // save proof and user data
         self.store_vault_server
-            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
+            .save_snapshot(
+                key,
+                &DataType::UserData.to_topic(),
+                prev_digest,
+                &user_data.encrypt(key.pubkey),
+            )
             .await?;
 
         Ok(())
@@ -271,7 +284,12 @@ impl Client {
 
         // save user data
         self.store_vault_server
-            .save_user_data(key, digest, &user_data.encrypt(key.pubkey))
+            .save_snapshot(
+                key,
+                &DataType::UserData.to_topic(),
+                digest,
+                &user_data.encrypt(key.pubkey),
+            )
             .await?;
         Ok(())
     }
@@ -323,7 +341,12 @@ impl Client {
         let balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         user_data.balance_proof = Some(balance_proof);
         self.store_vault_server
-            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
+            .save_snapshot(
+                key,
+                &DataType::UserData.to_topic(),
+                prev_digest,
+                &user_data.encrypt(key.pubkey),
+            )
             .await?;
 
         Ok(())
@@ -338,7 +361,12 @@ impl Client {
         user_data.deposit_status.pending_digests = pending_info.pending_deposit_digests;
         user_data.transfer_status.pending_digests = pending_info.pending_transfer_digests;
         self.store_vault_server
-            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
+            .save_snapshot(
+                key,
+                &DataType::UserData.to_topic(),
+                prev_digest,
+                &user_data.encrypt(key.pubkey),
+            )
             .await?;
         Ok(())
     }
@@ -357,7 +385,12 @@ impl Client {
         }
 
         self.store_vault_server
-            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
+            .save_snapshot(
+                key,
+                &DataType::UserData.to_topic(),
+                prev_digest,
+                &user_data.encrypt(key.pubkey),
+            )
             .await?;
 
         self.sync(key).await

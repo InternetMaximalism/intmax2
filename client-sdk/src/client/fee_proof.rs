@@ -5,7 +5,7 @@ use intmax2_interfaces::{
         store_vault_server::interface::StoreVaultClientInterface,
     },
     data::{
-        encryption::BlsEncryption, proof_compression::CompressedSpentProof,
+        data_type::DataType, encryption::BlsEncryption, proof_compression::CompressedSpentProof,
         sender_proof_set::SenderProofSet, transfer_data::TransferData, user_data::UserData,
     },
 };
@@ -72,8 +72,10 @@ pub async fn generate_fee_proof(
             };
             let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
             store_vault_server
-                .save_sender_proof_set(
+                .save_snapshot(
                     ephemeral_key,
+                    &DataType::SenderProofSet.to_topic(),
+                    None,
                     &sender_proof_set.encrypt(ephemeral_key.pubkey),
                 )
                 .await?;

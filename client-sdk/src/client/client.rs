@@ -73,7 +73,7 @@ pub struct Client {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentMemoEntry {
     pub transfer_index: u32,
-    pub topic: Bytes32,
+    pub topic: String,
     pub memo: String,
 }
 

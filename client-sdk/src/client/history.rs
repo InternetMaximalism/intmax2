@@ -7,7 +7,10 @@ use intmax2_interfaces::{
         tx_data::TxData,
     },
 };
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
+};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -34,8 +37,8 @@ pub enum EntryStatus {
 }
 
 impl EntryStatus {
-    pub fn from_settled(processed_uuids: &[String], meta: MetaDataWithBlockNumber) -> Self {
-        if processed_uuids.contains(&meta.meta.uuid) {
+    pub fn from_settled(processed_digests: &[Bytes32], meta: MetaDataWithBlockNumber) -> Self {
+        if processed_digests.contains(&meta.meta.digest) {
             EntryStatus::Processed(meta.block_number)
         } else {
             EntryStatus::Settled(meta.block_number)
@@ -89,7 +92,7 @@ pub async fn fetch_deposit_history(
 
     history.sort_by_key(|entry| {
         let HistoryEntry { meta, .. } = entry;
-        (meta.timestamp, meta.uuid.clone())
+        (meta.timestamp, meta.digest.to_hex())
     });
 
     Ok((history, cursor_response))
@@ -140,7 +143,7 @@ pub async fn fetch_transfer_history(
 
     history.sort_by_key(|entry| {
         let HistoryEntry { meta, .. } = entry;
-        (meta.timestamp, meta.uuid.clone())
+        (meta.timestamp, meta.digest.to_hex())
     });
 
     Ok((history, cursor_response))
@@ -188,7 +191,7 @@ pub async fn fetch_tx_history(
 
     history.sort_by_key(|entry| {
         let HistoryEntry { meta, .. } = entry;
-        (meta.timestamp, meta.uuid.clone())
+        (meta.timestamp, meta.digest.to_hex())
     });
 
     Ok((history, cursor_response))
