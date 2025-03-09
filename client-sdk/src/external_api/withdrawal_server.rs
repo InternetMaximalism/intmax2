@@ -17,7 +17,10 @@ use intmax2_interfaces::{
     },
     utils::signature::Signable,
 };
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::address::Address};
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{address::Address, bytes32::Bytes32},
+};
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -61,12 +64,12 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         key: KeySet,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
-        fee_transfer_uuids: &[String],
+        fee_transfer_digests: &[Bytes32],
     ) -> Result<(), ServerError> {
         let request = RequestWithdrawalRequest {
             single_withdrawal_proof: single_withdrawal_proof.clone(),
             fee_token_index,
-            fee_transfer_uuids: fee_transfer_uuids.to_vec(),
+            fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
         post_request::<_, ()>(
@@ -82,12 +85,12 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         key: KeySet,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
-        fee_transfer_uuids: &[String],
+        fee_transfer_digests: &[Bytes32],
     ) -> Result<(), ServerError> {
         let request = RequestClaimRequest {
             single_claim_proof: single_claim_proof.clone(),
             fee_token_index,
-            fee_transfer_uuids: fee_transfer_uuids.to_vec(),
+            fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
         post_request::<_, ()>(

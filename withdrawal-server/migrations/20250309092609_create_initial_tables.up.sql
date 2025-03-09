@@ -14,7 +14,6 @@ CREATE TYPE claim_status AS ENUM (
     'failed'
 );
 
-
 CREATE TABLE IF NOT EXISTS withdrawals (
     uuid TEXT NOT NULL,
     status withdrawal_status NOT NULL DEFAULT 'requested',
@@ -41,5 +40,12 @@ CREATE TABLE IF NOT EXISTS claims (
     PRIMARY KEY (uuid)
 );
 
+CREATE TABLE IF NOT EXISTS used_payments (
+    nullifier CHAR(66) PRIMARY KEY,
+    transfer jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE INDEX idx_withdrawals_pubkey ON withdrawals(pubkey);
 CREATE INDEX idx_withdrawals_recipient ON withdrawals(recipient);
+CREATE INDEX idx_withdrawals_withdrawal_hash ON withdrawals (withdrawal_hash);

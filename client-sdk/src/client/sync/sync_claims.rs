@@ -140,15 +140,14 @@ impl Client {
                 .collect::<Vec<_>>();
 
             // send claim request
-            todo!();
-            // self.withdrawal_server
-            //     .request_claim(
-            //         key,
-            //         &single_claim_proof,
-            //         Some(fee_token_index),
-            //         &fee_transfer_digests,
-            //     )
-            //     .await?;
+            self.withdrawal_server
+                .request_claim(
+                    key,
+                    &single_claim_proof,
+                    Some(fee_token_index),
+                    &fee_transfer_digests,
+                )
+                .await?;
 
             // consume fees
             for used_fee in &collected_fees {

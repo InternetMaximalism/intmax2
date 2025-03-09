@@ -141,15 +141,14 @@ impl Client {
             .collect::<Vec<_>>();
 
         // send withdrawal request
-        todo!("send withdrawal request");
-        // self.withdrawal_server
-        //     .request_withdrawal(
-        //         key,
-        //         &single_withdrawal_proof,
-        //         Some(fee_token_index),
-        //         &fee_transfer_digests,
-        //     )
-        //     .await?;
+        self.withdrawal_server
+            .request_withdrawal(
+                key,
+                &single_withdrawal_proof,
+                Some(fee_token_index),
+                &fee_transfer_digests,
+            )
+            .await?;
 
         // consume fees
         for used_fee in &collected_fees {
