@@ -35,6 +35,7 @@ struct EnvVar {
     transfer_admin_private_key: String,
     max_concurrent: Option<usize>,
     max_using_account: Option<usize>,
+    account_offset: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -527,8 +528,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run more iterations to test more failpoints
     process_queue::<RandomActionTask>(
-        config.max_using_account.unwrap_or(10),
+        config.max_using_account.unwrap_or(3),
         config.max_concurrent.unwrap_or(1),
+        config.account_offset.unwrap_or(0),
     )
     .await;
 

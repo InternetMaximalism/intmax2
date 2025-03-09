@@ -1,5 +1,8 @@
 use ethers::{abi::AbiEncode, prelude::*};
 
+const PENDING_TX_TIMEOUT: u64 = 60;
+const TX_CONFIRMATION_TIMEOUT: u64 = 60;
+
 pub async fn get_balance(
     l1_rpc_url: &str,
     address: Address,
@@ -34,15 +37,23 @@ pub async fn transfer_eth_on_ethereum(
     let tx = TransactionRequest::new().to(recipient).value(amount);
 
     // Send batch transaction
-    let pending_tx = client.send_transaction(tx, None).await?;
-    println!("tx hash: 0x{}", pending_tx.tx_hash().encode_hex());
+    let pending_tx_future = client.send_transaction(tx, None);
+    let pending_tx = tokio::time::timeout(
+        tokio::time::Duration::from_secs(PENDING_TX_TIMEOUT),
+        pending_tx_future,
+    )
+    .await??;
+    println!("tx hash: {}", pending_tx.tx_hash().encode_hex());
 
-    let receipt = pending_tx
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("tx dropped from mempool"))?;
+    let receipt = tokio::time::timeout(
+        tokio::time::Duration::from_secs(TX_CONFIRMATION_TIMEOUT),
+        pending_tx,
+    )
+    .await??
+    .ok_or_else(|| anyhow::anyhow!("tx dropped from mempool"))?;
     let tx = client.get_transaction(receipt.transaction_hash).await?;
 
-    println!("Sent tx: {}\n", serde_json::to_string(&tx)?);
+    println!("Sent tx: {}", serde_json::to_string(&tx)?);
     println!("Tx receipt: {}", serde_json::to_string(&receipt)?);
 
     Ok(receipt)

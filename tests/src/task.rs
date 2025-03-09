@@ -20,9 +20,9 @@ struct TaskQueue<T: AsyncTask> {
 }
 
 impl<T: AsyncTask> TaskQueue<T> {
-    fn new(total_tasks: usize) -> Self {
+    fn new(total_tasks: usize, offset: usize) -> Self {
         let mut tasks = Vec::with_capacity(total_tasks);
-        for i in 0..total_tasks {
+        for i in offset..offset + total_tasks {
             tasks.push(i);
         }
 
@@ -38,12 +38,13 @@ impl<T: AsyncTask> TaskQueue<T> {
 pub async fn process_queue<T: AsyncTask + 'static>(
     total_tasks: usize,
     max_concurrent: usize,
+    offset: usize,
 ) -> Vec<T::Output> {
     #[cfg(feature = "failpoints")]
     assert_eq!(max_concurrent, 1, "When the failpoints feature is enabled, please set the maximum degree of parallelism to 1.");
 
     let semaphore = Arc::new(Semaphore::new(max_concurrent));
-    let queue = Arc::new(Mutex::new(TaskQueue::<T>::new(total_tasks)));
+    let queue = Arc::new(Mutex::new(TaskQueue::<T>::new(total_tasks, offset)));
     let queue_clone = queue.clone();
 
     let local = tokio::task::LocalSet::new();
