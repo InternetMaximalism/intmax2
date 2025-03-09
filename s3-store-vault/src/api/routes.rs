@@ -14,6 +14,7 @@ use intmax2_interfaces::{
             SaveDataBatchResponse, SaveSnapshotRequest,
         },
     },
+    data::{rw_rights, topic::extract_rights},
     utils::signature::{Signable, WithAuth},
 };
 
@@ -26,11 +27,50 @@ pub async fn save_snapshot(
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
     let request = &request.inner;
+
+    // validate rights
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.write_rights {
+        rw_rights::WriteRights::SingleAuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+            if request.prev_digest.is_some() {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "SingleAuthWrite does not allow prev_digest",
+                ));
+            }
+        }
+        rw_rights::WriteRights::SingleOpenWrite => {
+            if request.prev_digest.is_some() {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "SingleOpenWrite does not allow prev_digest",
+                ));
+            }
+        }
+        rw_rights::WriteRights::AuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::WriteRights::OpenWrite => {}
+    }
+
     state
         .store_vault_server
-        .save_snapshot(&request.topic, pubkey, request.prev_digest, &request.data)
+        .save_snapshot(
+            &request.topic,
+            request.pubkey,
+            request.prev_digest,
+            &request.data,
+        )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(()))
@@ -45,11 +85,26 @@ pub async fn get_snapshot(
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
     let request = &request.inner;
+
+    // validate rights
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.read_rights {
+        rw_rights::ReadRights::AuthRead => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::ReadRights::OpenRead => {}
+    }
+
     let data = state
         .store_vault_server
-        .get_snapshot_data(&request.topic, pubkey)
+        .get_snapshot_data(&request.topic, request.pubkey)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetSnapshotResponse { data }))
@@ -64,7 +119,7 @@ pub async fn save_data_batch(
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    // let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
     let entries = &request.inner.data;
 
     if entries.len() > MAX_BATCH_SIZE {
@@ -74,15 +129,30 @@ pub async fn save_data_batch(
         )));
     }
 
-    // todo: auth check
-    // for entry in entries {
-    //     if entry.data_type.need_auth() && entry.pubkey != pubkey {
-    //         return Err(ErrorUnauthorized(format!(
-    //             "Data type {} requires auth but given pubkey is different",
-    //             entry.data_type,
-    //         )));
-    //     }
-    // }
+    for entry in entries {
+        let rw_rights = extract_rights(&entry.topic)
+            .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+        match rw_rights.write_rights {
+            rw_rights::WriteRights::SingleAuthWrite => {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "SingleAuthWrite is not allowed in historical data",
+                ));
+            }
+            rw_rights::WriteRights::SingleOpenWrite => {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "SingleOpenWrite is not allowed in historical data",
+                ));
+            }
+            rw_rights::WriteRights::AuthWrite => {
+                if auth_pubkey != entry.pubkey {
+                    return Err(actix_web::error::ErrorBadRequest(
+                        "Auth pubkey does not match request pubkey",
+                    ));
+                }
+            }
+            rw_rights::WriteRights::OpenWrite => {}
+        }
+    }
 
     let digests = state
         .store_vault_server
@@ -101,7 +171,7 @@ pub async fn get_data_batch(
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
     let request = &request.inner;
 
     if request.digests.len() > MAX_BATCH_SIZE {
@@ -111,9 +181,23 @@ pub async fn get_data_batch(
         )));
     }
 
+    // validate rights
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.read_rights {
+        rw_rights::ReadRights::AuthRead => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::ReadRights::OpenRead => {}
+    }
+
     let data = state
         .store_vault_server
-        .get_data_batch(&request.topic, pubkey, &request.digests)
+        .get_data_batch(&request.topic, auth_pubkey, &request.digests)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetDataBatchResponse { data }))
@@ -138,6 +222,19 @@ pub async fn get_data_sequence(
                 MAX_BATCH_SIZE
             )));
         }
+    }
+    // validate rights
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.read_rights {
+        rw_rights::ReadRights::AuthRead => {
+            if pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::ReadRights::OpenRead => {}
     }
 
     let (data, cursor_response) = state
