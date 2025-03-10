@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO snapshot_data (pubkey, digest, topic, data, timestamp)\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (pubkey, topic) DO UPDATE SET data = EXCLUDED.data,\n            digest = EXCLUDED.digest, timestamp = EXCLUDED.timestamp\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "217399d77455810429ba36ed634158d91e546c3848de704768a46f8356d1e250"
+}

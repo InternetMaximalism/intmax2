@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO historical_data (digest, pubkey, topic, data, timestamp)\n            SELECT\n                UNNEST($1::text[]),\n                UNNEST($2::text[]),\n                UNNEST($3::text[]),\n                UNNEST($4::bytea[]),\n                UNNEST($5::bigint[])\n            ON CONFLICT (digest) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "ByteaArray",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "76f45c3f096c8557c2ba67629310889ae339658e471af9354c01fa4701975099"
+}

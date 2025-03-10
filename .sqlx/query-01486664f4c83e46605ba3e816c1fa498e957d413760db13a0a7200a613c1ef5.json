@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT data, digest FROM snapshot_data WHERE pubkey = $1 AND topic = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "data",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "digest",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "01486664f4c83e46605ba3e816c1fa498e957d413760db13a0a7200a613c1ef5"
+}

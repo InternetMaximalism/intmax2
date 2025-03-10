@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT digest, data, timestamp\n                    FROM historical_data\n                     WHERE topic = $1\n                    AND pubkey = $2\n                    AND (timestamp < $3 OR (timestamp = $3 AND digest < $4))\n                    ORDER BY timestamp DESC, digest DESC\n                    LIMIT $5\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "data",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "timestamp",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f7df0e4fa6d1ed2d7c83054a6c1d5758124ba25744ad3978d1541bd4d378df13"
+}
