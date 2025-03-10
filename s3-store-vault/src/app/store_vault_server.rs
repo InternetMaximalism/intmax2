@@ -32,18 +32,31 @@ impl StoreVaultServer {
         Ok(Self { pool })
     }
 
-    pub async fn save_snapshot(
+    async fn get_snapshot_digest(&self, topic: &str, pubkey: U256) -> Result<Option<Bytes32>> {
+        let pubkey_hex = pubkey.to_hex();
+        let record = sqlx::query!(
+            r#"
+            SELECT digest FROM s3_snapshot_data WHERE pubkey = $1 AND topic = $2
+            "#,
+            pubkey_hex,
+            topic
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(record.map(|r| Bytes32::from_hex(&r.digest).unwrap()))
+    }
+
+    pub async fn save_snapshot_url(
         &self,
         topic: &str,
         pubkey: U256,
         prev_digest: Option<Bytes32>,
-        data: &[u8],
-    ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
-        let result = self.get_snapshot_and_digest(&mut tx, topic, pubkey).await?;
+        new_digest: Bytes32,
+    ) -> Result<String> {
+        let current_digest = self.get_snapshot_digest(topic, pubkey).await?;
         // validation
         if let Some(prev_digest) = prev_digest {
-            if let Some((_, digest)) = result {
+            if let Some(digest) = current_digest {
                 if digest != prev_digest {
                     return Err(StoreVaultError::LockError(format!(
                         "prev_digest {} mismatch with stored digest {}",
@@ -55,32 +68,30 @@ impl StoreVaultServer {
                     "prev_digest provided but no data found".to_string(),
                 ));
             }
-        } else if result.is_some() {
+        } else {
             return Err(StoreVaultError::LockError(
                 "prev_digest not provided but data found".to_string(),
             ));
         }
 
-        let pubkey_hex = pubkey.to_hex();
-        let digest = get_digest(data);
-        let digest_hex = digest.to_hex();
+        // insert new digest
         sqlx::query!(
             r#"
-            INSERT INTO snapshot_data (pubkey, digest, topic, data, timestamp)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (pubkey, topic) DO UPDATE SET data = EXCLUDED.data,
-            digest = EXCLUDED.digest, timestamp = EXCLUDED.timestamp
+            INSERT INTO s3_snapshot_data (pubkey, topic, digest, upload_finished)
+            VALUES ($1, $2, $3, false)
+            ON CONFLICT (pubkey, topic) DO UPDATE SET digest = $3
             "#,
-            pubkey_hex,
-            digest_hex,
+            pubkey.to_hex(),
             topic,
-            data,
-            chrono::Utc::now().timestamp() as i64
+            new_digest.to_hex()
         )
-        .execute(tx.as_mut())
+        .execute(&self.pool)
         .await?;
-        tx.commit().await?;
-        Ok(())
+
+        // publish s3 presigned url
+
+        // check update upload_finish=true in other thread
+        todo!()
     }
 
     pub async fn get_snapshot_data(&self, topic: &str, pubkey: U256) -> Result<Option<Vec<u8>>> {
@@ -88,25 +99,6 @@ impl StoreVaultServer {
         let result = self.get_snapshot_and_digest(&mut tx, topic, pubkey).await?;
         tx.commit().await?;
         Ok(result.map(|(data, _)| data))
-    }
-
-    async fn get_snapshot_and_digest(
-        &self,
-        tx: &mut sqlx::Transaction<'_, Postgres>,
-        topic: &str,
-        pubkey: U256,
-    ) -> Result<Option<(Vec<u8>, Bytes32)>> {
-        let pubkey_hex = pubkey.to_hex();
-        let record = sqlx::query!(
-            r#"
-            SELECT data, digest FROM snapshot_data WHERE pubkey = $1 AND topic = $2
-            "#,
-            pubkey_hex,
-            topic
-        )
-        .fetch_optional(tx.as_mut())
-        .await?;
-        Ok(record.map(|r| (r.data, Bytes32::from_hex(&r.digest).unwrap())))
     }
 
     pub async fn batch_save_data(&self, entries: &[SaveDataEntry]) -> Result<Vec<Bytes32>> {
