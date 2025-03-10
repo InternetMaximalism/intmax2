@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index\n            FROM deposit_leaf_events\n            WHERE (eth_block_number, eth_tx_index) > ($1, $2)\n            AND (eth_block_number, eth_tx_index) <= ($3, $4)\n            ORDER BY deposit_index\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deposit_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "deposit_hash",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "eth_block_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "eth_tx_index",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "092a4c7ed0490077002a6b7fdbb589d17ab62238a9f4d3c4d0110f5e97837929"
+}

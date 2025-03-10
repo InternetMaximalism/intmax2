@@ -30,13 +30,13 @@ pub struct Config {
     pub s3_download_timeout: u64,
 }
 
-pub struct StoreVaultServer {
+pub struct S3StoreVault {
     config: Config,
     pool: DbPool,
     s3_client: S3Client,
 }
 
-impl StoreVaultServer {
+impl S3StoreVault {
     pub async fn new(env: &EnvVar) -> Result<Self> {
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,

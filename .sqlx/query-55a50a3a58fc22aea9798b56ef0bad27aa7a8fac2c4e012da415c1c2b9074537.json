@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT MAX(block_number) as last_block_number FROM validity_state",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_block_number",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "55a50a3a58fc22aea9798b56ef0bad27aa7a8fac2c4e012da415c1c2b9074537"
+}

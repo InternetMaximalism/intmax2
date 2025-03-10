@@ -66,7 +66,7 @@ pub async fn save_snapshot(
     }
 
     let presigned_url = state
-        .store_vault_server
+        .s3_store_vault
         .save_snapshot_url(
             &request.topic,
             request.pubkey,
@@ -107,7 +107,7 @@ pub async fn get_snapshot(
     }
 
     let presigned_url = state
-        .store_vault_server
+        .s3_store_vault
         .get_snapshot_url(&request.topic, request.pubkey)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -161,7 +161,7 @@ pub async fn save_data_batch(
     }
 
     let presigned_urls = state
-        .store_vault_server
+        .s3_store_vault
         .batch_save_data_url(entries)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -203,7 +203,7 @@ pub async fn get_data_batch(
     }
 
     let presigned_urls_with_meta = state
-        .store_vault_server
+        .s3_store_vault
         .get_data_batch(&request.topic, auth_pubkey, &request.digests)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -249,7 +249,7 @@ pub async fn get_data_sequence(
     }
 
     let (presigned_urls_with_meta, cursor_response) = state
-        .store_vault_server
+        .s3_store_vault
         .get_data_sequence_url(&request.topic, pubkey, &request.cursor)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -260,7 +260,7 @@ pub async fn get_data_sequence(
     }))
 }
 
-pub fn store_vault_server_scope() -> actix_web::Scope {
+pub fn s3_store_vault_scope() -> actix_web::Scope {
     actix_web::web::scope("/s3-store-vault")
         .service(save_snapshot)
         .service(get_snapshot)

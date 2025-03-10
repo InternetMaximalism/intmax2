@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT deposit_index, eth_block_number, eth_tx_index \n            FROM deposit_leaf_events \n            WHERE deposit_hash = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deposit_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "eth_block_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "eth_tx_index",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8d53ac85dfd3e330a80c1d5d92384f41e59a8026b6a18c337c332fd61fb8cdc8"
+}

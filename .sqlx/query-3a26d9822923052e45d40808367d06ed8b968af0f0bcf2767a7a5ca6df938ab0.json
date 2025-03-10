@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                status as \"status: SqlWithdrawalStatus\",\n                contract_withdrawal\n            FROM withdrawals\n            WHERE pubkey = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status: SqlWithdrawalStatus",
+        "type_info": {
+          "Custom": {
+            "name": "withdrawal_status",
+            "kind": {
+              "Enum": [
+                "requested",
+                "relayed",
+                "success",
+                "need_claim",
+                "failed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_withdrawal",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bpchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3a26d9822923052e45d40808367d06ed8b968af0f0bcf2767a7a5ca6df938ab0"
+}
