@@ -1,3 +1,5 @@
+use super::error::StoreVaultError;
+use crate::EnvVar;
 use intmax2_interfaces::{
     api::store_vault_server::{
         interface::{SaveDataEntry, MAX_BATCH_SIZE},
@@ -7,13 +9,7 @@ use intmax2_interfaces::{
     utils::digest::get_digest,
 };
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait};
-use sqlx::Postgres;
-
 use server_common::db::{DbPool, DbPoolConfig};
-
-use crate::EnvVar;
-
-use super::error::StoreVaultError;
 
 type Result<T> = std::result::Result<T, StoreVaultError>;
 
@@ -94,11 +90,14 @@ impl StoreVaultServer {
         todo!()
     }
 
-    pub async fn get_snapshot_data(&self, topic: &str, pubkey: U256) -> Result<Option<Vec<u8>>> {
-        let mut tx = self.pool.begin().await?;
-        let result = self.get_snapshot_and_digest(&mut tx, topic, pubkey).await?;
-        tx.commit().await?;
-        Ok(result.map(|(data, _)| data))
+    pub async fn get_snapshot_url(&self, topic: &str, pubkey: U256) -> Result<Option<String>> {
+        let digest = self.get_snapshot_digest(topic, pubkey).await?;
+        if let Some(_digest) = digest {
+            // todo: generate presigned url
+            todo!()
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn batch_save_data(&self, entries: &[SaveDataEntry]) -> Result<Vec<Bytes32>> {
@@ -146,8 +145,8 @@ impl StoreVaultServer {
         let digests_hex: Vec<String> = digests.iter().map(|d| d.to_hex()).collect();
         let records = sqlx::query!(
             r#"
-            SELECT data, timestamp, digest
-            FROM historical_data
+            SELECT timestamp, digest
+            FROM s3_historical_data
             WHERE topic = $1 AND pubkey = $2 AND digest = ANY($3)
             "#,
             topic,
@@ -157,36 +156,35 @@ impl StoreVaultServer {
         .fetch_all(&self.pool)
         .await?;
 
-        let result: Vec<DataWithMetaData> = records
+        let meta: Vec<MetaData> = records
             .into_iter()
-            .map(|r| DataWithMetaData {
-                data: r.data,
-                meta: MetaData {
-                    digest: Bytes32::from_hex(&r.digest).unwrap(),
-                    timestamp: r.timestamp as u64,
-                },
+            .map(|r| MetaData {
+                digest: Bytes32::from_hex(&r.digest).unwrap(),
+                timestamp: r.timestamp as u64,
             })
             .collect();
 
-        Ok(result)
+        // generate presigned urls
+
+        todo!()
     }
 
-    pub async fn get_data_sequence(
+    pub async fn get_data_sequence_url(
         &self,
         topic: &str,
         pubkey: U256,
         cursor: &MetaDataCursor,
-    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse)> {
+    ) -> Result<(Vec<String>, MetaDataCursorResponse)> {
         let pubkey_hex = pubkey.to_hex();
         let actual_limit = cursor.limit.unwrap_or(MAX_BATCH_SIZE as u32) as i64;
 
-        let result: Vec<DataWithMetaData> = match cursor.order {
+        let result: Vec<MetaData> = match cursor.order {
             CursorOrder::Asc => {
                 let cursor_meta = cursor.cursor.clone().unwrap_or_default();
                 sqlx::query!(
                     r#"
-                    SELECT digest, data, timestamp
-                    FROM historical_data
+                    SELECT digest, timestamp
+                    FROM s3_historical_data
                     WHERE topic = $1
                     AND pubkey = $2
                     AND (timestamp > $3 OR (timestamp = $3 AND digest > $4))
@@ -202,12 +200,9 @@ impl StoreVaultServer {
                 .fetch_all(&self.pool)
                 .await?
                 .into_iter()
-                .map(|r| {
-                    let meta = MetaData {
-                        timestamp: r.timestamp as u64,
-                        digest: Bytes32::from_hex(&r.digest).unwrap(),
-                    };
-                    DataWithMetaData { meta, data: r.data }
+                .map(|r| MetaData {
+                    timestamp: r.timestamp as u64,
+                    digest: Bytes32::from_hex(&r.digest).unwrap(),
                 })
                 .collect()
             }
@@ -219,8 +214,8 @@ impl StoreVaultServer {
                     .unwrap_or((i64::MAX, Bytes32::default().to_hex()));
                 sqlx::query!(
                     r#"
-                    SELECT digest, data, timestamp
-                    FROM historical_data
+                    SELECT digest, timestamp
+                    FROM s3_historical_data
                      WHERE topic = $1
                     AND pubkey = $2
                     AND (timestamp < $3 OR (timestamp = $3 AND digest < $4))
@@ -236,12 +231,9 @@ impl StoreVaultServer {
                 .fetch_all(&self.pool)
                 .await?
                 .into_iter()
-                .map(|r| {
-                    let meta = MetaData {
-                        digest: Bytes32::from_hex(&r.digest).unwrap(),
-                        timestamp: r.timestamp as u64,
-                    };
-                    DataWithMetaData { meta, data: r.data }
+                .map(|r| MetaData {
+                    digest: Bytes32::from_hex(&r.digest).unwrap(),
+                    timestamp: r.timestamp as u64,
                 })
                 .collect()
             }
@@ -250,11 +242,11 @@ impl StoreVaultServer {
         let result = result
             .into_iter()
             .take(actual_limit as usize)
-            .collect::<Vec<DataWithMetaData>>();
-        let next_cursor = result.last().map(|r| r.meta.clone());
+            .collect::<Vec<MetaData>>();
+        let next_cursor = result.last().cloned();
         let total_count = sqlx::query_scalar!(
             r#"
-            SELECT COUNT(*) FROM historical_data
+            SELECT COUNT(*) FROM s3_historical_data
             "#,
         )
         .fetch_one(&self.pool)
@@ -265,58 +257,9 @@ impl StoreVaultServer {
             has_more,
             total_count,
         };
-        Ok((result, response_cursor))
+
+        // generate presigned urls
+
+        todo!()
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use ethers::core::rand;
-//     use intmax2_interfaces::{
-//         data::{encryption::BlsEncryption as _, meta_data::MetaData, snapshot_data::UserData},
-//         utils::digest::get_digest,
-//     };
-//     use intmax2_zkp::common::signature::key_set::KeySet;
-
-//     use crate::{app::store_vault_server::StoreVaultServer, EnvVar};
-
-//     #[tokio::test]
-//     async fn test_snapshot_data_get_and_save() -> anyhow::Result<()> {
-//         dotenv::dotenv().ok();
-//         let env: EnvVar = envy::from_env()?;
-//         let store_vault_server = StoreVaultServer::new(&env).await?;
-//         let mut rng = rand::thread_rng();
-//         let key = KeySet::rand(&mut rng);
-//         let encrypted_snapshot_data = store_vault_server.get_snapshot_data(key.pubkey).await?;
-//         assert!(encrypted_snapshot_data.is_none());
-
-//         let mut snapshot_data = UserData::new(key.pubkey);
-//         let encrypted = snapshot_data.encrypt(key.pubkey);
-//         let digest = get_digest(&encrypted);
-//         store_vault_server
-//             .save_snapshot_data(key.pubkey, None, &encrypted)
-//             .await?;
-//         let got_encrypted_snapshot_data = store_vault_server.get_snapshot_data(key.pubkey).await?;
-//         assert_eq!(got_encrypted_snapshot_data.as_ref().unwrap(), &encrypted);
-//         let digest2 = get_digest(&got_encrypted_snapshot_data.unwrap());
-//         assert_eq!(digest, digest2);
-//         snapshot_data.deposit_status.last_processed_meta_data = Some(MetaData {
-//             timestamp: 1,
-//             uuid: "test".to_string(),
-//         });
-//         let encrypted = snapshot_data.encrypt(key.pubkey);
-//         let digest3 = get_digest(&encrypted);
-//         store_vault_server
-//             .save_snapshot_data(key.pubkey, Some(digest), &encrypted)
-//             .await?;
-
-//         snapshot_data.deposit_status.last_processed_meta_data = Some(MetaData {
-//             timestamp: 2,
-//             uuid: "test2".to_string(),
-//         });
-//         store_vault_server
-//             .save_snapshot_data(key.pubkey, Some(digest3), &encrypted)
-//             .await?;
-//         Ok(())
-//     }
-// }
