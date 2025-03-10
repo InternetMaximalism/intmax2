@@ -428,8 +428,10 @@ impl S3StoreVault {
                     r#"
                     UPDATE s3_historical_data
                     SET upload_finished = true
-                    WHERE digest = $1
+                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
                     "#,
+                    record.topic,
+                    record.pubkey,
                     record.digest
                 )
                 .execute(&self.pool)
@@ -438,8 +440,10 @@ impl S3StoreVault {
                 sqlx::query!(
                     r#"
                     DELETE FROM s3_historical_data
-                    WHERE digest = $1
+                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
                     "#,
+                    record.topic,
+                    record.pubkey,
                     record.digest
                 )
                 .execute(&self.pool)

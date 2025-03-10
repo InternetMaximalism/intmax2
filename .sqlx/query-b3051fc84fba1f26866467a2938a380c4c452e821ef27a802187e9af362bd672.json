@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE s3_snapshot_data\n                    SET upload_finished = true\n                    WHERE topic = $1 AND pubkey = $2 AND digest = $3\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3051fc84fba1f26866467a2938a380c4c452e821ef27a802187e9af362bd672"
+}
