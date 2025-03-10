@@ -9,4 +9,13 @@ pub struct EnvVar {
     pub database_url: String,
     pub database_max_connections: u32,
     pub database_timeout: u64,
+
+    // S3 config
+    pub bucket_name: String,
+    pub cloudfront_domain: String,
+    pub cloudfront_key_pair_id: String,
+    pub private_key_path: String,
+
+    pub s3_upload_timeout: u64,
+    pub s3_download_timeout: u64,
 }

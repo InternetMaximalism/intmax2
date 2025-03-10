@@ -1,12 +1,10 @@
-use std::{
-    fmt::{self, Display, Formatter},
-    str::FromStr,
+use crate::{
+    api::store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse},
+    data::meta_data::MetaData,
+    utils::signature::Signable,
 };
-
-use crate::{data::meta_data::MetaData, utils::signature::Signable};
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256};
 use serde::{Deserialize, Serialize};
-use serde_with::{base64::Base64, serde_as};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,7 +16,7 @@ pub struct S3SaveDataEntry {
 
 // a prefix to make the content unique
 fn content_prefix(path: &str) -> Vec<u8> {
-    format!("intmax2/v1/store-vault-server/{}", path)
+    format!("intmax2/v1/s3-store-vault/{}", path)
         .as_bytes()
         .to_vec()
 }
@@ -50,12 +48,12 @@ pub struct S3SaveSnapshotResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetSnapshotRequest {
+pub struct GetS3SnapshotRequest {
     pub pubkey: U256,
     pub topic: String,
 }
 
-impl Signable for GetSnapshotRequest {
+impl Signable for GetS3SnapshotRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("get_snapshot"),
@@ -67,17 +65,17 @@ impl Signable for GetSnapshotRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetSnapshotResponse {
+pub struct GetS3SnapshotResponse {
     pub presigned_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SaveDataBatchRequest {
+pub struct SaveS3DataBatchRequest {
     pub data: Vec<S3SaveDataEntry>,
 }
 
-impl Signable for SaveDataBatchRequest {
+impl Signable for SaveS3DataBatchRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("save_data_batch"),
@@ -89,19 +87,19 @@ impl Signable for SaveDataBatchRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SaveDataBatchResponse {
+pub struct SaveS3DataBatchResponse {
     pub presigned_urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDataBatchRequest {
+pub struct GetS3DataBatchRequest {
     pub topic: String,
     pub pubkey: U256,
     pub digests: Vec<Bytes32>,
 }
 
-impl Signable for GetDataBatchRequest {
+impl Signable for GetS3DataBatchRequest {
     fn content(&self) -> Vec<u8> {
         // to reuse the signature, we exclude data_type and uuids from the content intentionally
         content_prefix("get_data_batch")
@@ -110,19 +108,19 @@ impl Signable for GetDataBatchRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDataBatchResponse {
+pub struct GetS3DataBatchResponse {
     pub presigned_urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDataSequenceRequest {
+pub struct GetS3DataSequenceRequest {
     pub topic: String,
     pub pubkey: U256,
     pub cursor: MetaDataCursor,
 }
 
-impl Signable for GetDataSequenceRequest {
+impl Signable for GetS3DataSequenceRequest {
     fn content(&self) -> Vec<u8> {
         // to reuse the signature, we exclude data_type and cursor from the content intentionally
         content_prefix("get_data_sequence")
@@ -131,69 +129,14 @@ impl Signable for GetDataSequenceRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDataSequenceResponse {
-    pub data: Vec<DataWithMetaData>,
+pub struct GetS3DataSequenceResponse {
+    pub data: Vec<PresignedUrlWithMetaData>,
     pub cursor_response: MetaDataCursorResponse,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MetaDataCursor {
-    pub cursor: Option<MetaData>,
-    pub order: CursorOrder,
-    pub limit: Option<u32>,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
-pub enum CursorOrder {
-    #[default]
-    Asc,
-    Desc,
-}
-
-impl Display for CursorOrder {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            CursorOrder::Asc => write!(f, "asc"),
-            CursorOrder::Desc => write!(f, "desc"),
-        }
-    }
-}
-
-impl FromStr for CursorOrder {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "asc" => Ok(CursorOrder::Asc),
-            "desc" => Ok(CursorOrder::Desc),
-            _ => Err(format!("Invalid CursorOrder: {}", s)),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MetaDataCursorResponse {
-    pub next_cursor: Option<MetaData>,
-    pub has_more: bool,
-    pub total_count: u32,
-}
-
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DataWithMetaData {
+pub struct PresignedUrlWithMetaData {
     pub meta: MetaData,
-    #[serde_as(as = "Base64")]
-    pub data: Vec<u8>,
-}
-
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DataWithTimestamp {
-    pub timestamp: u64,
-    #[serde_as(as = "Base64")]
-    pub data: Vec<u8>,
+    pub presigned_url: String,
 }

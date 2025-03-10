@@ -1,20 +1,39 @@
-use super::error::StoreVaultError;
+use std::time::Duration;
+
+use super::{
+    error::StoreVaultError,
+    s3::{S3Client, S3Config},
+};
 use crate::EnvVar;
 use intmax2_interfaces::{
-    api::store_vault_server::{
-        interface::{SaveDataEntry, MAX_BATCH_SIZE},
-        types::{CursorOrder, DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
+    api::{
+        s3_store_vault::types::{PresignedUrlWithMetaData, S3SaveDataEntry},
+        store_vault_server::{
+            interface::MAX_BATCH_SIZE,
+            types::{CursorOrder, MetaDataCursor, MetaDataCursorResponse},
+        },
     },
     data::meta_data::MetaData,
-    utils::digest::get_digest,
 };
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait};
 use server_common::db::{DbPool, DbPoolConfig};
 
+// get path for s3 object
+pub fn get_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
+    format!("{}/{}/{}", topic, pubkey.to_hex(), digest.to_hex())
+}
+
 type Result<T> = std::result::Result<T, StoreVaultError>;
 
+pub struct Config {
+    pub s3_upload_timeout: u64,
+    pub s3_download_timeout: u64,
+}
+
 pub struct StoreVaultServer {
+    config: Config,
     pool: DbPool,
+    s3_client: S3Client,
 }
 
 impl StoreVaultServer {
@@ -25,7 +44,25 @@ impl StoreVaultServer {
             url: env.database_url.clone(),
         })
         .await?;
-        Ok(Self { pool })
+        let aws_config = aws_config::load_from_env().await;
+        let s3_config = S3Config {
+            bucket_name: env.bucket_name.clone(),
+            cloudfront_domain: env.cloudfront_domain.clone(),
+            cloudfront_key_pair_id: env.cloudfront_key_pair_id.clone(),
+            private_key_path: env.private_key_path.clone(),
+        };
+        let s3_client = S3Client::new(aws_config, s3_config);
+
+        let config = Config {
+            s3_upload_timeout: env.s3_upload_timeout,
+            s3_download_timeout: env.s3_download_timeout,
+        };
+
+        Ok(Self {
+            config,
+            pool,
+            s3_client,
+        })
     }
 
     async fn get_snapshot_digest(&self, topic: &str, pubkey: U256) -> Result<Option<Bytes32>> {
@@ -85,54 +122,77 @@ impl StoreVaultServer {
         .await?;
 
         // publish s3 presigned url
+        let path = get_path(topic, pubkey, new_digest);
+        let presigned_url = self
+            .s3_client
+            .generate_presigned_upload_url(
+                &path,
+                "application/octet-stream",
+                Duration::from_secs(self.config.s3_upload_timeout),
+            )
+            .await?;
 
-        // check update upload_finish=true in other thread
-        todo!()
+        Ok(presigned_url)
     }
 
     pub async fn get_snapshot_url(&self, topic: &str, pubkey: U256) -> Result<Option<String>> {
         let digest = self.get_snapshot_digest(topic, pubkey).await?;
-        if let Some(_digest) = digest {
-            // todo: generate presigned url
-            todo!()
+        if let Some(digest) = digest {
+            let path = get_path(topic, pubkey, digest);
+            let presigned_url = self
+                .s3_client
+                .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
+            Ok(Some(presigned_url))
         } else {
             Ok(None)
         }
     }
 
-    pub async fn batch_save_data(&self, entries: &[SaveDataEntry]) -> Result<Vec<Bytes32>> {
+    pub async fn batch_save_data_url(&self, entries: &[S3SaveDataEntry]) -> Result<Vec<String>> {
         // Prepare values for bulk insert
         let topics: Vec<String> = entries.iter().map(|entry| entry.topic.clone()).collect();
         let pubkeys: Vec<String> = entries.iter().map(|entry| entry.pubkey.to_hex()).collect();
-        let digests: Vec<Bytes32> = entries
-            .iter()
-            .map(|entry| get_digest(&entry.data))
-            .collect();
+        let digests: Vec<Bytes32> = entries.iter().map(|entry| entry.digest).collect();
         let digests_hex: Vec<String> = digests.iter().map(|d| d.to_hex()).collect();
-        let data: Vec<Vec<u8>> = entries.iter().map(|entry| entry.data.clone()).collect();
         let timestamps = vec![chrono::Utc::now().timestamp(); entries.len()];
+        let upload_finished = vec![false; entries.len()];
 
         sqlx::query!(
             r#"
-            INSERT INTO historical_data (digest, pubkey, topic, data, timestamp)
+            INSERT INTO s3_historical_data (digest, pubkey, topic, timestamp, upload_finished)
             SELECT
                 UNNEST($1::text[]),
                 UNNEST($2::text[]),
                 UNNEST($3::text[]),
-                UNNEST($4::bytea[]),
-                UNNEST($5::bigint[])
+                UNNEST($4::bigint[]),
+                UNNEST($5::bool[])
             ON CONFLICT (digest) DO NOTHING
             "#,
             &digests_hex,
             &pubkeys,
             &topics,
-            &data,
-            &timestamps
+            &timestamps,
+            &upload_finished
         )
         .execute(&self.pool)
         .await?;
 
-        Ok(digests)
+        // generate presigned urls
+        let mut presigned_urls = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let path = get_path(&entry.topic, entry.pubkey, entry.digest);
+            let presigned_url = self
+                .s3_client
+                .generate_presigned_upload_url(
+                    &path,
+                    "application/octet-stream",
+                    Duration::from_secs(self.config.s3_upload_timeout),
+                )
+                .await?;
+            presigned_urls.push(presigned_url);
+        }
+
+        Ok(presigned_urls)
     }
 
     pub async fn get_data_batch(
@@ -140,7 +200,7 @@ impl StoreVaultServer {
         topic: &str,
         pubkey: U256,
         digests: &[Bytes32],
-    ) -> Result<Vec<DataWithMetaData>> {
+    ) -> Result<Vec<PresignedUrlWithMetaData>> {
         let pubkey_hex = pubkey.to_hex();
         let digests_hex: Vec<String> = digests.iter().map(|d| d.to_hex()).collect();
         let records = sqlx::query!(
@@ -165,8 +225,19 @@ impl StoreVaultServer {
             .collect();
 
         // generate presigned urls
+        let mut url_with_meta = Vec::with_capacity(meta.len());
+        for meta in meta.iter() {
+            let path = get_path(topic, pubkey, meta.digest);
+            let presigned_url = self
+                .s3_client
+                .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
+            url_with_meta.push(PresignedUrlWithMetaData {
+                presigned_url,
+                meta: meta.clone(),
+            });
+        }
 
-        todo!()
+        Ok(url_with_meta)
     }
 
     pub async fn get_data_sequence_url(
@@ -259,7 +330,15 @@ impl StoreVaultServer {
         };
 
         // generate presigned urls
+        let mut urls = Vec::with_capacity(result.len());
+        for meta in result.iter() {
+            let path = get_path(topic, pubkey, meta.digest);
+            let presigned_url = self
+                .s3_client
+                .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
+            urls.push(presigned_url);
+        }
 
-        todo!()
+        Ok((urls, response_cursor))
     }
 }

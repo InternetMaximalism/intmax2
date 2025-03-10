@@ -255,7 +255,7 @@ pub async fn get_data_sequence(
 }
 
 pub fn store_vault_server_scope() -> actix_web::Scope {
-    actix_web::web::scope("/store-vault-server")
+    actix_web::web::scope("/s3-store-vault")
         .service(save_snapshot)
         .service(get_snapshot)
         .service(save_data_batch)
