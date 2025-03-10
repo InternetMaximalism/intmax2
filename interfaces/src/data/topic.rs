@@ -25,7 +25,7 @@ pub enum ExtractRightsError {
 
 pub fn extract_rights(topic: &str) -> Result<RWRights, ExtractRightsError> {
     let parts: Vec<&str> = topic.split('/').collect();
-    if parts.len() > 2 {
+    if parts.len() < 2 {
         return Err(ExtractRightsError::InvalidPath);
     }
     let version_part = parts[0];

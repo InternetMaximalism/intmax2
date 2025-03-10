@@ -231,9 +231,16 @@ impl S3StoreVaultClient {
 
     async fn upload(&self, url: &str, data: &[u8]) -> Result<(), ServerError> {
         let client = reqwest::Client::new();
-        let response = with_retry(|| async { client.put(url).body(data.to_vec()).send().await })
-            .await
-            .map_err(|e| ServerError::NetworkError(e.to_string()))?;
+        let response = with_retry(|| async {
+            client
+                .put(url)
+                .header("Content-Type", "application/octet-stream")
+                .body(data.to_vec())
+                .send()
+                .await
+        })
+        .await
+        .map_err(|e| ServerError::NetworkError(e.to_string()))?;
         if !response.status().is_success() {
             return Err(ServerError::InvalidResponse(format!(
                 "Failed to upload data: {:?}",

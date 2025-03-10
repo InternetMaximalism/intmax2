@@ -34,6 +34,10 @@ async fn main() -> std::io::Result<()> {
             format!("Failed to initialize s3_store_vault: {}", e),
         )
     })?;
+
+    // start tasks
+    s3_store_vault.run();
+
     let state = Data::new(State::new(s3_store_vault));
 
     HttpServer::new(move || {

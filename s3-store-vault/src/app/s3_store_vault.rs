@@ -25,11 +25,13 @@ pub fn get_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
 
 type Result<T> = std::result::Result<T, StoreVaultError>;
 
+#[derive(Clone)]
 pub struct Config {
     pub s3_upload_timeout: u64,
     pub s3_download_timeout: u64,
 }
 
+#[derive(Clone)]
 pub struct S3StoreVault {
     config: Config,
     pool: DbPool,
@@ -231,6 +233,7 @@ impl S3StoreVault {
             let presigned_url = self
                 .s3_client
                 .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
+
             url_with_meta.push(PresignedUrlWithMetaData {
                 presigned_url,
                 meta: meta.clone(),
@@ -343,5 +346,123 @@ impl S3StoreVault {
         }
 
         Ok((presigned_urls_with_meta, response_cursor))
+    }
+
+    // jobs
+    // Fetch unfinished snapshots and check if they exist in s3.
+    // If they exist, set upload_finished to true. If they are timed out, delete them.
+    async fn cleanup_unfinished_snapshots(&self) -> Result<()> {
+        let records = sqlx::query!(
+            r#"
+            SELECT topic, pubkey, digest, timestamp
+            FROM s3_snapshot_data
+            WHERE upload_finished = false
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let current_time = chrono::Utc::now().timestamp() as u64;
+
+        for record in records {
+            let path = get_path(
+                &record.topic,
+                U256::from_hex(&record.pubkey).unwrap(),
+                Bytes32::from_hex(&record.digest).unwrap(),
+            );
+            let exists = self.s3_client.check_object_exists(&path).await?;
+            if exists {
+                sqlx::query!(
+                    r#"
+                    UPDATE s3_snapshot_data
+                    SET upload_finished = true
+                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
+                    "#,
+                    record.topic,
+                    record.pubkey,
+                    record.digest
+                )
+                .execute(&self.pool)
+                .await?;
+            } else if self.config.s3_upload_timeout + (record.timestamp as u64) < current_time {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM s3_snapshot_data
+                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
+                    "#,
+                    record.topic,
+                    record.pubkey,
+                    record.digest
+                )
+                .execute(&self.pool)
+                .await?;
+                log::warn!("Snapshot data not found in s3. Deleted: path={}", path);
+            }
+        }
+        Ok(())
+    }
+
+    // Fetch unfinished data and check if they exist in s3.
+    // If they exist, set upload_finished to true. If they are timed out, delete them.
+    async fn cleanup_data(&self) -> Result<()> {
+        let records = sqlx::query!(
+            r#"
+            SELECT topic, pubkey, digest, timestamp
+            FROM s3_historical_data
+            WHERE upload_finished = false
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        for record in records {
+            let path = get_path(
+                &record.topic,
+                U256::from_hex(&record.pubkey).unwrap(),
+                Bytes32::from_hex(&record.digest).unwrap(),
+            );
+            let exists = self.s3_client.check_object_exists(&path).await?;
+            if exists {
+                sqlx::query!(
+                    r#"
+                    UPDATE s3_historical_data
+                    SET upload_finished = true
+                    WHERE digest = $1
+                    "#,
+                    record.digest
+                )
+                .execute(&self.pool)
+                .await?;
+            } else if self.config.s3_upload_timeout + (record.timestamp as u64) < current_time {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM s3_historical_data
+                    WHERE digest = $1
+                    "#,
+                    record.digest
+                )
+                .execute(&self.pool)
+                .await?;
+                log::warn!("Historical data not found in s3. Deleted: path={}", path);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn run(&self) {
+        let self_clone = self.clone();
+        let interval = self.config.s3_upload_timeout;
+        actix_web::rt::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(interval)).await;
+                if let Err(e) = self_clone.cleanup_unfinished_snapshots().await {
+                    log::error!("Error in cleanup_unfinished_snapshots: {:?}", e);
+                }
+                if let Err(e) = self_clone.cleanup_data().await {
+                    log::error!("Error in cleanup_data: {:?}", e);
+                }
+            }
+        });
     }
 }

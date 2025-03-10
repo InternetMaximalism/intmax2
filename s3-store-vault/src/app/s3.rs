@@ -5,7 +5,7 @@ use std::{fs, io, time::Duration};
 
 pub type Result<T> = std::result::Result<T, S3Error>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct S3Config {
     pub bucket_name: String,
     pub cloudfront_domain: String,
@@ -13,6 +13,7 @@ pub struct S3Config {
     pub private_key_path: String,
 }
 
+#[derive(Clone)]
 pub struct S3Client {
     client: AwsS3Client,
     config: S3Config,
