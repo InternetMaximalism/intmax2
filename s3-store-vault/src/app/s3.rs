@@ -1,9 +1,7 @@
 use aws_config::SdkConfig;
 use aws_sdk_s3::{error::SdkError, presigning::PresigningConfig, Client as AwsS3Client};
 use serde::Deserialize;
-use std::fs;
-use std::io;
-use std::time::Duration;
+use std::{fs, io, time::Duration};
 
 pub type Result<T> = std::result::Result<T, S3Error>;
 

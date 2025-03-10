@@ -48,12 +48,12 @@ pub struct S3SaveSnapshotResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetS3SnapshotRequest {
+pub struct S3GetSnapshotRequest {
     pub pubkey: U256,
     pub topic: String,
 }
 
-impl Signable for GetS3SnapshotRequest {
+impl Signable for S3GetSnapshotRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("get_snapshot"),
@@ -65,17 +65,17 @@ impl Signable for GetS3SnapshotRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetS3SnapshotResponse {
-    pub presigned_url: String,
+pub struct S3GetSnapshotResponse {
+    pub presigned_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SaveS3DataBatchRequest {
+pub struct S3SaveDataBatchRequest {
     pub data: Vec<S3SaveDataEntry>,
 }
 
-impl Signable for SaveS3DataBatchRequest {
+impl Signable for S3SaveDataBatchRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("save_data_batch"),
@@ -87,19 +87,19 @@ impl Signable for SaveS3DataBatchRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SaveS3DataBatchResponse {
+pub struct S3SaveDataBatchResponse {
     pub presigned_urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetS3DataBatchRequest {
+pub struct S3GetDataBatchRequest {
     pub topic: String,
     pub pubkey: U256,
     pub digests: Vec<Bytes32>,
 }
 
-impl Signable for GetS3DataBatchRequest {
+impl Signable for S3GetDataBatchRequest {
     fn content(&self) -> Vec<u8> {
         // to reuse the signature, we exclude data_type and uuids from the content intentionally
         content_prefix("get_data_batch")
@@ -108,19 +108,19 @@ impl Signable for GetS3DataBatchRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetS3DataBatchResponse {
-    pub presigned_urls: Vec<String>,
+pub struct S3GetDataBatchResponse {
+    pub presigned_urls_with_meta: Vec<PresignedUrlWithMetaData>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetS3DataSequenceRequest {
+pub struct S3GetDataSequenceRequest {
     pub topic: String,
     pub pubkey: U256,
     pub cursor: MetaDataCursor,
 }
 
-impl Signable for GetS3DataSequenceRequest {
+impl Signable for S3GetDataSequenceRequest {
     fn content(&self) -> Vec<u8> {
         // to reuse the signature, we exclude data_type and cursor from the content intentionally
         content_prefix("get_data_sequence")
@@ -129,8 +129,8 @@ impl Signable for GetS3DataSequenceRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetS3DataSequenceResponse {
-    pub data: Vec<PresignedUrlWithMetaData>,
+pub struct S3GetDataSequenceResponse {
+    pub presigned_urls_with_meta: Vec<PresignedUrlWithMetaData>,
     pub cursor_response: MetaDataCursorResponse,
 }
 
