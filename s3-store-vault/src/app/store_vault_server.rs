@@ -245,7 +245,7 @@ impl StoreVaultServer {
         topic: &str,
         pubkey: U256,
         cursor: &MetaDataCursor,
-    ) -> Result<(Vec<String>, MetaDataCursorResponse)> {
+    ) -> Result<(Vec<PresignedUrlWithMetaData>, MetaDataCursorResponse)> {
         let pubkey_hex = pubkey.to_hex();
         let actual_limit = cursor.limit.unwrap_or(MAX_BATCH_SIZE as u32) as i64;
 
@@ -330,15 +330,18 @@ impl StoreVaultServer {
         };
 
         // generate presigned urls
-        let mut urls = Vec::with_capacity(result.len());
+        let mut presigned_urls_with_meta = Vec::with_capacity(result.len());
         for meta in result.iter() {
             let path = get_path(topic, pubkey, meta.digest);
             let presigned_url = self
                 .s3_client
                 .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
-            urls.push(presigned_url);
+            presigned_urls_with_meta.push(PresignedUrlWithMetaData {
+                presigned_url,
+                meta: meta.clone(),
+            });
         }
 
-        Ok((urls, response_cursor))
+        Ok((presigned_urls_with_meta, response_cursor))
     }
 }

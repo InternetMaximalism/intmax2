@@ -6,13 +6,14 @@ use actix_web::{
     Error,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::{
-        interface::MAX_BATCH_SIZE,
-        types::{
-            GetDataBatchRequest, GetDataBatchResponse, GetDataSequenceRequest,
-            GetDataSequenceResponse, GetSnapshotRequest, GetSnapshotResponse, SaveDataBatchRequest,
-            SaveDataBatchResponse, SaveSnapshotRequest,
+    api::{
+        s3_store_vault::types::{
+            S3GetDataBatchRequest, S3GetDataBatchResponse, S3GetDataSequenceRequest,
+            S3GetDataSequenceResponse, S3GetSnapshotRequest, S3GetSnapshotResponse,
+            S3SaveDataBatchRequest, S3SaveDataBatchResponse, S3SaveSnapshotRequest,
+            S3SaveSnapshotResponse,
         },
+        store_vault_server::interface::MAX_BATCH_SIZE,
     },
     data::{rw_rights, topic::extract_rights},
     utils::signature::{Signable, WithAuth},
@@ -21,8 +22,8 @@ use intmax2_interfaces::{
 #[post("/save-snapshot")]
 pub async fn save_snapshot(
     state: Data<State>,
-    request: Json<WithAuth<SaveSnapshotRequest>>,
-) -> Result<Json<()>, Error> {
+    request: Json<WithAuth<S3SaveSnapshotRequest>>,
+) -> Result<Json<S3SaveSnapshotResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
@@ -64,24 +65,25 @@ pub async fn save_snapshot(
         rw_rights::WriteRights::OpenWrite => {}
     }
 
-    state
+    let presigned_url = state
         .store_vault_server
-        .save_snapshot(
+        .save_snapshot_url(
             &request.topic,
             request.pubkey,
             request.prev_digest,
-            &request.data,
+            request.digest,
         )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(()))
+
+    Ok(Json(S3SaveSnapshotResponse { presigned_url }))
 }
 
 #[post("/get-snapshot")]
 pub async fn get_snapshot(
     state: Data<State>,
-    request: Json<WithAuth<GetSnapshotRequest>>,
-) -> Result<Json<GetSnapshotResponse>, Error> {
+    request: Json<WithAuth<S3GetSnapshotRequest>>,
+) -> Result<Json<S3GetSnapshotResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
@@ -104,19 +106,20 @@ pub async fn get_snapshot(
         rw_rights::ReadRights::OpenRead => {}
     }
 
-    let data = state
+    let presigned_url = state
         .store_vault_server
-        .get_snapshot_data(&request.topic, request.pubkey)
+        .get_snapshot_url(&request.topic, request.pubkey)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetSnapshotResponse { data }))
+
+    Ok(Json(S3GetSnapshotResponse { presigned_url }))
 }
 
 #[post("/save-data-batch")]
 pub async fn save_data_batch(
     state: Data<State>,
-    request: Json<WithAuth<SaveDataBatchRequest>>,
-) -> Result<Json<SaveDataBatchResponse>, Error> {
+    request: Json<WithAuth<S3SaveDataBatchRequest>>,
+) -> Result<Json<S3SaveDataBatchResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
@@ -157,19 +160,19 @@ pub async fn save_data_batch(
         }
     }
 
-    let digests = state
+    let presigned_urls = state
         .store_vault_server
-        .batch_save_data(entries)
+        .batch_save_data_url(entries)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(SaveDataBatchResponse { digests }))
+    Ok(Json(S3SaveDataBatchResponse { presigned_urls }))
 }
 
 #[post("/get-data-batch")]
 pub async fn get_data_batch(
     state: Data<State>,
-    request: Json<WithAuth<GetDataBatchRequest>>,
-) -> Result<Json<GetDataBatchResponse>, Error> {
+    request: Json<WithAuth<S3GetDataBatchRequest>>,
+) -> Result<Json<S3GetDataBatchResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
@@ -199,19 +202,22 @@ pub async fn get_data_batch(
         rw_rights::ReadRights::OpenRead => {}
     }
 
-    let data = state
+    let presigned_urls_with_meta = state
         .store_vault_server
         .get_data_batch(&request.topic, auth_pubkey, &request.digests)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetDataBatchResponse { data }))
+
+    Ok(Json(S3GetDataBatchResponse {
+        presigned_urls_with_meta,
+    }))
 }
 
 #[post("/get-data-sequence")]
 pub async fn get_data_sequence(
     state: Data<State>,
-    request: Json<WithAuth<GetDataSequenceRequest>>,
-) -> Result<Json<GetDataSequenceResponse>, Error> {
+    request: Json<WithAuth<S3GetDataSequenceRequest>>,
+) -> Result<Json<S3GetDataSequenceResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
@@ -242,16 +248,16 @@ pub async fn get_data_sequence(
         rw_rights::ReadRights::OpenRead => {}
     }
 
-    let (data, cursor_response) = state
+    let (presigned_urls_with_meta, cursor_response) = state
         .store_vault_server
-        .get_data_sequence(&request.topic, pubkey, &request.cursor)
+        .get_data_sequence_url(&request.topic, pubkey, &request.cursor)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    let res = GetDataSequenceResponse {
-        data,
+
+    Ok(Json(S3GetDataSequenceResponse {
+        presigned_urls_with_meta,
         cursor_response,
-    };
-    Ok(Json(res))
+    }))
 }
 
 pub fn store_vault_server_scope() -> actix_web::Scope {
