@@ -8,12 +8,15 @@ use intmax2_client_sdk::{
             withdrawal_contract::WithdrawalContract,
         },
         private_zkp_server::PrivateZKPServerClient,
-        store_vault_server::StoreVaultServerClient,
+        s3_store_vault::S3StoreVaultClient,
         validity_prover::ValidityProverClient,
         withdrawal_server::WithdrawalServerClient,
     },
 };
-use intmax2_interfaces::api::balance_prover::interface::BalanceProverClientInterface;
+use intmax2_interfaces::api::{
+    balance_prover::interface::BalanceProverClientInterface,
+    store_vault_server::interface::StoreVaultClientInterface,
+};
 
 use crate::env_var::EnvVar;
 
@@ -22,9 +25,8 @@ use super::error::CliError;
 pub fn get_client() -> Result<Client, CliError> {
     let env = envy::from_env::<EnvVar>()?;
     let block_builder = Box::new(BlockBuilderClient::new());
-    let store_vault_server = Box::new(StoreVaultServerClient::new(
-        &env.store_vault_server_base_url,
-    ));
+    let store_vault_server: Box<dyn StoreVaultClientInterface> =
+        Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url));
 
     let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
     let balance_prover: Box<dyn BalanceProverClientInterface> =
