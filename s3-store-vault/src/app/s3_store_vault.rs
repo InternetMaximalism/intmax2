@@ -141,6 +141,12 @@ impl S3StoreVault {
         .execute(&self.pool)
         .await?;
 
+        // delete old data if it exists
+        if let Some(prev_digest) = prev_digest {
+            let path = get_path(topic, pubkey, prev_digest);
+            self.s3_client.delete_object(&path).await?;
+        }
+
         Ok(())
     }
 
