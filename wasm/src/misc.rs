@@ -12,7 +12,12 @@ use intmax2_interfaces::{
         interface::SaveDataEntry,
         types::{CursorOrder, MetaDataCursor},
     },
-    data::{encryption::BlsEncryption as _, generic_misc_data::GenericMiscData},
+    data::{
+        encryption::BlsEncryption as _,
+        generic_misc_data::GenericMiscData,
+        rw_rights::{ReadRights, WriteRights},
+        topic::topic_from_rights,
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +39,7 @@ impl JsDerive {
 }
 
 fn derive_path_topic() -> String {
-    "v1/aa/derive_path".to_string()
+    topic_from_rights(ReadRights::AuthRead, WriteRights::AuthWrite, "derive_path")
 }
 
 #[wasm_bindgen]

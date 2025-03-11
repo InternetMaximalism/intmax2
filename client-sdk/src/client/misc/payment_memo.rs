@@ -4,13 +4,23 @@ use intmax2_interfaces::{
         interface::{SaveDataEntry, StoreVaultClientInterface},
         types::{CursorOrder, MetaDataCursor},
     },
-    data::{encryption::BlsEncryption, meta_data::MetaData, transfer_data::TransferData},
+    data::{
+        encryption::BlsEncryption,
+        meta_data::MetaData,
+        rw_rights::{ReadRights, WriteRights},
+        topic::topic_from_rights,
+        transfer_data::TransferData,
+    },
 };
 use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-pub fn get_topic(input: &str) -> String {
-    format!("v1/aa/misc:{}", input)
+pub fn payment_memo_topic(name: &str) -> String {
+    topic_from_rights(
+        ReadRights::AuthRead,
+        WriteRights::AuthWrite,
+        format!("payment_memo/{}", name).as_str(),
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +39,7 @@ pub async fn save_payment_memo<M: Default + Clone + Serialize + DeserializeOwned
     memo_name: &str,
     payment_memo: &PaymentMemo,
 ) -> Result<Bytes32, ClientError> {
-    let topic = get_topic(memo_name);
+    let topic = payment_memo_topic(memo_name);
     let entry = SaveDataEntry {
         topic,
         pubkey: key.pubkey,
@@ -44,7 +54,7 @@ pub async fn get_all_payment_memos(
     key: KeySet,
     memo_name: &str,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
-    let topic = get_topic(memo_name);
+    let topic = payment_memo_topic(memo_name);
     let mut encrypted_memos = vec![];
     let mut cursor = None;
     loop {
