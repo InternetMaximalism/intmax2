@@ -81,13 +81,31 @@ impl S3StoreVault {
         Ok(record.map(|r| Bytes32::from_hex(&r.digest).unwrap()))
     }
 
-    pub async fn save_snapshot_url(
+    pub async fn pre_save_snapshot(
+        &self,
+        topic: &str,
+        pubkey: U256,
+        digest: Bytes32,
+    ) -> Result<String> {
+        let path = get_path(topic, pubkey, digest);
+        let presigned_url = self
+            .s3_client
+            .generate_upload_url(
+                &path,
+                "application/octet-stream",
+                Duration::from_secs(self.config.s3_upload_timeout),
+            )
+            .await?;
+        Ok(presigned_url)
+    }
+
+    pub async fn save_snapshot(
         &self,
         topic: &str,
         pubkey: U256,
         prev_digest: Option<Bytes32>,
         new_digest: Bytes32,
-    ) -> Result<String> {
+    ) -> Result<()> {
         let current_digest = self.get_snapshot_digest(topic, pubkey).await?;
         // validation
         if let Some(prev_digest) = prev_digest {
@@ -123,18 +141,7 @@ impl S3StoreVault {
         .execute(&self.pool)
         .await?;
 
-        // publish s3 presigned url
-        let path = get_path(topic, pubkey, new_digest);
-        let presigned_url = self
-            .s3_client
-            .generate_upload_url(
-                &path,
-                "application/octet-stream",
-                Duration::from_secs(self.config.s3_upload_timeout),
-            )
-            .await?;
-
-        Ok(presigned_url)
+        Ok(())
     }
 
     pub async fn get_snapshot_url(&self, topic: &str, pubkey: U256) -> Result<Option<String>> {

@@ -23,6 +23,30 @@ fn content_prefix(path: &str) -> Vec<u8> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct S3PreSaveSnapshotRequest {
+    pub topic: String,
+    pub pubkey: U256,
+    pub digest: Bytes32,
+}
+
+impl Signable for S3PreSaveSnapshotRequest {
+    fn content(&self) -> Vec<u8> {
+        [
+            content_prefix("pre_save_snapshot"),
+            bincode::serialize(&(&self.topic, self.pubkey, self.digest)).unwrap(),
+        ]
+        .concat()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3PreSaveSnapshotResponse {
+    pub presigned_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct S3SaveSnapshotRequest {
     pub topic: String,
     pub pubkey: U256,
@@ -34,16 +58,10 @@ impl Signable for S3SaveSnapshotRequest {
     fn content(&self) -> Vec<u8> {
         [
             content_prefix("save_snapshot"),
-            bincode::serialize(&(self.pubkey, self.digest, self.prev_digest)).unwrap(),
+            bincode::serialize(&(&self.topic, self.pubkey, self.digest, self.prev_digest)).unwrap(),
         ]
         .concat()
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct S3SaveSnapshotResponse {
-    pub presigned_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

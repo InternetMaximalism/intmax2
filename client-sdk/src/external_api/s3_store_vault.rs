@@ -5,8 +5,8 @@ use intmax2_interfaces::{
         s3_store_vault::types::{
             S3GetDataBatchRequest, S3GetDataBatchResponse, S3GetDataSequenceRequest,
             S3GetDataSequenceResponse, S3GetSnapshotRequest, S3GetSnapshotResponse,
-            S3SaveDataBatchRequest, S3SaveDataBatchResponse, S3SaveDataEntry,
-            S3SaveSnapshotRequest, S3SaveSnapshotResponse,
+            S3PreSaveSnapshotRequest, S3PreSaveSnapshotResponse, S3SaveDataBatchRequest,
+            S3SaveDataBatchResponse, S3SaveDataEntry, S3SaveSnapshotRequest,
         },
         store_vault_server::{
             interface::{SaveDataEntry, StoreVaultClientInterface, MAX_BATCH_SIZE},
@@ -48,6 +48,23 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         data: &[u8],
     ) -> Result<(), ServerError> {
         let digest = get_digest(data);
+        let request = S3PreSaveSnapshotRequest {
+            pubkey: key.pubkey,
+            topic: topic.to_string(),
+            digest,
+        };
+        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let response: S3PreSaveSnapshotResponse = post_request(
+            &self.base_url,
+            "/s3-store-vault/pre-save-snapshot",
+            Some(&request_with_auth),
+        )
+        .await?;
+
+        // upload data to s3
+        self.upload(&response.presigned_url, data).await?;
+
+        // save snapshot
         let request = S3SaveSnapshotRequest {
             pubkey: key.pubkey,
             topic: topic.to_string(),
@@ -55,15 +72,12 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             digest,
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        let response: S3SaveSnapshotResponse = post_request(
+        let () = post_request(
             &self.base_url,
             "/s3-store-vault/save-snapshot",
             Some(&request_with_auth),
         )
         .await?;
-
-        // upload data to s3
-        self.upload(&response.presigned_url, data).await?;
 
         Ok(())
     }

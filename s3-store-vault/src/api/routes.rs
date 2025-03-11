@@ -10,8 +10,8 @@ use intmax2_interfaces::{
         s3_store_vault::types::{
             S3GetDataBatchRequest, S3GetDataBatchResponse, S3GetDataSequenceRequest,
             S3GetDataSequenceResponse, S3GetSnapshotRequest, S3GetSnapshotResponse,
-            S3SaveDataBatchRequest, S3SaveDataBatchResponse, S3SaveSnapshotRequest,
-            S3SaveSnapshotResponse,
+            S3PreSaveSnapshotRequest, S3PreSaveSnapshotResponse, S3SaveDataBatchRequest,
+            S3SaveDataBatchResponse, S3SaveSnapshotRequest,
         },
         store_vault_server::interface::MAX_BATCH_SIZE,
     },
@@ -19,11 +19,55 @@ use intmax2_interfaces::{
     utils::signature::{Signable, WithAuth},
 };
 
+#[post("/pre-save-snapshot")]
+pub async fn pre_save_snapshot(
+    state: Data<State>,
+    request: Json<WithAuth<S3PreSaveSnapshotRequest>>,
+) -> Result<Json<S3PreSaveSnapshotResponse>, Error> {
+    request
+        .inner
+        .verify(&request.auth)
+        .map_err(ErrorUnauthorized)?;
+    let auth_pubkey = request.auth.pubkey;
+    let request = &request.inner;
+
+    // validate rights
+    validate_topic_length(&request.topic)?;
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.write_rights {
+        rw_rights::WriteRights::SingleAuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::WriteRights::SingleOpenWrite => {}
+        rw_rights::WriteRights::AuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::WriteRights::OpenWrite => {}
+    }
+
+    let presigned_url = state
+        .s3_store_vault
+        .pre_save_snapshot(&request.topic, request.pubkey, request.digest)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(Json(S3PreSaveSnapshotResponse { presigned_url }))
+}
+
 #[post("/save-snapshot")]
 pub async fn save_snapshot(
-    state: Data<State>,
+    _state: Data<State>,
     request: Json<WithAuth<S3SaveSnapshotRequest>>,
-) -> Result<Json<S3SaveSnapshotResponse>, Error> {
+) -> Result<Json<()>, Error> {
     request
         .inner
         .verify(&request.auth)
@@ -44,14 +88,14 @@ pub async fn save_snapshot(
             }
             if request.prev_digest.is_some() {
                 return Err(actix_web::error::ErrorBadRequest(
-                    "SingleAuthWrite does not allow prev_digest",
+                    "pre_digest is not allowed in SingleAuthWrite",
                 ));
             }
         }
         rw_rights::WriteRights::SingleOpenWrite => {
             if request.prev_digest.is_some() {
                 return Err(actix_web::error::ErrorBadRequest(
-                    "SingleOpenWrite does not allow prev_digest",
+                    "pre_digest is not allowed in SingleOpenWrite",
                 ));
             }
         }
@@ -65,18 +109,7 @@ pub async fn save_snapshot(
         rw_rights::WriteRights::OpenWrite => {}
     }
 
-    let presigned_url = state
-        .s3_store_vault
-        .save_snapshot_url(
-            &request.topic,
-            request.pubkey,
-            request.prev_digest,
-            request.digest,
-        )
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
-    Ok(Json(S3SaveSnapshotResponse { presigned_url }))
+    Ok(Json(()))
 }
 
 #[post("/get-snapshot")]
@@ -262,6 +295,7 @@ pub async fn get_data_sequence(
 
 pub fn s3_store_vault_scope() -> actix_web::Scope {
     actix_web::web::scope("/s3-store-vault")
+        .service(pre_save_snapshot)
         .service(save_snapshot)
         .service(get_snapshot)
         .service(save_data_batch)
