@@ -27,7 +27,7 @@ pub fn get_client() -> Result<Client, CliError> {
     let env = envy::from_env::<EnvVar>()?;
     let block_builder = Box::new(BlockBuilderClient::new());
 
-    let use_s3 = true;
+    let use_s3 = env.use_s3.unwrap_or(true);
     let store_vault_server: Box<dyn StoreVaultClientInterface> = if use_s3 {
         Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
     } else {
