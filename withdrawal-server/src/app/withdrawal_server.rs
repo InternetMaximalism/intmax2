@@ -115,8 +115,10 @@ impl WithdrawalServer {
             claim_fee,
         };
         let store_vault_server: Box<dyn StoreVaultClientInterface> = if env.use_s3.unwrap_or(true) {
+            log::info!("Using s3_store_vault");
             Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
         } else {
+            log::info!("Using store_vault_server");
             Box::new(StoreVaultServerClient::new(
                 &env.store_vault_server_base_url,
             ))

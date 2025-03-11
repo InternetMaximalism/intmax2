@@ -47,7 +47,7 @@ You need to run `cp .env.example .env` in each directory.
 1. Start Store-vault-server. 
 Example port: 9000
 ```bash
-cd store-vault-server && sqlx database setup && cargo run -r
+cd s3-store-vault && sqlx database setup && cargo run -r
 ```
 
 2. Start balance-prover.

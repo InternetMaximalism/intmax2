@@ -69,10 +69,12 @@ impl BlockBuilder {
         // Initialize clients
         let store_vault_server_client: Arc<Box<dyn StoreVaultClientInterface>> =
             if env.use_s3.unwrap_or(true) {
+                log::info!("Using s3_store_vault");
                 Arc::new(Box::new(S3StoreVaultClient::new(
                     &env.store_vault_server_base_url,
                 )))
             } else {
+                log::info!("Using store_vault_server");
                 Arc::new(Box::new(StoreVaultServerClient::new(
                     &env.store_vault_server_base_url,
                 )))
