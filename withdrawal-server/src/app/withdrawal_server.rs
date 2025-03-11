@@ -19,7 +19,7 @@ use intmax2_client_sdk::{
         sync::utils::quote_withdrawal_claim_fee,
     },
     external_api::{
-        contract::withdrawal_contract::WithdrawalContract,
+        contract::withdrawal_contract::WithdrawalContract, s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient, validity_prover::ValidityProverClient,
     },
 };
@@ -63,7 +63,7 @@ struct Config {
 pub struct WithdrawalServer {
     config: Config,
     pub pool: DbPool,
-    pub store_vault_server: StoreVaultServerClient,
+    pub store_vault_server: Box<dyn StoreVaultClientInterface>,
     pub validity_prover: ValidityProverClient,
     pub withdrawal_contract: WithdrawalContract,
 }
@@ -114,7 +114,13 @@ impl WithdrawalServer {
             claimable_withdrawal_fee,
             claim_fee,
         };
-        let store_vault_server = StoreVaultServerClient::new(&env.store_vault_server_base_url);
+        let store_vault_server: Box<dyn StoreVaultClientInterface> = if env.use_s3.unwrap_or(true) {
+            Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
+        } else {
+            Box::new(StoreVaultServerClient::new(
+                &env.store_vault_server_base_url,
+            ))
+        };
         let validity_prover = ValidityProverClient::new(&env.validity_prover_base_url);
         let withdrawal_contract = WithdrawalContract::new(
             &env.l2_rpc_url,
@@ -444,7 +450,7 @@ impl WithdrawalServer {
         let mut transfers = Vec::new();
         for (meta, transfer_data) in transfer_data_with_meta {
             let transfer = validate_receive(
-                &self.store_vault_server,
+                self.store_vault_server.as_ref(),
                 &self.validity_prover,
                 key.pubkey,
                 &meta,
