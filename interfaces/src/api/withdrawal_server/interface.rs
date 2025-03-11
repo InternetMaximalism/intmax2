@@ -112,7 +112,7 @@ impl Display for ClaimStatus {
 }
 
 #[async_trait(?Send)]
-pub trait WithdrawalServerClientInterface {
+pub trait WithdrawalServerClientInterface: Sync + Send {
     async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError>;
 
     async fn get_claim_fee(&self) -> Result<ClaimFeeInfo, ServerError>;

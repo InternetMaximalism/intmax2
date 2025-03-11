@@ -2,10 +2,7 @@ use std::collections::HashMap;
 
 use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
 use ethers::core::rand;
-use intmax2_client_sdk::{
-    client::strategy::common::fetch_sender_proof_set,
-    external_api::store_vault_server::StoreVaultServerClient,
-};
+use intmax2_client_sdk::client::strategy::common::fetch_sender_proof_set;
 use intmax2_interfaces::{
     api::{
         block_builder::interface::{Fee, FeeProof},
@@ -32,7 +29,7 @@ use uuid::Uuid;
 
 /// Validate fee proof
 pub async fn validate_fee_proof(
-    store_vault_server_client: &StoreVaultServerClient,
+    store_vault_server_client: &dyn StoreVaultClientInterface,
     beneficiary_pubkey: Option<U256>,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
@@ -239,7 +236,7 @@ pub struct FeeCollection {
 
 /// Collect fee from the senders
 pub async fn collect_fee(
-    store_vault_server_client: &StoreVaultServerClient,
+    store_vault_server_client: &dyn StoreVaultClientInterface,
     beneficiary_pubkey: U256,
     fee_collection: &FeeCollection,
 ) -> Result<Vec<BlockPostTask>, FeeError> {

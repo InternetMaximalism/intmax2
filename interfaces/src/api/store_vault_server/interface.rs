@@ -23,7 +23,7 @@ pub struct SaveDataEntry {
 }
 
 #[async_trait(?Send)]
-pub trait StoreVaultClientInterface {
+pub trait StoreVaultClientInterface: Sync + Send {
     async fn save_snapshot(
         &self,
         key: KeySet,

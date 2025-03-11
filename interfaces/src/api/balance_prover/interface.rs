@@ -23,7 +23,7 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 #[async_trait(?Send)]
-pub trait BalanceProverClientInterface {
+pub trait BalanceProverClientInterface: Sync + Send {
     async fn prove_spent(
         &self,
         key: KeySet,

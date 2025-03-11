@@ -54,7 +54,7 @@ pub struct TransitionProofTaskResult {
 }
 
 #[async_trait(?Send)]
-pub trait ValidityProverClientInterface {
+pub trait ValidityProverClientInterface: Sync + Send {
     async fn get_block_number(&self) -> Result<u32, ServerError>;
 
     async fn get_validity_proof_block_number(&self) -> Result<u32, ServerError>;

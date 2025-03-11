@@ -123,7 +123,7 @@ impl BlockBuilder {
             loop {
                 match self
                     .storage
-                    .process_fee_collection(&self.store_vault_server_client)
+                    .process_fee_collection(self.store_vault_server_client.as_ref().as_ref())
                     .await
                 {
                     Ok(_) => {}

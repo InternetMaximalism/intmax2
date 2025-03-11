@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use intmax2_client_sdk::external_api::store_vault_server::StoreVaultServerClient;
+use intmax2_interfaces::api::store_vault_server::interface::StoreVaultClientInterface;
 use intmax2_zkp::{
     common::block_builder::{BlockProposal, UserSignature},
     constants::NUM_SENDERS_IN_BLOCK,
@@ -261,7 +261,7 @@ impl Storage for InMemoryStorage {
 
     async fn process_fee_collection(
         &self,
-        store_vault_server_client: &StoreVaultServerClient,
+        store_vault_server_client: &dyn StoreVaultClientInterface,
     ) -> Result<(), StorageError> {
         // get first fee collection task
         let fee_collection = {
