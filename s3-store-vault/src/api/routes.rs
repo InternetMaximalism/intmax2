@@ -65,7 +65,7 @@ pub async fn pre_save_snapshot(
 
 #[post("/save-snapshot")]
 pub async fn save_snapshot(
-    _state: Data<State>,
+    state: Data<State>,
     request: Json<WithAuth<S3SaveSnapshotRequest>>,
 ) -> Result<Json<()>, Error> {
     request
@@ -108,6 +108,17 @@ pub async fn save_snapshot(
         }
         rw_rights::WriteRights::OpenWrite => {}
     }
+
+    state
+        .s3_store_vault
+        .save_snapshot(
+            &request.topic,
+            request.pubkey,
+            request.prev_digest,
+            request.digest,
+        )
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
 
     Ok(Json(()))
 }

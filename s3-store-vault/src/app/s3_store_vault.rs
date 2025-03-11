@@ -104,7 +104,7 @@ impl S3StoreVault {
         topic: &str,
         pubkey: U256,
         prev_digest: Option<Bytes32>,
-        new_digest: Bytes32,
+        digest: Bytes32,
     ) -> Result<()> {
         let current_digest = self.get_snapshot_digest(topic, pubkey).await?;
         // validation
@@ -118,13 +118,15 @@ impl S3StoreVault {
         // insert new digest
         sqlx::query!(
             r#"
-            INSERT INTO s3_snapshot_data (pubkey, topic, digest)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (pubkey, topic) DO UPDATE SET digest = EXCLUDED.digest
+            INSERT INTO s3_snapshot_data (pubkey, topic, digest, timestamp)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (pubkey, topic) DO UPDATE SET digest = EXCLUDED.digest,
+            timestamp = EXCLUDED.timestamp
             "#,
             pubkey.to_hex(),
             topic,
-            new_digest.to_hex()
+            digest.to_hex(),
+            chrono::Utc::now().timestamp() as i64
         )
         .execute(&self.pool)
         .await?;
@@ -419,4 +421,82 @@ impl S3StoreVault {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+
+    use intmax2_interfaces::utils::digest::get_digest;
+    use intmax2_zkp::ethereum_types::u256::U256;
+
+    use super::S3StoreVault;
+
+    #[tokio::test]
+    async fn update_snapshot_test() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        dotenv::dotenv().ok();
+
+        let env = envy::from_env::<crate::EnvVar>().unwrap();
+        let s3_store_vault = S3StoreVault::new(&env).await.unwrap();
+
+        let topic = "test-2";
+        let pubkey = U256::from(1);
+        let data = b"test data 1";
+
+        let prev_digest = None;
+        let new_digest = get_digest(data);
+        let url = s3_store_vault
+            .pre_save_snapshot(topic, pubkey, new_digest)
+            .await
+            .unwrap();
+
+        reqwest::Client::new()
+            .put(&url)
+            .header("Content-Type", "application/octet-stream")
+            .body(data.to_vec())
+            .send()
+            .await
+            .unwrap();
+
+        s3_store_vault
+            .save_snapshot(topic, pubkey, prev_digest, new_digest)
+            .await
+            .unwrap();
+
+        let get_url = s3_store_vault
+            .get_snapshot_url(topic, pubkey)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let response = reqwest::Client::new().get(&get_url).send().await.unwrap();
+        assert_eq!(response.bytes().await.unwrap().as_ref(), data);
+
+        // overwrite
+        let data = b"test data 2";
+        let prev_digest = Some(new_digest);
+        let new_digest = get_digest(data);
+        let url = s3_store_vault
+            .pre_save_snapshot(topic, pubkey, new_digest)
+            .await
+            .unwrap();
+
+        reqwest::Client::new()
+            .put(&url)
+            .header("Content-Type", "application/octet-stream")
+            .body(data.to_vec())
+            .send()
+            .await
+            .unwrap();
+
+        s3_store_vault
+            .save_snapshot(topic, pubkey, prev_digest, new_digest)
+            .await
+            .unwrap();
+
+        let get_url = s3_store_vault
+            .get_snapshot_url(topic, pubkey)
+            .await
+            .unwrap()
+            .unwrap();
+        let response = reqwest::Client::new().get(&get_url).send().await.unwrap();
+        assert_eq!(response.bytes().await.unwrap().as_ref(), data);
+    }
+}

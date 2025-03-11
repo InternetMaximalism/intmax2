@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS s3_snapshot_data (
-    pubkey VARCHAR(66) PRIMARY KEY,
-    digest VARCHAR(66) NOT NULL,
+    pubkey VARCHAR(66) NOT NULL,
     topic VARCHAR(255) NOT NULL,
+    digest VARCHAR(66) NOT NULL,
     timestamp BIGINT NOT NULL,
     UNIQUE (pubkey, topic)
 );
