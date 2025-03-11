@@ -108,31 +108,19 @@ impl S3StoreVault {
     ) -> Result<()> {
         let current_digest = self.get_snapshot_digest(topic, pubkey).await?;
         // validation
-        if let Some(prev_digest) = prev_digest {
-            if let Some(digest) = current_digest {
-                if digest != prev_digest {
-                    return Err(StoreVaultError::LockError(format!(
-                        "prev_digest {} mismatch with stored digest {}",
-                        prev_digest, digest
-                    )));
-                }
-            } else {
-                return Err(StoreVaultError::LockError(
-                    "prev_digest provided but no data found".to_string(),
-                ));
-            }
-        } else {
-            return Err(StoreVaultError::LockError(
-                "prev_digest not provided but data found".to_string(),
-            ));
+        if current_digest != prev_digest {
+            return Err(StoreVaultError::LockError(format!(
+                "prev_digest mismatch with stored digest: {:?}",
+                current_digest
+            )));
         }
 
         // insert new digest
         sqlx::query!(
             r#"
-            INSERT INTO s3_snapshot_data (pubkey, topic, digest, upload_finished)
-            VALUES ($1, $2, $3, false)
-            ON CONFLICT (pubkey, topic) DO UPDATE SET digest = $3
+            INSERT INTO s3_snapshot_data (pubkey, topic, digest)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (pubkey, topic) DO UPDATE SET digest = EXCLUDED.digest
             "#,
             pubkey.to_hex(),
             topic,
@@ -429,3 +417,6 @@ impl S3StoreVault {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {}

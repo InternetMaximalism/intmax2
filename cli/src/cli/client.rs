@@ -9,6 +9,7 @@ use intmax2_client_sdk::{
         },
         private_zkp_server::PrivateZKPServerClient,
         s3_store_vault::S3StoreVaultClient,
+        store_vault_server::StoreVaultServerClient,
         validity_prover::ValidityProverClient,
         withdrawal_server::WithdrawalServerClient,
     },
@@ -25,8 +26,15 @@ use super::error::CliError;
 pub fn get_client() -> Result<Client, CliError> {
     let env = envy::from_env::<EnvVar>()?;
     let block_builder = Box::new(BlockBuilderClient::new());
-    let store_vault_server: Box<dyn StoreVaultClientInterface> =
-        Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url));
+
+    let use_s3 = true;
+    let store_vault_server: Box<dyn StoreVaultClientInterface> = if use_s3 {
+        Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
+    } else {
+        Box::new(StoreVaultServerClient::new(
+            &env.store_vault_server_base_url,
+        ))
+    };
 
     let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
     let balance_prover: Box<dyn BalanceProverClientInterface> =
