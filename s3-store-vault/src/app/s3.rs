@@ -5,7 +5,7 @@ use std::{fs, io, time::Duration};
 
 pub type Result<T> = std::result::Result<T, S3Error>;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct S3Config {
     pub bucket_name: String,
     pub cloudfront_domain: String,
@@ -45,7 +45,7 @@ pub enum S3Error {
 }
 
 impl S3Client {
-    pub async fn generate_presigned_upload_url(
+    pub async fn generate_upload_url(
         &self,
         key: &str,
         content_type: &str,
@@ -69,6 +69,32 @@ impl S3Client {
         Ok(presigned_request.uri().to_string())
     }
 
+    pub fn generate_download_url(
+        &self,
+        resource_path: &str,
+        expiration: Duration,
+    ) -> Result<String> {
+        let url = format!(
+            "https://{}/{}",
+            self.config.cloudfront_domain, resource_path
+        );
+
+        // Read the private key file
+        let private_key_data = fs::read_to_string(&self.config.private_key_path)?;
+
+        let options = cloudfront_sign::SignedOptions {
+            key_pair_id: self.config.cloudfront_key_pair_id.clone(),
+            private_key: private_key_data,
+            date_less_than: chrono::Utc::now().timestamp() as u64 + expiration.as_secs(),
+            ..Default::default()
+        };
+
+        let signed_url = cloudfront_sign::get_signed_url(&url, &options)
+            .map_err(|e| S3Error::CloudFrontSigning(format!("{:?}", e)))?;
+
+        Ok(signed_url)
+    }
+
     pub async fn check_object_exists(&self, key: &str) -> Result<bool> {
         match self
             .client
@@ -90,25 +116,14 @@ impl S3Client {
         }
     }
 
-    pub fn generate_signed_url(&self, resource_path: &str, expiration: Duration) -> Result<String> {
-        let url = format!(
-            "https://{}/{}",
-            self.config.cloudfront_domain, resource_path
-        );
-
-        // Read the private key file
-        let private_key_data = fs::read_to_string(&self.config.private_key_path)?;
-
-        let options = cloudfront_sign::SignedOptions {
-            key_pair_id: self.config.cloudfront_key_pair_id.clone(),
-            private_key: private_key_data,
-            date_less_than: chrono::Utc::now().timestamp() as u64 + expiration.as_secs(),
-            ..Default::default()
-        };
-
-        let signed_url = cloudfront_sign::get_signed_url(&url, &options)
-            .map_err(|e| S3Error::CloudFrontSigning(format!("{:?}", e)))?;
-
-        Ok(signed_url)
+    pub async fn delete_object(&self, key: &str) -> Result<()> {
+        self.client
+            .delete_object()
+            .bucket(&self.config.bucket_name)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| S3Error::ObjectExistenceCheck(format!("{:?}", e)))?;
+        Ok(())
     }
 }

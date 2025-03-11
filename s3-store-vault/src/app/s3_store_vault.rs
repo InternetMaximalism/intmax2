@@ -127,7 +127,7 @@ impl S3StoreVault {
         let path = get_path(topic, pubkey, new_digest);
         let presigned_url = self
             .s3_client
-            .generate_presigned_upload_url(
+            .generate_upload_url(
                 &path,
                 "application/octet-stream",
                 Duration::from_secs(self.config.s3_upload_timeout),
@@ -141,9 +141,10 @@ impl S3StoreVault {
         let digest = self.get_snapshot_digest(topic, pubkey).await?;
         if let Some(digest) = digest {
             let path = get_path(topic, pubkey, digest);
-            let presigned_url = self
-                .s3_client
-                .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
+            let presigned_url = self.s3_client.generate_download_url(
+                &path,
+                Duration::from_secs(self.config.s3_download_timeout),
+            )?;
             Ok(Some(presigned_url))
         } else {
             Ok(None)
@@ -185,7 +186,7 @@ impl S3StoreVault {
             let path = get_path(&entry.topic, entry.pubkey, entry.digest);
             let presigned_url = self
                 .s3_client
-                .generate_presigned_upload_url(
+                .generate_upload_url(
                     &path,
                     "application/octet-stream",
                     Duration::from_secs(self.config.s3_upload_timeout),
@@ -230,9 +231,10 @@ impl S3StoreVault {
         let mut url_with_meta = Vec::with_capacity(meta.len());
         for meta in meta.iter() {
             let path = get_path(topic, pubkey, meta.digest);
-            let presigned_url = self
-                .s3_client
-                .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
+            let presigned_url = self.s3_client.generate_download_url(
+                &path,
+                Duration::from_secs(self.config.s3_download_timeout),
+            )?;
 
             url_with_meta.push(PresignedUrlWithMetaData {
                 presigned_url,
@@ -336,9 +338,10 @@ impl S3StoreVault {
         let mut presigned_urls_with_meta = Vec::with_capacity(result.len());
         for meta in result.iter() {
             let path = get_path(topic, pubkey, meta.digest);
-            let presigned_url = self
-                .s3_client
-                .generate_signed_url(&path, Duration::from_secs(self.config.s3_download_timeout))?;
+            let presigned_url = self.s3_client.generate_download_url(
+                &path,
+                Duration::from_secs(self.config.s3_download_timeout),
+            )?;
             presigned_urls_with_meta.push(PresignedUrlWithMetaData {
                 presigned_url,
                 meta: meta.clone(),
@@ -346,60 +349,6 @@ impl S3StoreVault {
         }
 
         Ok((presigned_urls_with_meta, response_cursor))
-    }
-
-    // jobs
-    // Fetch unfinished snapshots and check if they exist in s3.
-    // If they exist, set upload_finished to true. If they are timed out, delete them.
-    async fn cleanup_unfinished_snapshots(&self) -> Result<()> {
-        let records = sqlx::query!(
-            r#"
-            SELECT topic, pubkey, digest, timestamp
-            FROM s3_snapshot_data
-            WHERE upload_finished = false
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let current_time = chrono::Utc::now().timestamp() as u64;
-
-        for record in records {
-            let path = get_path(
-                &record.topic,
-                U256::from_hex(&record.pubkey).unwrap(),
-                Bytes32::from_hex(&record.digest).unwrap(),
-            );
-            let exists = self.s3_client.check_object_exists(&path).await?;
-            if exists {
-                sqlx::query!(
-                    r#"
-                    UPDATE s3_snapshot_data
-                    SET upload_finished = true
-                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
-                    "#,
-                    record.topic,
-                    record.pubkey,
-                    record.digest
-                )
-                .execute(&self.pool)
-                .await?;
-            } else if self.config.s3_upload_timeout + (record.timestamp as u64) < current_time {
-                sqlx::query!(
-                    r#"
-                    DELETE FROM s3_snapshot_data
-                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
-                    "#,
-                    record.topic,
-                    record.pubkey,
-                    record.digest
-                )
-                .execute(&self.pool)
-                .await?;
-                log::warn!("Snapshot data not found in s3. Deleted: path={}", path);
-            }
-        }
-        Ok(())
     }
 
     // Fetch unfinished data and check if they exist in s3.
@@ -459,13 +408,10 @@ impl S3StoreVault {
         let interval = self.config.s3_upload_timeout;
         actix_web::rt::spawn(async move {
             loop {
-                tokio::time::sleep(Duration::from_secs(interval)).await;
-                if let Err(e) = self_clone.cleanup_unfinished_snapshots().await {
-                    log::error!("Error in cleanup_unfinished_snapshots: {:?}", e);
-                }
                 if let Err(e) = self_clone.cleanup_data().await {
                     log::error!("Error in cleanup_data: {:?}", e);
                 }
+                tokio::time::sleep(Duration::from_secs(interval)).await;
             }
         });
     }
