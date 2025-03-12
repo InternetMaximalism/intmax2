@@ -1,3 +1,2 @@
-pub mod algorithm;
-pub mod message;
-pub mod utils;
+pub mod types;
+pub mod v1;

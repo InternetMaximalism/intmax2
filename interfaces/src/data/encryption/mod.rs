@@ -1,5 +1,5 @@
 use ::rsa::RsaPublicKey;
-use bls::algorithm::{decrypt_bls, encrypt_bls};
+use bls::v1::algorithm::{decrypt_bls, encrypt_bls};
 use errors::{BlsEncryptionError, RsaEncryptionError};
 use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
 use rsa::{decrypt_with_aes_key, encrypt_with_rsa, RsaEncryptedMessage};
