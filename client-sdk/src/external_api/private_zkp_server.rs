@@ -305,12 +305,14 @@ impl PrivateZKPServerClient {
                 }
 
                 let proof_with_result =
-                    ProofResultWithError::decrypt(&response.result.unwrap(), key).map_err(|e| {
-                        ServerError::DeserializationError(format!(
-                            "Failed to decrypt proof result: {:?}",
-                            e
-                        ))
-                    })?;
+                    ProofResultWithError::decrypt(key, None, &response.result.unwrap()).map_err(
+                        |e| {
+                            ServerError::DeserializationError(format!(
+                                "Failed to decrypt proof result: {:?}",
+                                e
+                            ))
+                        },
+                    )?;
 
                 return Ok(proof_with_result);
             } else if response.status == "error" {

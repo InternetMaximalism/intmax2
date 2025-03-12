@@ -43,7 +43,7 @@ pub async fn save_payment_memo<M: Default + Clone + Serialize + DeserializeOwned
     let entry = SaveDataEntry {
         topic,
         pubkey: key.pubkey,
-        data: payment_memo.encrypt(key.pubkey),
+        data: payment_memo.encrypt(key.pubkey, Some(key))?,
     };
     let digests = store_vault_server.save_data_batch(key, &[entry]).await?;
     Ok(digests[0])
@@ -79,7 +79,7 @@ pub async fn get_all_payment_memos(
 
     let mut memos = Vec::new();
     for encrypted_memo in encrypted_memos {
-        let memo = PaymentMemo::decrypt(&encrypted_memo.data, key)?;
+        let memo = PaymentMemo::decrypt(key, None, &encrypted_memo.data)?;
         memos.push(memo);
     }
 
