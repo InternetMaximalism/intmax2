@@ -14,7 +14,10 @@ use intmax2_interfaces::{
         user_data::ProcessStatus,
     },
 };
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _}};
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
+};
 
 #[derive(Debug, Clone)]
 pub struct TxInfo {
