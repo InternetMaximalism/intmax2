@@ -15,7 +15,7 @@ use intmax2_interfaces::{
     data::{
         encryption::BlsEncryption as _,
         generic_misc_data::GenericMiscData,
-        rw_rights::{ReadRights, WriteRights},
+        rw_rights::{RWRights, ReadRights, WriteRights},
         topic::topic_from_rights,
     },
 };
@@ -39,7 +39,13 @@ impl JsDerive {
 }
 
 fn derive_path_topic() -> String {
-    topic_from_rights(ReadRights::AuthRead, WriteRights::AuthWrite, "derive_path")
+    topic_from_rights(
+        RWRights {
+            read_rights: ReadRights::AuthRead,
+            write_rights: WriteRights::AuthWrite,
+        },
+        "derive_path",
+    )
 }
 
 #[wasm_bindgen]
@@ -58,7 +64,7 @@ pub async fn save_derive_path(
     let entry = SaveDataEntry {
         topic: derive_path_topic(),
         pubkey: key.pubkey,
-        data: generic_misc_data.encrypt(key.pubkey),
+        data: generic_misc_data.encrypt(key.pubkey, Some(key))?,
     };
     let digests = client
         .store_vault_server
@@ -95,7 +101,7 @@ pub async fn get_derive_path_list(
     }
     let mut derive_list: Vec<JsDerive> = Vec::new();
     for data in encrypted_data {
-        let generic_misc_data = GenericMiscData::decrypt(&data.data, key)?;
+        let generic_misc_data = GenericMiscData::decrypt(key, Some(key.pubkey), &data.data)?;
         derive_list.push(bincode::deserialize(&generic_misc_data.data).unwrap());
     }
     Ok(derive_list)

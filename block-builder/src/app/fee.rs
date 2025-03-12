@@ -343,16 +343,17 @@ pub async fn collect_fee(
     }
 
     // save transfer data to the store vault server
-    let entries = transfer_data_vec
-        .iter()
-        .map(|transfer_data| SaveDataEntry {
+    let mut entries = Vec::new();
+    for transfer_data in transfer_data_vec {
+        let entry = SaveDataEntry {
             topic: DataType::Transfer.to_topic(),
             pubkey: beneficiary_pubkey,
-            data: transfer_data.encrypt(beneficiary_pubkey),
-        })
-        .collect::<Vec<_>>();
+            data: transfer_data.encrypt(beneficiary_pubkey, None)?,
+        };
+        entries.push(entry);
+    }
     let dummy_key = KeySet::rand(&mut rand::thread_rng());
-    let _uuids = store_vault_server_client
+    let _digests = store_vault_server_client
         .save_data_batch(dummy_key, &entries)
         .await?;
     Ok(block_post_tasks)

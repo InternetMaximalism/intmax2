@@ -443,7 +443,7 @@ impl WithdrawalServer {
         let transfer_data_with_meta = encrypted_transfer_data
             .iter()
             .map(|data| {
-                let transfer_data = TransferData::decrypt(&data.data, key)?;
+                let transfer_data = TransferData::decrypt(key, None, &data.data)?;
                 Ok((data.meta.clone(), transfer_data))
             })
             .collect::<Result<Vec<_>, BlsEncryptionError>>()?;

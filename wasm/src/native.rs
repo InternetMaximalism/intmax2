@@ -34,7 +34,7 @@ pub async fn decrypt_deposit_data(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let deposit_data =
-        DepositData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
+        DepositData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{}", e)))?;
     Ok(deposit_data.into())
 }
 
@@ -47,7 +47,7 @@ pub async fn decrypt_transfer_data(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let transfer_data =
-        TransferData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
+        TransferData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{}", e)))?;
     Ok(transfer_data.into())
 }
 
@@ -56,7 +56,8 @@ pub async fn decrypt_transfer_data(
 pub async fn decrypt_tx_data(private_key: &str, data: &[u8]) -> Result<JsTxData, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
-    let tx_data = TxData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
+    let tx_data = TxData::decrypt(key, Some(key.pubkey), data)
+        .map_err(|e| JsError::new(&format!("{}", e)))?;
     Ok(tx_data.into())
 }
 

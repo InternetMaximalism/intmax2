@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    rw_rights::{ReadRights, WriteRights},
+    rw_rights::{RWRights, ReadRights, WriteRights},
     topic::topic_from_rights,
 };
 
@@ -48,26 +48,38 @@ impl FromStr for DataType {
 }
 
 impl DataType {
-    pub fn to_topic(&self) -> String {
+    pub fn rw_rights(&self) -> RWRights {
         match self {
-            DataType::Transfer => {
-                topic_from_rights(ReadRights::AuthRead, WriteRights::OpenWrite, "transfer")
-            }
-            DataType::Deposit => {
-                topic_from_rights(ReadRights::AuthRead, WriteRights::OpenWrite, "deposit")
-            }
-            DataType::Withdrawal => {
-                topic_from_rights(ReadRights::AuthRead, WriteRights::AuthWrite, "withdrawal")
-            }
-            DataType::Tx => topic_from_rights(ReadRights::AuthRead, WriteRights::AuthWrite, "tx"),
-            DataType::SenderProofSet => topic_from_rights(
-                ReadRights::OpenRead,
-                WriteRights::SingleOpenWrite,
-                "sender_proof_set",
-            ),
-            DataType::UserData => {
-                topic_from_rights(ReadRights::AuthRead, WriteRights::AuthWrite, "user_data")
-            }
+            DataType::Deposit => RWRights {
+                read_rights: ReadRights::AuthRead,
+                write_rights: WriteRights::OpenWrite,
+            },
+            DataType::Transfer => RWRights {
+                read_rights: ReadRights::AuthRead,
+                write_rights: WriteRights::OpenWrite,
+            },
+            DataType::Withdrawal => RWRights {
+                read_rights: ReadRights::AuthRead,
+                write_rights: WriteRights::AuthWrite,
+            },
+            DataType::Tx => RWRights {
+                read_rights: ReadRights::AuthRead,
+                write_rights: WriteRights::AuthWrite,
+            },
+            DataType::UserData => RWRights {
+                read_rights: ReadRights::AuthRead,
+                write_rights: WriteRights::AuthWrite,
+            },
+            DataType::SenderProofSet => RWRights {
+                read_rights: ReadRights::AuthRead,
+                write_rights: WriteRights::AuthWrite,
+            },
         }
+    }
+}
+
+impl DataType {
+    pub fn to_topic(&self) -> String {
+        topic_from_rights(self.rw_rights(), &self.to_string())
     }
 }

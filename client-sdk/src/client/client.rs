@@ -167,7 +167,7 @@ impl Client {
         let save_entry = SaveDataEntry {
             topic: DataType::Deposit.to_topic(),
             pubkey,
-            data: deposit_data.encrypt(pubkey),
+            data: deposit_data.encrypt(pubkey, None)?,
         };
         let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
         let digests = self
@@ -299,7 +299,7 @@ impl Client {
                 ephemeral_key,
                 &DataType::SenderProofSet.to_topic(),
                 None,
-                &sender_proof_set.encrypt(ephemeral_key.pubkey),
+                &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
             )
             .await?;
         let sender_proof_set_ephemeral_key: U256 =
@@ -332,7 +332,7 @@ impl Client {
                 let entry = SaveDataEntry {
                     topic: DataType::Tx.to_topic(),
                     pubkey: key.pubkey,
-                    data: tx_data.encrypt(key.pubkey),
+                    data: tx_data.encrypt(key.pubkey, Some(key))?,
                 };
                 self.store_vault_server
                     .save_data_batch(key, &[entry])
@@ -458,7 +458,7 @@ impl Client {
         entries.push(SaveDataEntry {
             topic: DataType::Tx.to_topic(),
             pubkey: key.pubkey,
-            data: tx_data.encrypt(key.pubkey),
+            data: tx_data.encrypt(key.pubkey, Some(key))?,
         });
 
         // save transfer data
@@ -499,10 +499,15 @@ impl Client {
                 withdrawal_data_vec.push(transfer_data.clone());
                 key.pubkey
             };
+            let sender_key = if data_type == DataType::Withdrawal {
+                Some(key)
+            } else {
+                None
+            };
             entries.push(SaveDataEntry {
                 topic: data_type.to_topic(),
                 pubkey,
-                data: transfer_data.encrypt(pubkey),
+                data: transfer_data.encrypt(pubkey, sender_key)?,
             });
         }
 
@@ -571,7 +576,7 @@ impl Client {
             let entry = SaveDataEntry {
                 topic: memo_entry.topic.clone(),
                 pubkey: key.pubkey,
-                data: payment_memo.encrypt(key.pubkey),
+                data: payment_memo.encrypt(key.pubkey, Some(key))?,
             };
             misc_entries.push(entry);
         }

@@ -5,7 +5,8 @@ use intmax2_interfaces::{
     },
     data::{
         data_type::DataType, encryption::BlsEncryption, meta_data::MetaData,
-        sender_proof_set::SenderProofSet, user_data::UserData, validation::Validation,
+        rw_rights::WriteRights, sender_proof_set::SenderProofSet, user_data::UserData,
+        validation::Validation,
     },
 };
 use intmax2_zkp::{
@@ -46,7 +47,13 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
                 log::warn!("{} {} is excluded", data_type, meta.digest);
                 return None;
             }
-            match T::decrypt(&data, key) {
+            let enc_sender = match data_type.rw_rights().write_rights {
+                WriteRights::SingleAuthWrite => Some(key.pubkey),
+                WriteRights::AuthWrite => Some(key.pubkey),
+                WriteRights::SingleOpenWrite => None,
+                WriteRights::OpenWrite => None,
+            };
+            match T::decrypt(key, enc_sender, &data) {
                 Ok(data) => match data.validate(key.pubkey) {
                     Ok(_) => Some((meta, data)),
                     Err(e) => {
@@ -73,7 +80,13 @@ pub async fn fetch_sender_proof_set(
         .get_snapshot(key, &DataType::SenderProofSet.to_topic())
         .await?
         .ok_or(StrategyError::SenderProofSetNotFound)?;
-    let sender_proof_set = SenderProofSet::decrypt(&encrypted_sender_proof_set, key)?;
+    let enc_sender = match DataType::SenderProofSet.rw_rights().write_rights {
+        WriteRights::SingleAuthWrite => Some(key.pubkey),
+        WriteRights::AuthWrite => Some(key.pubkey),
+        WriteRights::SingleOpenWrite => None,
+        WriteRights::OpenWrite => None,
+    };
+    let sender_proof_set = SenderProofSet::decrypt(key, enc_sender, &encrypted_sender_proof_set)?;
     Ok(sender_proof_set)
 }
 
@@ -81,10 +94,16 @@ pub async fn fetch_user_data(
     store_vault_server: &dyn StoreVaultClientInterface,
     key: KeySet,
 ) -> Result<UserData, StrategyError> {
+    let enc_sender = match DataType::UserData.rw_rights().write_rights {
+        WriteRights::SingleAuthWrite => Some(key.pubkey),
+        WriteRights::AuthWrite => Some(key.pubkey),
+        WriteRights::SingleOpenWrite => None,
+        WriteRights::OpenWrite => None,
+    };
     let user_data = store_vault_server
         .get_snapshot(key, &DataType::UserData.to_topic())
         .await?
-        .map(|encrypted| UserData::decrypt(&encrypted, key))
+        .map(|encrypted| UserData::decrypt(key, enc_sender, &encrypted))
         .transpose()
         .map_err(|e| StrategyError::UserDataDecryptionError(e.to_string()))?
         .unwrap_or(UserData::new(key.pubkey));

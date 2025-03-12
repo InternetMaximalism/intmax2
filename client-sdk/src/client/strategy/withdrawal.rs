@@ -11,6 +11,7 @@ use intmax2_interfaces::{
         data_type::DataType,
         encryption::BlsEncryption,
         meta_data::{MetaData, MetaDataWithBlockNumber},
+        rw_rights::WriteRights,
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
         user_data::ProcessStatus,
@@ -71,8 +72,14 @@ pub async fn fetch_withdrawal_info(
         };
 
         // Decrypt sender proof set
+        let enc_sender = match DataType::UserData.rw_rights().write_rights {
+            WriteRights::SingleAuthWrite => Some(ephemeral_key.pubkey),
+            WriteRights::AuthWrite => Some(ephemeral_key.pubkey),
+            WriteRights::SingleOpenWrite => None,
+            WriteRights::OpenWrite => None,
+        };
         let sender_proof_set =
-            match SenderProofSet::decrypt(&encrypted_sender_proof_set, ephemeral_key) {
+            match SenderProofSet::decrypt(ephemeral_key, enc_sender, &encrypted_sender_proof_set) {
                 Ok(data) => data,
                 Err(e) => {
                     log::error!("failed to decrypt sender proof set: {}", e);

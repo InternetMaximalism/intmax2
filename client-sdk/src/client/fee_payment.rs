@@ -250,7 +250,7 @@ pub async fn consume_payment(
     let entry = SaveDataEntry {
         topic,
         pubkey: key.pubkey,
-        data: payment_memo.encrypt(key.pubkey),
+        data: payment_memo.encrypt(key.pubkey, Some(key))?,
     };
     store_vault_server.save_data_batch(key, &[entry]).await?;
     Ok(())

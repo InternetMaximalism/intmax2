@@ -170,7 +170,7 @@ impl Client {
                     key,
                     &DataType::UserData.to_topic(),
                     prev_digest,
-                    &user_data.encrypt(key.pubkey),
+                    &user_data.encrypt(key.pubkey, Some(key))?,
                 )
                 .await?;
             log::info!("Claimed {}", mining.meta.meta.digest.clone());

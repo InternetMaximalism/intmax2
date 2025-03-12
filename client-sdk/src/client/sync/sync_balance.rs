@@ -44,7 +44,7 @@ impl Client {
             .as_ref()
             .map(|encrypted| get_digest(encrypted));
         let user_data = encrypted_data
-            .map(|encrypted| UserData::decrypt(&encrypted, key))
+            .map(|encrypted| UserData::decrypt(key, Some(key.pubkey), &encrypted))
             .transpose()
             .map_err(|e| SyncError::DecryptionError(format!("failed to decrypt user data: {}", e)))?
             .unwrap_or(UserData::new(key.pubkey));
@@ -150,7 +150,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 prev_digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
         Ok(())
@@ -237,7 +237,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 prev_digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
 
@@ -288,7 +288,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
         Ok(())
@@ -345,7 +345,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 prev_digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
 
@@ -365,7 +365,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 prev_digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
         Ok(())
@@ -389,7 +389,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 prev_digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
 

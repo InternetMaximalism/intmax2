@@ -76,7 +76,7 @@ pub async fn generate_fee_proof(
                     ephemeral_key,
                     &DataType::SenderProofSet.to_topic(),
                     None,
-                    &sender_proof_set.encrypt(ephemeral_key.pubkey),
+                    &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
                 )
                 .await?;
             let sender_proof_set_ephemeral_key: U256 =

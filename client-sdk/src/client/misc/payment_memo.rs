@@ -7,7 +7,7 @@ use intmax2_interfaces::{
     data::{
         encryption::BlsEncryption,
         meta_data::MetaData,
-        rw_rights::{ReadRights, WriteRights},
+        rw_rights::{RWRights, ReadRights, WriteRights},
         topic::topic_from_rights,
         transfer_data::TransferData,
     },
@@ -17,8 +17,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub fn payment_memo_topic(name: &str) -> String {
     topic_from_rights(
-        ReadRights::AuthRead,
-        WriteRights::AuthWrite,
+        RWRights {
+            read_rights: ReadRights::AuthRead,
+            write_rights: WriteRights::AuthWrite,
+        },
         format!("payment_memo/{}", name).as_str(),
     )
 }

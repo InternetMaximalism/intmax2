@@ -171,7 +171,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 prev_digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
 
@@ -190,7 +190,7 @@ impl Client {
                 key,
                 &DataType::UserData.to_topic(),
                 prev_digest,
-                &user_data.encrypt(key.pubkey),
+                &user_data.encrypt(key.pubkey, Some(key))?,
             )
             .await?;
         Ok(())
