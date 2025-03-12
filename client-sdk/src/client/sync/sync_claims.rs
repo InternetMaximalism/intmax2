@@ -1,7 +1,4 @@
-use intmax2_interfaces::{
-    api::withdrawal_server::interface::ClaimFeeInfo,
-    data::{data_type::DataType, encryption::BlsEncryption as _},
-};
+use intmax2_interfaces::api::withdrawal_server::interface::ClaimFeeInfo;
 use intmax2_zkp::{
     common::{
         signature::key_set::KeySet,
@@ -165,14 +162,9 @@ impl Client {
             let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
             user_data.claim_status.process(mining.meta.meta.clone());
 
-            self.store_vault_server
-                .save_snapshot(
-                    key,
-                    &DataType::UserData.to_topic(),
-                    prev_digest,
-                    &user_data.encrypt(key.pubkey, Some(key))?,
-                )
-                .await?;
+            // save user data
+            self.save_user_data(key, prev_digest, &user_data).await?;
+
             log::info!("Claimed {}", mining.meta.meta.digest.clone());
         }
         Ok(())

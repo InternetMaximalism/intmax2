@@ -51,6 +51,24 @@ impl Client {
         Ok((user_data, digest))
     }
 
+    pub(super) async fn save_user_data(
+        &self,
+        key: KeySet,
+        prev_digest: Option<Bytes32>,
+        user_data: &UserData,
+    ) -> Result<(), SyncError> {
+        let encrypted_data = user_data.encrypt(key.pubkey, Some(key))?;
+        self.store_vault_server
+            .save_snapshot(
+                key,
+                &DataType::UserData.to_topic(),
+                prev_digest,
+                &encrypted_data,
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Sync the client's balance proof with the latest block
     pub async fn sync(&self, key: KeySet) -> Result<(), SyncError> {
         let (sequence, pending_info) = determine_sequence(
@@ -140,19 +158,12 @@ impl Client {
                 "private commitment mismatch".to_string(),
             ));
         }
-        let new_balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         // update user data
+        let new_balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         user_data.balance_proof = Some(new_balance_proof);
         user_data.deposit_status.process(meta.meta);
-        // save user data
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                prev_digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
+        self.save_user_data(key, prev_digest, &user_data).await?;
+
         Ok(())
     }
 
@@ -230,16 +241,7 @@ impl Client {
         let balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         user_data.balance_proof = Some(balance_proof);
         user_data.transfer_status.process(meta.meta);
-
-        // save proof and user data
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                prev_digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
+        self.save_user_data(key, prev_digest, &user_data).await?;
 
         Ok(())
     }
@@ -251,7 +253,7 @@ impl Client {
         tx_data: &TxData,
     ) -> Result<(), SyncError> {
         log::info!("sync_tx: {:?}", meta);
-        let (mut user_data, digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         let prev_balance_proof = get_balance_proof(&user_data)?;
         let balance_proof = update_send_by_sender(
             self.validity_prover.as_ref(),
@@ -281,16 +283,8 @@ impl Client {
         let balance_proof = CompressedBalanceProof::new(&balance_proof)?;
         user_data.balance_proof = Some(balance_proof);
         user_data.tx_status.process(meta.meta);
+        self.save_user_data(key, prev_digest, &user_data).await?;
 
-        // save user data
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
         Ok(())
     }
 
@@ -337,17 +331,11 @@ impl Client {
                 "private commitment mismatch".to_string(),
             ));
         }
+
         // update user data
         let balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         user_data.balance_proof = Some(balance_proof);
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                prev_digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
+        self.save_user_data(key, prev_digest, &user_data).await?;
 
         Ok(())
     }
@@ -360,14 +348,7 @@ impl Client {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         user_data.deposit_status.pending_digests = pending_info.pending_deposit_digests;
         user_data.transfer_status.pending_digests = pending_info.pending_transfer_digests;
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                prev_digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
+        self.save_user_data(key, prev_digest, &user_data).await?;
         Ok(())
     }
 
@@ -384,14 +365,7 @@ impl Client {
             user_data.withdrawal_status.last_processed_meta_data = None;
         }
 
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                prev_digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
+        self.save_user_data(key, prev_digest, &user_data).await?;
 
         self.sync(key).await
     }

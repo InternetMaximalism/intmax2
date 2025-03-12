@@ -1,9 +1,6 @@
 use intmax2_interfaces::{
     api::{block_builder::interface::Fee, withdrawal_server::interface::WithdrawalFeeInfo},
-    data::{
-        data_type::DataType, encryption::BlsEncryption as _, meta_data::MetaDataWithBlockNumber,
-        transfer_data::TransferData,
-    },
+    data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData},
 };
 use intmax2_zkp::{
     common::{
@@ -166,14 +163,8 @@ impl Client {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         user_data.withdrawal_status.process(meta.meta);
 
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                prev_digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
+        // save user data
+        self.save_user_data(key, prev_digest, &user_data).await?;
 
         Ok(())
     }
@@ -185,14 +176,8 @@ impl Client {
     ) -> Result<(), SyncError> {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         user_data.withdrawal_status.pending_digests = pending_withdrawal_digests;
-        self.store_vault_server
-            .save_snapshot(
-                key,
-                &DataType::UserData.to_topic(),
-                prev_digest,
-                &user_data.encrypt(key.pubkey, Some(key))?,
-            )
-            .await?;
+        // save user data
+        self.save_user_data(key, prev_digest, &user_data).await?;
         Ok(())
     }
 }
