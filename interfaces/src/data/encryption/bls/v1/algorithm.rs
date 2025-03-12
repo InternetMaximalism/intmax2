@@ -11,11 +11,8 @@ use intmax2_zkp::{
 };
 use rand::Rng;
 
-use crate::data::encryption::errors::ECIESError;
-
 use super::{
-    message::EncryptedMessage,
-    utils::{ecdh_x, hmac_sha256, kdf, sha256, U256_SIZE},
+    error::ECIESError, message::EncryptedMessage, utils::{ecdh_x, hmac_sha256, kdf, sha256, U256_SIZE}
 };
 
 pub use alloy_primitives::bytes::BytesMut;
