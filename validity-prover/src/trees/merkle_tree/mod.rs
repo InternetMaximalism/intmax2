@@ -123,6 +123,95 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
+    async fn test_speed_incremental_merkle_tree_with_select() -> anyhow::Result<()> {
+        let height = 32;
+        let n = 1000;
+        let mut rng = rand::thread_rng();
+
+        let database_url = setup_test();
+        let pool = sqlx::Pool::connect(&database_url).await?;
+
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
+        tree.reset(0).await?;
+
+        let time = std::time::Instant::now();
+        for i in 0..n {
+            let timestamp = i;
+            tree.push(timestamp, i as u32).await?;
+        }
+        println!(
+            "SqlIncrementMerkleTree.push: {} leaves, {} height, {} seconds",
+            n,
+            height,
+            time.elapsed().as_secs_f64()
+        );
+
+        let n = n * 5;
+
+        // SELECT - pattern 1
+        let time = std::time::Instant::now();
+        for _i in 0..n {
+            tree.get_last_timestamp().await?;
+        }
+        println!(
+            "SqlIncrementMerkleTree.get_last_timestamp: {} times, {} seconds",
+            n,
+            time.elapsed().as_secs_f64()
+        );
+
+        // SELECT - pattern 2
+        let time = std::time::Instant::now();
+        for _i in 0..n {
+            tree.get_leaf(n * 2, 1).await?;
+            tree.get_leaf(n * 2, n / 4).await?;
+            tree.get_leaf(n * 2, n / 2).await?;
+        }
+        println!(
+            "SqlIncrementMerkleTree.get_leaf: {} times, {} seconds",
+            n,
+            time.elapsed().as_secs_f64()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_speed_incremental_merkle_tree_reset() -> anyhow::Result<()> {
+        let height = 32;
+        let n = 1000;
+        let mut rng = rand::thread_rng();
+
+        let database_url = setup_test();
+        let pool = sqlx::Pool::connect(&database_url).await?;
+
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
+        tree.reset(0).await?;
+
+        for h in 0..5 {
+            for i in 0..n {
+                let timestamp = i;
+                tree.push(timestamp, i as u32).await?;
+            }
+            let time = std::time::Instant::now();
+            tree.reset(n / 2).await?;
+            tree.reset(n / 4).await?;
+            tree.reset(0).await?;
+            tree.reset(0).await?;
+            println!(
+                "SqlIncrementMerkleTree.reset.loop{}: {} leaves, {} height, {} seconds",
+                h,
+                n,
+                height,
+                time.elapsed().as_secs_f64()
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore]
     async fn test_speed_indexed_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
         let n = 1 << 10;
