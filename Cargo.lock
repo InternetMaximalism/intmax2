@@ -3865,6 +3865,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "ethers",
+ "futures",
  "getrandom 0.2.15",
  "gloo-timers 0.3.0",
  "hashbrown 0.15.2",

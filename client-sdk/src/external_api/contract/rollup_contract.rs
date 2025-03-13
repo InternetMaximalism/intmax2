@@ -18,6 +18,7 @@ use intmax2_zkp::{
         u32limb_trait::U32LimbTrait as _,
     },
 };
+use tokio::task::JoinSet;
 
 use crate::external_api::{contract::utils::get_latest_block_number, utils::retry::with_retry};
 
@@ -248,33 +249,64 @@ impl RollupContract {
         from_block: u64,
     ) -> Result<(Vec<FullBlockWithMeta>, u64), BlockchainError> {
         let (blocks_posted_events, to_block) = self.get_blocks_posted_event(from_block).await?;
-        let mut full_blocks = Vec::new();
+
+        let mut full_blocks = Vec::with_capacity(blocks_posted_events.len());
+        let mut join_set = JoinSet::new();
+
+        // Spawn tasks for all events
         for event in blocks_posted_events {
-            let tx = get_transaction(&self.rpc_url, event.tx_hash)
-                .await?
-                .ok_or(BlockchainError::TxNotFound(event.tx_hash))?;
-            let contract = self.get_contract().await?;
-            let functions = contract.abi().functions();
-            let full_block = decode_post_block_calldata(
-                functions,
-                event.prev_block_hash,
-                event.deposit_tree_root,
-                event.timestamp,
-                event.block_number,
-                &tx.input,
-            )
-            .map_err(|e| {
-                BlockchainError::DecodeCallDataError(format!(
-                    "failed to decode post block calldata: {}",
-                    e
-                ))
-            })?;
-            full_blocks.push(FullBlockWithMeta {
-                full_block,
-                eth_block_number: event.eth_block_number,
-                eth_tx_index: event.eth_tx_index,
+            let rpc_url = self.rpc_url.clone();
+            let self_clone = self.clone();
+
+            join_set.spawn(async move {
+                log::info!(
+                    "get_full_block_with_meta: processing block_number={}",
+                    event.block_number
+                );
+                let tx = get_transaction(&rpc_url, event.tx_hash)
+                    .await?
+                    .ok_or(BlockchainError::TxNotFound(event.tx_hash))?;
+
+                let contract = self_clone.get_contract().await?;
+                let functions = contract.abi().functions();
+
+                let full_block = decode_post_block_calldata(
+                    functions,
+                    event.prev_block_hash,
+                    event.deposit_tree_root,
+                    event.timestamp,
+                    event.block_number,
+                    &tx.input,
+                )
+                .map_err(|e| {
+                    BlockchainError::DecodeCallDataError(format!(
+                        "failed to decode post block calldata: {}",
+                        e
+                    ))
+                })?;
+
+                Ok::<_, BlockchainError>(FullBlockWithMeta {
+                    full_block,
+                    eth_block_number: event.eth_block_number,
+                    eth_tx_index: event.eth_tx_index,
+                })
             });
         }
+
+        log::info!("get_full_block_with_meta: waiting for join_set");
+
+        // Collect results as they complete
+        while let Some(result) = join_set.join_next().await {
+            match result {
+                Ok(Ok(block)) => full_blocks.push(block),
+                Ok(Err(e)) => return Err(e),
+                Err(e) => return Err(BlockchainError::JoinError(e.to_string())),
+            }
+        }
+
+        // Sort by block number
+        full_blocks.sort_by_key(|block| block.full_block.block.block_number);
+
         Ok((full_blocks, to_block))
     }
 

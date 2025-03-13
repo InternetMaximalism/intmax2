@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
     time::Duration,
 };
@@ -74,7 +74,7 @@ pub struct Config {
 pub struct ValidityProver {
     config: Config,
     manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
-    validity_circuit: Arc<ValidityCircuit<F, C, D>>,
+    validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
     observer: Observer,
     account_tree: SqlIndexedMerkleTree,
     block_tree: SqlIncrementalMerkleTree<Bytes32>,
@@ -88,8 +88,6 @@ impl ValidityProver {
             sync_interval: env.sync_interval,
         };
 
-        let transition_vd = CircuitVerifiers::load().get_transition_vd();
-        let validity_circuit = Arc::new(ValidityCircuit::new(&transition_vd));
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
@@ -155,12 +153,19 @@ impl ValidityProver {
         Ok(Self {
             config,
             manager,
-            validity_circuit,
+            validity_circuit: Arc::new(OnceLock::new()),
             observer,
             pool,
             account_tree,
             block_tree,
             deposit_hash_tree,
+        })
+    }
+
+    fn validity_circuit(&self) -> &ValidityCircuit<F, C, D> {
+        self.validity_circuit.get_or_init(|| {
+            let transition_vd = CircuitVerifiers::load().get_transition_vd();
+            ValidityCircuit::new(&transition_vd)
         })
     }
 
@@ -609,7 +614,7 @@ impl ValidityProver {
         Ok(())
     }
 
-    pub async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
+    async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
         // Get the largest block_number and its proof from the validity_proofs table that already exists
         let record = sqlx::query!(
             r#"
@@ -656,7 +661,7 @@ impl ValidityProver {
             }
             let transition_proof = result.proof.unwrap();
             let validity_proof = self
-                .validity_circuit
+                .validity_circuit()
                 .prove(&transition_proof, &prev_proof)
                 .map_err(|e| ValidityProverError::FailedToGenerateValidityProof(e.to_string()))?;
             // Add a new validity proof to the validity_proofs table

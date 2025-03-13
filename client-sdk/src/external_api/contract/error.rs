@@ -11,6 +11,9 @@ pub enum BlockchainError {
     #[error("RPC error: {0}")]
     RPCError(String),
 
+    #[error("Join error: {0}")]
+    JoinError(String),
+
     #[error("Decode call data error: {0}")]
     DecodeCallDataError(String),
 
