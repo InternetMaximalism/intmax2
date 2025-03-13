@@ -5935,6 +5935,7 @@ dependencies = [
  "anyhow",
  "aws-config",
  "aws-sdk-s3",
+ "base64 0.22.1",
  "bincode",
  "chrono",
  "cloudfront_sign",

@@ -1,7 +1,8 @@
 use aws_config::SdkConfig;
 use aws_sdk_s3::{error::SdkError, presigning::PresigningConfig, Client as AwsS3Client};
+use base64::{prelude::BASE64_STANDARD, Engine};
 use serde::Deserialize;
-use std::{fs, io, time::Duration};
+use std::{io, time::Duration};
 
 pub type Result<T> = std::result::Result<T, S3Error>;
 
@@ -10,7 +11,7 @@ pub struct S3Config {
     pub bucket_name: String,
     pub cloudfront_domain: String,
     pub cloudfront_key_pair_id: String,
-    pub private_key_path: String,
+    pub cloudfront_private_key_base64: String,
 }
 
 #[derive(Clone)]
@@ -30,6 +31,9 @@ impl S3Client {
 pub enum S3Error {
     #[error("Failed to create presigning configuration: {0}")]
     PresigningConfig(String),
+
+    #[error("Failed to parse private key: {0}")]
+    ParsePrivateKeyError(String),
 
     #[error("Failed to generate presigned upload URL: {0}")]
     PresignedUrlGeneration(String),
@@ -79,12 +83,17 @@ impl S3Client {
             self.config.cloudfront_domain, resource_path
         );
 
-        // Read the private key file
-        let private_key_data = fs::read_to_string(&self.config.private_key_path)?;
+        let private_key_bytes = BASE64_STANDARD
+            .decode(&self.config.cloudfront_private_key_base64)
+            .map_err(|e| {
+                S3Error::ParsePrivateKeyError(format!("failed to decode base64: {}", e))
+            })?;
+        let private_key = String::from_utf8(private_key_bytes)
+            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to parse utf8: {}", e)))?;
 
         let options = cloudfront_sign::SignedOptions {
             key_pair_id: self.config.cloudfront_key_pair_id.clone(),
-            private_key: private_key_data,
+            private_key,
             date_less_than: chrono::Utc::now().timestamp() as u64 + expiration.as_secs(),
             ..Default::default()
         };

@@ -14,7 +14,7 @@ pub struct EnvVar {
     pub bucket_name: String,
     pub cloudfront_domain: String,
     pub cloudfront_key_pair_id: String,
-    pub private_key_path: String,
+    pub cloudfront_private_key_base64: String,
 
     pub s3_upload_timeout: u64,
     pub s3_download_timeout: u64,

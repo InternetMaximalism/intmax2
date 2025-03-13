@@ -51,7 +51,7 @@ impl S3StoreVault {
             bucket_name: env.bucket_name.clone(),
             cloudfront_domain: env.cloudfront_domain.clone(),
             cloudfront_key_pair_id: env.cloudfront_key_pair_id.clone(),
-            private_key_path: env.private_key_path.clone(),
+            cloudfront_private_key_base64: env.cloudfront_private_key_base64.clone(),
         };
         let s3_client = S3Client::new(aws_config, s3_config);
 
