@@ -71,23 +71,23 @@ dependencies = [
 
 [[package]]
 name = "actix-http"
-version = "3.9.0"
+version = "3.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d48f96fc3003717aeb9856ca3d02a8c7de502667ad76eeacd830b48d2e91fac4"
+checksum = "0fa882656b67966045e4152c634051e70346939fced7117d5f0b52146a7c74c9"
 dependencies = [
  "actix-codec",
  "actix-rt",
  "actix-service",
  "actix-utils",
- "ahash",
  "base64 0.22.1",
  "bitflags 2.8.0",
  "brotli",
  "bytes",
  "bytestring",
- "derive_more 0.99.19",
+ "derive_more 2.0.1",
  "encoding_rs",
  "flate2",
+ "foldhash",
  "futures-core",
  "h2 0.3.26",
  "http 0.2.12",
@@ -99,7 +99,7 @@ dependencies = [
  "mime",
  "percent-encoding",
  "pin-project-lite",
- "rand",
+ "rand 0.9.0",
  "sha1",
  "smallvec",
  "tokio",
@@ -183,9 +183,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web"
-version = "4.9.0"
+version = "4.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9180d76e5cc7ccbc4d60a506f2c727730b154010262df5b910eb17dbe4b8cb38"
+checksum = "f2e3b15b3dc6c6ed996e4032389e9849d4ab002b1e92fbfe85b5f307d1479b4d"
 dependencies = [
  "actix-codec",
  "actix-http",
@@ -196,13 +196,13 @@ dependencies = [
  "actix-service",
  "actix-utils",
  "actix-web-codegen",
- "ahash",
  "bytes",
  "bytestring",
  "cfg-if",
  "cookie",
- "derive_more 0.99.19",
+ "derive_more 2.0.1",
  "encoding_rs",
+ "foldhash",
  "futures-core",
  "futures-util",
  "impl-more",
@@ -220,6 +220,7 @@ dependencies = [
  "smallvec",
  "socket2 0.5.8",
  "time",
+ "tracing",
  "url",
 ]
 
@@ -315,7 +316,6 @@ checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
  "cfg-if",
  "const-random",
- "getrandom 0.2.15",
  "once_cell",
  "version_check",
  "zerocopy 0.7.35",
@@ -371,7 +371,7 @@ dependencies = [
  "keccak-asm",
  "paste",
  "proptest",
- "rand",
+ "rand 0.8.5",
  "ruint",
  "rustc-hash",
  "serde",
@@ -685,7 +685,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1df2c09229cbc5a028b1d70e00fdb2acee28b1055dfb5ca73eea49c5a25c4e7c"
 dependencies = [
  "num-traits",
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -695,7 +695,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
 dependencies = [
  "num-traits",
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -705,7 +705,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "246a225cc6131e9ee4f24619af0f19d67761fff15d7ccc22e42b80846e69449a"
 dependencies = [
  "num-traits",
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -1429,9 +1429,9 @@ dependencies = [
 
 [[package]]
 name = "brotli"
-version = "6.0.0"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74f7971dbd9326d58187408ab83117d8ac1bb9c17b085fdacd1cf2f598719b6b"
+checksum = "cc97b8f16f944bba54f0433f07e30be199b6dc2bd25937444bbad560bcea29bd"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -1676,7 +1676,7 @@ dependencies = [
  "hmac",
  "once_cell",
  "pbkdf2 0.12.2",
- "rand",
+ "rand 0.8.5",
  "sha2",
  "thiserror 1.0.69",
 ]
@@ -2390,7 +2390,7 @@ dependencies = [
  "hex",
  "k256",
  "log",
- "rand",
+ "rand 0.8.5",
  "rlp",
  "serde",
  "sha3",
@@ -2488,7 +2488,7 @@ dependencies = [
  "hex",
  "hmac",
  "pbkdf2 0.11.0",
- "rand",
+ "rand 0.8.5",
  "scrypt",
  "serde",
  "serde_json",
@@ -2651,7 +2651,7 @@ dependencies = [
  "num_enum",
  "once_cell",
  "open-fastrlp",
- "rand",
+ "rand 0.8.5",
  "rlp",
  "serde",
  "serde_json",
@@ -2756,7 +2756,7 @@ dependencies = [
  "elliptic-curve",
  "eth-keystore",
  "ethers-core",
- "rand",
+ "rand 0.8.5",
  "sha2",
  "thiserror 1.0.69",
  "tracing",
@@ -2897,7 +2897,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "835c052cb0c08c1acf6ffd71c022172e18723949c8282f2b9f27efbc51e64534"
 dependencies = [
  "byteorder",
- "rand",
+ "rand 0.8.5",
  "rustc-hex",
  "static_assertions",
 ]
@@ -3844,7 +3844,7 @@ dependencies = [
  "mockito",
  "num-bigint 0.4.6",
  "plonky2",
- "rand",
+ "rand 0.8.5",
  "reqwest 0.12.12",
  "serde",
  "serde_json",
@@ -3887,7 +3887,7 @@ dependencies = [
  "plonky2",
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
  "plonky2_keccak",
- "rand",
+ "rand 0.8.5",
  "rand_chacha 0.9.0",
  "regex",
  "reqwest 0.12.12",
@@ -3932,7 +3932,7 @@ dependencies = [
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
  "plonky2_keccak",
  "plonky2_u32",
- "rand",
+ "rand 0.8.5",
  "rsa",
  "serde",
  "serde_bytes",
@@ -3959,7 +3959,7 @@ dependencies = [
  "log",
  "num-bigint 0.4.6",
  "plonky2",
- "rand",
+ "rand 0.8.5",
  "reqwest 0.12.12",
  "serde",
  "serde_json",
@@ -3996,7 +3996,7 @@ dependencies = [
  "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254?branch=audit)",
  "plonky2_keccak",
  "plonky2_u32",
- "rand",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "uuid 1.12.1",
@@ -4358,7 +4358,7 @@ dependencies = [
  "hyper 1.6.0",
  "hyper-util",
  "log",
- "rand",
+ "rand 0.8.5",
  "regex",
  "serde_json",
  "serde_urlencoded",
@@ -4438,7 +4438,7 @@ checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
 dependencies = [
  "num-integer",
  "num-traits",
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -4453,7 +4453,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-traits",
- "rand",
+ "rand 0.8.5",
  "smallvec",
  "zeroize",
 ]
@@ -4465,7 +4465,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
  "num-traits",
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -4719,7 +4719,7 @@ dependencies = [
  "glob",
  "opentelemetry",
  "percent-encoding",
- "rand",
+ "rand 0.8.5",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
@@ -4969,7 +4969,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
 dependencies = [
  "phf_shared",
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -5069,7 +5069,7 @@ dependencies = [
  "plonky2_field",
  "plonky2_maybe_rayon",
  "plonky2_util",
- "rand",
+ "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
  "static_assertions",
@@ -5096,7 +5096,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "plonky2",
  "plonky2_u32",
- "rand",
+ "rand 0.8.5",
  "starky",
 ]
 
@@ -5119,7 +5119,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "plonky2",
  "plonky2_u32",
- "rand",
+ "rand 0.8.5",
  "starky",
 ]
 
@@ -5132,7 +5132,7 @@ dependencies = [
  "itertools 0.11.0",
  "num",
  "plonky2_util",
- "rand",
+ "rand 0.8.5",
  "serde",
  "static_assertions",
  "unroll",
@@ -5150,7 +5150,7 @@ dependencies = [
  "itertools 0.12.1",
  "log",
  "plonky2",
- "rand",
+ "rand 0.8.5",
  "starky",
  "tiny-keccak",
 ]
@@ -5276,7 +5276,7 @@ dependencies = [
  "bitflags 2.8.0",
  "lazy_static",
  "num-traits",
- "rand",
+ "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_xorshift",
  "regex-syntax 0.8.5",
@@ -5338,6 +5338,17 @@ dependencies = [
  "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3779b94aeb87e8bd4e834cee3650289ee9e0d5677f976ecdb6d219e5f4f6cd94"
+dependencies = [
+ "rand_chacha 0.9.0",
+ "rand_core 0.9.0",
+ "zerocopy 0.8.17",
 ]
 
 [[package]]
@@ -5733,7 +5744,7 @@ dependencies = [
  "parity-scale-codec",
  "primitive-types 0.12.2",
  "proptest",
- "rand",
+ "rand 0.8.5",
  "rlp",
  "ruint-macro",
  "serde",
@@ -5770,7 +5781,7 @@ version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 dependencies = [
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -6572,7 +6583,7 @@ dependencies = [
  "memchr",
  "once_cell",
  "percent-encoding",
- "rand",
+ "rand 0.8.5",
  "rsa",
  "serde",
  "sha1",
@@ -6614,7 +6625,7 @@ dependencies = [
  "memchr",
  "num-bigint 0.4.6",
  "once_cell",
- "rand",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "sha2",
@@ -6958,7 +6969,7 @@ dependencies = [
  "log",
  "num-bigint 0.4.6",
  "plonky2",
- "rand",
+ "rand 0.8.5",
  "reqwest 0.12.12",
  "serde",
  "serde_json",
@@ -7268,7 +7279,7 @@ dependencies = [
  "indexmap 1.9.3",
  "pin-project",
  "pin-project-lite",
- "rand",
+ "rand 0.8.5",
  "slab",
  "tokio",
  "tokio-util",
@@ -7444,7 +7455,7 @@ dependencies = [
  "http 0.2.12",
  "httparse",
  "log",
- "rand",
+ "rand 0.8.5",
  "rustls 0.21.12",
  "sha1",
  "thiserror 1.0.69",
@@ -7643,7 +7654,7 @@ dependencies = [
  "intmax2-zkp",
  "log",
  "plonky2",
- "rand",
+ "rand 0.8.5",
  "reqwest 0.12.12",
  "serde",
  "serde_qs",
@@ -7678,7 +7689,7 @@ dependencies = [
  "intmax2-zkp",
  "log",
  "plonky2",
- "rand",
+ "rand 0.8.5",
  "reqwest 0.12.12",
  "serde",
  "serde_json",
