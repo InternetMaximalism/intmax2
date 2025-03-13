@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
 use ethers::{
     contract::abigen,
@@ -252,17 +252,19 @@ impl RollupContract {
 
         let mut full_blocks = Vec::with_capacity(blocks_posted_events.len());
         let mut join_set = JoinSet::new();
-
+        let max_parallel_requests = env::var("MAX_PARALLEL_REQUESTS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(20);
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(max_parallel_requests));
         // Spawn tasks for all events
         for event in blocks_posted_events {
             let rpc_url = self.rpc_url.clone();
             let self_clone = self.clone();
+            let permit = Arc::clone(&semaphore);
 
             join_set.spawn(async move {
-                log::info!(
-                    "get_full_block_with_meta: processing block_number={}",
-                    event.block_number
-                );
+                let _permit = permit.acquire().await.expect("Semaphore is never closed");
                 let tx = get_transaction(&rpc_url, event.tx_hash)
                     .await?
                     .ok_or(BlockchainError::TxNotFound(event.tx_hash))?;
