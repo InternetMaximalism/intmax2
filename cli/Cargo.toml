@@ -20,7 +20,7 @@ clap = { version = "4.5.31", features = ["derive"] }
 num-bigint = "0.4.6"
 rand = "0.8.5"
 log = "0.4.26"
-mockito = "1.6.1"
+mockito = "1.7.0"
 hex = "0.4.3"
 envy = "0.4.2"
 url = { version = "2.5.4", features = ["serde"] }
