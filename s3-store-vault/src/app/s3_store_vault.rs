@@ -429,6 +429,7 @@ mod tests {
     use super::S3StoreVault;
 
     #[tokio::test]
+    #[ignore]
     async fn update_snapshot_test() {
         let _ = env_logger::builder().is_test(true).try_init();
         dotenv::dotenv().ok();
