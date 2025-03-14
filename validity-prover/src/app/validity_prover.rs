@@ -642,6 +642,11 @@ impl ValidityProver {
                 .manager
                 .get_result(last_validity_proof_block_number)
                 .await?;
+            log::info!(
+                "result {} found for {}",
+                result.is_none().then_some("not").unwrap_or_default(),
+                last_validity_proof_block_number
+            );
             if result.is_none() {
                 break;
             }
@@ -664,6 +669,10 @@ impl ValidityProver {
                 .validity_circuit()
                 .prove(&transition_proof, &prev_proof)
                 .map_err(|e| ValidityProverError::FailedToGenerateValidityProof(e.to_string()))?;
+            log::info!(
+                "validity proof generated: {}",
+                last_validity_proof_block_number
+            );
             // Add a new validity proof to the validity_proofs table
             sqlx::query!(
                 r#"
@@ -689,7 +698,7 @@ impl ValidityProver {
     }
 
     // This function is used to setup all tasks in the task manager
-    pub async fn setup_tasks(&self) -> Result<(), ValidityProverError> {
+    async fn setup_tasks(&self) -> Result<(), ValidityProverError> {
         // clear all tasks
         self.manager.clear_all().await?;
 
@@ -718,7 +727,7 @@ impl ValidityProver {
         Ok(())
     }
 
-    pub async fn job(&self) -> Result<(), ValidityProverError> {
+    pub(crate) async fn job(&self) -> Result<(), ValidityProverError> {
         if self.config.sync_interval.is_none() {
             // If sync_interval is not set, we don't run the sync task
             return Ok(());
