@@ -2,4 +2,4 @@
 DirectWithdrawalSuccessed = "DirectWithdrawalSuccessed"
 
 [files]
-extend-exclude = ["**/*.bin"]
+extend-exclude = ["**/*.bin", "redis-test-certs/*"]
