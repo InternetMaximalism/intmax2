@@ -642,14 +642,11 @@ impl ValidityProver {
                 .manager
                 .get_result(last_validity_proof_block_number)
                 .await?;
-            log::info!(
-                "result {} found for {}",
-                result.is_none().then_some("not").unwrap_or_default(),
-                last_validity_proof_block_number
-            );
             if result.is_none() {
+                log::info!("result not found for {}", last_validity_proof_block_number);
                 break;
             }
+            log::info!("result found for {}", last_validity_proof_block_number);
 
             let result = result.unwrap();
             if let Some(error) = result.error {
@@ -720,7 +717,9 @@ impl ValidityProver {
                 validity_witness: validity_witness.clone(),
             };
             self.manager.add_task(block_number, &task).await?;
-
+            if block_number % 100 == 0 {
+                log::info!("Task setup for block number {}", block_number);
+            }
             prev_validity_pis = validity_witness.to_validity_pis().unwrap();
         }
 
@@ -734,6 +733,15 @@ impl ValidityProver {
         }
         let sync_interval = self.config.sync_interval.unwrap();
 
+        let s = self.clone();
+        let _validity_prove_handler = tokio::spawn(async move {
+            loop {
+                s.generate_validity_proof().await.unwrap();
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        });
+
+        // setup tasks after register generating validity proofs
         self.setup_tasks().await?;
 
         let is_syncing = Arc::new(AtomicBool::new(false));
@@ -770,14 +778,6 @@ impl ValidityProver {
             loop {
                 manager.cleanup_inactive_workers().await.unwrap();
                 tokio::time::sleep(Duration::from_secs(CLEANUP_INTERVAL)).await;
-            }
-        });
-
-        let s = self.clone();
-        let _validity_prove_handler = tokio::spawn(async move {
-            loop {
-                s.generate_validity_proof().await.unwrap();
-                tokio::time::sleep(Duration::from_secs(2)).await;
             }
         });
 
