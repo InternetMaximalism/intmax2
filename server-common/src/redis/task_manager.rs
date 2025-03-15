@@ -165,7 +165,8 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
         for task_id in task_ids {
             if task_id <= to_task_id {
                 let mut pipe = redis::pipe();
-                pipe.srem(&self.pending_key, task_id)
+                pipe.atomic()
+                    .srem(&self.pending_key, task_id)
                     .srem(&self.running_key, task_id)
                     .srem(&self.completed_key, task_id)
                     .hdel(&self.tasks_key, task_id)
@@ -217,7 +218,8 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
 
         let mut pipe = redis::pipe();
 
-        pipe.hset(&self.results_key, task_id, &result_json)
+        pipe.atomic()
+            .hset(&self.results_key, task_id, &result_json)
             .smove(&self.running_key, &self.completed_key, task_id)
             .expire(&self.completed_key, self.ttl)
             .expire(&self.results_key, self.ttl);
