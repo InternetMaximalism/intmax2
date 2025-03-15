@@ -126,6 +126,7 @@ impl Worker {
                 }
             });
         }
+        log::info!("Worker started");
 
         let worker = self.clone();
         let worker_id = self.worker_id.clone();

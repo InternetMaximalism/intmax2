@@ -627,6 +627,10 @@ impl ValidityProver {
             }),
             None => (0, None),
         };
+        let last_block_number = self.get_last_block_number().await?;
+        if last_validity_proof_block_number == last_block_number {
+            return Ok(());
+        }
 
         loop {
             last_validity_proof_block_number += 1;
