@@ -58,6 +58,7 @@ const D: usize = 2;
 const ACCOUNT_DB_TAG: u32 = 1;
 const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
+const MAX_TASKS: u32 = 30;
 
 #[derive(Clone)]
 pub struct Config {
@@ -697,7 +698,7 @@ impl ValidityProver {
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
-        let to_block_number = last_block_number.min(last_validity_prover_block_number + 20);
+        let to_block_number = last_block_number.min(last_validity_prover_block_number + MAX_TASKS);
 
         let mut prev_validity_pis = self
             .get_validity_witness(last_validity_prover_block_number)

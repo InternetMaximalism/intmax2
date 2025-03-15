@@ -107,13 +107,37 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
         let mut conn = self.get_connection().await?;
         let task_json = serde_json::to_string(task)?;
 
-        let mut pipe = redis::pipe();
-        pipe.hset(&self.tasks_key, task_id, task_json.clone())
-            .sadd(&self.pending_key, task_id)
-            .expire(&self.tasks_key, self.ttl)
-            .expire(&self.pending_key, self.ttl);
+        // Define Lua script for atomic task addition
+        let script = redis::Script::new(
+            r#"
+            -- Check if task already exists
+            local exists = redis.call('HEXISTS', KEYS[1], ARGV[1])
+            
+            -- If task doesn't exist, add it and update related keys
+            if exists == 0 then
+                redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+                redis.call('SADD', KEYS[2], ARGV[1])
+                redis.call('EXPIRE', KEYS[1], ARGV[3])
+                redis.call('EXPIRE', KEYS[2], ARGV[3])
+                return 0
+            else
+                -- Task already exists
+                return 1
+            end
+        "#,
+        );
 
-        pipe.query_async::<_, ()>(&mut conn).await?;
+        let exists: i32 = script
+            .key(&self.tasks_key)
+            .key(&self.pending_key)
+            .arg(task_id)
+            .arg(task_json)
+            .arg(self.ttl)
+            .invoke_async(&mut conn)
+            .await?;
+        if exists == 1 {
+            log::warn!("task {} already exists", task_id);
+        }
 
         Ok(())
     }
