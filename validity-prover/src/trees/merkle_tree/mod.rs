@@ -45,7 +45,7 @@ pub trait IncrementalMerkleTreeClient<V: Leafable + Serialize + DeserializeOwned
 }
 
 #[async_trait(?Send)]
-pub trait IndexedMerkleTreeClient: std::fmt::Debug + Clone {
+pub trait IndexedMerkleTreeClient: std::fmt::Debug {
     async fn get_root(&self, timestamp: u64) -> MTResult<PoseidonHashOut>;
     async fn get_leaf(&self, timestamp: u64, index: u64) -> MTResult<IndexedMerkleLeaf>;
     async fn len(&self, timestamp: u64) -> MTResult<usize>;

@@ -13,16 +13,8 @@ async fn main() -> anyhow::Result<()> {
     let transition_processor = Arc::new(TransitionProcessor::new());
     log::info!("initialized transition processor");
 
-    let mut handles = vec![];
-    for _ in 0..env.num_process {
-        let worker = Worker::new(&env, transition_processor.clone())?;
-        handles.extend(worker.run().await);
-    }
-
-    let result = futures::future::join_all(handles).await;
-    for res in result {
-        res?;
-    }
+    let worker = Worker::new(&env, transition_processor.clone())?;
+    worker.run().await;
 
     Ok(())
 }

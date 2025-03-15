@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, OnceLock,
-    },
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -40,7 +37,6 @@ use server_common::{
     db::{DbPool, DbPoolConfig},
     redis::task_manager::TaskManager,
 };
-use tokio::time::interval;
 
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
@@ -62,8 +58,6 @@ const D: usize = 2;
 const ACCOUNT_DB_TAG: u32 = 1;
 const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
-
-const CLEANUP_INTERVAL: u64 = 10;
 
 #[derive(Clone)]
 pub struct Config {
@@ -687,7 +681,7 @@ impl ValidityProver {
 
             // Remove the result from the task manager
             self.manager
-                .remove_result(last_validity_proof_block_number)
+                .remove_old_tasks(last_validity_proof_block_number)
                 .await?;
         }
 
@@ -695,13 +689,11 @@ impl ValidityProver {
     }
 
     // This function is used to setup all tasks in the task manager
-    async fn setup_tasks(&self) -> Result<(), ValidityProverError> {
-        // clear all tasks
-        self.manager.clear_all().await?;
-
+    async fn add_tasks(&self) -> Result<(), ValidityProverError> {
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
+        let to_block_number = last_block_number.min(last_validity_prover_block_number + 20);
 
         let mut prev_validity_pis = self
             .get_validity_witness(last_validity_prover_block_number)
@@ -709,7 +701,10 @@ impl ValidityProver {
             .to_validity_pis()
             .unwrap();
 
-        for block_number in (last_validity_prover_block_number + 1)..=last_block_number {
+        for block_number in (last_validity_prover_block_number + 1)..=to_block_number {
+            if self.manager.check_task_exists(block_number).await? {
+                break;
+            }
             let validity_witness = self.get_validity_witness(block_number).await?;
             let task = TransitionProofTask {
                 block_number,
@@ -717,9 +712,7 @@ impl ValidityProver {
                 validity_witness: validity_witness.clone(),
             };
             self.manager.add_task(block_number, &task).await?;
-            if block_number % 100 == 0 {
-                log::info!("Task setup for block number {}", block_number);
-            }
+
             prev_validity_pis = validity_witness.to_validity_pis().unwrap();
         }
 
@@ -733,51 +726,45 @@ impl ValidityProver {
         }
         let sync_interval = self.config.sync_interval.unwrap();
 
-        let s = self.clone();
-        let _validity_prove_handler = tokio::spawn(async move {
+        // clear all tasks
+        self.manager.clear_all().await?;
+
+        // generate validity proof job
+        let self_clone = self.clone();
+        actix_web::rt::spawn(async move {
             loop {
-                s.generate_validity_proof().await.unwrap();
+                if let Err(e) = self_clone.generate_validity_proof().await {
+                    log::error!("Error in generate validity proof: {:?}", e);
+                }
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
         });
 
-        // setup tasks after register generating validity proofs
-        self.setup_tasks().await?;
-
-        let is_syncing = Arc::new(AtomicBool::new(false));
-        let is_syncing_clone = is_syncing.clone();
-        let s = self.clone();
+        // add tasks job
+        let self_clone = self.clone();
         actix_web::rt::spawn(async move {
-            let mut interval = interval(Duration::from_secs(sync_interval));
             loop {
-                interval.tick().await;
-
-                // Skip if previous task is still running
-                if is_syncing_clone.load(Ordering::SeqCst) {
-                    log::warn!("Previous sync task is still running, skipping this interval");
-                    continue;
+                if let Err(e) = self_clone.add_tasks().await {
+                    log::error!("Error in add tasks: {:?}", e);
                 }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        });
 
-                is_syncing_clone.store(true, Ordering::SeqCst);
-
-                match s.sync().await {
-                    Ok(_) => {
-                        log::debug!("Sync task completed successfully");
-                    }
-                    Err(e) => {
-                        log::error!("Error in sync task: {:?}", e);
-                    }
+        let self_clone = self.clone();
+        actix_web::rt::spawn(async move {
+            loop {
+                if let Err(e) = self_clone.sync().await {
+                    log::error!("Error in sync: {:?}", e);
                 }
-                // Reset the flag after task completion
-                is_syncing_clone.store(false, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_secs(sync_interval)).await;
             }
         });
 
         let manager = self.manager.clone();
-        let _cleanup_handler = tokio::spawn(async move {
-            loop {
-                manager.cleanup_inactive_workers().await.unwrap();
-                tokio::time::sleep(Duration::from_secs(CLEANUP_INTERVAL)).await;
+        tokio::spawn(async move {
+            if let Err(e) = manager.cleanup_inactive_tasks().await {
+                log::error!("Error in task manager: {:?}", e);
             }
         });
 

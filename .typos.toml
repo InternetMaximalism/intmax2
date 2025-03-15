@@ -1,5 +1,7 @@
 [default.extend-identifiers]
 DirectWithdrawalSuccessed = "DirectWithdrawalSuccessed"
+smove = "smove"
+SMOVE = "SMOVE"
 
 [files]
 extend-exclude = ["**/*.bin", "redis-test-certs/*"]
