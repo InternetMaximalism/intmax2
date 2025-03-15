@@ -148,6 +148,5 @@ impl Worker {
                 tokio::time::sleep(tokio::time::Duration::from_secs(heartbeat_interval)).await;
             }
         });
-        tokio::signal::ctrl_c().await.unwrap();
     }
 }

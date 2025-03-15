@@ -16,5 +16,8 @@ async fn main() -> anyhow::Result<()> {
     let worker = Worker::new(&env, transition_processor.clone())?;
     worker.run().await;
 
-    Ok(())
+    // keep the main thread alive
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    }
 }
