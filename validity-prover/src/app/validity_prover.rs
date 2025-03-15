@@ -87,7 +87,7 @@ impl ValidityProver {
             &env.redis_url,
             "validity_prover",
             env.task_ttl as usize,
-            10, // dummy value
+            env.heartbeat_interval as usize,
         )?);
 
         let rollup_contract = RollupContract::new(

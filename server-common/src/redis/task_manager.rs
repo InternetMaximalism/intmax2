@@ -72,13 +72,13 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
         redis_url: &str,
         prefix: &str,
         ttl: usize,
-        heartbeat_ttl: usize,
+        heartbeat_interval: usize,
     ) -> Result<TaskManager<T, R>> {
         let client = Client::open(redis_url)?;
         Ok(TaskManager {
             prefix: prefix.to_owned(),
             ttl,
-            heartbeat_ttl,
+            heartbeat_ttl: heartbeat_interval * 3,
             client,
             tasks_key: format!("{}:tasks", prefix),
             pending_key: format!("{}:tasks:pending", prefix),
@@ -243,11 +243,8 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
             let task_ids: Vec<u32> = conn.smembers(&self.running_key).await?;
             log::info!("running tasks: {:?}", task_ids);
 
-            // wait heartbeat_ttl * 3 seconds for worker to submit heartbeat
-            tokio::time::sleep(tokio::time::Duration::from_secs(
-                (self.heartbeat_ttl * 3) as u64,
-            ))
-            .await;
+            // wait heartbeat_ttl seconds for worker to submit heartbeat
+            tokio::time::sleep(tokio::time::Duration::from_secs(self.heartbeat_ttl as u64)).await;
 
             for task_id in task_ids {
                 let key = format!("{}:{}", self.heartbeat_prefix, task_id);

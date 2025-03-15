@@ -20,6 +20,7 @@ pub struct Env {
     // Prover coordinator
     pub redis_url: String,
     pub task_ttl: u64,
+    pub heartbeat_interval: u64,
 
     // Cache
     pub dynamic_cache_ttl: u64,

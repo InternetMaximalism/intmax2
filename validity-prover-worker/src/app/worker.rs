@@ -49,8 +49,8 @@ impl Worker {
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
-            100, // dummy value
-            (env.heartbeat_interval * 3) as usize,
+            env.task_ttl as usize,
+            env.heartbeat_interval as usize,
         )?);
         let worker_id = Uuid::new_v4().to_string();
         Ok(Worker {
