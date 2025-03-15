@@ -244,6 +244,7 @@ impl RollupContract {
         Ok((blocks_posted_events, final_to_block))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn get_full_block_with_meta(
         &self,
         from_block: u64,
