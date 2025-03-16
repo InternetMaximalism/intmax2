@@ -21,6 +21,16 @@ pub fn get_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
     format!("{}/{}/{}", topic, pubkey.to_hex(), digest.to_hex())
 }
 
+// get metadata side car file path for local object
+pub fn get_metadata_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
+    format!(
+        "{}/{}/{}.metadata.json",
+        topic,
+        pubkey.to_hex(),
+        digest.to_hex()
+    )
+}
+
 #[derive(Clone)]
 pub struct LocalStoreVaultClient {
     pub root_path: PathBuf,
@@ -155,5 +165,26 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256};
+
+    use super::get_path;
+
+    #[test]
+    fn test_path() {
+        let topic = "v1/topic";
+
+        let path = get_path(topic, U256::from(1), Bytes32::default());
+        let path = Path::new(&path);
+
+    
+
+        dbg!(path);
     }
 }
