@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::sync::Arc;
 
 use ethers::{
     contract::abigen,
@@ -18,16 +18,14 @@ use intmax2_zkp::{
         u32limb_trait::U32LimbTrait as _,
     },
 };
-use tokio::task::JoinSet;
 
 use crate::external_api::{contract::utils::get_latest_block_number, utils::retry::with_retry};
 
 use super::{
-    data_decoder::decode_post_block_calldata,
     error::BlockchainError,
     handlers::handle_contract_call,
     proxy_contract::ProxyContract,
-    utils::{get_client, get_client_with_signer, get_transaction},
+    utils::{get_client, get_client_with_signer},
 };
 
 const EVENT_BLOCK_RANGE: u64 = 10000;
@@ -183,7 +181,7 @@ impl RollupContract {
         Ok((deposit_leaf_inserted_events, final_to_block))
     }
 
-    async fn get_blocks_posted_event(
+    pub async fn get_blocks_posted_event(
         &self,
         from_block: u64,
     ) -> Result<(Vec<BlockPosted>, u64), BlockchainError> {
@@ -244,10 +242,17 @@ impl RollupContract {
         Ok((blocks_posted_events, final_to_block))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn get_full_block_with_meta(
         &self,
         from_block: u64,
     ) -> Result<(Vec<FullBlockWithMeta>, u64), BlockchainError> {
+        use crate::external_api::contract::{
+            data_decoder::decode_post_block_calldata, utils::get_transaction,
+        };
+        use std::env;
+        use tokio::task::JoinSet;
+
         let (blocks_posted_events, to_block) = self.get_blocks_posted_event(from_block).await?;
 
         let mut full_blocks = Vec::with_capacity(blocks_posted_events.len());
