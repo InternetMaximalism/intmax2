@@ -122,6 +122,54 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
         Ok(sibling_hash)
     }
 
+    pub async fn bulk_get_sibling_hashes(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        paths: &[BitPath],
+    ) -> MTResult<Vec<HashOut<V>>> {
+        let sibling_paths: Vec<BitPath> = paths.iter().map(|p| p.sibling()).collect();
+        let serialized_paths: Vec<Vec<u8>> = sibling_paths
+            .iter()
+            .map(|p| bincode::serialize(p).unwrap())
+            .collect();
+
+        let records = sqlx::query!(
+            r#"
+            SELECT bit_path, hash_value
+            FROM hash_nodes
+            WHERE bit_path = ANY($1)
+              AND timestamp_value <= $2
+              AND tag = $3
+            ORDER BY bit_path, timestamp_value DESC
+            "#,
+            &serialized_paths[..],
+            timestamp as i64,
+            self.tag as i32
+        )
+        .fetch_all(tx.as_mut())
+        .await?;
+
+        let mut hash_map = std::collections::HashMap::new();
+        for record in records {
+            let bit_path: BitPath = bincode::deserialize(&record.bit_path).unwrap();
+            let hash: HashOut<V> = bincode::deserialize(&record.hash_value).unwrap();
+            hash_map.entry(bit_path).or_insert(hash);
+        }
+
+        // get results
+        let mut results = Vec::with_capacity(sibling_paths.len());
+        for sibling_path in sibling_paths {
+            let hash = match hash_map.get(&sibling_path) {
+                Some(h) => *h,
+                None => self.zero_hashes[sibling_path.len() as usize],
+            };
+            results.push(hash);
+        }
+
+        Ok(results)
+    }
+
     pub async fn get_root(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
@@ -141,11 +189,13 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
     ) -> MTResult<MerkleProof<V>> {
         let mut path = BitPath::new(self.height as u32, index);
         path.reverse(); // path is big endian
-        let mut siblings = vec![];
+        let mut paths = vec![];
         while !path.is_empty() {
-            siblings.push(self.get_sibling_hash(tx, timestamp, path).await?);
+            paths.push(path);
             path.pop();
         }
+        let siblings = self.bulk_get_sibling_hashes(tx, timestamp, &paths).await?;
+
         Ok(MerkleProof { siblings })
     }
 
