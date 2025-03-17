@@ -562,10 +562,21 @@ impl Client {
             });
         }
 
+        fail::fail_point!("finalize-tx-save-data-batch-error", |_| {
+            Err(ClientError::UnexpectedError(
+                "failed to save data batch".to_string(),
+            ))
+        });
         let uuids = self
             .store_vault_server
             .save_data_batch(key, &entries)
             .await?;
+
+        fail::fail_point!("before-post-signature", |_| {
+            Err(ClientError::UnexpectedError(
+                "error occurred before post signature".to_string(),
+            ))
+        });
 
         // sign and post signature
         let signature = proposal.sign(key);
@@ -624,6 +635,11 @@ impl Client {
                 memo: memo_entry.memo.clone(),
             };
             // todo: batch save
+            // fail::fail_point!("finalize-tx-save-misc-error", |_| {
+            //     Err(ClientError::UnexpectedError(
+            //         "failed to save misc".to_string(),
+            //     ))
+            // });
             self.store_vault_server
                 .save_misc(key, memo_entry.topic, &payment_memo.encrypt(key.pubkey))
                 .await?;

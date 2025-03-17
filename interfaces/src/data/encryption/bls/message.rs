@@ -1,11 +1,13 @@
 //! These functions reference reth.
 //! <https://github.com/paradigmxyz/reth/blob/main/crates/net/ecies/src/algorithm.rs>
 
+use std::io::Write;
+
 use aes::{
     cipher::{KeyIvInit, StreamCipher},
     Aes128,
 };
-use alloy_primitives::{B128, B256};
+use alloy_primitives::{hex, B128, B256};
 use ark_bn254::Fr;
 use ctr::Ctr64BE;
 use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait};
@@ -163,23 +165,48 @@ impl<'a> EncryptedMessage<'a> {
 
     /// Use the given ECIES keys to decrypt the contained encrypted data, consuming the message and
     /// returning the decrypted data.
-    pub fn decrypt(self, keys: &RLPxSymmetricKeys) -> &'a mut [u8] {
+    pub fn decrypt(self, keys: &RLPxSymmetricKeys) -> Result<&'a mut [u8], ECIESError> {
         let Self {
             iv, encrypted_data, ..
         } = self;
 
         // rename for clarity once it's decrypted
+        let cloned_encrypted_data = encrypted_data.to_vec();
         let decrypted_data = encrypted_data;
 
         let mut decryptor = Ctr64BE::<Aes128>::new((&keys.enc_key.0).into(), (&*iv).into());
         decryptor.apply_keystream(decrypted_data);
-        decrypted_data
+
+        let check_tag = hmac_sha256(
+            keys.mac_key.as_ref(),
+            &[iv.as_slice(), cloned_encrypted_data.as_slice()],
+            &self.auth_data,
+        );
+        if check_tag != self.tag {
+            let mut f =
+                std::fs::File::create(format!("decrypted_data-{}.txt", self.public_key.to_hex()))
+                    .unwrap();
+            write!(&mut f, "{}", hex::encode(&decrypted_data)).unwrap();
+            log::error!(
+                "Tag check failed: {:?} != {:?}, (mac_key={}, iv={}, auth_data={:?})",
+                check_tag,
+                self.tag,
+                keys.mac_key,
+                iv,
+                self.auth_data,
+            );
+            return Err(ECIESError::TagCheckDecryptFailed);
+        }
+
+        Ok(decrypted_data)
     }
 
     /// Use the given ECIES keys to check the integrity of the message, returning an error if the
     /// tag check fails, and then decrypt the message, returning the decrypted data.
     pub fn check_and_decrypt(self, keys: RLPxSymmetricKeys) -> Result<&'a mut [u8], ECIESError> {
-        self.check_integrity(&keys)?;
-        Ok(self.decrypt(&keys))
+        let result = self.decrypt(&keys)?;
+
+        // self.check_integrity(&keys)?;
+        Ok(result)
     }
 }

@@ -1,6 +1,7 @@
 use ethers::types::H256;
 use futures::future::join_all;
 use intmax2_cli::cli::{
+    client::get_client,
     deposit::deposit,
     error::CliError,
     get::{balance, BalanceInfo},
@@ -12,7 +13,10 @@ use intmax2_client_sdk::{
     client::{error::ClientError, strategy::error::StrategyError, sync::error::SyncError},
     external_api::utils::retry::{retry_if, RetryConfig},
 };
-use intmax2_interfaces::{api::error::ServerError, data::deposit_data::TokenType};
+use intmax2_interfaces::{
+    api::{error::ServerError, withdrawal_server::interface::WithdrawalStatus},
+    data::deposit_data::TokenType,
+};
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
     ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
@@ -242,6 +246,47 @@ async fn withdraw_directly_with_error_handling_inner(
         retry_config,
     )
     .await?;
+
+    Ok(())
+}
+
+pub async fn wait_for_withdrawal_finalization(key: KeySet) -> Result<(), CliError> {
+    let client = get_client()?;
+    let mut withdrawal_info = client.get_withdrawal_info(key).await?;
+    let mut pending_withdrawals = withdrawal_info
+        .into_iter()
+        .filter(|withdrawal_info| {
+            withdrawal_info.status == WithdrawalStatus::Requested
+                || withdrawal_info.status == WithdrawalStatus::Relayed
+        })
+        .collect::<Vec<_>>();
+
+    while !pending_withdrawals.is_empty() {
+        log::info!("Waiting for withdrawal finalization...");
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        withdrawal_info = client.get_withdrawal_info(key).await?;
+        pending_withdrawals = withdrawal_info
+            .into_iter()
+            .filter(|withdrawal_info| {
+                // some of the pending withdrawals are not in the withdrawal_info
+                pending_withdrawals.iter().any(|pending_withdrawal| {
+                    pending_withdrawal.contract_withdrawal.withdrawal_hash()
+                        == withdrawal_info.contract_withdrawal.withdrawal_hash()
+                })
+            })
+            .filter(|withdrawal_info| {
+                withdrawal_info.status == WithdrawalStatus::Requested
+                    || withdrawal_info.status == WithdrawalStatus::Relayed
+            })
+            .collect::<Vec<_>>();
+        log::info!(
+            "Pending withdrawals: {:?}",
+            pending_withdrawals
+                .iter()
+                .map(|w| w.contract_withdrawal.withdrawal_hash())
+                .collect::<Vec<_>>()
+        );
+    }
 
     Ok(())
 }

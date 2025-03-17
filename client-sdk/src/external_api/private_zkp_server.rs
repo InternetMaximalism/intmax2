@@ -30,7 +30,7 @@ use intmax2_zkp::{
             withdrawal_witness::WithdrawalWitness,
         },
     },
-    ethereum_types::u256::U256,
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
@@ -42,8 +42,8 @@ use crate::external_api::utils::time::sleep_for;
 
 use super::utils::query::{get_request, post_request};
 
-const MAX_RETRIES: usize = 30;
-const RETRY_INTERVAL: usize = 10; // seconds
+const MAX_RETRIES: usize = 20;
+const RETRY_INTERVAL: usize = 5; // seconds
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -98,6 +98,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         let request = ProveSpentRequest {
             spent_witness: spent_witness.clone(),
         };
+        log::info!("prove_spent: {}", key.pubkey.to_hex());
         let result = self
             .request_and_get_proof(
                 key,
@@ -127,6 +128,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
             spent_proof: spent_proof.clone(),
             prev_proof: prev_proof.clone(),
         };
+        log::info!("prove_send: {}", key.pubkey.to_hex());
         let result = self
             .request_and_get_proof(
                 key,
@@ -152,6 +154,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
             update_witness: update_witness.clone(),
             prev_proof: prev_proof.clone(),
         };
+        log::info!("prove_update: {}", key.pubkey.to_hex());
         let result = self
             .request_and_get_proof(
                 key,
@@ -177,6 +180,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
             receive_transfer_witness: receive_transfer_witness.clone(),
             prev_proof: prev_proof.clone(),
         };
+        log::info!("prove_receive_transfer: {}", key.pubkey.to_hex());
         let result = self
             .request_and_get_proof(
                 key,
@@ -223,6 +227,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         let request = ProveSingleWithdrawalRequest {
             withdrawal_witness: withdrawal_witness.clone(),
         };
+        log::info!("prove_single_withdrawal: {}", key.pubkey.to_hex());
         let result = self
             .request_and_get_proof(
                 key,
@@ -244,6 +249,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         let request = ProveSingleClaimRequest {
             claim_witness: claim_witness.clone(),
         };
+        log::info!("prove_single_claim: {}", _key.pubkey.to_hex());
         let result = self
             .request_and_get_proof(
                 _key,
@@ -292,38 +298,62 @@ impl PrivateZKPServerClient {
         request: &ProveRequestWithType,
     ) -> Result<ProofResultWithError, ServerError> {
         let request_id = self.send_prove_request(request).await?;
+        log::info!(
+            "(request_and_get_proof) request_id={}, pubkey={}",
+            key.pubkey.to_hex(),
+            request_id
+        );
         let mut retries = 0;
+        let start = std::time::Instant::now();
         loop {
             let response = self.get_request(&request_id).await?;
             log::info!("{}: {}", request.prove_type, response.status);
             if response.status == "success" {
                 if response.result.is_none() {
                     return Err(ServerError::InvalidResponse(format!(
-                        "Proof result is missing: {}",
+                        "Proof result (request_id={}, pubkey={}) is missing: {}",
+                        request_id,
+                        key.pubkey.to_hex(),
                         response.error.unwrap_or_default()
                     )));
                 }
 
+                let result = response.result.unwrap();
                 let proof_with_result =
-                    ProofResultWithError::decrypt(&response.result.unwrap(), key).map_err(|e| {
+                    ProofResultWithError::decrypt(&result, key).map_err(|e| {
                         ServerError::DeserializationError(format!(
-                            "Failed to decrypt proof result: {:?}",
-                            e
+                            "Failed to decrypt proof result (request_id={}, pubkey={})): {:?} ({}s)",
+                            request_id,
+                            key.pubkey.to_hex(),
+                            e,
+                            start.elapsed().as_secs()
                         ))
                     })?;
+                log::info!(
+                    "Success proof generation (request_id={}, pubkey={}) {} ({}s)",
+                    request_id,
+                    key.pubkey.to_hex(),
+                    request.prove_type,
+                    start.elapsed().as_secs()
+                );
 
                 return Ok(proof_with_result);
             } else if response.status == "error" {
                 return Err(ServerError::InvalidResponse(format!(
-                    "Proof request failed: {}",
+                    "Proof request failed (request_id={}, pubkey={}): {}",
+                    request_id,
+                    key.pubkey.to_hex(),
                     response.error.unwrap_or_default()
                 )));
             }
 
             if retries >= MAX_RETRIES {
                 return Err(ServerError::UnknownError(format!(
-                    "Failed to get proof after {} retries",
-                    MAX_RETRIES
+                    "Failed to get proof (request_id={}, pubkey={}) after {} retries ({}s)",
+                    request_id,
+                    key.pubkey.to_hex(),
+                    MAX_RETRIES,
+                    start.elapsed().as_secs()
                 )));
             }
             retries += 1;

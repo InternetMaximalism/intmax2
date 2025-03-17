@@ -44,9 +44,10 @@ impl StoreVaultServer {
             if let Some((_, digest)) = result {
                 if digest != prev_digest {
                     return Err(anyhow!(
-                        "Prev digest mismatch {} != {}",
+                        "Prev digest mismatch {} != {} (pubkey: {})",
                         digest,
-                        prev_digest
+                        prev_digest,
+                        pubkey.to_hex()
                     ));
                 }
             } else {

@@ -4,7 +4,7 @@ use log::warn;
 
 use crate::external_api::utils::time::sleep_for;
 
-const MAX_RETRIES: u32 = 5;
+const MAX_RETRIES: u32 = 1;
 const INITIAL_DELAY: u64 = 1000;
 
 #[derive(Debug, Clone, Copy)]

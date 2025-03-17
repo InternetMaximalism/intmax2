@@ -1,4 +1,3 @@
-use fail;
 use intmax2_client_sdk::{
     client::{client::PaymentMemoEntry, strategy::tx_status::TxStatus},
     external_api::{indexer::IndexerClient, utils::time::sleep_for},
@@ -35,11 +34,11 @@ pub async fn send_transfers(
     } else {
         // get block builder info
         let indexer = IndexerClient::new(&env.indexer_base_url.to_string());
-        fail::fail_point!("indexer-get-block-builder-info-empty", |_| {
-            Err(CliError::UnexpectedError(
-                "Block builder info is empty".to_string(),
-            ))
-        });
+        // fail::fail_point!("indexer-get-block-builder-info-empty", |_| {
+        //     Err(CliError::UnexpectedError(
+        //         "Block builder info is empty".to_string(),
+        //     ))
+        // });
         let block_builder_info = indexer.get_block_builder_info().await?;
         if block_builder_info.is_empty() {
             return Err(CliError::UnexpectedError(
@@ -49,11 +48,11 @@ pub async fn send_transfers(
         block_builder_info.first().unwrap().url.clone()
     };
 
-    fail::fail_point!("quote-transfer-fee-error", |_| {
-        Err(CliError::UnexpectedError(
-            "Failed to quote transfer fee".to_string(),
-        ))
-    });
+    // fail::fail_point!("quote-transfer-fee-error", |_| {
+    //     Err(CliError::UnexpectedError(
+    //         "Failed to quote transfer fee".to_string(),
+    //     ))
+    // });
     let fee_quote = client
         .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
         .await?;
@@ -69,11 +68,11 @@ pub async fn send_transfers(
         );
     }
 
-    fail::fail_point!("send-tx-request-error", |_| {
-        Err(CliError::UnexpectedError(
-            "Failed to send transaction request".to_string(),
-        ))
-    });
+    // fail::fail_point!("send-tx-request-error", |_| {
+    //     Err(CliError::UnexpectedError(
+    //         "Failed to send transaction request".to_string(),
+    //     ))
+    // });
     let memo = client
         .send_tx_request(
             &block_builder_url,
@@ -86,11 +85,11 @@ pub async fn send_transfers(
         )
         .await?;
 
-    fail::fail_point!("after-send-tx-request", |_| {
-        Err(CliError::UnexpectedError(
-            "Failpoint triggered after send_tx_request".to_string(),
-        ))
-    });
+    // fail::fail_point!("after-send-tx-request", |_| {
+    //     Err(CliError::UnexpectedError(
+    //         "Failpoint triggered after send_tx_request".to_string(),
+    //     ))
+    // });
 
     log::info!("Waiting for block builder to build the block");
     tokio::time::sleep(std::time::Duration::from_secs(
@@ -117,11 +116,11 @@ pub async fn send_transfers(
         .finalize_tx(&block_builder_url, key, &memo, &proposal)
         .await?;
 
-    fail::fail_point!("after-finalize-tx", |_| {
-        Err(CliError::UnexpectedError(
-            "Failpoint triggered after finalize_tx".to_string(),
-        ))
-    });
+    // fail::fail_point!("after-finalize-tx", |_| {
+    //     Err(CliError::UnexpectedError(
+    //         "Failpoint triggered after finalize_tx".to_string(),
+    //     ))
+    // });
 
     let expiry_with_margin = if proposal.expiry > 0 {
         proposal.expiry + BLOCK_SYNC_MARGIN

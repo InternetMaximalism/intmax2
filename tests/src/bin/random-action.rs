@@ -9,7 +9,11 @@ use ethers::{abi::AbiEncode, types::H256};
 use fail::FailScenario;
 use intmax2_cli::cli::{error::CliError, send::send_transfers};
 use intmax2_client_sdk::{
-    client::sync::utils::generate_salt, external_api::contract::utils::get_eth_balance,
+    client::sync::utils::generate_salt,
+    external_api::{
+        contract::utils::get_eth_balance,
+        utils::retry::{retry_if, RetryConfig},
+    },
 };
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
@@ -23,7 +27,8 @@ use tests::{
     ethereum::transfer_eth_on_ethereum,
     get_eth_balance_on_intmax,
     task::{process_queue, AsyncTask},
-    wait_for_balance_synchronization, withdraw_directly_with_error_handling,
+    wait_for_balance_synchronization, wait_for_withdrawal_finalization,
+    withdraw_directly_with_error_handling,
 };
 
 const ETH_TOKEN_INDEX: u32 = 0;
@@ -142,6 +147,8 @@ impl TestSystem {
         let switch_recipient = rand::thread_rng().gen_bool(0.5);
         let sender_key = if switch_recipient { keys[1] } else { keys[0] };
         let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
+        log::info!("sender_key: {}", sender_key.intmax_key.privkey);
+        log::info!("recipient_key: {}", recipient_key.intmax_key.privkey);
 
         // Enable a random failpoint if applicable
         let scenario = Self::enable_random_failpoint(action);
@@ -184,7 +191,11 @@ impl TestSystem {
         // Log the result
         match &result {
             Ok(_) => log::info!("Action completed successfully"),
-            Err(e) => log::warn!("Action failed with error: {:?}", e),
+            Err(e) => log::warn!(
+                "Action failed with error {}: {:?}",
+                sender_key.intmax_key.pubkey.to_hex(),
+                e
+            ),
         }
 
         // Return the result
@@ -314,7 +325,11 @@ impl TestSystem {
         let result = send_transfers(sender_key, &[transfer], vec![], ETH_TOKEN_INDEX, true).await;
         match &result {
             Ok(_) => log::info!("Transaction completed successfully"),
-            Err(e) => log::warn!("Transaction failed with error: {:?}", e),
+            Err(e) => log::warn!(
+                "Transaction failed with error {}: {:?}",
+                sender_key.pubkey.to_hex(),
+                e
+            ),
         }
 
         // Check final balances
@@ -387,8 +402,6 @@ impl TestSystem {
             log::info!("Refilling amount: {}", refilling_amount);
             self.refill_eth_on_intmax(&[sender_key], refilling_amount)
                 .await?;
-
-            // return Err("Sender's balance is insufficient".into());
         }
 
         let to = Address::from_bytes_be(recipient_account.eth_address.as_bytes());
@@ -398,6 +411,18 @@ impl TestSystem {
         withdraw_directly_with_error_handling(sender_key, to, transfer_amount, ETH_TOKEN_INDEX)
             .await?;
         log::info!("Withdrawal completed {}", sender_key.pubkey);
+
+        let retry_config = RetryConfig {
+            max_retries: 100,
+            initial_delay: 30000,
+        };
+        let retry_condition = |_: &CliError| true;
+        retry_if(
+            retry_condition,
+            || wait_for_withdrawal_finalization(sender_key),
+            retry_config,
+        )
+        .await?;
 
         // Check final balances
         let sender_final_balance = get_eth_balance_on_intmax(sender_key).await?;
@@ -413,6 +438,19 @@ impl TestSystem {
             recipient_account.eth_address,
             recipient_final_balance
         );
+
+        // let expected_recipient_balance = U256::from(recipient_initial_balance) + (transfer_amount);
+
+        // if recipient_final_balance.eq(&expected_recipient_balance) {
+        //     log::info!("Withdrawal transaction was processed");
+        // } else {
+        //     log::warn!("Recipient's balance does not match expected value");
+        //     log::warn!(
+        //         "Expected: {}, Actual: {}",
+        //         expected_recipient_balance,
+        //         recipient_final_balance
+        //     );
+        // }
 
         Ok::<(), Box<dyn std::error::Error>>(())
     }
@@ -483,7 +521,7 @@ impl AsyncTask for RandomActionTask {
     type Error = VarError;
 
     async fn execute(id: usize) -> Result<Self::Output, Self::Error> {
-        log::info!("Starting random action test");
+        log::info!("Starting random action test (id: {})", id);
 
         let master_mnemonic =
             std::env::var("MASTER_MNEMONIC").expect("MASTER_MNEMONIC must be set");
