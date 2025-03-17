@@ -1,5 +1,5 @@
 [package]
-name = "s3-store-vault"
+name = "legacy-store-vault-server"
 version.workspace = true
 edition = "2021"
 
@@ -30,7 +30,3 @@ actix-web = { workspace = true }
 actix-cors = { workspace = true }
 serde_qs = { workspace = true }
 tracing-actix-web = { workspace = true }
-aws-config = "0.55.3"
-aws-sdk-s3 = "0.28.0"
-cloudfront_sign = "0.1.0"
-base64 = "0.22.1"

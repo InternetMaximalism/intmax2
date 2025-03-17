@@ -3,9 +3,9 @@ use actix_web::{
     web::{Data, JsonConfig},
     App, HttpServer,
 };
-use s3_store_vault::{
-    api::{routes::s3_store_vault_scope, state::State},
-    app::s3_store_vault::S3StoreVault,
+use legacy_store_vault_server::{
+    api::{routes::store_vault_server_scope, state::State},
+    app::store_vault_server::StoreVaultServer,
     EnvVar,
 };
 use server_common::{
@@ -28,17 +28,13 @@ async fn main() -> std::io::Result<()> {
             format!("Failed to parse environment variables: {}", e),
         )
     })?;
-    let s3_store_vault = S3StoreVault::new(&env).await.map_err(|e| {
+    let store_vault_server = StoreVaultServer::new(&env).await.map_err(|e| {
         io::Error::new(
             io::ErrorKind::Other,
-            format!("Failed to initialize s3_store_vault: {}", e),
+            format!("Failed to initialize store_vault_server: {}", e),
         )
     })?;
-
-    // start tasks
-    s3_store_vault.run();
-
-    let state = Data::new(State::new(s3_store_vault));
+    let state = Data::new(State::new(store_vault_server));
 
     HttpServer::new(move || {
         let cors = Cors::permissive();
@@ -48,7 +44,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(JsonConfig::default().limit(35_000_000))
             .app_data(state.clone())
             .service(health_check)
-            .service(s3_store_vault_scope())
+            .service(store_vault_server_scope())
     })
     .bind(format!("0.0.0.0:{}", env.port))?
     .run()

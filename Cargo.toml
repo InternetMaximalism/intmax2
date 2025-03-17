@@ -6,7 +6,7 @@ members = [
     "wasm",
     "balance-prover",
     "store-vault-server",
-    "s3-store-vault",
+    "legacy-store-vault-server",
     "validity-prover",
     "block-builder",
     "withdrawal-server",

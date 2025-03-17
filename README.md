@@ -47,7 +47,7 @@ You need to run `cp .env.example .env` in each directory.
 1. Start Store-vault-server. 
 Example port: 9000
 ```bash
-cd s3-store-vault && sqlx database setup && cargo run -r
+cd store-vault-server && sqlx database setup && cargo run -r
 ```
 
 2. Start balance-prover.
@@ -85,7 +85,7 @@ Please refer to [the examples of cli ](cli/README.md#examples)
 # Reset DB
 
 ```bash
-(cd store-vault-server && sqlx database reset -y && sqlx database setup && cd ../s3-store-vault && sqlx database reset -y && sqlx database setup && cd ../validity-prover && sqlx database reset -y && sqlx database setup && cd ../withdrawal-server && sqlx database reset -y && sqlx database setup)
+(cd store-vault-server && sqlx database reset -y && sqlx database setup && cd ../validity-prover && sqlx database reset -y && sqlx database setup && cd ../withdrawal-server && sqlx database reset -y && sqlx database setup)
 ```
 
 # Overview 
