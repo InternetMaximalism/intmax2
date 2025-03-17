@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use intmax2_interfaces::api::validity_prover::interface::{
     TransitionProofTask, TransitionProofTaskResult,
@@ -6,7 +6,7 @@ use intmax2_interfaces::api::validity_prover::interface::{
 use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
 use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
 use server_common::redis::task_manager::TaskManager;
-use tokio::task::JoinHandle;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::EnvVar;
@@ -23,6 +23,7 @@ type Result<T> = std::result::Result<T, WorkerError>;
 
 #[derive(Clone)]
 struct Config {
+    num_process: u32,
     heartbeat_interval: u64,
 }
 
@@ -32,6 +33,7 @@ pub struct Worker {
     transition_processor: Arc<TransitionProcessor<F, C, D>>,
     manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
     worker_id: String,
+    running_tasks: Arc<RwLock<HashSet<u32>>>,
 }
 
 impl Worker {
@@ -40,14 +42,15 @@ impl Worker {
         transition_processor: Arc<TransitionProcessor<F, C, D>>,
     ) -> Result<Worker> {
         let config = Config {
+            num_process: env.num_process,
             heartbeat_interval: env.heartbeat_interval,
         };
 
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
-            100, // dummy value
-            (env.heartbeat_interval * 3) as usize,
+            env.task_ttl as usize,
+            env.heartbeat_interval as usize,
         )?);
         let worker_id = Uuid::new_v4().to_string();
         Ok(Worker {
@@ -55,23 +58,22 @@ impl Worker {
             transition_processor,
             manager,
             worker_id,
+            running_tasks: Arc::new(RwLock::new(HashSet::new())),
         })
     }
 
     async fn work(&self) -> Result<()> {
         loop {
-            let task = self.manager.assign_task(&self.worker_id).await?;
+            tokio::time::sleep(tokio::time::Duration::from_secs(TASK_POLLING_INTERVAL)).await;
+
+            let task = self.manager.assign_task().await?;
             if task.is_none() {
-                tokio::time::sleep(tokio::time::Duration::from_secs(TASK_POLLING_INTERVAL)).await;
                 continue;
             }
 
             let (block_number, task) = task.unwrap();
-            log::info!(
-                "Processing block {} by worker {}",
-                block_number,
-                self.worker_id
-            );
+            self.running_tasks.write().await.insert(block_number);
+            log::info!("processing block_number {}", block_number,);
 
             // Prove the transition on another thread
             let transition_processor = self.transition_processor.clone();
@@ -88,11 +90,7 @@ impl Worker {
 
             let result = match result {
                 Ok(proof) => {
-                    log::info!(
-                        "Proof generated for block_number {} by worker {}",
-                        block_number,
-                        self.worker_id
-                    );
+                    log::info!("Proof generated for block_number {}", block_number,);
                     TransitionProofTaskResult {
                         block_number,
                         proof: Some(proof),
@@ -100,7 +98,11 @@ impl Worker {
                     }
                 }
                 Err(e) => {
-                    log::error!("Error while proving: {:?} by worker {}", e, self.worker_id);
+                    log::error!(
+                        "Error while proving for block number {}: {:?}",
+                        block_number,
+                        e,
+                    );
                     TransitionProofTaskResult {
                         block_number,
                         proof: None,
@@ -108,32 +110,43 @@ impl Worker {
                     }
                 }
             };
-            self.manager
-                .complete_task(&self.worker_id, block_number, &task, &result)
-                .await?;
+            self.manager.complete_task(block_number, &result).await?;
+            self.running_tasks.write().await.remove(&block_number);
+
+            log::info!("completed block_number {}", block_number);
         }
     }
 
-    pub async fn run(&self) -> Vec<JoinHandle<()>> {
+    pub async fn run(&self) {
+        for _ in 0..self.config.num_process {
+            let worker = self.clone();
+            tokio::spawn(async move {
+                if let Err(e) = worker.work().await {
+                    eprintln!("Error: {:?}", e);
+                }
+            });
+        }
+        log::info!("Worker started");
+
         let worker = self.clone();
-        let solve_handle = tokio::spawn(async move {
-            if let Err(e) = worker.work().await {
-                eprintln!("Error: {:?}", e);
-            }
-        });
-        let manager = self.manager.clone();
         let worker_id = self.worker_id.clone();
         let heartbeat_interval = self.config.heartbeat_interval;
-        let submit_heartbeat_handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             loop {
-                log::info!("Submitting heartbeat for worker {}", worker_id);
-                if let Err(e) = manager.submit_heartbeat(&worker_id).await {
-                    eprintln!("Error: {:?}", e);
+                let running_tasks = worker.running_tasks.read().await.clone();
+                for block_number in running_tasks {
+                    if let Err(e) = worker
+                        .manager
+                        .submit_heartbeat(&worker_id, block_number)
+                        .await
+                    {
+                        log::error!("Error while submitting heartbeat: {:?}", e);
+                    } else {
+                        log::info!("submitted heartbeat for block_number {}", block_number);
+                    }
                 }
                 tokio::time::sleep(tokio::time::Duration::from_secs(heartbeat_interval)).await;
             }
         });
-        log::info!("Starting worker with id {}", self.worker_id);
-        vec![solve_handle, submit_heartbeat_handle]
     }
 }

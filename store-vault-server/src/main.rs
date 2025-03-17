@@ -9,9 +9,8 @@ use server_common::{
 };
 use std::io::{self};
 use store_vault_server::{
-    api::{routes::store_vault_server_scope, state::State},
-    app::store_vault_server::StoreVaultServer,
-    // middleware::authorization::authorization_middleware,
+    api::{routes::s3_store_vault_scope, state::State},
+    app::s3_store_vault::S3StoreVault,
     EnvVar,
 };
 use tracing_actix_web::TracingLogger;
@@ -29,24 +28,27 @@ async fn main() -> std::io::Result<()> {
             format!("Failed to parse environment variables: {}", e),
         )
     })?;
-    let store_vault_server = StoreVaultServer::new(&env).await.map_err(|e| {
+    let s3_store_vault = S3StoreVault::new(&env).await.map_err(|e| {
         io::Error::new(
             io::ErrorKind::Other,
-            format!("Failed to initialize store_vault_server: {}", e),
+            format!("Failed to initialize s3_store_vault: {}", e),
         )
     })?;
-    let state = Data::new(State::new(store_vault_server));
+
+    // start tasks
+    s3_store_vault.run();
+
+    let state = Data::new(State::new(s3_store_vault));
 
     HttpServer::new(move || {
         let cors = Cors::permissive();
         App::new()
             .wrap(cors)
             .wrap(TracingLogger::<logger::CustomRootSpanBuilder>::new())
-            // .wrap(from_fn(authorization_middleware))
             .app_data(JsonConfig::default().limit(35_000_000))
             .app_data(state.clone())
             .service(health_check)
-            .service(store_vault_server_scope())
+            .service(s3_store_vault_scope())
     })
     .bind(format!("0.0.0.0:{}", env.port))?
     .run()

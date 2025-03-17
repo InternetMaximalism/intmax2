@@ -3,11 +3,13 @@ use intmax2_client_sdk::external_api::{
     contract::{
         block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
     },
+    s3_store_vault::S3StoreVaultClient,
     store_vault_server::StoreVaultServerClient,
     validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
     block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
+    store_vault_server::interface::StoreVaultClientInterface,
     validity_prover::interface::{AccountInfo, ValidityProverClientInterface},
 };
 use intmax2_zkp::{
@@ -53,7 +55,7 @@ pub struct Config {
 #[derive(Clone)]
 pub struct BlockBuilder {
     pub config: Config,
-    pub store_vault_server_client: StoreVaultServerClient,
+    pub store_vault_server_client: Arc<Box<dyn StoreVaultClientInterface>>,
     pub validity_prover_client: ValidityProverClient,
     pub rollup_contract: RollupContract,
     pub registry_contract: BlockBuilderRegistryContract,
@@ -65,8 +67,18 @@ impl BlockBuilder {
     /// Create a new BlockBuilder instance
     pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
         // Initialize clients
-        let store_vault_server_client =
-            StoreVaultServerClient::new(&env.store_vault_server_base_url);
+        let store_vault_server_client: Arc<Box<dyn StoreVaultClientInterface>> =
+            if env.use_s3.unwrap_or(true) {
+                log::info!("Using s3_store_vault");
+                Arc::new(Box::new(S3StoreVaultClient::new(
+                    &env.store_vault_server_base_url,
+                )))
+            } else {
+                log::info!("Using store_vault_server");
+                Arc::new(Box::new(StoreVaultServerClient::new(
+                    &env.store_vault_server_base_url,
+                )))
+            };
         let validity_prover_client = ValidityProverClient::new(&env.validity_prover_base_url);
         let rollup_contract = RollupContract::new(
             &env.l2_rpc_url,
@@ -283,7 +295,7 @@ impl BlockBuilder {
         };
 
         validate_fee_proof(
-            &self.store_vault_server_client,
+            self.store_vault_server_client.as_ref().as_ref(),
             self.config.beneficiary_pubkey,
             required_fee,
             required_collateral_fee,

@@ -1,4 +1,4 @@
-import { cleanEnv, num, str, url } from 'envalid';
+import { bool, cleanEnv, num, str, url } from 'envalid';
 import { Config, } from '../pkg/intmax2_wasm_lib';
 import * as dotenv from 'dotenv';
 dotenv.config();
@@ -13,6 +13,9 @@ export const env = cleanEnv(process.env, {
     VALIDITY_PROVER_BASE_URL: url(),
     WITHDRAWAL_SERVER_BASE_URL: url(),
     BLOCK_BUILDER_BASE_URL: url(),
+
+    USE_PRIVATE_ZKP_SERVER: bool(),
+    USE_S3: bool(),
 
     // Timeout configurations
     DEPOSIT_TIMEOUT: num(),
@@ -58,5 +61,6 @@ export const config = new Config(
     env.ROLLUP_CONTRACT_ADDRESS,
     BigInt(env.ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER),
     env.WITHDRAWAL_CONTRACT_ADDRESS,
-    true
+    env.USE_PRIVATE_ZKP_SERVER,
+    env.USE_S3,
 );

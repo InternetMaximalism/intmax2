@@ -3,8 +3,9 @@ use crate::{
     Env,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::interface::{DataType, StoreVaultClientInterface},
+    api::store_vault_server::interface::StoreVaultClientInterface,
     data::{
+        data_type::DataType,
         encryption::{errors::BlsEncryptionError, BlsEncryption},
         transfer_data::TransferData,
     },
@@ -18,7 +19,7 @@ use intmax2_client_sdk::{
         sync::utils::quote_withdrawal_claim_fee,
     },
     external_api::{
-        contract::withdrawal_contract::WithdrawalContract,
+        contract::withdrawal_contract::WithdrawalContract, s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient, validity_prover::ValidityProverClient,
     },
 };
@@ -44,7 +45,6 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
-use uuid::Uuid;
 
 use server_common::db::{DbPool, DbPoolConfig};
 
@@ -63,7 +63,7 @@ struct Config {
 pub struct WithdrawalServer {
     config: Config,
     pub pool: DbPool,
-    pub store_vault_server: StoreVaultServerClient,
+    pub store_vault_server: Box<dyn StoreVaultClientInterface>,
     pub validity_prover: ValidityProverClient,
     pub withdrawal_contract: WithdrawalContract,
 }
@@ -114,7 +114,15 @@ impl WithdrawalServer {
             claimable_withdrawal_fee,
             claim_fee,
         };
-        let store_vault_server = StoreVaultServerClient::new(&env.store_vault_server_base_url);
+        let store_vault_server: Box<dyn StoreVaultClientInterface> = if env.use_s3.unwrap_or(true) {
+            log::info!("Using s3_store_vault");
+            Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
+        } else {
+            log::info!("Using store_vault_server");
+            Box::new(StoreVaultServerClient::new(
+                &env.store_vault_server_base_url,
+            ))
+        };
         let validity_prover = ValidityProverClient::new(&env.validity_prover_base_url);
         let withdrawal_contract = WithdrawalContract::new(
             &env.l2_rpc_url,
@@ -151,7 +159,7 @@ impl WithdrawalServer {
         pubkey: U256,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
-        fee_transfer_uuids: &[String],
+        fee_transfer_digests: &[Bytes32],
     ) -> Result<(), WithdrawalServerError> {
         // Verify the single withdrawal proof
         let single_withdrawal_vd = CircuitVerifiers::load().get_single_withdrawal_vd();
@@ -176,7 +184,7 @@ impl WithdrawalServer {
             .map_err(|e| WithdrawalServerError::InvalidFee(e.to_string()))?;
         if let Some(fee) = fee {
             let transfers = self
-                .fee_validation(FeeType::Withdrawal, &fee, fee_transfer_uuids)
+                .fee_validation(FeeType::Withdrawal, &fee, fee_transfer_digests)
                 .await?;
             self.add_spent_transfers(&transfers).await?;
         }
@@ -210,12 +218,12 @@ impl WithdrawalServer {
         let proof_bytes = CompressedSingleWithdrawalProof::new(single_withdrawal_proof)
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?
             .0;
-        let uuid_str = Uuid::new_v4().to_string();
 
         let pubkey_str = pubkey.to_hex();
         let recipient_str = withdrawal.recipient.to_hex();
         let withdrawal_value = serde_json::to_value(contract_withdrawal)
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+        let uuid_str = uuid::Uuid::new_v4().to_string();
         sqlx::query!(
             r#"
             INSERT INTO withdrawals (
@@ -248,7 +256,7 @@ impl WithdrawalServer {
         pubkey: U256,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
-        fee_transfer_uuids: &[String],
+        fee_transfer_digests: &[Bytes32],
     ) -> Result<(), WithdrawalServerError> {
         let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec());
         let nullifier = claim.nullifier;
@@ -259,7 +267,7 @@ impl WithdrawalServer {
             .map_err(|e| WithdrawalServerError::InvalidFee(e.to_string()))?;
         if let Some(fee) = fee {
             let transfers = self
-                .fee_validation(FeeType::Claim, &fee, fee_transfer_uuids)
+                .fee_validation(FeeType::Claim, &fee, fee_transfer_digests)
                 .await?;
             self.add_spent_transfers(&transfers).await?;
         }
@@ -284,13 +292,12 @@ impl WithdrawalServer {
         let proof_bytes = CompressedSingleClaimProof::new(single_claim_proof)
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?
             .0;
-        let uuid_str = Uuid::new_v4().to_string();
-
         let pubkey_str = pubkey.to_hex();
         let recipient_str = claim.recipient.to_hex();
         let nullifier_str = claim.nullifier.to_hex();
         let claim_value = serde_json::to_value(claim)
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+        let uuid_str = uuid::Uuid::new_v4().to_string();
         sqlx::query!(
             r#"
             INSERT INTO claims (
@@ -414,7 +421,7 @@ impl WithdrawalServer {
         &self,
         fee_type: FeeType,
         fee: &Fee,
-        fee_transfer_uuids: &[String],
+        fee_transfer_digests: &[Bytes32],
     ) -> Result<Vec<Transfer>, WithdrawalServerError> {
         let key = match fee_type {
             FeeType::Withdrawal => self.config.withdrawal_beneficiary_key.unwrap(),
@@ -423,12 +430,12 @@ impl WithdrawalServer {
         // fetch transfer data
         let encrypted_transfer_data = self
             .store_vault_server
-            .get_data_batch(key, DataType::Transfer, fee_transfer_uuids)
+            .get_data_batch(key, &DataType::Transfer.to_topic(), fee_transfer_digests)
             .await?;
-        if encrypted_transfer_data.len() != fee_transfer_uuids.len() {
+        if encrypted_transfer_data.len() != fee_transfer_digests.len() {
             return Err(WithdrawalServerError::InvalidFee(format!(
-                "Invalid fee transfer uuid response: expected {}, got {}",
-                fee_transfer_uuids.len(),
+                "Invalid fee transfer digest response: expected {}, got {}",
+                fee_transfer_digests.len(),
                 encrypted_transfer_data.len()
             )));
         }
@@ -436,7 +443,7 @@ impl WithdrawalServer {
         let transfer_data_with_meta = encrypted_transfer_data
             .iter()
             .map(|data| {
-                let transfer_data = TransferData::decrypt(&data.data, key)?;
+                let transfer_data = TransferData::decrypt(key, None, &data.data)?;
                 Ok((data.meta.clone(), transfer_data))
             })
             .collect::<Result<Vec<_>, BlsEncryptionError>>()?;
@@ -445,7 +452,7 @@ impl WithdrawalServer {
         let mut transfers = Vec::new();
         for (meta, transfer_data) in transfer_data_with_meta {
             let transfer = validate_receive(
-                &self.store_vault_server,
+                self.store_vault_server.as_ref(),
                 &self.validity_prover,
                 key.pubkey,
                 &meta,

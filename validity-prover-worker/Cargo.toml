@@ -24,7 +24,6 @@ dotenv = { workspace = true }
 envy = { workspace = true }
 bincode = { workspace = true }
 thiserror = { workspace = true }
-hashbrown = { workspace = true }
 actix-web = { workspace = true }
 actix-cors = { workspace = true }
 serde_qs = { workspace = true }

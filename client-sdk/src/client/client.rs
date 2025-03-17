@@ -3,7 +3,7 @@ use intmax2_interfaces::{
         balance_prover::interface::BalanceProverClientInterface,
         block_builder::interface::{BlockBuilderClientInterface, Fee},
         store_vault_server::{
-            interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+            interface::{SaveDataEntry, StoreVaultClientInterface},
             types::{MetaDataCursor, MetaDataCursorResponse},
         },
         validity_prover::interface::ValidityProverClientInterface,
@@ -12,6 +12,7 @@ use intmax2_interfaces::{
         },
     },
     data::{
+        data_type::DataType,
         deposit_data::{DepositData, TokenType},
         encryption::BlsEncryption as _,
         meta_data::MetaData,
@@ -80,7 +81,7 @@ pub struct Client {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentMemoEntry {
     pub transfer_index: u32,
-    pub topic: Bytes32,
+    pub topic: String,
     pub memo: String,
 }
 
@@ -101,7 +102,7 @@ pub struct TxRequestMemo {
 #[serde(rename_all = "camelCase")]
 pub struct DepositResult {
     pub deposit_data: DepositData,
-    pub deposit_uuid: String,
+    pub deposit_digest: Bytes32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -116,8 +117,8 @@ pub struct FeeQuote {
 #[serde(rename_all = "camelCase")]
 pub struct TxResult {
     pub tx_tree_root: Bytes32,
-    pub transfer_uuids: Vec<String>,
-    pub withdrawal_uuids: Vec<String>,
+    pub transfer_digests: Vec<Bytes32>,
+    pub withdrawal_digests: Vec<Bytes32>,
     pub transfer_data_vec: Vec<TransferData>,
     pub withdrawal_data_vec: Vec<TransferData>,
 }
@@ -164,24 +165,21 @@ impl Client {
             token_index: None,
         };
         let save_entry = SaveDataEntry {
-            data_type: DataType::Deposit,
+            topic: DataType::Deposit.to_topic(),
             pubkey,
-            encrypted_data: deposit_data.encrypt(pubkey),
+            data: deposit_data.encrypt(pubkey, None)?,
         };
         let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
-        let uuids = self
+        let digests = self
             .store_vault_server
             .save_data_batch(ephemeral_key, &[save_entry])
             .await?;
-        let deposit_uuid = uuids
-            .first()
-            .ok_or(ClientError::UnexpectedError(
-                "deposit_uuid not found".to_string(),
-            ))?
-            .clone();
+        let deposit_digest = *digests.first().ok_or(ClientError::UnexpectedError(
+            "deposit_digest not found".to_string(),
+        ))?;
         let result = DepositResult {
             deposit_data,
-            deposit_uuid,
+            deposit_digest,
         };
 
         Ok(result)
@@ -326,9 +324,11 @@ impl Client {
         };
         let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
         self.store_vault_server
-            .save_sender_proof_set(
+            .save_snapshot(
                 ephemeral_key,
-                &sender_proof_set.encrypt(ephemeral_key.pubkey),
+                &DataType::SenderProofSet.to_topic(),
+                None,
+                &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
             )
             .await?;
         let sender_proof_set_ephemeral_key: U256 =
@@ -359,9 +359,9 @@ impl Client {
                     sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
                 };
                 let entry = SaveDataEntry {
-                    data_type: DataType::Tx,
+                    topic: DataType::Tx.to_topic(),
                     pubkey: key.pubkey,
-                    encrypted_data: tx_data.encrypt(key.pubkey),
+                    data: tx_data.encrypt(key.pubkey, Some(key))?,
                 };
                 self.store_vault_server
                     .save_data_batch(key, &[entry])
@@ -512,9 +512,9 @@ impl Client {
         };
 
         entries.push(SaveDataEntry {
-            data_type: DataType::Tx,
+            topic: DataType::Tx.to_topic(),
             pubkey: key.pubkey,
-            encrypted_data: tx_data.encrypt(key.pubkey),
+            data: tx_data.encrypt(key.pubkey, Some(key))?,
         });
 
         // save transfer data
@@ -555,10 +555,15 @@ impl Client {
                 withdrawal_data_vec.push(transfer_data.clone());
                 key.pubkey
             };
+            let sender_key = if data_type == DataType::Withdrawal {
+                Some(key)
+            } else {
+                None
+            };
             entries.push(SaveDataEntry {
-                data_type,
+                topic: data_type.to_topic(),
                 pubkey,
-                encrypted_data: transfer_data.encrypt(pubkey),
+                data: transfer_data.encrypt(pubkey, sender_key)?,
             });
         }
 
@@ -567,7 +572,7 @@ impl Client {
                 "failed to save data batch".to_string(),
             ))
         });
-        let uuids = self
+        let digests = self
             .store_vault_server
             .save_data_batch(key, &entries)
             .await?;
@@ -589,23 +594,23 @@ impl Client {
             )
             .await?;
 
-        let transfer_uuids: Vec<String> = uuids
+        let transfer_digests: Vec<Bytes32> = digests
             .iter()
             .zip(entries.iter())
-            .filter_map(|(uuid, entry)| {
-                if entry.data_type == DataType::Transfer {
-                    Some(uuid.clone())
+            .filter_map(|(digest, entry)| {
+                if entry.topic == DataType::Transfer.to_topic() {
+                    Some(*digest)
                 } else {
                     None
                 }
             })
             .collect();
-        let withdrawal_uuids = uuids
+        let withdrawal_digests: Vec<Bytes32> = digests
             .iter()
             .zip(entries.iter())
-            .filter_map(|(uuid, entry)| {
-                if entry.data_type == DataType::Withdrawal {
-                    Some(uuid.clone())
+            .filter_map(|(digest, entry)| {
+                if entry.topic == DataType::Withdrawal.to_topic() {
+                    Some(*digest)
                 } else {
                     None
                 }
@@ -614,6 +619,8 @@ impl Client {
 
         // Save payment memo after posting signature because it's not critical data,
         // and we should reduce the time before posting the signature.
+
+        let mut misc_entries = Vec::new();
         for memo_entry in memo.payment_memos.iter() {
             let (position, transfer_data) = transfer_data_vec
                 .iter()
@@ -624,31 +631,30 @@ impl Client {
                 .ok_or(ClientError::UnexpectedError(
                     "transfer_data not found".to_string(),
                 ))?;
-            let transfer_uuid = transfer_uuids[position].clone();
+            let transfer_digest = transfer_digests[position];
             let payment_memo = PaymentMemo {
                 meta: MetaData {
-                    // todo: use response from store-vault-server
                     timestamp: chrono::Utc::now().timestamp() as u64,
-                    uuid: transfer_uuid.clone(),
+                    digest: transfer_digest,
                 },
                 transfer_data: transfer_data.clone(),
                 memo: memo_entry.memo.clone(),
             };
-            // todo: batch save
-            // fail::fail_point!("finalize-tx-save-misc-error", |_| {
-            //     Err(ClientError::UnexpectedError(
-            //         "failed to save misc".to_string(),
-            //     ))
-            // });
-            self.store_vault_server
-                .save_misc(key, memo_entry.topic, &payment_memo.encrypt(key.pubkey))
-                .await?;
+            let entry = SaveDataEntry {
+                topic: memo_entry.topic.clone(),
+                pubkey: key.pubkey,
+                data: payment_memo.encrypt(key.pubkey, Some(key))?,
+            };
+            misc_entries.push(entry);
         }
+        self.store_vault_server
+            .save_data_batch(key, &misc_entries)
+            .await?;
 
         let result = TxResult {
             tx_tree_root: proposal.tx_tree_root,
-            transfer_uuids,
-            withdrawal_uuids,
+            transfer_digests,
+            withdrawal_digests,
             transfer_data_vec,
             withdrawal_data_vec,
         };

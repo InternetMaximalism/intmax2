@@ -112,7 +112,7 @@ impl Display for ClaimStatus {
 }
 
 #[async_trait(?Send)]
-pub trait WithdrawalServerClientInterface {
+pub trait WithdrawalServerClientInterface: Sync + Send {
     async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError>;
 
     async fn get_claim_fee(&self) -> Result<ClaimFeeInfo, ServerError>;
@@ -122,7 +122,7 @@ pub trait WithdrawalServerClientInterface {
         key: KeySet,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
-        fee_transfer_uuids: &[String],
+        fee_transfer_digests: &[Bytes32],
     ) -> Result<(), ServerError>;
 
     async fn request_claim(
@@ -130,7 +130,7 @@ pub trait WithdrawalServerClientInterface {
         key: KeySet,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
-        fee_transfer_uuids: &[String],
+        fee_transfer_digests: &[Bytes32],
     ) -> Result<(), ServerError>;
 
     async fn get_withdrawal_info(&self, key: KeySet) -> Result<Vec<WithdrawalInfo>, ServerError>;

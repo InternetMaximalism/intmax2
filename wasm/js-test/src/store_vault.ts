@@ -17,7 +17,7 @@ async function main() {
     const data = await fetch_encrypted_data(config, auth, cursor);
     console.log(`data.length: ${data.length}`);
     for (const d of data) {
-        console.log(`type:${d.data_type} timestamp:${d.timestamp} uuid: ${d.uuid} data.length: ${d.data.length}`);
+        console.log(`type:${d.data_type} timestamp:${d.timestamp} uuid: ${d.digest} data.length: ${d.data.length}`);
     }
 }
 

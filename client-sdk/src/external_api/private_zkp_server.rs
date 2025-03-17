@@ -318,17 +318,15 @@ impl PrivateZKPServerClient {
                     )));
                 }
 
-                let result = response.result.unwrap();
                 let proof_with_result =
-                    ProofResultWithError::decrypt(&result, key).map_err(|e| {
-                        ServerError::DeserializationError(format!(
-                            "Failed to decrypt proof result (request_id={}, pubkey={})): {:?} ({}s)",
-                            request_id,
-                            key.pubkey.to_hex(),
-                            e,
-                            start.elapsed().as_secs()
-                        ))
-                    })?;
+                    ProofResultWithError::decrypt(key, None, &response.result.unwrap()).map_err(
+                        |e| {
+                            ServerError::DeserializationError(format!(
+                                "Failed to decrypt proof result: {:?}",
+                                e
+                            ))
+                        },
+                    )?;
                 log::info!(
                     "Success proof generation (request_id={}, pubkey={}) {} ({}s)",
                     request_id,

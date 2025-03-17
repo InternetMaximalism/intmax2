@@ -10,6 +10,7 @@ pub struct EnvVar {
     // client settings
     pub indexer_base_url: String,
     pub store_vault_server_base_url: String,
+    pub use_s3: Option<bool>,
     pub validity_prover_base_url: String,
     pub balance_prover_base_url: String,
     pub use_private_zkp_server: Option<bool>,

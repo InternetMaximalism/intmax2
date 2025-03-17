@@ -85,7 +85,7 @@ pub async fn fetch_mining_info(
                 // skip deposits that do not meet the mining criteria
                 return false;
             }
-            if claim_status.processed_uuids.contains(&meta.meta.uuid) {
+            if claim_status.processed_digests.contains(&meta.meta.digest) {
                 // skip deposits that are already claimed
                 return false;
             }

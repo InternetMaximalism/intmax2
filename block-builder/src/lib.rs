@@ -16,6 +16,7 @@ pub struct EnvVar {
     pub block_builder_registry_contract_address: Address,
 
     pub store_vault_server_base_url: String,
+    pub use_s3: Option<bool>,
     pub validity_prover_base_url: String,
 
     pub block_builder_private_key: H256,

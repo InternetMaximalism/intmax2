@@ -1,23 +1,14 @@
 use thiserror::Error;
 
-/// An error that occurs while reading or writing to an ECIES stream.
-#[derive(Debug, Error)]
-pub enum ECIESError {
-    /// Error when checking the HMAC tag against the tag on the message being decrypted
-    #[error("tag check failure in read_header")]
-    TagCheckDecryptFailed,
-    /// The encrypted data is not large enough for all fields
-    #[error("encrypted data is not large enough for all fields")]
-    EncryptedDataTooSmall,
-}
+use super::bls::versioned_encryption::VersionedBlsEncryptionError;
 
 #[derive(Debug, Error)]
 pub enum BlsEncryptionError {
+    #[error("{0}")]
+    VersionedBlsEncryptionError(#[from] VersionedBlsEncryptionError),
+
     #[error("Deserialization error: {0}")]
     DeserializeError(#[from] bincode::Error),
-
-    #[error("Decryption error: {0}")]
-    DecryptionError(String),
 }
 
 #[derive(Debug, Error)]

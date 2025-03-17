@@ -1,11 +1,11 @@
-use crate::app::store_vault_server::StoreVaultServer;
+use crate::app::s3_store_vault::S3StoreVault;
 
 pub struct State {
-    pub store_vault_server: StoreVaultServer,
+    pub s3_store_vault: S3StoreVault,
 }
 
 impl State {
-    pub fn new(store_vault_server: StoreVaultServer) -> Self {
-        Self { store_vault_server }
+    pub fn new(s3_store_vault: S3StoreVault) -> Self {
+        Self { s3_store_vault }
     }
 }

@@ -1,6 +1,7 @@
 use intmax2_interfaces::{
     api::{
-        block_builder::interface::Fee, store_vault_server::interface::StoreVaultClientInterface,
+        block_builder::interface::Fee,
+        store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
@@ -14,8 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
-        misc::{get_topic, payment_memo::PaymentMemo},
-        receive_validation::validate_receive,
+        misc::payment_memo::PaymentMemo, receive_validation::validate_receive,
         sync::utils::generate_salt,
     },
     external_api::contract::withdrawal_contract::WithdrawalContract,
@@ -23,7 +23,7 @@ use crate::{
 
 use super::{
     client::PaymentMemoEntry,
-    misc::payment_memo::get_all_payment_memos,
+    misc::payment_memo::{get_all_payment_memos, payment_memo_topic},
     receive_validation::ReceiveValidationError,
     sync::{error::SyncError, utils::quote_withdrawal_claim_fee},
 };
@@ -116,7 +116,7 @@ pub fn generate_fee_payment_memo(
         let withdrawal_fee_memo = WithdrawalFeeMemo { fee };
         let payment_memo = PaymentMemoEntry {
             transfer_index: withdrawal_fee_transfer_index,
-            topic: get_topic(WITHDRAWAL_FEE_MEMO),
+            topic: payment_memo_topic(WITHDRAWAL_FEE_MEMO),
             memo: serde_json::to_string(&withdrawal_fee_memo).unwrap(),
         };
         payment_memos.push(payment_memo);
@@ -136,7 +136,7 @@ pub fn generate_fee_payment_memo(
         let claim_fee_memo = ClaimFeeMemo { fee };
         let payment_memo = PaymentMemoEntry {
             transfer_index: claim_fee_transfer_index,
-            topic: get_topic(CLAIM_FEE_MEMO),
+            topic: payment_memo_topic(CLAIM_FEE_MEMO),
             memo: serde_json::to_string(&claim_fee_memo).unwrap(),
         };
         payment_memos.push(payment_memo);
@@ -225,7 +225,7 @@ pub async fn get_unused_payments(
         .filter(|memo| {
             !used_memos
                 .iter()
-                .any(|used_memo| used_memo.meta.uuid == memo.meta.uuid)
+                .any(|used_memo| used_memo.meta.digest == memo.meta.digest)
         })
         .collect::<Vec<PaymentMemo>>();
     Ok(unused_memos)
@@ -238,7 +238,7 @@ pub async fn consume_payment(
     payment_memo: &PaymentMemo,
     reason: &str,
 ) -> Result<(), SyncError> {
-    let topic = get_topic(USED_OR_INVALID_MEMO);
+    let topic = payment_memo_topic(USED_OR_INVALID_MEMO);
     let memo = UsedOrInvalidMemo {
         reason: reason.to_string(),
     };
@@ -247,9 +247,12 @@ pub async fn consume_payment(
         transfer_data: payment_memo.transfer_data.clone(),
         memo: serde_json::to_string(&memo).unwrap(),
     };
-    store_vault_server
-        .save_misc(key, topic, &payment_memo.encrypt(key.pubkey))
-        .await?;
+    let entry = SaveDataEntry {
+        topic,
+        pubkey: key.pubkey,
+        data: payment_memo.encrypt(key.pubkey, Some(key))?,
+    };
+    store_vault_server.save_data_batch(key, &[entry]).await?;
     Ok(())
 }
 

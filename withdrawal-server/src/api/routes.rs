@@ -46,7 +46,7 @@ pub async fn request_withdrawal(
             pubkey,
             &request.inner.single_withdrawal_proof,
             request.inner.fee_token_index,
-            &request.inner.fee_transfer_uuids,
+            &request.inner.fee_transfer_digests,
         )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -69,7 +69,7 @@ pub async fn request_claim(
             pubkey,
             &request.inner.single_claim_proof,
             request.inner.fee_token_index,
-            &request.inner.fee_transfer_uuids,
+            &request.inner.fee_transfer_digests,
         )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;

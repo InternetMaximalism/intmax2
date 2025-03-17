@@ -2,18 +2,15 @@ use std::collections::HashMap;
 
 use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
 use ethers::core::rand;
-use intmax2_client_sdk::{
-    client::strategy::common::fetch_sender_proof_set,
-    external_api::store_vault_server::StoreVaultServerClient,
-};
+use intmax2_client_sdk::client::strategy::common::fetch_sender_proof_set;
 use intmax2_interfaces::{
     api::{
         block_builder::interface::{Fee, FeeProof},
-        store_vault_server::interface::{DataType, SaveDataEntry, StoreVaultClientInterface},
+        store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
-        encryption::BlsEncryption, sender_proof_set::SenderProofSet, transfer_data::TransferData,
-        validation::Validation,
+        data_type::DataType, encryption::BlsEncryption, sender_proof_set::SenderProofSet,
+        transfer_data::TransferData, validation::Validation,
     },
 };
 use intmax2_zkp::{
@@ -32,7 +29,7 @@ use uuid::Uuid;
 
 /// Validate fee proof
 pub async fn validate_fee_proof(
-    store_vault_server_client: &StoreVaultServerClient,
+    store_vault_server_client: &dyn StoreVaultClientInterface,
     beneficiary_pubkey: Option<U256>,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
@@ -239,7 +236,7 @@ pub struct FeeCollection {
 
 /// Collect fee from the senders
 pub async fn collect_fee(
-    store_vault_server_client: &StoreVaultServerClient,
+    store_vault_server_client: &dyn StoreVaultClientInterface,
     beneficiary_pubkey: U256,
     fee_collection: &FeeCollection,
 ) -> Result<Vec<BlockPostTask>, FeeError> {
@@ -346,16 +343,17 @@ pub async fn collect_fee(
     }
 
     // save transfer data to the store vault server
-    let entries = transfer_data_vec
-        .iter()
-        .map(|transfer_data| SaveDataEntry {
-            data_type: DataType::Transfer,
+    let mut entries = Vec::new();
+    for transfer_data in transfer_data_vec {
+        let entry = SaveDataEntry {
+            topic: DataType::Transfer.to_topic(),
             pubkey: beneficiary_pubkey,
-            encrypted_data: transfer_data.encrypt(beneficiary_pubkey),
-        })
-        .collect::<Vec<_>>();
+            data: transfer_data.encrypt(beneficiary_pubkey, None)?,
+        };
+        entries.push(entry);
+    }
     let dummy_key = KeySet::rand(&mut rand::thread_rng());
-    let _uuids = store_vault_server_client
+    let _digests = store_vault_server_client
         .save_data_batch(dummy_key, &entries)
         .await?;
     Ok(block_post_tasks)

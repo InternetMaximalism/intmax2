@@ -12,6 +12,7 @@ pub struct Env {
     pub database_timeout: u64,
 
     pub store_vault_server_base_url: String,
+    pub use_s3: Option<bool>,
     pub validity_prover_base_url: String,
 
     pub l2_rpc_url: String,

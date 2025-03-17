@@ -52,7 +52,7 @@ pub struct BlockBuilderFeeInfo {
 }
 
 #[async_trait(?Send)]
-pub trait BlockBuilderClientInterface {
+pub trait BlockBuilderClientInterface: Sync + Send {
     async fn get_fee_info(
         &self,
         block_builder_url: &str,

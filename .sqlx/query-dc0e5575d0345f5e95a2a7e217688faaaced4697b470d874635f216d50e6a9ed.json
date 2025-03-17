@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT timestamp, digest\n            FROM s3_historical_data\n            WHERE topic = $1 AND pubkey = $2 AND digest = ANY($3)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "timestamp",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "digest",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "dc0e5575d0345f5e95a2a7e217688faaaced4697b470d874635f216d50e6a9ed"
+}

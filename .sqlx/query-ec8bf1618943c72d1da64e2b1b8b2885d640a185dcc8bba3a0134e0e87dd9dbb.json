@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT digest, timestamp\n                    FROM s3_historical_data\n                    WHERE topic = $1\n                    AND pubkey = $2\n                    AND (timestamp > $3 OR (timestamp = $3 AND digest > $4))\n                    ORDER BY timestamp ASC, digest ASC\n                    LIMIT $5\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "timestamp",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ec8bf1618943c72d1da64e2b1b8b2885d640a185dcc8bba3a0134e0e87dd9dbb"
+}

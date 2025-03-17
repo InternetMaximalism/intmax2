@@ -12,13 +12,10 @@ use crate::{
 };
 use intmax2_client_sdk::external_api::store_vault_server::generate_auth_for_get_data_sequence;
 use intmax2_interfaces::{
-    api::store_vault_server::{
-        interface::DataType,
-        types::{CursorOrder, MetaDataCursor},
-    },
+    api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{
-        deposit_data::DepositData, encryption::BlsEncryption as _, transfer_data::TransferData,
-        tx_data::TxData,
+        data_type::DataType, deposit_data::DepositData, encryption::BlsEncryption as _,
+        transfer_data::TransferData, tx_data::TxData,
     },
     utils::signature::Auth,
 };
@@ -37,7 +34,7 @@ pub async fn decrypt_deposit_data(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let deposit_data =
-        DepositData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
+        DepositData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{}", e)))?;
     Ok(deposit_data.into())
 }
 
@@ -50,7 +47,7 @@ pub async fn decrypt_transfer_data(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let transfer_data =
-        TransferData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
+        TransferData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{}", e)))?;
     Ok(transfer_data.into())
 }
 
@@ -59,7 +56,8 @@ pub async fn decrypt_transfer_data(
 pub async fn decrypt_tx_data(private_key: &str, data: &[u8]) -> Result<JsTxData, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
-    let tx_data = TxData::decrypt(data, key).map_err(|e| JsError::new(&format!("{}", e)))?;
+    let tx_data = TxData::decrypt(key, Some(key.pubkey), data)
+        .map_err(|e| JsError::new(&format!("{}", e)))?;
     Ok(tx_data.into())
 }
 
@@ -87,7 +85,7 @@ pub async fn fetch_encrypted_data(
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
     let mut data_array = Vec::new();
     let (deposit_data, _) = sv
-        .get_data_sequence_with_auth(DataType::Deposit, &cursor, &auth)
+        .get_data_sequence_with_auth(&DataType::Deposit.to_topic(), &cursor, &auth)
         .await?;
     data_array.extend(
         deposit_data
@@ -95,7 +93,7 @@ pub async fn fetch_encrypted_data(
             .map(|data| JsEncryptedData::new(DataType::Deposit, data)),
     );
     let (transfer_data, _) = sv
-        .get_data_sequence_with_auth(DataType::Transfer, &cursor, &auth)
+        .get_data_sequence_with_auth(&DataType::Transfer.to_topic(), &cursor, &auth)
         .await?;
     data_array.extend(
         transfer_data
@@ -103,14 +101,14 @@ pub async fn fetch_encrypted_data(
             .map(|data| JsEncryptedData::new(DataType::Transfer, data)),
     );
     let (tx_data, _) = sv
-        .get_data_sequence_with_auth(DataType::Tx, &cursor, &auth)
+        .get_data_sequence_with_auth(&DataType::Tx.to_topic(), &cursor, &auth)
         .await?;
     data_array.extend(
         tx_data
             .into_iter()
             .map(|data| JsEncryptedData::new(DataType::Tx, data)),
     );
-    data_array.sort_by_key(|data| (data.timestamp, data.uuid.clone()));
+    data_array.sort_by_key(|data| (data.timestamp, data.digest.clone()));
     if cursor.order == CursorOrder::Desc {
         data_array.reverse();
     }

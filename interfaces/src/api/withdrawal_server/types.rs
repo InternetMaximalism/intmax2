@@ -1,4 +1,4 @@
-use intmax2_zkp::ethereum_types::address::Address;
+use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32};
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -25,7 +25,7 @@ fn content_prefix(path: &str) -> Vec<u8> {
 pub struct RequestWithdrawalRequest {
     pub single_withdrawal_proof: ProofWithPublicInputs<F, C, D>,
     pub fee_token_index: Option<u32>,
-    pub fee_transfer_uuids: Vec<String>,
+    pub fee_transfer_digests: Vec<Bytes32>,
 }
 
 impl Signable for RequestWithdrawalRequest {
@@ -35,7 +35,7 @@ impl Signable for RequestWithdrawalRequest {
             bincode::serialize(&(
                 self.single_withdrawal_proof.clone(),
                 self.fee_token_index,
-                self.fee_transfer_uuids.clone(),
+                self.fee_transfer_digests.clone(),
             ))
             .unwrap(),
         ]
@@ -48,7 +48,7 @@ impl Signable for RequestWithdrawalRequest {
 pub struct RequestClaimRequest {
     pub single_claim_proof: ProofWithPublicInputs<F, C, D>,
     pub fee_token_index: Option<u32>,
-    pub fee_transfer_uuids: Vec<String>,
+    pub fee_transfer_digests: Vec<Bytes32>,
 }
 
 impl Signable for RequestClaimRequest {
@@ -58,7 +58,7 @@ impl Signable for RequestClaimRequest {
             bincode::serialize(&(
                 self.single_claim_proof.clone(),
                 self.fee_token_index,
-                self.fee_transfer_uuids.clone(),
+                self.fee_transfer_digests.clone(),
             ))
             .unwrap(),
         ]

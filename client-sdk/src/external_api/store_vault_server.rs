@@ -3,14 +3,12 @@ use intmax2_interfaces::{
     api::{
         error::ServerError,
         store_vault_server::{
-            interface::{DataType, SaveDataEntry, StoreVaultClientInterface, MAX_BATCH_SIZE},
+            interface::{SaveDataEntry, StoreVaultClientInterface, MAX_BATCH_SIZE},
             types::{
                 CursorOrder, DataWithMetaData, GetDataBatchRequest, GetDataBatchResponse,
-                GetDataSequenceRequest, GetDataSequenceResponse, GetMiscSequenceRequest,
-                GetMiscSequenceResponse, GetSenderProofSetRequest, GetSenderProofSetResponse,
-                GetUserDataRequest, GetUserDataResponse, MetaDataCursor, MetaDataCursorResponse,
-                SaveDataBatchRequest, SaveDataBatchResponse, SaveMiscRequest, SaveMiscResponse,
-                SaveSenderProofSetRequest, SaveUserDataRequest,
+                GetDataSequenceRequest, GetDataSequenceResponse, GetSnapshotRequest,
+                GetSnapshotResponse, MetaDataCursor, MetaDataCursorResponse, SaveDataBatchRequest,
+                SaveDataBatchResponse, SaveSnapshotRequest,
             },
         },
     },
@@ -38,62 +36,38 @@ impl StoreVaultServerClient {
 
 #[async_trait(?Send)]
 impl StoreVaultClientInterface for StoreVaultServerClient {
-    async fn save_user_data(
+    async fn save_snapshot(
         &self,
         key: KeySet,
+        topic: &str,
         prev_digest: Option<Bytes32>,
-        encrypted_data: &[u8],
+        data: &[u8],
     ) -> Result<(), ServerError> {
-        let request = SaveUserDataRequest {
-            data: encrypted_data.to_vec(),
+        let request = SaveSnapshotRequest {
+            data: data.to_vec(),
+            pubkey: key.pubkey,
+            topic: topic.to_string(),
             prev_digest,
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
         post_request::<_, ()>(
             &self.base_url,
-            "/store-vault-server/save-user-data",
+            "/store-vault-server/save-snapshot",
             Some(&request_with_auth),
         )
         .await?;
         Ok(())
     }
 
-    async fn get_user_data(&self, key: KeySet) -> Result<Option<Vec<u8>>, ServerError> {
-        let request = GetUserDataRequest;
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        let response: GetUserDataResponse = post_request(
-            &self.base_url,
-            "/store-vault-server/get-user-data",
-            Some(&request_with_auth),
-        )
-        .await?;
-        Ok(response.data)
-    }
-
-    async fn save_sender_proof_set(
-        &self,
-        ephemeral_key: KeySet,
-        encrypted_data: &[u8],
-    ) -> Result<(), ServerError> {
-        let request = SaveSenderProofSetRequest {
-            data: encrypted_data.to_vec(),
+    async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
+        let request = GetSnapshotRequest {
+            topic: topic.to_string(),
+            pubkey: key.pubkey,
         };
-        let request_with_auth = request.sign(ephemeral_key, TIME_TO_EXPIRY);
-        post_request::<_, ()>(
+        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let response: GetSnapshotResponse = post_request(
             &self.base_url,
-            "/store-vault-server/save-sender-proof-set",
-            Some(&request_with_auth),
-        )
-        .await?;
-        Ok(())
-    }
-
-    async fn get_sender_proof_set(&self, ephemeral_key: KeySet) -> Result<Vec<u8>, ServerError> {
-        let request = GetSenderProofSetRequest;
-        let request_with_auth = request.sign(ephemeral_key, TIME_TO_EXPIRY);
-        let response: GetSenderProofSetResponse = post_request(
-            &self.base_url,
-            "/store-vault-server/get-sender-proof-set",
+            "/store-vault-server/get-snapshot",
             Some(&request_with_auth),
         )
         .await?;
@@ -104,8 +78,8 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         &self,
         key: KeySet,
         entries: &[SaveDataEntry],
-    ) -> Result<Vec<String>, ServerError> {
-        let mut all_uuids = vec![];
+    ) -> Result<Vec<Bytes32>, ServerError> {
+        let mut all_digests = vec![];
 
         for chunk in entries.chunks(MAX_BATCH_SIZE) {
             let request = SaveDataBatchRequest {
@@ -118,23 +92,23 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
                 Some(&request_with_auth),
             )
             .await?;
-            all_uuids.extend(response.uuids);
+            all_digests.extend(response.digests);
         }
-
-        Ok(all_uuids)
+        Ok(all_digests)
     }
 
     async fn get_data_batch(
         &self,
         key: KeySet,
-        data_type: DataType,
-        uuids: &[String],
+        topic: &str,
+        digests: &[Bytes32],
     ) -> Result<Vec<DataWithMetaData>, ServerError> {
         let mut all_data = vec![];
-        for chunk in uuids.chunks(MAX_BATCH_SIZE) {
+        for chunk in digests.chunks(MAX_BATCH_SIZE) {
             let request = GetDataBatchRequest {
-                data_type,
-                uuids: chunk.to_vec(),
+                topic: topic.to_string(),
+                digests: chunk.to_vec(),
+                pubkey: key.pubkey,
             };
             let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
             let response: GetDataBatchResponse = post_request(
@@ -151,52 +125,19 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
     async fn get_data_sequence(
         &self,
         key: KeySet,
-        data_type: DataType,
+        topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         let auth = generate_auth_for_get_data_sequence(key);
         let (data, cursor) = self
-            .get_data_sequence_with_auth(data_type, cursor, &auth)
-            .await?;
-        Ok((data, cursor))
-    }
-
-    async fn save_misc(
-        &self,
-        key: KeySet,
-        topic: Bytes32,
-        encrypted_data: &[u8],
-    ) -> Result<String, ServerError> {
-        let request = SaveMiscRequest {
-            data: encrypted_data.to_vec(),
-            topic,
-        };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        let response: SaveMiscResponse = post_request(
-            &self.base_url,
-            "/store-vault-server/save-misc",
-            Some(&request_with_auth),
-        )
-        .await?;
-        Ok(response.uuid)
-    }
-
-    async fn get_misc_sequence(
-        &self,
-        key: KeySet,
-        topic: Bytes32,
-        meta_cursor: &MetaDataCursor,
-    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        let auth = generate_auth_for_get_misc_sequence(key, topic);
-        let (data, cursor) = self
-            .get_misc_sequence_native_with_auth(topic, meta_cursor, &auth)
+            .get_data_sequence_with_auth(topic, cursor, &auth)
             .await?;
         Ok((data, cursor))
     }
 
     async fn get_data_sequence_with_auth(
         &self,
-        data_type: DataType,
+        topic: &str,
         cursor: &MetaDataCursor,
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
@@ -211,7 +152,8 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             .map_err(|e| ServerError::InvalidAuth(e.to_string()))?;
         let request_with_auth = WithAuth {
             inner: GetDataSequenceRequest {
-                data_type,
+                topic: topic.to_string(),
+                pubkey: auth.pubkey,
                 cursor: cursor.clone(),
             },
             auth: auth.clone(),
@@ -224,41 +166,13 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         .await?;
         Ok((response.data, response.cursor_response))
     }
-
-    async fn get_misc_sequence_native_with_auth(
-        &self,
-        topic: Bytes32,
-        cursor: &MetaDataCursor,
-        auth: &Auth,
-    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        if let Some(limit) = cursor.limit {
-            if limit > MAX_BATCH_SIZE as u32 {
-                return Err(ServerError::InvalidRequest(
-                    "Limit exceeds max batch size".to_string(),
-                ));
-            }
-        }
-        let request_with_auth = WithAuth {
-            inner: GetMiscSequenceRequest {
-                topic,
-                cursor: cursor.clone(),
-            },
-            auth: auth.clone(),
-        };
-        let response: GetMiscSequenceResponse = post_request(
-            &self.base_url,
-            "/store-vault-server/get-misc-sequence",
-            Some(&request_with_auth),
-        )
-        .await?;
-        Ok((response.data, response.cursor_response))
-    }
 }
 
 impl StoreVaultServerClient {
     fn verify_auth_for_get_data_sequence(&self, auth: &Auth) -> anyhow::Result<()> {
         let dummy_request = GetDataSequenceRequest {
-            data_type: DataType::Deposit,
+            topic: "dummy".to_string(),
+            pubkey: auth.pubkey,
             cursor: MetaDataCursor {
                 cursor: None,
                 order: CursorOrder::Asc,
@@ -272,21 +186,8 @@ impl StoreVaultServerClient {
 pub fn generate_auth_for_get_data_sequence(key: KeySet) -> Auth {
     // because auth is not dependent on the datatype and cursor, we can use a dummy request
     let dummy_request = GetDataSequenceRequest {
-        data_type: DataType::Deposit,
-        cursor: MetaDataCursor {
-            cursor: None,
-            order: CursorOrder::Asc,
-            limit: None,
-        },
-    };
-    let dummy_request_with_auth = dummy_request.sign(key, TIME_TO_EXPIRY_READONLY);
-    dummy_request_with_auth.auth
-}
-
-pub fn generate_auth_for_get_misc_sequence(key: KeySet, topic: Bytes32) -> Auth {
-    // because auth is not dependent on the topic and cursor, we can use a dummy request
-    let dummy_request = GetMiscSequenceRequest {
-        topic,
+        topic: "dummy".to_string(),
+        pubkey: key.pubkey,
         cursor: MetaDataCursor {
             cursor: None,
             order: CursorOrder::Asc,

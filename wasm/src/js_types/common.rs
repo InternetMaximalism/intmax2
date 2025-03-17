@@ -8,7 +8,7 @@ use intmax2_zkp::{
         block::Block, claim::Claim, generic_address::GenericAddress, transfer::Transfer, tx::Tx,
         withdrawal::get_withdrawal_nullifier,
     },
-    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -238,24 +238,28 @@ impl From<Claim> for JsClaim {
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsMetaData {
     pub timestamp: u64,
-    pub uuid: String,
+    pub digest: String,
 }
 
 impl From<MetaData> for JsMetaData {
     fn from(meta_data: MetaData) -> Self {
         Self {
             timestamp: meta_data.timestamp,
-            uuid: meta_data.uuid.to_string(),
+            digest: meta_data.digest.to_hex(),
         }
     }
 }
 
-impl From<JsMetaData> for MetaData {
-    fn from(js_meta_data: JsMetaData) -> Self {
-        Self {
+impl TryFrom<JsMetaData> for MetaData {
+    type Error = JsError;
+
+    fn try_from(js_meta_data: JsMetaData) -> Result<MetaData, Self::Error> {
+        let digest = Bytes32::from_hex(&js_meta_data.digest)
+            .map_err(|_| JsError::new("Failed to parse digest"))?;
+        Ok(MetaData {
             timestamp: js_meta_data.timestamp,
-            uuid: js_meta_data.uuid,
-        }
+            digest,
+        })
     }
 }
 

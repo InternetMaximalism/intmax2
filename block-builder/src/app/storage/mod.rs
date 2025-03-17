@@ -1,4 +1,4 @@
-use intmax2_client_sdk::external_api::store_vault_server::StoreVaultServerClient;
+use intmax2_interfaces::api::store_vault_server::interface::StoreVaultClientInterface;
 use intmax2_zkp::common::block_builder::{BlockProposal, UserSignature};
 
 use super::{block_post::BlockPostTask, types::TxRequest};
@@ -49,7 +49,7 @@ pub trait Storage: Sync + Send {
     /// Process fee collection tasks
     async fn process_fee_collection(
         &self,
-        store_vault_server_client: &StoreVaultServerClient,
+        store_vault_server_client: &dyn StoreVaultClientInterface,
     ) -> Result<(), error::StorageError>;
 
     async fn enqueue_empty_block(&self) -> Result<(), error::StorageError>;

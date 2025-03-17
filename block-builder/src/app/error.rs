@@ -1,7 +1,10 @@
 use intmax2_client_sdk::{
     client::strategy::error::StrategyError, external_api::contract::error::BlockchainError,
 };
-use intmax2_interfaces::{api::error::ServerError, data::proof_compression::ProofCompressionError};
+use intmax2_interfaces::{
+    api::error::ServerError,
+    data::{encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError},
+};
 use intmax2_zkp::ethereum_types::u256::U256;
 
 use super::storage::error::StorageError;
@@ -73,6 +76,9 @@ pub enum FeeError {
 
     #[error("Server error: {0}")]
     ServerError(#[from] ServerError),
+
+    #[error("Encryption error: {0}")]
+    EncryptionError(#[from] BlsEncryptionError),
 
     #[error("Fee verification error: {0}")]
     FeeVerificationError(String),

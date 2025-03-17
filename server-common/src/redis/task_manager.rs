@@ -1,31 +1,42 @@
 // Data Structure in Redis:
 //
-// 1. Tasks Queue:
+// 1. Task Hash:
 //    - Key: {prefix}:tasks
-//    - Type: Sorted Set
-//    - Members: task_json (serialized Task objects)
-//    - Scores: task_id
+//    - Type: HSET
+//    - Field: {task_id}
+//    - Value: task_json (serialized Task object)
 //    - TTL: {ttl} seconds
 //
-// 2. Worker Assigned Tasks:
-//    - Key: {prefix}:worker:{worker_id}
-//    - Type: Sorted Set
-//    - Members: task_json (serialized Task objects)
-//    - Scores: task_id
+// 2. Pending Tasks:
+//    - Key: {prefix}:tasks:pending
+//    - Type: Set
+//    - Members: {task_id}
 //    - TTL: {ttl} seconds
 //
-// 3. Task Results:
-//    - Key: {prefix}:result:{task_id}
-//    - Type: String
+// 3. Running Tasks:
+//   - Key: {prefix}:tasks:running
+//   - Type: Set
+//   - Members: {task_id}
+//   - TTL: {ttl} seconds
+//
+// 4. Completed Tasks:
+//    - Key: {prefix}:tasks:completed
+//    - Type: Set
+//    - Members: {task_id}
+//    - TTL: {ttl} seconds
+//
+// 5. Results Hash:
+//    - Key: {prefix}:results
+//    - Type: HSET
+//    - Field: {task_id}
 //    - Value: result_json (serialized TaskResult object)
 //    - TTL: {ttl} seconds
 //
-// 4. Worker Heartbeats:
-//    - Key: {prefix}:heartbeat:{worker_id}
+// 6. Worker Heartbeats:
+//    - Key: {prefix}:heartbeat:{task_id}
 //    - Type: String
-//    - Value: "" (empty string)
+//    - Value: {worker_id}
 //    - TTL: {heartbeat_ttl} seconds
-//
 
 use redis::{aio::Connection, AsyncCommands as _, Client};
 use serde::{de::DeserializeOwned, Serialize};
@@ -40,12 +51,19 @@ pub enum TaskManagerError {
     SerdeError(#[from] serde_json::Error),
 }
 
-#[derive(Debug)]
 pub struct TaskManager<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> {
     prefix: String,
     ttl: usize,
     heartbeat_ttl: usize,
     client: Client,
+
+    // keys
+    tasks_key: String,
+    pending_key: String,
+    running_key: String,
+    completed_key: String,
+    results_key: String,
+    heartbeat_prefix: String,
     _phantom: std::marker::PhantomData<(T, R)>,
 }
 
@@ -54,14 +72,20 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
         redis_url: &str,
         prefix: &str,
         ttl: usize,
-        heartbeat_ttl: usize,
+        heartbeat_interval: usize,
     ) -> Result<TaskManager<T, R>> {
         let client = Client::open(redis_url)?;
         Ok(TaskManager {
             prefix: prefix.to_owned(),
             ttl,
-            heartbeat_ttl,
+            heartbeat_ttl: heartbeat_interval * 3,
             client,
+            tasks_key: format!("{}:tasks", prefix),
+            pending_key: format!("{}:tasks:pending", prefix),
+            running_key: format!("{}:tasks:running", prefix),
+            completed_key: format!("{}:tasks:completed", prefix),
+            results_key: format!("{}:results", prefix),
+            heartbeat_prefix: format!("{}:heartbeat", prefix),
             _phantom: std::marker::PhantomData,
         })
     }
@@ -81,141 +105,159 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
 
     pub async fn add_task(&self, task_id: u32, task: &T) -> Result<()> {
         let mut conn = self.get_connection().await?;
+        let task_json = serde_json::to_string(task)?;
 
-        let key = format!("{}:tasks", self.prefix);
-        let member = serde_json::to_string(task)?;
-        conn.zadd::<_, _, _, ()>(&key, member, task_id as f64)
+        // Define Lua script for atomic task addition
+        let script = redis::Script::new(
+            r#"
+            -- Check if task already exists
+            local exists = redis.call('HEXISTS', KEYS[1], ARGV[1])
+            
+            -- If task doesn't exist, add it and update related keys
+            if exists == 0 then
+                redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+                redis.call('SADD', KEYS[2], ARGV[1])
+                redis.call('EXPIRE', KEYS[1], ARGV[3])
+                redis.call('EXPIRE', KEYS[2], ARGV[3])
+                return 0
+            else
+                -- Task already exists
+                return 1
+            end
+        "#,
+        );
+
+        let exists: i32 = script
+            .key(&self.tasks_key)
+            .key(&self.pending_key)
+            .arg(task_id)
+            .arg(task_json)
+            .arg(self.ttl)
+            .invoke_async(&mut conn)
             .await?;
-
-        // set expiration
-        conn.expire::<_, ()>(&key, self.ttl).await?;
+        if exists == 1 {
+            log::warn!("task {} already exists", task_id);
+        }
 
         Ok(())
+    }
+
+    pub async fn check_task_exists(&self, task_id: u32) -> Result<bool> {
+        let mut conn = self.get_connection().await?;
+        let exists: bool = conn.hexists(&self.tasks_key, task_id).await?;
+        Ok(exists)
     }
 
     pub async fn get_result(&self, task_id: u32) -> Result<Option<R>> {
         let mut conn = self.get_connection().await?;
-        let key = format!("{}:result:{}", self.prefix, task_id);
-
-        let exists: bool = conn.exists(&key).await?;
-        if !exists {
-            return Ok(None);
-        }
-
-        let result_json: String = conn.get(&key).await?;
-        Ok(Some(serde_json::from_str(&result_json)?))
-    }
-
-    pub async fn remove_result(&self, task_id: u32) -> Result<()> {
-        let mut conn = self.get_connection().await?;
-        let key = format!("{}:result:{}", self.prefix, task_id);
-        conn.del::<_, ()>(key).await?;
-        Ok(())
-    }
-
-    // assign task to worker if available
-    pub async fn assign_task(&self, worker_id: &str) -> Result<Option<(u32, T)>> {
-        let mut conn = self.get_connection().await?;
-
-        let task_key = format!("{}:tasks", self.prefix);
-
-        // get task from sorted set
-        let task: Option<(String, f64)> = conn
-            .zpopmin::<_, Vec<(String, f64)>>(&task_key, 1)
-            .await?
-            .into_iter()
-            .next();
-
-        if let Some((task_json, task_id)) = task {
-            // add task to worker's list
-            let task: T = serde_json::from_str(&task_json)?;
-            let key = format!("{}:worker:{}", self.prefix, worker_id);
-            let member = serde_json::to_string(&task)?;
-            conn.zadd::<_, _, _, ()>(&key, member, task_id).await?;
-
-            // set expiration
-            conn.expire::<_, ()>(&key, self.ttl).await?;
-
-            // remove task from tasks list
-            conn.zrem::<_, _, ()>(&task_key, task_json).await?;
-
-            Ok(Some((task_id as u32, task)))
+        let result_json: Option<String> = conn.hget(&self.results_key, task_id).await?;
+        if let Some(result_json) = result_json {
+            let result: R = serde_json::from_str(&result_json)?;
+            Ok(Some(result))
         } else {
             Ok(None)
         }
     }
 
-    pub async fn complete_task(
-        &self,
-        worker_id: &str,
-        task_id: u32,
-        task: &T,
-        result: &R,
-    ) -> Result<()> {
+    pub async fn remove_old_tasks(&self, to_task_id: u32) -> Result<()> {
         let mut conn = self.get_connection().await?;
-
-        // remove task from worker's list
-        let worker_key = format!("{}:worker:{}", self.prefix, worker_id);
-        let task_json = serde_json::to_string(task)?;
-        conn.zrem::<_, _, ()>(worker_key, task_json).await?;
-
-        // add result
-        let result_key = format!("{}:result:{}", self.prefix, task_id);
-        let result_json = serde_json::to_string(result)?;
-        conn.set::<_, _, ()>(&result_key, result_json).await?;
-
-        // set expiration
-        conn.expire::<_, ()>(&result_key, self.ttl).await?;
-
-        Ok(())
-    }
-
-    pub async fn submit_heartbeat(&self, worker_id: &str) -> Result<()> {
-        let mut conn = self.get_connection().await?;
-
-        let key = format!("{}:heartbeat:{}", self.prefix, worker_id);
-        conn.set::<_, _, ()>(&key, "").await?;
-
-        // set expiration
-        conn.expire::<_, ()>(&key, self.heartbeat_ttl).await?;
-
-        Ok(())
-    }
-
-    // remove inactive workers and re-queue their tasks
-    pub async fn cleanup_inactive_workers(&self) -> Result<()> {
-        let mut conn = self.get_connection().await?;
-
-        let worker_ids: Vec<String> = conn
-            .keys::<_, Vec<String>>(format!("{}:worker:*", self.prefix))
-            .await?
-            .into_iter()
-            .map(|key| key.split(':').last().unwrap().to_string())
-            .collect();
-
-        for worker_id in worker_ids {
-            let key = format!("{}:heartbeat:{}", self.prefix, worker_id);
-            let ttl: i64 = conn.ttl(&key).await?;
-            if ttl < 0 {
-                // re-queue tasks
-                let worker_key = format!("{}:worker:{}", self.prefix, worker_id);
-                let tasks: Vec<(String, f64)> = conn
-                    .zrangebyscore_withscores(&worker_key, 0.0, "+inf")
-                    .await?;
-                for (task_json, task_id) in tasks {
-                    let key = format!("{}:tasks", self.prefix);
-                    conn.zadd::<_, _, _, ()>(&key, task_json, task_id).await?;
-
-                    // set expiration
-                    conn.expire::<_, ()>(&key, self.ttl).await?;
-
-                    log::error!("re-queued task {} from worker {}", task_id, worker_id);
-                }
-
-                // remove worker
-                conn.del::<_, ()>(worker_key).await?;
+        let task_ids: Vec<u32> = conn.hkeys(&self.tasks_key).await?;
+        for task_id in task_ids {
+            if task_id <= to_task_id {
+                let mut pipe = redis::pipe();
+                pipe.atomic()
+                    .srem(&self.pending_key, task_id)
+                    .srem(&self.running_key, task_id)
+                    .srem(&self.completed_key, task_id)
+                    .hdel(&self.tasks_key, task_id)
+                    .hdel(&self.results_key, task_id);
+                pipe.query_async::<_, ()>(&mut conn).await?;
             }
         }
         Ok(())
+    }
+
+    // assign task to worker if available
+    pub async fn assign_task(&self) -> Result<Option<(u32, T)>> {
+        let mut conn = self.get_connection().await?;
+
+        let script = redis::Script::new(
+            r"
+            local task_ids = redis.call('SORT', KEYS[1], 'LIMIT', 0, 1)
+            if #task_ids == 0 then
+                return nil
+            end
+            local task_id = task_ids[1]
+            local task_json = redis.call('HGET', KEYS[3], task_id)
+            redis.call('SMOVE', KEYS[1], KEYS[2], task_id)
+            redis.call('EXPIRE', KEYS[2], ARGV[1])
+
+            return {task_id, task_json}
+        ",
+        );
+
+        let result: Option<(u32, String)> = script
+            .key(&self.pending_key)
+            .key(&self.running_key)
+            .key(&self.tasks_key)
+            .arg(self.ttl)
+            .invoke_async(&mut conn)
+            .await?;
+
+        if let Some((task_id, task_json)) = result {
+            let task: T = serde_json::from_str(&task_json)?;
+            Ok(Some((task_id, task)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn complete_task(&self, task_id: u32, result: &R) -> Result<()> {
+        let mut conn = self.get_connection().await?;
+        let result_json = serde_json::to_string(result)?;
+
+        let mut pipe = redis::pipe();
+
+        pipe.atomic()
+            .hset(&self.results_key, task_id, &result_json)
+            .smove(&self.running_key, &self.completed_key, task_id)
+            .expire(&self.completed_key, self.ttl)
+            .expire(&self.results_key, self.ttl);
+
+        pipe.query_async::<_, ()>(&mut conn).await?;
+
+        Ok(())
+    }
+
+    pub async fn submit_heartbeat(&self, worker_id: &str, task_id: u32) -> Result<()> {
+        let mut conn = self.get_connection().await?;
+        let key = format!("{}:{}", self.heartbeat_prefix, task_id);
+        conn.set_ex::<_, _, ()>(&key, worker_id, self.heartbeat_ttl)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn cleanup_inactive_tasks(&self) -> Result<()> {
+        let mut conn = self.get_connection().await?;
+
+        loop {
+            // get all running tasks
+            let task_ids: Vec<u32> = conn.smembers(&self.running_key).await?;
+            log::info!("running tasks: {:?}", task_ids);
+
+            // wait heartbeat_ttl seconds for worker to submit heartbeat
+            tokio::time::sleep(tokio::time::Duration::from_secs(self.heartbeat_ttl as u64)).await;
+
+            for task_id in task_ids {
+                let key = format!("{}:{}", self.heartbeat_prefix, task_id);
+                let worker_id: Option<String> = conn.get(&key).await?;
+                if worker_id.is_none() {
+                    // move task from running to pending
+                    conn.smove::<_, _, _, ()>(&self.running_key, &self.pending_key, task_id)
+                        .await?;
+                    log::warn!("task {} moved from running to pending", task_id);
+                }
+            }
+        }
     }
 }

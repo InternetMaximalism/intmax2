@@ -1,6 +1,4 @@
-use intmax2_interfaces::{
-    api::withdrawal_server::interface::ClaimFeeInfo, data::encryption::BlsEncryption as _,
-};
+use intmax2_interfaces::api::withdrawal_server::interface::ClaimFeeInfo;
 use intmax2_zkp::{
     common::{
         signature::key_set::KeySet,
@@ -133,9 +131,9 @@ impl Client {
                 }
                 None => vec![],
             };
-            let fee_transfer_uuids = collected_fees
+            let fee_transfer_digests = collected_fees
                 .iter()
-                .map(|fee| fee.meta.uuid.clone())
+                .map(|fee| fee.meta.digest)
                 .collect::<Vec<_>>();
 
             // send claim request
@@ -144,7 +142,7 @@ impl Client {
                     key,
                     &single_claim_proof,
                     Some(fee_token_index),
-                    &fee_transfer_uuids,
+                    &fee_transfer_digests,
                 )
                 .await?;
 
@@ -164,10 +162,10 @@ impl Client {
             let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
             user_data.claim_status.process(mining.meta.meta.clone());
 
-            self.store_vault_server
-                .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
-                .await?;
-            log::info!("Claimed {}", mining.meta.meta.uuid.clone());
+            // save user data
+            self.save_user_data(key, prev_digest, &user_data).await?;
+
+            log::info!("Claimed {}", mining.meta.meta.digest.clone());
         }
         Ok(())
     }

@@ -23,7 +23,7 @@ tracing = "0.1.41"
 tracing-actix-web = { workspace = true }
 tracing-opentelemetry = "0.28"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
-redis = { version = "0.23", features = ["tokio-comp"] }
+redis = { version = "0.23", features = ["tokio-native-tls-comp"] }
 tokio = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }

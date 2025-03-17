@@ -6,103 +6,169 @@ use actix_web::{
     Error,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::{
-        interface::MAX_BATCH_SIZE,
-        types::{
-            GetDataBatchRequest, GetDataBatchResponse, GetDataSequenceRequest,
-            GetDataSequenceResponse, GetMiscSequenceRequest, GetMiscSequenceResponse,
-            GetSenderProofSetRequest, GetSenderProofSetResponse, GetUserDataRequest,
-            GetUserDataResponse, SaveDataBatchRequest, SaveDataBatchResponse, SaveMiscRequest,
-            SaveMiscResponse, SaveSenderProofSetRequest, SaveUserDataRequest,
+    api::{
+        s3_store_vault::types::{
+            S3GetDataBatchRequest, S3GetDataBatchResponse, S3GetDataSequenceRequest,
+            S3GetDataSequenceResponse, S3GetSnapshotRequest, S3GetSnapshotResponse,
+            S3PreSaveSnapshotRequest, S3PreSaveSnapshotResponse, S3SaveDataBatchRequest,
+            S3SaveDataBatchResponse, S3SaveSnapshotRequest,
         },
+        store_vault_server::interface::MAX_BATCH_SIZE,
     },
+    data::{rw_rights, topic::extract_rights},
     utils::signature::{Signable, WithAuth},
 };
 
-#[post("/save-user-data")]
-pub async fn save_user_data(
+#[post("/pre-save-snapshot")]
+pub async fn pre_save_snapshot(
     state: Data<State>,
-    request: Json<WithAuth<SaveUserDataRequest>>,
-) -> Result<Json<()>, Error> {
+    request: Json<WithAuth<S3PreSaveSnapshotRequest>>,
+) -> Result<Json<S3PreSaveSnapshotResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
     let request = &request.inner;
-    state
-        .store_vault_server
-        .save_user_data(pubkey, request.prev_digest, &request.data)
+
+    // validate rights
+    validate_topic_length(&request.topic)?;
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.write_rights {
+        rw_rights::WriteRights::SingleAuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::WriteRights::SingleOpenWrite => {}
+        rw_rights::WriteRights::AuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::WriteRights::OpenWrite => {}
+    }
+
+    let presigned_url = state
+        .s3_store_vault
+        .pre_save_snapshot(&request.topic, request.pubkey, request.digest)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(()))
+
+    Ok(Json(S3PreSaveSnapshotResponse { presigned_url }))
 }
 
-#[post("/get-user-data")]
-pub async fn get_user_data(
+#[post("/save-snapshot")]
+pub async fn save_snapshot(
     state: Data<State>,
-    request: Json<WithAuth<GetUserDataRequest>>,
-) -> Result<Json<GetUserDataResponse>, Error> {
-    request
-        .inner
-        .verify(&request.auth)
-        .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
-    let data = state
-        .store_vault_server
-        .get_user_data(pubkey)
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetUserDataResponse { data }))
-}
-
-#[post("/save-sender-proof-set")]
-pub async fn save_sender_proof_set(
-    state: Data<State>,
-    request: Json<WithAuth<SaveSenderProofSetRequest>>,
+    request: Json<WithAuth<S3SaveSnapshotRequest>>,
 ) -> Result<Json<()>, Error> {
     request
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let data = &request.inner.data;
-    let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
+    let request = &request.inner;
+
+    // validate rights
+    validate_topic_length(&request.topic)?;
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.write_rights {
+        rw_rights::WriteRights::SingleAuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+            if request.prev_digest.is_some() {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "pre_digest is not allowed in SingleAuthWrite",
+                ));
+            }
+        }
+        rw_rights::WriteRights::SingleOpenWrite => {
+            if request.prev_digest.is_some() {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "pre_digest is not allowed in SingleOpenWrite",
+                ));
+            }
+        }
+        rw_rights::WriteRights::AuthWrite => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::WriteRights::OpenWrite => {}
+    }
+
     state
-        .store_vault_server
-        .save_sender_proof_set(pubkey, data)
+        .s3_store_vault
+        .save_snapshot(
+            &request.topic,
+            request.pubkey,
+            request.prev_digest,
+            request.digest,
+        )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
+
     Ok(Json(()))
 }
 
-#[post("/get-sender-proof-set")]
-pub async fn get_sender_proof_set(
+#[post("/get-snapshot")]
+pub async fn get_snapshot(
     state: Data<State>,
-    request: Json<WithAuth<GetSenderProofSetRequest>>,
-) -> Result<Json<GetSenderProofSetResponse>, Error> {
+    request: Json<WithAuth<S3GetSnapshotRequest>>,
+) -> Result<Json<S3GetSnapshotResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
-    let data = state
-        .store_vault_server
-        .get_sender_proof_set(pubkey)
+    let auth_pubkey = request.auth.pubkey;
+    let request = &request.inner;
+
+    // validate rights
+    validate_topic_length(&request.topic)?;
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.read_rights {
+        rw_rights::ReadRights::AuthRead => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::ReadRights::OpenRead => {}
+    }
+
+    let presigned_url = state
+        .s3_store_vault
+        .get_snapshot_url(&request.topic, request.pubkey)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetSenderProofSetResponse { data }))
+
+    Ok(Json(S3GetSnapshotResponse { presigned_url }))
 }
 
 #[post("/save-data-batch")]
 pub async fn save_data_batch(
     state: Data<State>,
-    request: Json<WithAuth<SaveDataBatchRequest>>,
-) -> Result<Json<SaveDataBatchResponse>, Error> {
+    request: Json<WithAuth<S3SaveDataBatchRequest>>,
+) -> Result<Json<S3SaveDataBatchResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
     let entries = &request.inner.data;
 
     if entries.len() > MAX_BATCH_SIZE {
@@ -113,53 +179,89 @@ pub async fn save_data_batch(
     }
 
     for entry in entries {
-        if entry.data_type.need_auth() && entry.pubkey != pubkey {
-            return Err(ErrorUnauthorized(format!(
-                "Data type {} requires auth but given pubkey is different",
-                entry.data_type,
-            )));
+        validate_topic_length(&entry.topic)?;
+        let rw_rights = extract_rights(&entry.topic)
+            .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+        match rw_rights.write_rights {
+            rw_rights::WriteRights::SingleAuthWrite => {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "SingleAuthWrite is not allowed in historical data",
+                ));
+            }
+            rw_rights::WriteRights::SingleOpenWrite => {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "SingleOpenWrite is not allowed in historical data",
+                ));
+            }
+            rw_rights::WriteRights::AuthWrite => {
+                if auth_pubkey != entry.pubkey {
+                    return Err(actix_web::error::ErrorBadRequest(
+                        "Auth pubkey does not match request pubkey",
+                    ));
+                }
+            }
+            rw_rights::WriteRights::OpenWrite => {}
         }
     }
-    let uuids = state
-        .store_vault_server
-        .batch_save_data(entries)
+
+    let presigned_urls = state
+        .s3_store_vault
+        .batch_save_data_url(entries)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(SaveDataBatchResponse { uuids }))
+    Ok(Json(S3SaveDataBatchResponse { presigned_urls }))
 }
 
 #[post("/get-data-batch")]
 pub async fn get_data_batch(
     state: Data<State>,
-    request: Json<WithAuth<GetDataBatchRequest>>,
-) -> Result<Json<GetDataBatchResponse>, Error> {
+    request: Json<WithAuth<S3GetDataBatchRequest>>,
+) -> Result<Json<S3GetDataBatchResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
+    let auth_pubkey = request.auth.pubkey;
     let request = &request.inner;
 
-    if request.uuids.len() > MAX_BATCH_SIZE {
+    if request.digests.len() > MAX_BATCH_SIZE {
         return Err(actix_web::error::ErrorBadRequest(format!(
             "Batch size exceeds maximum limit of {}",
             MAX_BATCH_SIZE
         )));
     }
 
-    let data = state
-        .store_vault_server
-        .get_data_batch(request.data_type, pubkey, &request.uuids)
+    // validate rights
+    validate_topic_length(&request.topic)?;
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.read_rights {
+        rw_rights::ReadRights::AuthRead => {
+            if auth_pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
+        }
+        rw_rights::ReadRights::OpenRead => {}
+    }
+
+    let presigned_urls_with_meta = state
+        .s3_store_vault
+        .get_data_batch(&request.topic, auth_pubkey, &request.digests)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetDataBatchResponse { data }))
+
+    Ok(Json(S3GetDataBatchResponse {
+        presigned_urls_with_meta,
+    }))
 }
 
 #[post("/get-data-sequence")]
 pub async fn get_data_sequence(
     state: Data<State>,
-    request: Json<WithAuth<GetDataSequenceRequest>>,
-) -> Result<Json<GetDataSequenceResponse>, Error> {
+    request: Json<WithAuth<S3GetDataSequenceRequest>>,
+) -> Result<Json<S3GetDataSequenceResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
@@ -175,80 +277,46 @@ pub async fn get_data_sequence(
             )));
         }
     }
-
-    let (data, cursor_response) = state
-        .store_vault_server
-        .get_data_sequence(request.data_type, pubkey, &request.cursor)
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-    let res = GetDataSequenceResponse {
-        data,
-        cursor_response,
-    };
-    Ok(Json(res))
-}
-
-#[post("/save-misc")]
-pub async fn save_misc(
-    state: Data<State>,
-    request: Json<WithAuth<SaveMiscRequest>>,
-) -> Result<Json<SaveMiscResponse>, Error> {
-    request
-        .inner
-        .verify(&request.auth)
-        .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
-    let request = &request.inner;
-    let uuid = state
-        .store_vault_server
-        .save_misc(pubkey, request.topic, &request.data)
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(SaveMiscResponse { uuid }))
-}
-
-#[post("/get-misc-sequence")]
-pub async fn get_misc_sequence(
-    state: Data<State>,
-    request: Json<WithAuth<GetMiscSequenceRequest>>,
-) -> Result<Json<GetMiscSequenceResponse>, Error> {
-    request
-        .inner
-        .verify(&request.auth)
-        .map_err(ErrorUnauthorized)?;
-    let pubkey = request.auth.pubkey;
-    let request = &request.inner;
-
-    if let Some(limit) = request.cursor.limit {
-        if limit > MAX_BATCH_SIZE as u32 {
-            return Err(actix_web::error::ErrorBadRequest(format!(
-                "Batch size exceeds maximum limit of {}",
-                MAX_BATCH_SIZE
-            )));
+    // validate rights
+    validate_topic_length(&request.topic)?;
+    let rw_rights = extract_rights(&request.topic)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+    match rw_rights.read_rights {
+        rw_rights::ReadRights::AuthRead => {
+            if pubkey != request.pubkey {
+                return Err(actix_web::error::ErrorBadRequest(
+                    "Auth pubkey does not match request pubkey",
+                ));
+            }
         }
+        rw_rights::ReadRights::OpenRead => {}
     }
 
-    let (data, cursor_response) = state
-        .store_vault_server
-        .get_misc_sequence(pubkey, request.topic, &request.cursor)
+    let (presigned_urls_with_meta, cursor_response) = state
+        .s3_store_vault
+        .get_data_sequence_url(&request.topic, pubkey, &request.cursor)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    let res = GetMiscSequenceResponse {
-        data,
+
+    Ok(Json(S3GetDataSequenceResponse {
+        presigned_urls_with_meta,
         cursor_response,
-    };
-    Ok(Json(res))
+    }))
 }
 
-pub fn store_vault_server_scope() -> actix_web::Scope {
-    actix_web::web::scope("/store-vault-server")
-        .service(save_user_data)
-        .service(get_user_data)
-        .service(save_sender_proof_set)
-        .service(get_sender_proof_set)
+pub fn s3_store_vault_scope() -> actix_web::Scope {
+    actix_web::web::scope("/s3-store-vault")
+        .service(pre_save_snapshot)
+        .service(save_snapshot)
+        .service(get_snapshot)
         .service(save_data_batch)
         .service(get_data_batch)
         .service(get_data_sequence)
-        .service(save_misc)
-        .service(get_misc_sequence)
+}
+
+fn validate_topic_length(topic: &str) -> Result<(), actix_web::Error> {
+    if topic.len() >= 256 {
+        return Err(actix_web::error::ErrorBadRequest("Topic too long"));
+    }
+    Ok(())
 }

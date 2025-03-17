@@ -1,16 +1,13 @@
 use intmax2_interfaces::{
     api::{block_builder::interface::Fee, withdrawal_server::interface::WithdrawalFeeInfo},
-    data::{
-        encryption::BlsEncryption as _, meta_data::MetaDataWithBlockNumber,
-        transfer_data::TransferData,
-    },
+    data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData},
 };
 use intmax2_zkp::{
     common::{
         signature::key_set::KeySet,
         witness::{transfer_witness::TransferWitness, withdrawal_witness::WithdrawalWitness},
     },
-    ethereum_types::u256::U256,
+    ethereum_types::{bytes32::Bytes32, u256::U256},
 };
 
 use crate::client::{
@@ -87,7 +84,7 @@ impl Client {
             Err(SyncError::InvalidTransferError(e)) => {
                 log::error!(
                     "Ignore tx: {} because of invalid transfer: {}",
-                    meta.meta.uuid,
+                    meta.meta.digest,
                     e
                 );
                 return Ok(());
@@ -135,9 +132,9 @@ impl Client {
             }
             None => vec![],
         };
-        let fee_transfer_uuids = collected_fees
+        let fee_transfer_digests = collected_fees
             .iter()
-            .map(|fee| fee.meta.uuid.clone())
+            .map(|fee| fee.meta.digest)
             .collect::<Vec<_>>();
 
         // send withdrawal request
@@ -146,7 +143,7 @@ impl Client {
                 key,
                 &single_withdrawal_proof,
                 Some(fee_token_index),
-                &fee_transfer_uuids,
+                &fee_transfer_digests,
             )
             .await
             .map_err(|e| {
@@ -170,9 +167,8 @@ impl Client {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         user_data.withdrawal_status.process(meta.meta);
 
-        self.store_vault_server
-            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
-            .await?;
+        // save user data
+        self.save_user_data(key, prev_digest, &user_data).await?;
 
         Ok(())
     }
@@ -180,13 +176,12 @@ impl Client {
     async fn update_pending_withdrawals(
         &self,
         key: KeySet,
-        pending_withdrawal_uuids: Vec<String>,
+        pending_withdrawal_digests: Vec<Bytes32>,
     ) -> Result<(), SyncError> {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
-        user_data.withdrawal_status.pending_uuids = pending_withdrawal_uuids;
-        self.store_vault_server
-            .save_user_data(key, prev_digest, &user_data.encrypt(key.pubkey))
-            .await?;
+        user_data.withdrawal_status.pending_digests = pending_withdrawal_digests;
+        // save user data
+        self.save_user_data(key, prev_digest, &user_data).await?;
         Ok(())
     }
 }
