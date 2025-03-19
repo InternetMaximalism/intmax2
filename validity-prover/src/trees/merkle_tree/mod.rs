@@ -177,6 +177,34 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
+    async fn test_speed_incremental_merkle_tree_prove() -> anyhow::Result<()> {
+        let height = 32;
+        let n = 5000;
+        let mut rng = rand::thread_rng();
+
+        let database_url = setup_test();
+        let pool = sqlx::Pool::connect(&database_url).await?;
+
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
+        tree.reset(0).await?;
+
+        let time = std::time::Instant::now();
+        for i in 0..n {
+            let timestamp = i;
+            tree.prove(timestamp, i).await?;
+        }
+        println!(
+            "SqlIncrementMerkleTree.prove: {} times, {} height, {} seconds",
+            n,
+            height,
+            time.elapsed().as_secs_f64()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore]
     async fn test_speed_incremental_merkle_tree_reset() -> anyhow::Result<()> {
         let height = 32;
         let n = 1000;
