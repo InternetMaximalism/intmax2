@@ -168,27 +168,43 @@ impl SqlIndexedMerkleTree {
     ) -> super::MTResult<()> {
         let mut path = BitPath::new(self.height() as u32, index);
         path.reverse();
-        let mut h = leaf.hash();
+        let leaf_hash = leaf.hash();
         self.save_leaf(tx, timestamp, index, leaf).await?;
         self.sql_node_hashes
-            .save_node(tx, timestamp, path, h)
+            .save_node(tx, timestamp, path, leaf_hash)
             .await?;
-        while !path.is_empty() {
-            let sibling = self
-                .sql_node_hashes
-                .get_sibling_hash(tx, timestamp, path)
-                .await?;
-            let b = path.pop().unwrap(); // safe to unwrap
-            let new_h = if b {
-                Hasher::<V>::two_to_one(sibling, h)
-            } else {
-                Hasher::<V>::two_to_one(h, sibling)
-            };
-            self.sql_node_hashes
-                .save_node(tx, timestamp, path, new_h)
-                .await?;
-            h = new_h;
+
+        // collect paths
+        let mut paths = Vec::new();
+        let mut current_path = path;
+        while !current_path.is_empty() {
+            paths.push(current_path);
+            current_path.pop();
         }
+
+        if !paths.is_empty() {
+            let sibling_hashes = self
+                .sql_node_hashes
+                .bulk_get_sibling_hashes(tx, timestamp, &paths)
+                .await?;
+
+            let mut h = leaf_hash;
+            let mut current_path = path;
+
+            for sibling in sibling_hashes {
+                let bit = current_path.pop().unwrap();
+                let new_h = if bit {
+                    Hasher::<V>::two_to_one(sibling, h)
+                } else {
+                    Hasher::<V>::two_to_one(h, sibling)
+                };
+                self.sql_node_hashes
+                    .save_node(tx, timestamp, current_path, new_h)
+                    .await?;
+                h = new_h;
+            }
+        }
+
         Ok(())
     }
 
