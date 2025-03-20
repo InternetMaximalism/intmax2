@@ -51,6 +51,7 @@ impl BlockBuilder {
 
     async fn enqueue_empty_block(&self) -> Result<(), BlockBuilderError> {
         let next_deposit_index = self.validity_prover_client.get_next_deposit_index().await?;
+        log::info!("next_deposit_index={}", next_deposit_index);
         let latest_included_deposit_index = self
             .validity_prover_client
             .get_latest_included_deposit_index()

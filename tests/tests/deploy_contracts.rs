@@ -33,7 +33,6 @@ async fn deploy_contracts() -> anyhow::Result<()> {
             random_address,
             random_address,
             random_address,
-            random_address,
         )
         .await?;
 
@@ -88,7 +87,6 @@ async fn deploy_contracts() -> anyhow::Result<()> {
     withdrawal_contract
         .initialize(
             config.deployer_private_key,
-            random_address,
             random_address,
             random_address,
             random_address,

@@ -44,10 +44,10 @@ You need to run `cp .env.example .env` in each directory.
 
 # Start server
 
-1. Start Store-vault-server. 
+1. Start Legacy-store-vault-server. 
 Example port: 9000
 ```bash
-cd store-vault-server && sqlx database setup && cargo run -r
+cd legacy-store-vault-server && sqlx database setup && cargo run -r
 ```
 
 2. Start balance-prover.
@@ -85,7 +85,7 @@ Please refer to [the examples of cli ](cli/README.md#examples)
 # Reset DB
 
 ```bash
-(cd store-vault-server && sqlx database reset -y && sqlx database setup && cd ../validity-prover && sqlx database reset -y && sqlx database setup && cd ../withdrawal-server && sqlx database reset -y && sqlx database setup)
+(cd legacy-store-vault-server && sqlx database reset -y && sqlx database setup && cd ../validity-prover && sqlx database reset -y && sqlx database setup && cd ../withdrawal-server && sqlx database reset -y && sqlx database setup)
 ```
 
 # Overview 

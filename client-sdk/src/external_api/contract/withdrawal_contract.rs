@@ -81,7 +81,6 @@ impl WithdrawalContract {
         &self,
         signer_private_key: H256,
         admin: types::Address,
-        scroll_messenger_address: types::Address,
         withdrawal_verifier_address: types::Address,
         liquidity_address: types::Address,
         rollup_address: types::Address,
@@ -91,7 +90,6 @@ impl WithdrawalContract {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let mut tx = contract.initialize(
             admin,
-            scroll_messenger_address,
             withdrawal_verifier_address,
             liquidity_address,
             rollup_address,

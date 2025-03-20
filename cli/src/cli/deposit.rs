@@ -12,7 +12,7 @@ use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256
 use super::{
     client::get_client,
     error::CliError,
-    utils::{convert_address, convert_u256, is_local},
+    utils::{convert_address, convert_u256},
 };
 
 pub async fn deposit(
@@ -96,24 +96,6 @@ pub async fn deposit(
                 )
                 .await?;
         }
-    }
-
-    // relay deposits by self if local
-    if is_local()? {
-        log::info!("get token index");
-        let token_index = liquidity_contract
-            .get_token_index(token_type, token_address, token_id)
-            .await?
-            .ok_or(CliError::UnexpectedError(
-                "Cloud not find token index".to_string(),
-            ))?;
-        log::info!("token index: {}", token_index);
-        let mut deposit_data = deposit_data;
-        deposit_data.set_token_index(token_index);
-        client
-            .rollup_contract
-            .process_deposits(eth_private_key, 0, &[deposit_data.deposit_hash().unwrap()])
-            .await?;
     }
 
     Ok(())
