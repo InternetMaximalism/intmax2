@@ -63,9 +63,9 @@ impl LiquidityContract {
         &self,
         signer_private_key: H256,
         admin: EthAddress,
-        l_1_scroll_messenger: EthAddress,
         rollup: EthAddress,
         withdrawal: EthAddress,
+        claim: EthAddress,
         analyzer: EthAddress,
         contribution: EthAddress,
         initial_erc20_tokens: Vec<EthAddress>,
@@ -73,9 +73,9 @@ impl LiquidityContract {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let mut tx = contract.initialize(
             admin,
-            l_1_scroll_messenger,
             rollup,
             withdrawal,
+            claim,
             analyzer,
             contribution,
             initial_erc20_tokens,

@@ -27,32 +27,33 @@ async fn deploy_contracts() -> anyhow::Result<()> {
     )
     .await?;
     let random_address = ethers::types::Address::random();
-    rollup_contract
-        .initialize(
-            config.deployer_private_key,
-            random_address,
-            random_address,
-            random_address,
-        )
-        .await?;
 
     println!("Rollup contract address: {:?}", rollup_contract.address());
     println!(
         "Rollup contract deployed block number: {}",
         rollup_contract.deployed_block_number
     );
-
     let liquidity_contract = LiquidityContract::deploy(
         &config.rpc_url,
         config.chain_id,
         config.deployer_private_key,
     )
     .await?;
+
+    rollup_contract
+        .initialize(
+            config.deployer_private_key,
+            random_address,
+            liquidity_contract.address,
+            random_address,
+        )
+        .await?;
+
     liquidity_contract
         .initialize(
             config.deployer_private_key,
             random_address,
-            random_address,
+            rollup_contract.address,
             random_address,
             random_address,
             random_address,
