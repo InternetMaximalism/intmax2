@@ -686,7 +686,7 @@ mod tests {
     #[tokio::test]
     async fn test_comparison_account_tree() -> anyhow::Result<()> {
         let database_url = crate::trees::setup_test();
-        let tag = 3;
+        let tag = 4;
         let pool = sqlx::Pool::connect(&database_url).await?;
         let db_tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
         <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&db_tree, 0).await?;
