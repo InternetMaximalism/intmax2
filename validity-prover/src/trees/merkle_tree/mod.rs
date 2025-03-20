@@ -273,4 +273,51 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_speed_prove_and_update() -> anyhow::Result<()> {
+        let height = 32;
+        let n = 1000;
+        let mut rng = rand::thread_rng();
+
+        let database_url = setup_test();
+        let pool = sqlx::Pool::connect(&database_url).await?;
+
+        let tree = SqlIndexedMerkleTree::new(pool, rng.gen(), height);
+        tree.reset(0).await?;
+        tree.initialize().await?;
+
+        // target for update
+        let timestamp = 0;
+        let test_key = U256::rand(&mut rng);
+        tree.prove_and_insert(timestamp, test_key, 1000).await?;
+
+        let t1 = std::time::Instant::now();
+        for i in 0..n {
+            let key = U256::rand(&mut rng);
+            tree.prove_and_insert(timestamp, key, i).await?;
+        }
+        println!(
+            "SqlIndexedMerkleTree.prove_and_insert: {} times, {} height, {} seconds",
+            n,
+            height,
+            t1.elapsed().as_secs_f64()
+        );
+
+        let t2 = std::time::Instant::now();
+        for i in 0..n {
+            let update_value = 2000 + i;
+            tree.prove_and_update(timestamp, test_key, update_value)
+                .await?;
+        }
+        println!(
+            "SqlIndexedMerkleTree.prove_and_update: {} times, {} height, {} seconds",
+            n,
+            height,
+            t2.elapsed().as_secs_f64()
+        );
+
+        Ok(())
+    }
 }
