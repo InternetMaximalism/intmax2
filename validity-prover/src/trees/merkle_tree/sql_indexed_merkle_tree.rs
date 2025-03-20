@@ -642,12 +642,22 @@ impl IndexedMerkleTreeClient for SqlIndexedMerkleTree {
 #[cfg(test)]
 mod tests {
     use super::IndexedMerkleTreeClient;
-    use crate::trees::merkle_tree::sql_indexed_merkle_tree::SqlIndexedMerkleTree;
-    use intmax2_zkp::{common::trees::account_tree::AccountTree, constants::ACCOUNT_TREE_HEIGHT};
+    use crate::trees::merkle_tree::sql_indexed_merkle_tree::{
+        from_str_to_u256, SqlIndexedMerkleTree,
+    };
+    use intmax2_zkp::{
+        common::trees::account_tree::AccountTree, constants::ACCOUNT_TREE_HEIGHT,
+        ethereum_types::u256::U256, utils::trees::indexed_merkle_tree::leaf::IndexedMerkleLeaf,
+    };
+
+    fn setup_test() -> String {
+        dotenv::dotenv().ok();
+        std::env::var("DATABASE_URL").unwrap()
+    }
 
     #[tokio::test]
     async fn test_account_tree() -> anyhow::Result<()> {
-        let database_url = crate::trees::setup_test();
+        let database_url = setup_test();
 
         let tag = 3;
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -685,7 +695,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_comparison_account_tree() -> anyhow::Result<()> {
-        let database_url = crate::trees::setup_test();
+        let database_url = setup_test();
         let tag = 4;
         let pool = sqlx::Pool::connect(&database_url).await?;
         let db_tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
@@ -708,6 +718,185 @@ mod tests {
         }
         let root = tree.get_root();
         assert_eq!(db_root, root);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_leaf_consistency() -> anyhow::Result<()> {
+        let database_url = setup_test();
+        let tag = 1000;
+        let pool = sqlx::Pool::connect(&database_url).await?;
+        let tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
+        <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&tree, 0).await?;
+
+        tree.initialize().await?;
+        let timestamp = 123;
+
+        let test_leaves = vec![
+            (1, "100", "200", 1000),
+            (2, "200", "300", 2000),
+            (3, "300", "400", 3000),
+            (10, "1000", "1100", 10000),
+            (20, "2000", "2100", 20000),
+        ];
+
+        for &(index, key, next_key, value) in &test_leaves {
+            let mut tx = tree.pool().begin().await?;
+
+            let leaf = IndexedMerkleLeaf {
+                next_index: index + 1,
+                key: from_str_to_u256(key),
+                next_key: from_str_to_u256(next_key),
+                value,
+            };
+
+            tree.update_leaf(&mut tx, timestamp, index, leaf.clone())
+                .await?;
+            let stored_leaf = tree.get_leaf(&mut tx, timestamp, index).await?;
+            assert_eq!(
+                stored_leaf.key, leaf.key,
+                "Key should match for index {}",
+                index
+            );
+            assert_eq!(
+                stored_leaf.next_key, leaf.next_key,
+                "NextKey should match for index {}",
+                index
+            );
+            assert_eq!(
+                stored_leaf.value, leaf.value,
+                "Value should match for index {}",
+                index
+            );
+
+            tx.commit().await?;
+        }
+
+        {
+            let mut tx = tree.pool().begin().await?;
+
+            for &(index, key, _, value) in &test_leaves {
+                let leaf = tree.get_leaf(&mut tx, timestamp, index).await?;
+                assert_eq!(
+                    leaf.key,
+                    from_str_to_u256(key),
+                    "Key should match for retrieved leaf at index {}",
+                    index
+                );
+                assert_eq!(
+                    leaf.value, value,
+                    "Value should match for retrieved leaf at index {}",
+                    index
+                );
+            }
+
+            for &(index, key, _, __) in &test_leaves {
+                let proof = tree.prove_inclusion(&mut tx, timestamp, index).await?;
+                let root = tree.sql_node_hashes.get_root(&mut tx, timestamp).await?;
+
+                let result = proof.verify(root, index, from_str_to_u256(key));
+                assert!(result, "Proof verification failed for index {}", index);
+            }
+
+            tx.rollback().await?;
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_leaf_edge_cases() -> anyhow::Result<()> {
+        let database_url = setup_test();
+        let tag = 2000;
+        let pool = sqlx::Pool::connect(&database_url).await?;
+        let tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
+        <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&tree, 0).await?;
+
+        tree.initialize().await?;
+        let timestamp = 456;
+        let mut tx = tree.pool().begin().await?;
+
+        let leaf1 = IndexedMerkleLeaf {
+            next_index: 2,
+            key: U256::from(1),
+            next_key: U256::from(2),
+            value: 100,
+        };
+        tree.update_leaf(&mut tx, timestamp, 1, leaf1.clone())
+            .await?;
+        let stored_leaf1 = tree.get_leaf(&mut tx, timestamp, 1).await?;
+        assert_eq!(
+            stored_leaf1.key, leaf1.key,
+            "Key should match for minimal index case"
+        );
+        assert_eq!(
+            stored_leaf1.value, leaf1.value,
+            "Value should match for minimal index case"
+        );
+
+        let large_index = (1 << (ACCOUNT_TREE_HEIGHT - 1)) - 1;
+        let leaf2 = IndexedMerkleLeaf {
+            next_index: large_index + 1,
+            key: U256::from(large_index as u32),
+            next_key: U256::from((large_index + 1) as u32),
+            value: 9999,
+        };
+        tree.update_leaf(&mut tx, timestamp, large_index, leaf2.clone())
+            .await?;
+        let stored_leaf2 = tree.get_leaf(&mut tx, timestamp, large_index).await?;
+        assert_eq!(
+            stored_leaf2.key, leaf2.key,
+            "Key should match for large index case"
+        );
+        assert_eq!(
+            stored_leaf2.value, leaf2.value,
+            "Value should match for large index case"
+        );
+
+        let leaf3 = IndexedMerkleLeaf {
+            next_index: 2,
+            key: U256::from(1),
+            next_key: U256::from(2),
+            value: 200,
+        };
+        tree.update_leaf(&mut tx, timestamp, 1, leaf3.clone())
+            .await?;
+        let stored_leaf3 = tree.get_leaf(&mut tx, timestamp, 1).await?;
+        assert_eq!(
+            stored_leaf3.value, leaf3.value,
+            "Value should be updated for same index update"
+        );
+
+        let new_timestamp = 789;
+        let leaf4 = IndexedMerkleLeaf {
+            next_index: 2,
+            key: U256::from(1),
+            next_key: U256::from(2),
+            value: 300,
+        };
+        tree.update_leaf(&mut tx, new_timestamp, 1, leaf4.clone())
+            .await?;
+
+        let stored_leaf_old_ts = tree.get_leaf(&mut tx, timestamp, 1).await?;
+        assert_eq!(
+            stored_leaf_old_ts.value, leaf3.value,
+            "Old timestamp should still see the old value"
+        );
+        let stored_leaf_new_ts = tree.get_leaf(&mut tx, new_timestamp, 1).await?;
+        assert_eq!(
+            stored_leaf_new_ts.value, leaf4.value,
+            "New timestamp should see the updated value"
+        );
+
+        let root = tree
+            .sql_node_hashes
+            .get_root(&mut tx, new_timestamp)
+            .await?;
+        let proof = tree.prove_inclusion(&mut tx, new_timestamp, 1).await?;
+        let result = proof.verify(root, 1, leaf4.key);
+        assert!(result, "Final proof verification failed");
+
+        tx.rollback().await?;
         Ok(())
     }
 }
