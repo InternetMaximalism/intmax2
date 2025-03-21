@@ -62,7 +62,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         .await?;
 
         // upload data to s3
-        self.upload(&response.presigned_url, data).await?;
+        upload_s3(&response.presigned_url, data).await?;
 
         // save snapshot
         let request = S3SaveSnapshotRequest {
@@ -97,7 +97,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
 
         match response.presigned_url {
             Some(url) => {
-                let data = self.download(&url).await?;
+                let data = download_s3(&url).await?;
                 Ok(Some(data))
             }
             None => Ok(None),
@@ -130,9 +130,11 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             )
             .await?;
 
-            for (url, entry) in response.presigned_urls.iter().zip(chunk.iter()) {
-                self.upload(url, &entry.data).await?;
-            }
+            let data = chunk
+                .iter()
+                .map(|entry| entry.data.clone())
+                .collect::<Vec<_>>();
+            batch_upload_s3(&response.presigned_urls, &data).await?;
 
             all_digests.extend(digests);
         }
@@ -159,14 +161,23 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
                 Some(&request_with_auth),
             )
             .await?;
-            let mut data_with_meta = Vec::new();
-            for url_with_meta in response.presigned_urls_with_meta.iter() {
-                let data = self.download(&url_with_meta.presigned_url).await?;
-                data_with_meta.push(DataWithMetaData {
-                    data,
+            let urls = response
+                .presigned_urls_with_meta
+                .iter()
+                .map(|x| x.presigned_url.clone())
+                .collect::<Vec<_>>();
+
+            // download data
+            let data = batch_download_s3(&urls).await?;
+            let data_with_meta = response
+                .presigned_urls_with_meta
+                .iter()
+                .zip(data.iter())
+                .map(|(url_with_meta, data)| DataWithMetaData {
+                    data: data.clone(),
                     meta: url_with_meta.meta.clone(),
-                });
-            }
+                })
+                .collect::<Vec<_>>();
             all_data.extend(data_with_meta);
         }
 
@@ -179,7 +190,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        let auth = generate_auth_for_get_data_sequence(key);
+        let auth = generate_auth_for_get_data_sequence_s3(key);
         let (data, cursor) = self
             .get_data_sequence_with_auth(topic, cursor, &auth)
             .await?;
@@ -216,15 +227,21 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         )
         .await?;
 
-        let mut data_with_meta = Vec::new();
-        for url_with_meta in response.presigned_urls_with_meta.iter() {
-            let data = self.download(&url_with_meta.presigned_url).await?;
-            data_with_meta.push(DataWithMetaData {
-                data,
+        let urls = response
+            .presigned_urls_with_meta
+            .iter()
+            .map(|x| x.presigned_url.clone())
+            .collect::<Vec<_>>();
+        let data = batch_download_s3(&urls).await?;
+        let data_with_meta = response
+            .presigned_urls_with_meta
+            .iter()
+            .zip(data.iter())
+            .map(|(url_with_meta, data)| DataWithMetaData {
+                data: data.clone(),
                 meta: url_with_meta.meta.clone(),
-            });
-        }
-
+            })
+            .collect::<Vec<_>>();
         Ok((data_with_meta, response.cursor_response))
     }
 }
@@ -242,48 +259,75 @@ impl S3StoreVaultClient {
         };
         dummy_request.verify(auth)
     }
-
-    async fn upload(&self, url: &str, data: &[u8]) -> Result<(), ServerError> {
-        let client = reqwest::Client::new();
-        let response = with_retry(|| async {
-            client
-                .put(url)
-                .header("Content-Type", "application/octet-stream")
-                .body(data.to_vec())
-                .send()
-                .await
-        })
-        .await
-        .map_err(|e| ServerError::NetworkError(e.to_string()))?;
-        if !response.status().is_success() {
-            return Err(ServerError::InvalidResponse(format!(
-                "Failed to upload data: {:?}",
-                response.text().await
-            )));
-        }
-        Ok(())
-    }
-
-    async fn download(&self, url: &str) -> Result<Vec<u8>, ServerError> {
-        let client = reqwest::Client::new();
-        let response = with_retry(|| async { client.get(url).send().await })
-            .await
-            .map_err(|e| ServerError::NetworkError(e.to_string()))?;
-        if !response.status().is_success() {
-            return Err(ServerError::InvalidResponse(format!(
-                "Failed to download data: {:?}",
-                response.text().await
-            )));
-        }
-        let response = response.bytes().await.map_err(|e| {
-            ServerError::InvalidResponse(format!("Failed to read response: {:?}", e))
-        })?;
-        Ok(response.to_vec())
-    }
 }
 
-pub fn generate_auth_for_get_data_sequence(key: KeySet) -> Auth {
-    // because auth is not dependent on the datatype and cursor, we can use a dummy request
+async fn upload_s3(url: &str, data: &[u8]) -> Result<(), ServerError> {
+    let client = reqwest::Client::new();
+    let response = with_retry(|| async {
+        client
+            .put(url)
+            .header("Content-Type", "application/octet-stream")
+            .body(data.to_vec())
+            .send()
+            .await
+    })
+    .await
+    .map_err(|e| ServerError::NetworkError(e.to_string()))?;
+    if !response.status().is_success() {
+        return Err(ServerError::InvalidResponse(format!(
+            "Failed to upload data: {:?}",
+            response.text().await
+        )));
+    }
+    Ok(())
+}
+
+async fn download_s3(url: &str) -> Result<Vec<u8>, ServerError> {
+    let client = reqwest::Client::new();
+    let response = with_retry(|| async { client.get(url).send().await })
+        .await
+        .map_err(|e| ServerError::NetworkError(e.to_string()))?;
+    if !response.status().is_success() {
+        return Err(ServerError::InvalidResponse(format!(
+            "Failed to download data: {:?}",
+            response.text().await
+        )));
+    }
+    let response = response
+        .bytes()
+        .await
+        .map_err(|e| ServerError::InvalidResponse(format!("Failed to read response: {:?}", e)))?;
+    Ok(response.to_vec())
+}
+
+async fn batch_upload_s3(urls: &[String], data: &[Vec<u8>]) -> Result<(), ServerError> {
+    let upload_futures = urls
+        .iter()
+        .zip(data.iter())
+        .map(|(url, data)| async move { upload_s3(url, data).await })
+        .collect::<Vec<_>>();
+    let results = futures::future::join_all(upload_futures).await;
+    for result in results {
+        result?;
+    }
+    Ok(())
+}
+
+async fn batch_download_s3(urls: &[String]) -> Result<Vec<Vec<u8>>, ServerError> {
+    let download_futures = urls
+        .iter()
+        .map(|url| async move { download_s3(url).await })
+        .collect::<Vec<_>>();
+    let results = futures::future::join_all(download_futures).await;
+    let mut all_data = Vec::new();
+    for result in results {
+        all_data.push(result?);
+    }
+    Ok(all_data)
+}
+
+pub fn generate_auth_for_get_data_sequence_s3(key: KeySet) -> Auth {
+    // because auth is not dependent on the topic and cursor, we can use a dummy request
     let dummy_request = S3GetDataSequenceRequest {
         topic: "dummy".to_string(),
         pubkey: key.pubkey,
