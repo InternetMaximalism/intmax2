@@ -9,6 +9,7 @@ pub struct EnvVar {
     pub port: u16,
     pub block_builder_url: String,
     pub redis_url: Option<String>,
+    pub cluster_id: Option<String>,
     pub l2_rpc_url: String,
     pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
