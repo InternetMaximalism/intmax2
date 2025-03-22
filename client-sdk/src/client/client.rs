@@ -624,11 +624,13 @@ impl Client {
     }
 
     pub async fn get_mining_list(&self, key: KeySet) -> Result<Vec<Mining>, ClientError> {
+        let current_time = chrono::Utc::now().timestamp() as u64;
         let minings = fetch_mining_info(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
+            current_time,
             &ProcessStatus::default(),
             self.config.tx_timeout,
             self.config.deposit_timeout,

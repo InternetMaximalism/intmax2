@@ -53,9 +53,6 @@ pub enum SyncError {
     #[error("Failed to update private state: {0}")]
     FailedToUpdatePrivateState(String),
 
-    #[error("Validity prover is not up to date: {0}")]
-    ValidityProverIsNotSynced(String),
-
     #[error("Deposit info not found: {0}")]
     DepositInfoNotFound(Bytes32),
 
