@@ -24,6 +24,11 @@ pub async fn send_withdrawal(
         amount,
         salt: generate_salt(),
     };
+    fail::fail_point!("before-withdrawal-transfers", |_| {
+        Err(CliError::UnexpectedError(
+            "Fail point before withdrawal transfers".to_string(),
+        ))
+    });
     let withdrawal_transfers = client
         .generate_withdrawal_transfers(&withdrawal_transfer, fee_token_index, with_claim_fee)
         .await?;
@@ -58,5 +63,10 @@ pub async fn send_withdrawal(
         wait,
     )
     .await?;
+    fail::fail_point!("after-send-transfers", |_| {
+        Err(CliError::UnexpectedError(
+            "Fail point after payment_memo_topic".to_string(),
+        ))
+    });
     Ok(())
 }

@@ -313,6 +313,7 @@ impl TestSystem {
                             to,
                             U256::from(10),
                             ETH_TOKEN_INDEX,
+                            false,
                         )
                         .await?;
                         log::info!("Withdrawal completed from {} (No.{})", sender.pubkey, i);

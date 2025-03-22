@@ -102,6 +102,15 @@ impl TestSystem {
         config_server_base_url: String,
         l1_rpc_url: String,
     ) -> Self {
+        let trash_account = mnemonic_to_account(&master_mnemonic_phrase, 1, 0).unwrap();
+        println!(
+            "Trash account intmax_private_key: {}",
+            trash_account.intmax_key.privkey
+        );
+        println!(
+            "Trash account eth_private_key: {:?}",
+            trash_account.eth_private_key
+        );
         Self {
             admin_eth_key,
             master_mnemonic_phrase,
@@ -218,6 +227,7 @@ impl TestSystem {
                         trash_account.intmax_key,
                         U256::from(10),
                         None,
+                        false,
                     )
                     .await?;
                     log::info!("Deposit completed from {:?} (No.{})", sender.eth_address, i);

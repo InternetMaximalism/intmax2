@@ -42,6 +42,11 @@ impl Client {
         )
         .await?;
         self.update_pending_withdrawals(key, pending).await?;
+        fail::fail_point!("after update pending withdrawals", |_| {
+            Err(CliError::UnexpectedError(
+                "Fail point after payment_memo_topic".to_string(),
+            ))
+        });
         for (meta, data) in withdrawals {
             self.sync_withdrawal(
                 key,
@@ -54,6 +59,12 @@ impl Client {
             )
             .await?;
         }
+        fail::fail_point!("after-sync-withdrawals", |_| {
+            Err(CliError::UnexpectedError(
+                "Fail point after payment_memo_topic".to_string(),
+            ))
+        });
+
         Ok(())
     }
 

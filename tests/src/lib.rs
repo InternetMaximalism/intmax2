@@ -146,12 +146,12 @@ pub async fn deposit_native_token_with_error_handling(
     recipient_key: KeySet,
     amount: U256,
     waiting_duration: Option<Duration>,
+    is_mining: bool,
 ) -> Result<(), CliError> {
     let token_type = TokenType::NATIVE;
     // let amount = ethers::types::U256::from(10);
     let token_address = ethers::types::Address::default();
     let token_id = U256::from(0);
-    let is_mining = false;
 
     let timer = std::time::Instant::now();
     deposit(
@@ -190,10 +190,12 @@ pub async fn withdraw_directly_with_error_handling(
     to: Address,
     amount: U256,
     token_index: u32,
+    with_claim_fee: bool,
 ) -> Result<(), CliError> {
     // First attempt with the requested amount
     let mut result =
-        withdraw_directly_with_error_handling_inner(key, to, amount, token_index).await;
+        withdraw_directly_with_error_handling_inner(key, to, amount, token_index, with_claim_fee)
+            .await;
 
     // Handle fee payment if needed
     if matches!(result, Err(CliError::SyncError(SyncError::FeeError(_)))) {
@@ -201,16 +203,28 @@ pub async fn withdraw_directly_with_error_handling(
 
         // Pay pending fees by sending zero-amount transactions until successful
         while let Err(CliError::SyncError(SyncError::FeeError(_))) = result {
-            result =
-                withdraw_directly_with_error_handling_inner(key, to, U256::default(), token_index)
-                    .await;
+            result = withdraw_directly_with_error_handling_inner(
+                key,
+                to,
+                U256::default(),
+                token_index,
+                with_claim_fee,
+            )
+            .await;
         }
 
         // If fee payment failed with a different error, return that error
         result?;
 
         // Retry the original withdrawal
-        result = withdraw_directly_with_error_handling_inner(key, to, amount, token_index).await;
+        result = withdraw_directly_with_error_handling_inner(
+            key,
+            to,
+            amount,
+            token_index,
+            with_claim_fee,
+        )
+        .await;
     }
 
     result
@@ -221,6 +235,7 @@ async fn withdraw_directly_with_error_handling_inner(
     to: Address,
     amount: U256,
     token_index: u32,
+    with_claim_fee: bool,
 ) -> Result<(), CliError> {
     let retry_config = RetryConfig {
         max_retries: 100,
@@ -229,7 +244,17 @@ async fn withdraw_directly_with_error_handling_inner(
     let retry_condition = |_: &CliError| true;
     retry_if(
         retry_condition,
-        || send_withdrawal(key, to, amount, token_index, ETH_TOKEN_INDEX, false, true),
+        || {
+            send_withdrawal(
+                key,
+                to,
+                amount,
+                token_index,
+                ETH_TOKEN_INDEX,
+                with_claim_fee,
+                true,
+            )
+        },
         retry_config,
     )
     .await?;

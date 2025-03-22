@@ -26,6 +26,9 @@ use tests::{
     mul_u256, transfer_with_error_handling, wait_for_balance_synchronization,
 };
 
+const TRANSFER_WAITING_DURATION: u64 = 10;
+const TRANSFER_POLLING_DURATION: u64 = 5;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvVar {
     pub master_mnemonic: String,
@@ -43,7 +46,7 @@ pub struct EnvVar {
 }
 
 fn default_url() -> String {
-    "0.0.0.0:8080".to_string()
+    "http://127.0.0.1:8080".to_string()
 }
 
 const ETH_TOKEN_INDEX: u32 = 0;
@@ -88,7 +91,6 @@ struct TestConfig {
 
 async fn get_config(base_url: &str) -> Result<TestConfig, Box<dyn std::error::Error>> {
     let config = get_request::<(), TestConfig>(base_url, "/config", None).await?;
-
     Ok(config)
 }
 
@@ -140,7 +142,6 @@ impl TestSystem {
         &self,
         required_count: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        dbg!("without transfers");
         let accounts_len = self.accounts.lock().unwrap().len();
 
         if accounts_len >= required_count {
@@ -281,6 +282,40 @@ impl TestSystem {
             let num_accounts = self.accounts.lock().unwrap().len();
             let num_using_accounts = concurrent_limit.min(num_accounts);
             let intmax_senders = self.accounts.lock().unwrap()[0..num_using_accounts].to_vec();
+
+            let futures = intmax_senders
+                .iter()
+                .enumerate()
+                .map(|(_, sender)| async move {
+                    tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
+                    wait_for_balance_synchronization(
+                        *sender,
+                        Duration::from_secs(TRANSFER_POLLING_DURATION),
+                    )
+                    .await
+                    .map_err(|err| {
+                        println!("transfer_with_error_handling Error: {:?}", err);
+                        err
+                    })?;
+
+                    Ok::<(), CliError>(())
+                });
+
+            log::info!("Synchronize balances");
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(300)) => log::info!("synchronization timeout"),
+                errors = join_all(futures) => {
+                    for (i, error) in errors.iter().enumerate() {
+                        if let Err(e) = error {
+                            log::error!("Recipient ({}/{}) failed: {:?}", i + 1, num_using_accounts, e);
+                        } else {
+                            log::info!("Recipient ({}/{}) succeeded", i + 1, num_using_accounts);
+                        }
+                    }
+
+                    log::info!("Completed synchronization");
+                },
+            }
 
             let futures = intmax_senders
                 .iter()

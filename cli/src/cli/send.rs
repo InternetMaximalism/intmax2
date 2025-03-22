@@ -47,6 +47,7 @@ pub async fn send_transfers(
         }
         block_builder_info.first().unwrap().url.clone()
     };
+    log::info!("Block builder url: {}", block_builder_url);
 
     // fail::fail_point!("quote-transfer-fee-error", |_| {
     //     Err(CliError::UnexpectedError(
