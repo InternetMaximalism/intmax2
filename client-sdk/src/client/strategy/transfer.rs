@@ -165,7 +165,7 @@ pub async fn fetch_all_unprocessed_transfer_info(
         order: CursorOrder::Asc,
         limit: None,
     };
-    let mut included_digests = process_status.processed_digests.clone(); // cleared after first fetch
+    let mut included_digests = process_status.pending_digests.clone(); // cleared after first fetch
 
     let mut settled = Vec::new();
     let mut pending = Vec::new();
