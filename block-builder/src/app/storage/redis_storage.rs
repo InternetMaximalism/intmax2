@@ -259,9 +259,11 @@ impl RedisStorage {
     /// Initializes Redis connection and sets up keys for shared state.
     pub async fn new(config: &StorageConfig) -> Self {
         log::info!("Initializing Redis storage");
-        // Create a common prefix for all block builder instances to share the same state
-        let prefix = "block_builder:shared";
-
+        let cluster_id = config
+            .cluster_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
+        let prefix = format!("block_builder:{}", cluster_id);
         // Create Redis client with fallback to localhost if URL not provided
         let redis_url = config.redis_url.clone().expect("redis_url not found");
         let client = Client::open(redis_url).expect("Failed to create Redis client");

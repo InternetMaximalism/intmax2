@@ -119,7 +119,7 @@ pub struct S3GetDataBatchRequest {
 
 impl Signable for S3GetDataBatchRequest {
     fn content(&self) -> Vec<u8> {
-        // to reuse the signature, we exclude data_type and uuids from the content intentionally
+        // to reuse the signature, we exclude topic and digests from the content intentionally
         content_prefix("get_data_batch")
     }
 }
@@ -140,7 +140,7 @@ pub struct S3GetDataSequenceRequest {
 
 impl Signable for S3GetDataSequenceRequest {
     fn content(&self) -> Vec<u8> {
-        // to reuse the signature, we exclude data_type and cursor from the content intentionally
+        // to reuse the signature, we exclude topic and cursor from the content intentionally
         content_prefix("get_data_sequence")
     }
 }

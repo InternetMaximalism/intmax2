@@ -195,6 +195,7 @@ impl BlockBuilder {
             proposing_block_interval: env.proposing_block_interval,
             deposit_check_interval: env.deposit_check_interval,
             redis_url: env.redis_url.clone(),
+            cluster_id: env.cluster_id.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
 

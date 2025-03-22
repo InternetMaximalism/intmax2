@@ -7,7 +7,7 @@ async function main() {
     const privkey = key.privkey;
 
     // get auth for store vault using private key
-    const auth = await generate_auth_for_store_vault(privkey);
+    const auth = await generate_auth_for_store_vault(privkey, env.USE_S3);
     console.log(`auth: pubkey ${auth.pubkey}, expiry ${auth.expiry}`);
 
     // get latest 10 encrypted data

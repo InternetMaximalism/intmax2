@@ -13,4 +13,5 @@ pub struct StorageConfig {
 
     // Redis configuration
     pub redis_url: Option<String>,
+    pub cluster_id: Option<String>,
 }
