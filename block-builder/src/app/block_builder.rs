@@ -1,11 +1,14 @@
 use ethers::types::H256;
-use intmax2_client_sdk::external_api::{
-    contract::{
-        block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
+use intmax2_client_sdk::{
+    client::key_from_eth::generate_intmax_account_from_eth_key,
+    external_api::{
+        contract::{
+            block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
+        },
+        s3_store_vault::S3StoreVaultClient,
+        store_vault_server::StoreVaultServerClient,
+        validity_prover::ValidityProverClient,
     },
-    s3_store_vault::S3StoreVaultClient,
-    store_vault_server::StoreVaultServerClient,
-    validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::api::{
     block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
@@ -46,6 +49,8 @@ pub struct Config {
 
     // fees
     pub beneficiary_pubkey: Option<U256>,
+    pub use_fee: bool,
+    pub use_collateral: bool,
     pub registration_fee: Option<HashMap<u32, U256>>,
     pub non_registration_fee: Option<HashMap<u32, U256>>,
     pub registration_collateral_fee: Option<HashMap<u32, U256>>,
@@ -91,12 +96,8 @@ impl BlockBuilder {
             env.l2_chain_id,
             env.block_builder_registry_contract_address,
         );
-
-        // Parse and process configuration
         let config = Self::create_config(env)?;
-
-        // Create storage
-        let storage = Self::create_storage(env, config.beneficiary_pubkey).await?;
+        let storage = Self::create_storage(env, &config).await?;
 
         Ok(Self {
             config,
@@ -116,7 +117,6 @@ impl BlockBuilder {
             u.to_big_endian(&mut buf);
             U256::from_bytes_be(&buf)
         };
-
         let registration_fee = env
             .registration_fee
             .as_ref()
@@ -132,16 +132,39 @@ impl BlockBuilder {
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
-        let _non_registration_collateral_fee = env
+        let non_registration_collateral_fee = env
             .non_registration_collateral_fee
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
+        let use_fee = registration_fee.is_some() || non_registration_fee.is_some();
+        let use_collateral_fee =
+            registration_collateral_fee.is_some() || non_registration_fee.is_some();
+        if use_collateral_fee && !use_fee {
+            return Err(BlockBuilderError::InvalidFeeSetting(
+                "Collateral fee is set but fee is not set".to_string(),
+            ));
+        }
+        let beneficiary_pubkey = if use_fee {
+            if let Some(beneficiary_pubkey) = env.beneficiary_pubkey.as_ref() {
+                Some(U256::from_bytes_be(beneficiary_pubkey.as_bytes()))
+            } else {
+                // generate from eth private key
+                let key = generate_intmax_account_from_eth_key(env.block_builder_private_key);
+                Some(key.pubkey)
+            }
+        } else {
+            None
+        };
 
-        let beneficiary_pubkey = env
-            .beneficiary_pubkey
-            .map(|pubkey| U256::from_bytes_be(pubkey.as_bytes()));
-
+        // log configuration
+        log::info!("eth_allowance_for_block: {}", eth_allowance_for_block);
+        log::info!("use_fee: {}", use_fee);
+        log::info!("use_collateral_fee: {}", use_collateral_fee);
+        log::info!(
+            "beneficiary_pubkey: {}",
+            beneficiary_pubkey.map(|b| b.to_hex()).unwrap_or_default()
+        );
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
@@ -149,47 +172,25 @@ impl BlockBuilder {
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
             beneficiary_pubkey,
+            use_fee,
+            use_collateral: use_collateral_fee,
             registration_fee,
             non_registration_fee,
             registration_collateral_fee,
-            non_registration_collateral_fee: _non_registration_collateral_fee,
+            non_registration_collateral_fee,
         };
-
         Ok(config)
     }
 
     /// Create storage based on configuration
     async fn create_storage(
         env: &EnvVar,
-        beneficiary_pubkey: Option<U256>,
+        config: &Config,
     ) -> Result<Arc<Box<dyn Storage>>, BlockBuilderError> {
-        // Parse fee configuration
-        let registration_fee = env
-            .registration_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        let non_registration_fee = env
-            .non_registration_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        let registration_collateral_fee = env
-            .registration_collateral_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        let _non_registration_collateral_fee = env
-            .non_registration_collateral_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-
-        // Create storage configuration
         let storage_config = StorageConfig {
-            use_fee: registration_fee.is_some() || non_registration_fee.is_some(),
-            use_collateral: registration_collateral_fee.is_some() || non_registration_fee.is_some(),
-            fee_beneficiary: beneficiary_pubkey.unwrap_or_default(),
+            use_fee: config.use_fee,
+            use_collateral: config.use_collateral,
+            fee_beneficiary: config.beneficiary_pubkey.unwrap_or_default(),
             tx_timeout: env.tx_timeout,
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
@@ -198,9 +199,7 @@ impl BlockBuilder {
             cluster_id: env.cluster_id.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
-
         let storage = storage::create_storage(&storage_config).await;
-
         Ok(Arc::new(storage))
     }
 
@@ -229,7 +228,6 @@ impl BlockBuilder {
             "send_tx_request is_registration_block: {}",
             is_registration_block
         );
-
         // Verify account info
         let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
         self.verify_account_info(is_registration_block, pubkey, &account_info)
@@ -248,11 +246,9 @@ impl BlockBuilder {
             fee_proof: fee_proof.clone(),
             request_id: request_id.clone(),
         };
-
         self.storage
             .add_tx(is_registration_block, tx_request)
             .await?;
-
         Ok(request_id)
     }
 
