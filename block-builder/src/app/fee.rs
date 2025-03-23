@@ -25,6 +25,7 @@ use intmax2_zkp::{
     constants::NUM_SENDERS_IN_BLOCK,
     ethereum_types::{
         account_id::{AccountId, AccountIdPacked},
+        address::Address,
         u256::U256,
     },
 };
@@ -36,6 +37,7 @@ use uuid::Uuid;
 pub async fn validate_fee_proof(
     store_vault_server_client: &dyn StoreVaultClientInterface,
     beneficiary_pubkey: Option<U256>,
+    block_builder_address: Address,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
     sender: U256,
@@ -92,6 +94,11 @@ pub async fn validate_fee_proof(
                 ));
             }
         }
+        if collateral_block.block_builder_address != block_builder_address {
+            return Err(FeeError::FeeVerificationError(
+                "Invalid block builder address in collateral block".to_string(),
+            ));
+        }
 
         // validate signature
         let user_signature = UserSignature {
@@ -105,7 +112,7 @@ pub async fn validate_fee_proof(
             is_registration_block: collateral_block.is_registration_block,
             tx_tree_root: transfer_data.tx_tree_root,
             expiry: collateral_block.expiry.into(),
-            block_builder_address: collateral_block.block_builder_address, // todo: check address
+            block_builder_address,
             block_builder_nonce: 0,
         };
         user_signature

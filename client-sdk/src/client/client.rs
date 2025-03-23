@@ -190,6 +190,7 @@ impl Client {
     pub async fn send_tx_request(
         &self,
         block_builder_url: &str,
+        block_builder_address: Address,
         key: KeySet,
         transfers: Vec<Transfer>,
         payment_memos: Vec<PaymentMemoEntry>,
@@ -317,6 +318,8 @@ impl Client {
                 fee_index,
                 &transfers,
                 collateral_transfer,
+                is_registration_block,
+                block_builder_address,
             )
             .await?;
             // save tx data for collateral block
@@ -710,6 +713,7 @@ impl Client {
         )
         .await?;
         Ok(FeeQuote {
+    
             beneficiary,
             fee,
             collateral_fee: None,

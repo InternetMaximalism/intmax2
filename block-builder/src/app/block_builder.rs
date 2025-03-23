@@ -42,6 +42,7 @@ pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
 pub struct Config {
     pub block_builder_url: String,
     pub block_builder_private_key: H256,
+    pub block_builder_address: Address,
     pub eth_allowance_for_block: U256,
 
     pub initial_heart_beat_delay: u64,
@@ -145,9 +146,14 @@ impl BlockBuilder {
             .beneficiary_pubkey
             .map(|pubkey| U256::from_bytes_be(pubkey.as_bytes()).unwrap());
 
+        let block_builder_address = get_address(env.l2_chain_id, env.block_builder_private_key);
+        let block_builder_address =
+            Address::from_bytes_be(block_builder_address.as_bytes()).unwrap();
+
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
+            block_builder_address,
             eth_allowance_for_block,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
@@ -216,6 +222,7 @@ impl BlockBuilder {
     /// Get fee information for the block builder
     pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
         BlockBuilderFeeInfo {
+            block_builder_address: self.config.block_builder_address,
             beneficiary: self.config.beneficiary_pubkey,
             registration_fee: convert_fee_vec(&self.config.registration_fee),
             non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
@@ -308,6 +315,7 @@ impl BlockBuilder {
         validate_fee_proof(
             self.store_vault_server_client.as_ref().as_ref(),
             self.config.beneficiary_pubkey,
+            self.config.block_builder_address,
             required_fee,
             required_collateral_fee,
             pubkey,

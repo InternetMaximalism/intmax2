@@ -38,6 +38,8 @@ pub async fn generate_fee_proof(
     fee_index: u32,
     transfers: &[Transfer],
     collateral_transfer: Option<Transfer>,
+    is_registration_block: bool,
+    block_builder_address: Address,
 ) -> Result<(FeeProof, Option<SpentWitness>), ClientError> {
     let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
     for transfer in transfers {
@@ -107,8 +109,6 @@ pub async fn generate_fee_proof(
             };
 
             let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
-            let block_builder_address = Address::default(); // todo: get from args
-            let is_registration_block = false; // todo: get from args
             let block_sign_payload = BlockSignPayload {
                 is_registration_block,
                 tx_tree_root,
