@@ -190,7 +190,6 @@ impl Client {
     pub async fn send_tx_request(
         &self,
         block_builder_url: &str,
-        block_builder_address: Address,
         key: KeySet,
         transfers: Vec<Transfer>,
         payment_memos: Vec<PaymentMemoEntry>,
@@ -230,6 +229,9 @@ impl Client {
                 ));
             }
         }
+
+        // get fee info
+        let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
 
         // fetch if this is first time tx
         let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
@@ -319,7 +321,7 @@ impl Client {
                 &transfers,
                 collateral_transfer,
                 is_registration_block,
-                block_builder_address,
+                fee_info.block_builder_address,
             )
             .await?;
             // save tx data for collateral block
@@ -713,7 +715,6 @@ impl Client {
         )
         .await?;
         Ok(FeeQuote {
-    
             beneficiary,
             fee,
             collateral_fee: None,
