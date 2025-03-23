@@ -2,6 +2,7 @@ use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
     contract::{
         block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
+        utils::get_address,
     },
     s3_store_vault::S3StoreVaultClient,
     store_vault_server::StoreVaultServerClient,
@@ -17,7 +18,9 @@ use intmax2_zkp::{
         block_builder::{BlockProposal, UserSignature},
         tx::Tx,
     },
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{
+        account_id::AccountId, address::Address, u256::U256, u32limb_trait::U32LimbTrait,
+    },
 };
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
@@ -179,16 +182,21 @@ impl BlockBuilder {
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
-        let non_registration_collateral_fee = env
+        let _non_registration_collateral_fee = env
             .non_registration_collateral_fee
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
 
+        let block_builder_address = get_address(env.l2_chain_id, env.block_builder_private_key);
+        let block_builder_address =
+            Address::from_bytes_be(block_builder_address.as_bytes()).unwrap();
+
         // Create storage configuration
         let storage_config = StorageConfig {
             use_fee: registration_fee.is_some() || non_registration_fee.is_some(),
             use_collateral: registration_collateral_fee.is_some() || non_registration_fee.is_some(),
+            block_builder_address,
             fee_beneficiary: beneficiary_pubkey.unwrap_or_default(),
             tx_timeout: env.tx_timeout,
             accepting_tx_interval: env.accepting_tx_interval,
@@ -241,9 +249,10 @@ impl BlockBuilder {
 
         // Create and add transaction request
         let request_id = Uuid::new_v4().to_string();
+        let account_id = account_info.account_id.map(|id| AccountId(id));
         let tx_request = TxRequest {
             pubkey,
-            account_id: account_info.account_id,
+            account_id,
             tx,
             fee_proof: fee_proof.clone(),
             request_id: request_id.clone(),

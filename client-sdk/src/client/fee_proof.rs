@@ -120,7 +120,9 @@ pub async fn generate_fee_proof(
             let collateral_block = CollateralBlock {
                 sender_proof_set_ephemeral_key,
                 fee_transfer_data,
+                is_registration_block,
                 expiry,
+                block_builder_address,
                 signature,
             };
             (Some(collateral_block), Some(collateral_spent_witness))
