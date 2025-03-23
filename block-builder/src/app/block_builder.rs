@@ -182,7 +182,7 @@ impl BlockBuilder {
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
-        let _non_registration_collateral_fee = env
+        let non_registration_collateral_fee = env
             .non_registration_collateral_fee
             .as_ref()
             .map(|fee| parse_fee_str(fee))
@@ -195,7 +195,8 @@ impl BlockBuilder {
         // Create storage configuration
         let storage_config = StorageConfig {
             use_fee: registration_fee.is_some() || non_registration_fee.is_some(),
-            use_collateral: registration_collateral_fee.is_some() || non_registration_fee.is_some(),
+            use_collateral: registration_collateral_fee.is_some()
+                || non_registration_collateral_fee.is_some(),
             block_builder_address,
             fee_beneficiary: beneficiary_pubkey.unwrap_or_default(),
             tx_timeout: env.tx_timeout,
@@ -249,7 +250,7 @@ impl BlockBuilder {
 
         // Create and add transaction request
         let request_id = Uuid::new_v4().to_string();
-        let account_id = account_info.account_id.map(|id| AccountId(id));
+        let account_id = account_info.account_id.map(AccountId);
         let tx_request = TxRequest {
             pubkey,
             account_id,

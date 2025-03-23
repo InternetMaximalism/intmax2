@@ -116,6 +116,11 @@ impl Storage for InMemoryStorage {
             &tx_requests,
             self.config.tx_timeout,
         );
+        log::info!(
+            "constructed proposal block_id: {}, payload: {:?}",
+            memo.block_id,
+            memo.block_sign_payload.clone()
+        );
 
         // update request_id -> block_id
         let mut request_id_to_block_id = self.request_id_to_block_id.write().await;

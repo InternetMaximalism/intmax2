@@ -662,8 +662,10 @@ mod tests {
         from_str_to_u256, SqlIndexedMerkleTree,
     };
     use intmax2_zkp::{
-        common::trees::account_tree::AccountTree, constants::ACCOUNT_TREE_HEIGHT,
-        ethereum_types::u256::U256, utils::trees::indexed_merkle_tree::leaf::IndexedMerkleLeaf,
+        common::trees::account_tree::AccountTree,
+        constants::ACCOUNT_TREE_HEIGHT,
+        ethereum_types::{account_id::AccountId, u256::U256},
+        utils::trees::indexed_merkle_tree::leaf::IndexedMerkleLeaf,
     };
 
     fn setup_test() -> String {
@@ -703,7 +705,7 @@ mod tests {
             .await?;
         tx.commit().await?;
 
-        let result = proof.verify(old_root, account_id, (account_id as u32).into());
+        let result = proof.verify(old_root, AccountId(account_id), (account_id as u32).into());
         assert!(result);
 
         Ok(())
@@ -810,7 +812,7 @@ mod tests {
                 let proof = tree.prove_inclusion(&mut tx, timestamp, index).await?;
                 let root = tree.sql_node_hashes.get_root(&mut tx, timestamp).await?;
 
-                let result = proof.verify(root, index, from_str_to_u256(key));
+                let result = proof.verify(root, AccountId(index), from_str_to_u256(key));
                 assert!(result, "Proof verification failed for index {}", index);
             }
 
@@ -909,7 +911,7 @@ mod tests {
             .get_root(&mut tx, new_timestamp)
             .await?;
         let proof = tree.prove_inclusion(&mut tx, new_timestamp, 1).await?;
-        let result = proof.verify(root, 1, leaf4.key);
+        let result = proof.verify(root, AccountId(1), leaf4.key);
         assert!(result, "Final proof verification failed");
 
         tx.rollback().await?;

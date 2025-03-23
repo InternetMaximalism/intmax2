@@ -57,7 +57,7 @@ impl BlockPostTask {
     pub fn from_memo(memo: &ProposalMemo, signatures: &[UserSignature]) -> Self {
         Self {
             force_post: false,
-            block_sign_payload: BlockSignPayload::default(),
+            block_sign_payload: memo.block_sign_payload.clone(),
             pubkeys: memo.pubkeys.clone(),
             account_ids: memo.get_account_ids(),
             pubkey_hash: memo.pubkey_hash,

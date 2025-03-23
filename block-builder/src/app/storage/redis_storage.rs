@@ -496,6 +496,11 @@ impl Storage for RedisStorage {
                     &tx_requests,
                     self.config.tx_timeout,
                 );
+                log::info!(
+                    "constructed proposal block_id: {}, payload: {:?}",
+                    memo.block_id,
+                    memo.block_sign_payload.clone()
+                );
 
                 // Serialize the memo for storage
                 let serialized_memo = serde_json::to_string(&memo)?;
