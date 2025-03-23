@@ -61,6 +61,6 @@ impl JsBlockProposal {
     #[wasm_bindgen]
     pub fn tx_tree_root(&self) -> Result<String, JsError> {
         let proposal = self.to_block_proposal()?;
-        Ok(proposal.tx_tree_root.to_string())
+        Ok(proposal.block_sign_payload.tx_tree_root.to_string())
     }
 }
