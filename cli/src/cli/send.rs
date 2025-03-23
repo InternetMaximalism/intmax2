@@ -84,8 +84,9 @@ pub async fn send_transfers(
         .finalize_tx(&block_builder_url, key, &memo, &proposal)
         .await?;
 
-    let expiry_with_margin = if proposal.expiry > 0 {
-        proposal.expiry + BLOCK_SYNC_MARGIN
+    let expiry: u64 = proposal.block_sign_payload.expiry.into();
+    let expiry_with_margin = if expiry > 0 {
+        expiry + BLOCK_SYNC_MARGIN
     } else {
         chrono::Utc::now().timestamp() as u64 + BLOCK_SYNC_MARGIN
     };

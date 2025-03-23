@@ -114,7 +114,7 @@ impl BlockBuilder {
             let u = ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
             let mut buf = [0u8; 32];
             u.to_big_endian(&mut buf);
-            U256::from_bytes_be(&buf)
+            U256::from_bytes_be(&buf).unwrap()
         };
 
         let registration_fee = env
@@ -140,7 +140,7 @@ impl BlockBuilder {
 
         let beneficiary_pubkey = env
             .beneficiary_pubkey
-            .map(|pubkey| U256::from_bytes_be(pubkey.as_bytes()));
+            .map(|pubkey| U256::from_bytes_be(pubkey.as_bytes()).unwrap());
 
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
@@ -179,7 +179,7 @@ impl BlockBuilder {
             .as_ref()
             .map(|fee| parse_fee_str(fee))
             .transpose()?;
-        let _non_registration_collateral_fee = env
+        let non_registration_collateral_fee = env
             .non_registration_collateral_fee
             .as_ref()
             .map(|fee| parse_fee_str(fee))

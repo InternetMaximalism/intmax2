@@ -1272,7 +1272,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "tracing-actix-web",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -1424,7 +1424,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "tracing-actix-web",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -3833,7 +3833,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "url",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -3955,7 +3955,6 @@ dependencies = [
 [[package]]
 name = "intmax2-zkp"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#8f511d8ee5f2f3286ecb1d6854f31b056872a57a"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3981,7 +3980,8 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
- "uuid 1.12.1",
+ "thiserror 1.0.69",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -4208,7 +4208,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "tracing-actix-web",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -6110,9 +6110,9 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
+checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
 dependencies = [
  "serde_derive",
 ]
@@ -6128,9 +6128,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
+checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6139,9 +6139,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.138"
+version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d434192e7da787e94a6ea7e9670b26a036d0ca41e0b7efb2676dd32bae872949"
+checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
  "itoa",
  "memchr",
@@ -6238,7 +6238,7 @@ dependencies = [
  "tracing-actix-web",
  "tracing-opentelemetry",
  "tracing-subscriber",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -6488,7 +6488,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -6571,7 +6571,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.11",
  "tracing",
- "uuid 1.12.1",
+ "uuid 1.16.0",
  "whoami",
 ]
 
@@ -6612,7 +6612,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.11",
  "tracing",
- "uuid 1.12.1",
+ "uuid 1.16.0",
  "whoami",
 ]
 
@@ -6638,7 +6638,7 @@ dependencies = [
  "sqlx-core",
  "tracing",
  "url",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -6702,7 +6702,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "tracing-actix-web",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -7319,7 +7319,7 @@ dependencies = [
  "mutually_exclusive_features",
  "pin-project",
  "tracing",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -7606,11 +7606,11 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.12.1"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b"
+checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.3.1",
  "serde",
 ]
 
@@ -7647,7 +7647,7 @@ dependencies = [
  "tracing",
  "tracing-actix-web",
  "tracing-subscriber",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -7681,7 +7681,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]
@@ -8193,7 +8193,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "tracing-actix-web",
- "uuid 1.12.1",
+ "uuid 1.16.0",
 ]
 
 [[package]]

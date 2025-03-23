@@ -491,6 +491,8 @@ impl Storage for RedisStorage {
                 // Create memo from the transaction requests
                 let memo = ProposalMemo::from_tx_requests(
                     is_registration,
+                    self.config.block_builder_address,
+                    0, // todo: fetch builder nonce from contract
                     &tx_requests,
                     self.config.tx_timeout,
                 );
@@ -597,7 +599,7 @@ impl Storage for RedisStorage {
 
             // Verify signature
             signature
-                .verify(memo.tx_tree_root, memo.expiry, memo.pubkey_hash)
+                .verify(&memo.block_sign_payload, memo.pubkey_hash)
                 .map_err(|e| {
                     StorageError::AddSignatureError(format!("signature verification failed: {}", e))
                 })?;

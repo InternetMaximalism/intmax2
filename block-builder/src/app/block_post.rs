@@ -6,7 +6,7 @@ use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInt
 use intmax2_zkp::{
     common::block_builder::{construct_signature, SenderWithSignature, UserSignature},
     constants::NUM_SENDERS_IN_BLOCK,
-    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
+    ethereum_types::{account_id::AccountIdPacked, bytes32::Bytes32, u256::U256},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

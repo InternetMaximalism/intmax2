@@ -12,9 +12,7 @@ use intmax2_interfaces::{
 use intmax2_zkp::{
     common::{
         signature::{
-            flatten::FlatG2,
-            key_set::KeySet,
-            sign::{get_pubkey_hash, sign_to_tx_root_and_expiry},
+            block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
         },
         transfer::Transfer,
         trees::{transfer_tree::TransferTree, tx_tree::TxTree},
@@ -22,7 +20,7 @@ use intmax2_zkp::{
         witness::{spent_witness::SpentWitness, transfer_witness::TransferWitness},
     },
     constants::{NUM_SENDERS_IN_BLOCK, TRANSFER_TREE_HEIGHT, TX_TREE_HEIGHT},
-    ethereum_types::{bytes32::Bytes32, u256::U256},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
 };
 use num_bigint::BigUint;
 
@@ -109,8 +107,16 @@ pub async fn generate_fee_proof(
             };
 
             let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
-            let signature: FlatG2 =
-                sign_to_tx_root_and_expiry(key.privkey, tx_tree_root, expiry, pubkey_hash).into();
+            let block_builder_address = Address::default(); // todo: get from args
+            let is_registration_block = false; // todo: get from args
+            let block_sign_payload = BlockSignPayload {
+                is_registration_block,
+                tx_tree_root,
+                expiry: expiry.into(),
+                block_builder_address,
+                block_builder_nonce: 0, // contract will ignore nonce checking
+            };
+            let signature = block_sign_payload.sign(key.privkey, pubkey_hash);
             let collateral_block = CollateralBlock {
                 sender_proof_set_ephemeral_key,
                 fee_transfer_data,

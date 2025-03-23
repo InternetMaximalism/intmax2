@@ -146,11 +146,11 @@ impl LiquidityContract {
         let token_type: u8 = token_info.token_type;
         let token_type = TokenType::try_from(token_type)
             .map_err(|e| BlockchainError::ParseError(format!("Invalid token type: {:?}", e)))?;
-        let token_address = Address::from_bytes_be(token_info.token_address.as_bytes());
+        let token_address = Address::from_bytes_be(token_info.token_address.as_bytes()).unwrap();
         let token_id = {
             let mut buf = [0u8; 32];
             token_info.token_id.to_big_endian(&mut buf);
-            U256::from_bytes_be(&buf)
+            U256::from_bytes_be(&buf).unwrap()
         };
         Ok((token_type, token_address, token_id))
     }
