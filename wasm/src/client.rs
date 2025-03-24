@@ -7,7 +7,7 @@ use intmax2_client_sdk::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
         },
-        private_zkp_server::PrivateZKPServerClient,
+        private_zkp_server::{PrivateZKPServerClient, PrivateZKPServerConfig},
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
         validity_prover::ValidityProverClient,
@@ -87,6 +87,10 @@ pub struct Config {
     pub use_private_zkp_server: bool,
 
     pub use_s3: bool,
+
+    pub private_zkp_server_max_retires: Option<usize>,
+
+    pub private_zkp_server_retry_interval: Option<u64>,
 }
 
 #[wasm_bindgen]
@@ -117,6 +121,9 @@ impl Config {
         withdrawal_contract_address: String,
         use_private_zkp_server: bool,
         use_s3: bool,
+
+        private_zkp_server_max_retires: Option<usize>,
+        private_zkp_server_retry_interval: Option<u64>,
     ) -> Config {
         Config {
             store_vault_server_url,
@@ -140,6 +147,8 @@ impl Config {
             withdrawal_contract_address,
             use_private_zkp_server,
             use_s3,
+            private_zkp_server_max_retires,
+            private_zkp_server_retry_interval,
         }
     }
 }
@@ -153,7 +162,14 @@ pub fn get_client(config: &Config) -> Client {
     };
     let validity_prover = Box::new(ValidityProverClient::new(&config.validity_prover_url));
     let balance_prover: Box<dyn BalanceProverClientInterface> = if config.use_private_zkp_server {
-        Box::new(PrivateZKPServerClient::new(&config.balance_prover_url))
+        let private_zkp_server_config = PrivateZKPServerConfig {
+            max_retries: config.private_zkp_server_max_retires.unwrap_or(30),
+            retry_interval: config.private_zkp_server_retry_interval.unwrap_or(5),
+        };
+        Box::new(PrivateZKPServerClient::new(
+            &config.balance_prover_url,
+            &private_zkp_server_config,
+        ))
     } else {
         Box::new(BalanceProverClient::new(&config.balance_prover_url))
     };

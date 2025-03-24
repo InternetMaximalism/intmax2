@@ -1,4 +1,4 @@
-import { bool, cleanEnv, num, str, url } from 'envalid';
+import { bool, cleanEnv, num, str, url, } from 'envalid';
 import { Config, } from '../pkg/intmax2_wasm_lib';
 import * as dotenv from 'dotenv';
 dotenv.config();
@@ -39,6 +39,10 @@ export const env = cleanEnv(process.env, {
     ROLLUP_CONTRACT_ADDRESS: str(),
     ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER: num(),
     WITHDRAWAL_CONTRACT_ADDRESS: str(),
+
+    // Private ZKP server configurations
+    PRIVATE_ZKP_SERVER_MAX_RETRIES: num({ default: 30 }),
+    PRIVATE_ZKP_SERVER_RETRY_INTERVAL: num({ default: 5 }),
 });
 
 export const config = new Config(
@@ -63,4 +67,6 @@ export const config = new Config(
     env.WITHDRAWAL_CONTRACT_ADDRESS,
     env.USE_PRIVATE_ZKP_SERVER,
     env.USE_S3,
+    env.PRIVATE_ZKP_SERVER_MAX_RETRIES,
+    BigInt(env.PRIVATE_ZKP_SERVER_RETRY_INTERVAL),
 );

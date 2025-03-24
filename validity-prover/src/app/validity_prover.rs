@@ -738,8 +738,15 @@ impl ValidityProver {
         let self_clone = self.clone();
         actix_web::rt::spawn(async move {
             loop {
-                if let Err(e) = self_clone.generate_validity_proof().await {
-                    log::error!("Error in generate validity proof: {:?}", e);
+                let self_clone = self_clone.clone();
+                let generate_validity_proof_result = actix_web::rt::spawn(async move {
+                    if let Err(e) = self_clone.generate_validity_proof().await {
+                        log::error!("Error in generate validity proof: {:?}", e);
+                    }
+                })
+                .await;
+                if let Err(e) = generate_validity_proof_result {
+                    log::error!("Panic error in generate validity proof: {:?}", e);
                 }
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
@@ -749,8 +756,15 @@ impl ValidityProver {
         let self_clone = self.clone();
         actix_web::rt::spawn(async move {
             loop {
-                if let Err(e) = self_clone.add_tasks().await {
-                    log::error!("Error in add tasks: {:?}", e);
+                let self_clone = self_clone.clone();
+                let add_task_result = actix_web::rt::spawn(async move {
+                    if let Err(e) = self_clone.add_tasks().await {
+                        log::error!("Error in add tasks: {:?}", e);
+                    }
+                })
+                .await;
+                if let Err(e) = add_task_result {
+                    log::error!("Panic error in add tasks: {:?}", e);
                 }
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
@@ -759,8 +773,15 @@ impl ValidityProver {
         let self_clone = self.clone();
         actix_web::rt::spawn(async move {
             loop {
-                if let Err(e) = self_clone.sync().await {
-                    log::error!("Error in sync: {:?}", e);
+                let self_clone = self_clone.clone();
+                let sync_result = actix_web::rt::spawn(async move {
+                    if let Err(e) = self_clone.sync().await {
+                        log::error!("Error in sync: {:?}", e);
+                    }
+                })
+                .await;
+                if let Err(e) = sync_result {
+                    log::error!("Panic error in sync: {:?}", e);
                 }
                 tokio::time::sleep(Duration::from_secs(sync_interval)).await;
             }
@@ -768,6 +789,7 @@ impl ValidityProver {
 
         let manager = self.manager.clone();
         tokio::spawn(async move {
+            let manager = manager.clone();
             if let Err(e) = manager.cleanup_inactive_tasks().await {
                 log::error!("Error in task manager: {:?}", e);
             }

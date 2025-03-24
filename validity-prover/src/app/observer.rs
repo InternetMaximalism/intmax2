@@ -60,6 +60,18 @@ impl Observer {
             )
             .execute(&pool)
             .await?;
+
+            sqlx::query!(
+                r#"
+                INSERT INTO observer_block_sync_eth_block_num (singleton_key, block_sync_eth_block_num)
+                VALUES (TRUE, $1)
+                ON CONFLICT (singleton_key) DO UPDATE
+                SET block_sync_eth_block_num = $1
+                "#,
+                rollup_contract.deployed_block_number as i64
+            )
+            .execute(&pool)
+            .await?;
         }
 
         Ok(Observer {
