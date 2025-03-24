@@ -23,6 +23,9 @@ pub enum BlockBuilderError {
     #[error("Fee error: {0}")]
     FeeError(#[from] FeeError),
 
+    #[error("Invalid fee setting: {0}")]
+    InvalidFeeSetting(String),
+
     #[error("Queue error: {0}")]
     QueueError(String),
 

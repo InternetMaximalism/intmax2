@@ -19,15 +19,12 @@ exclude = ["job-servers/aggregator-prover"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.16"
+version = "0.1.17"
 edition = "2021"
 
 [workspace.dependencies]
 plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
-# intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp", branch = "cli", features = [
-#     "faster-mining",
-# ] }
-intmax2-zkp = {path="../intmax2-zkp", features = [
+intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp", branch = "block-builder-nonce", features = [
     "faster-mining",
 ] }
 plonky2_bn254 = { git = "https://github.com/InternetMaximalism/plonky2_bn254" }
