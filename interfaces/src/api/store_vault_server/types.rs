@@ -94,8 +94,12 @@ pub struct GetDataBatchRequest {
 
 impl Signable for GetDataBatchRequest {
     fn content(&self) -> Vec<u8> {
-        // to reuse the signature, we exclude data_type and uuids from the content intentionally
-        content_prefix("get_data_batch")
+        // to reuse the signature, we exclude topic and digests from the content intentionally
+        [
+            content_prefix("get_data_batch"),
+            bincode::serialize(&self.pubkey).unwrap(),
+        ]
+        .concat()
     }
 }
 
@@ -115,8 +119,12 @@ pub struct GetDataSequenceRequest {
 
 impl Signable for GetDataSequenceRequest {
     fn content(&self) -> Vec<u8> {
-        // to reuse the signature, we exclude data_type and cursor from the content intentionally
-        content_prefix("get_data_sequence")
+        // to reuse the signature, we exclude topic and cursor from the content intentionally
+        [
+            content_prefix("get_data_sequence"),
+            bincode::serialize(&self.pubkey).unwrap(),
+        ]
+        .concat()
     }
 }
 
