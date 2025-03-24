@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use wasm_bindgen::JsError;
 
 pub fn h256_to_bytes32(h256: H256) -> Bytes32 {
-    Bytes32::from_bytes_be(h256.as_bytes())
+    Bytes32::from_bytes_be(h256.as_bytes()).unwrap()
 }
 
 pub fn str_privkey_to_keyset(privkey: &str) -> Result<KeySet, JsError> {

@@ -109,8 +109,18 @@ impl Storage for InMemoryStorage {
 
         let num_tx_requests = tx_requests.len().min(NUM_SENDERS_IN_BLOCK);
         let tx_requests: Vec<TxRequest> = tx_requests.drain(..num_tx_requests).collect();
-        let memo =
-            ProposalMemo::from_tx_requests(is_registration, &tx_requests, self.config.tx_timeout);
+        let memo = ProposalMemo::from_tx_requests(
+            is_registration,
+            self.config.block_builder_address,
+            0, // todo: fetch nonce from contract
+            &tx_requests,
+            self.config.tx_timeout,
+        );
+        log::info!(
+            "constructed proposal block_id: {}, payload: {:?}",
+            memo.block_id,
+            memo.block_sign_payload.clone()
+        );
 
         // update request_id -> block_id
         let mut request_id_to_block_id = self.request_id_to_block_id.write().await;
@@ -183,7 +193,7 @@ impl Storage for InMemoryStorage {
 
         // verify signature
         signature
-            .verify(memo.tx_tree_root, memo.expiry, memo.pubkey_hash)
+            .verify(&memo.block_sign_payload, memo.pubkey_hash)
             .map_err(|e| {
                 StorageError::AddSignatureError(format!("signature verification failed: {}", e))
             })?;

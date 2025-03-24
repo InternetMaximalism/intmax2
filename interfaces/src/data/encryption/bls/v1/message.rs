@@ -62,7 +62,7 @@ impl<'a> EncryptedMessage<'a> {
         let auth_data = auth_data.try_into().unwrap();
 
         let (pubkey_bytes, encrypted) = encrypted.split_at_mut(U256_SIZE);
-        let public_key = U256::from_bytes_be(pubkey_bytes);
+        let public_key = U256::from_bytes_be(pubkey_bytes).unwrap();
 
         // return an error if the encrypted len is currently less than 32
         let tag_index = encrypted

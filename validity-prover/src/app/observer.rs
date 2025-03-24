@@ -324,7 +324,7 @@ impl Observer {
             .into_iter()
             .map(|d| DepositLeafInserted {
                 deposit_index: d.deposit_index as u32,
-                deposit_hash: Bytes32::from_bytes_be(&d.deposit_hash),
+                deposit_hash: Bytes32::from_bytes_be(&d.deposit_hash).unwrap(),
                 eth_block_number: d.eth_block_number as u64,
                 eth_tx_index: d.eth_tx_index as u64,
             })

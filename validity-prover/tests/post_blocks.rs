@@ -36,8 +36,9 @@ async fn post_blocks() -> anyhow::Result<()> {
         .post_registration_block(
             block_builder_private_key,
             BigUint::from(10u32).pow(18).try_into().unwrap(),
-            signature.tx_tree_root,
-            signature.expiry.into(),
+            signature.block_sign_payload.tx_tree_root,
+            signature.block_sign_payload.expiry.into(),
+            signature.block_sign_payload.block_builder_nonce,
             signature.sender_flag,
             signature.agg_pubkey,
             signature.agg_signature,

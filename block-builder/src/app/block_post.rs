@@ -4,9 +4,16 @@ use intmax2_client_sdk::external_api::{
 };
 use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInterface;
 use intmax2_zkp::{
-    common::block_builder::{construct_signature, SenderWithSignature, UserSignature},
+    common::{
+        block_builder::{construct_signature, SenderWithSignature, UserSignature},
+        signature::block_sign_payload::BlockSignPayload,
+    },
     constants::NUM_SENDERS_IN_BLOCK,
-    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
+    ethereum_types::{
+        account_id::{AccountId, AccountIdPacked},
+        bytes32::Bytes32,
+        u256::U256,
+    },
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -21,9 +28,7 @@ const EXPIRY_BUFFER: u64 = 5;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockPostTask {
     pub force_post: bool,
-    pub is_registration_block: bool,
-    pub tx_tree_root: Bytes32,
-    pub expiry: u64,
+    pub block_sign_payload: BlockSignPayload,
     pub pubkeys: Vec<U256>, // sorted & padded pubkeys
     pub account_ids: Option<AccountIdPacked>,
     pub pubkey_hash: Bytes32,
@@ -36,11 +41,11 @@ impl Default for BlockPostTask {
     fn default() -> Self {
         Self {
             force_post: true,
-            is_registration_block: false,
-            tx_tree_root: Bytes32::default(),
-            expiry: 0,
+            block_sign_payload: BlockSignPayload::default(),
             pubkeys: vec![U256::dummy_pubkey(); NUM_SENDERS_IN_BLOCK],
-            account_ids: Some(AccountIdPacked::pack(&[1; NUM_SENDERS_IN_BLOCK])),
+            account_ids: Some(AccountIdPacked::pack(
+                &[AccountId::dummy(); NUM_SENDERS_IN_BLOCK],
+            )),
             pubkey_hash: Bytes32::default(),
             signatures: Vec::new(),
             block_id: Uuid::new_v4().to_string(),
@@ -52,9 +57,7 @@ impl BlockPostTask {
     pub fn from_memo(memo: &ProposalMemo, signatures: &[UserSignature]) -> Self {
         Self {
             force_post: false,
-            is_registration_block: memo.is_registration_block,
-            tx_tree_root: memo.tx_tree_root,
-            expiry: memo.expiry,
+            block_sign_payload: memo.block_sign_payload.clone(),
             pubkeys: memo.pubkeys.clone(),
             account_ids: memo.get_account_ids(),
             pubkey_hash: memo.pubkey_hash,
@@ -73,9 +76,9 @@ pub(crate) async fn post_block(
 ) -> Result<(), BlockBuilderError> {
     log::info!(
         "Posting block: is_registration_block={}, tx_tree_root={}, expiry={}, num_signatures={}, force_post={}",
-        block_post.is_registration_block,
-        block_post.tx_tree_root,
-        block_post.expiry,
+        block_post.block_sign_payload.is_registration_block,
+        block_post.block_sign_payload.tx_tree_root,
+        block_post.block_sign_payload.expiry,
         block_post.signatures.len(),
         block_post.force_post
     );
@@ -132,10 +135,11 @@ pub(crate) async fn post_block(
 
     // expiry check
     let current_time = chrono::Utc::now().timestamp() as u64;
-    if block_post.expiry != 0 && block_post.expiry < current_time + EXPIRY_BUFFER {
+    let expiry: u64 = block_post.block_sign_payload.expiry.into();
+    if expiry != 0 && expiry < current_time + EXPIRY_BUFFER {
         log::error!(
             "Block already expired: expiry={}, current_time={}, buffer={}",
-            block_post.expiry,
+            expiry,
             current_time,
             EXPIRY_BUFFER
         );
@@ -145,7 +149,7 @@ pub(crate) async fn post_block(
     // construct signature
     let mut account_id_packed = None;
     let mut eliminated_pubkeys = Vec::new();
-    if block_post.is_registration_block {
+    if block_post.block_sign_payload.is_registration_block {
         // eliminate pubkeys that already have account_id, which means the user sent another registration tx before this block
         // filter out dummy pubkeys for efficiency
         let pubkeys_without_dummy = block_post
@@ -188,16 +192,14 @@ pub(crate) async fn post_block(
         sender_with_signatures[tx_index].signature = Some(signature.signature.clone());
     }
     let signature = construct_signature(
-        block_post.tx_tree_root,
-        block_post.expiry,
+        &block_post.block_sign_payload,
         block_post.pubkey_hash,
         account_id_hash,
-        block_post.is_registration_block,
         &sender_with_signatures,
     );
 
     // call contract
-    if block_post.is_registration_block {
+    if block_post.block_sign_payload.is_registration_block {
         let trimmed_pubkeys = block_post
             .pubkeys
             .into_iter()
@@ -207,8 +209,9 @@ pub(crate) async fn post_block(
             .post_registration_block(
                 block_builder_private_key,
                 eth_allowance_for_block,
-                block_post.tx_tree_root,
-                block_post.expiry,
+                block_post.block_sign_payload.tx_tree_root,
+                block_post.block_sign_payload.expiry.into(),
+                block_post.block_sign_payload.block_builder_nonce,
                 signature.sender_flag,
                 signature.agg_pubkey,
                 signature.agg_signature,
@@ -221,8 +224,9 @@ pub(crate) async fn post_block(
             .post_non_registration_block(
                 block_builder_private_key,
                 eth_allowance_for_block,
-                block_post.tx_tree_root,
-                block_post.expiry,
+                block_post.block_sign_payload.tx_tree_root,
+                block_post.block_sign_payload.expiry.into(),
+                block_post.block_sign_payload.block_builder_nonce,
                 signature.sender_flag,
                 signature.agg_pubkey,
                 signature.agg_signature,

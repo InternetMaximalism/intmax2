@@ -12,7 +12,7 @@ pub fn convert_u256(input: intmax2_zkp::ethereum_types::u256::U256) -> U256 {
 }
 
 pub fn convert_address(input: Address) -> intmax2_zkp::ethereum_types::address::Address {
-    intmax2_zkp::ethereum_types::address::Address::from_bytes_be(&input.to_fixed_bytes())
+    intmax2_zkp::ethereum_types::address::Address::from_bytes_be(&input.to_fixed_bytes()).unwrap()
 }
 
 pub fn load_env() -> Result<EnvVar, CliError> {
