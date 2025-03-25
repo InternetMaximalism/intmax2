@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT bit_path, hash_value\n            FROM hash_nodes\n            WHERE bit_path = ANY($1)\n              AND timestamp_value <= $2\n              AND tag = $3\n            ORDER BY bit_path, timestamp_value DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bit_path",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "hash_value",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "ByteaArray",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5d8aa4b3337528381f508ce98fee9fae04337bc51c427972bb91aef4efa526e7"
+}

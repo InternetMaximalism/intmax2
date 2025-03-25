@@ -259,9 +259,11 @@ impl RedisStorage {
     /// Initializes Redis connection and sets up keys for shared state.
     pub async fn new(config: &StorageConfig) -> Self {
         log::info!("Initializing Redis storage");
-        // Create a common prefix for all block builder instances to share the same state
-        let prefix = "block_builder:shared";
-
+        let cluster_id = config
+            .cluster_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
+        let prefix = format!("block_builder:{}", cluster_id);
         // Create Redis client with fallback to localhost if URL not provided
         let redis_url = config.redis_url.clone().expect("redis_url not found");
         let client = Client::open(redis_url).expect("Failed to create Redis client");
@@ -489,8 +491,15 @@ impl Storage for RedisStorage {
                 // Create memo from the transaction requests
                 let memo = ProposalMemo::from_tx_requests(
                     is_registration,
+                    self.config.block_builder_address,
+                    0, // todo: fetch builder nonce from contract
                     &tx_requests,
                     self.config.tx_timeout,
+                );
+                log::info!(
+                    "constructed proposal block_id: {}, payload: {:?}",
+                    memo.block_id,
+                    memo.block_sign_payload.clone()
                 );
 
                 // Serialize the memo for storage
@@ -595,7 +604,7 @@ impl Storage for RedisStorage {
 
             // Verify signature
             signature
-                .verify(memo.tx_tree_root, memo.expiry, memo.pubkey_hash)
+                .verify(&memo.block_sign_payload, memo.pubkey_hash)
                 .map_err(|e| {
                     StorageError::AddSignatureError(format!("signature verification failed: {}", e))
                 })?;

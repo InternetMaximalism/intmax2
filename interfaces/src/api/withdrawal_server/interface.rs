@@ -63,7 +63,7 @@ impl ContractWithdrawal {
         input.extend_from_slice(&[self.token_index]);
         input.extend_from_slice(&self.amount.to_u32_vec());
         input.extend_from_slice(&self.nullifier.to_u32_vec());
-        Bytes32::from_u32_slice(solidity_keccak256(&input).as_slice())
+        Bytes32::from_u32_slice(solidity_keccak256(&input).as_slice()).unwrap()
     }
 }
 

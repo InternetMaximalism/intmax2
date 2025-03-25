@@ -10,7 +10,7 @@ use intmax2_zkp::{
         },
     },
     constants::{ACCOUNT_TREE_HEIGHT, NUM_SENDERS_IN_BLOCK},
-    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
+    ethereum_types::{account_id::AccountIdPacked, bytes32::Bytes32, u256::U256},
     utils::trees::indexed_merkle_tree::membership::MembershipProof,
 };
 
@@ -31,7 +31,10 @@ pub async fn to_block_witness<
         full_block.block.block_number != 0,
         "genesis block is not allowed"
     );
-    let is_registration_block = full_block.signature.is_registration_block;
+    let is_registration_block = full_block
+        .signature
+        .block_sign_payload
+        .is_registration_block;
     let (pubkeys, account_id_packed, account_merkle_proofs, account_membership_proofs) =
         if is_registration_block {
             let mut pubkeys = full_block.pubkeys.clone().ok_or(anyhow::anyhow!(
@@ -67,8 +70,10 @@ pub async fn to_block_witness<
             let mut account_merkle_proofs = Vec::new();
             let mut pubkeys = Vec::new();
             for account_id in account_ids {
-                let pubkey = account_tree.key(timestamp, account_id).await?;
-                let proof = account_tree.prove_inclusion(timestamp, account_id).await?;
+                let pubkey = account_tree.key(timestamp, account_id.0).await?;
+                let proof = account_tree
+                    .prove_inclusion(timestamp, account_id.0)
+                    .await?;
                 pubkeys.push(pubkey);
                 account_merkle_proofs.push(proof);
             }

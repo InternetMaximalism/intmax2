@@ -40,4 +40,8 @@ pub struct EnvVar {
 
     // optional token mapping base url
     pub token_mapping_base_url: Option<String>,
+
+    // optional private zkp server settings
+    pub private_zkp_server_max_retires: Option<usize>,
+    pub private_zkp_server_retry_interval: Option<u64>,
 }

@@ -4,7 +4,7 @@ use intmax2_zkp::{
         block_builder::BlockProposal, signature::flatten::FlatG2, tx::Tx,
         witness::transfer_witness::TransferWitness,
     },
-    ethereum_types::u256::U256,
+    ethereum_types::{address::Address, u256::U256},
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +23,9 @@ pub struct FeeProof {
 pub struct CollateralBlock {
     pub sender_proof_set_ephemeral_key: U256,
     pub fee_transfer_data: TransferData,
+    pub is_registration_block: bool,
     pub expiry: u64,
+    pub block_builder_address: Address,
     pub signature: FlatG2,
 }
 
@@ -44,6 +46,7 @@ pub struct Fee {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockBuilderFeeInfo {
+    pub block_builder_address: Address,
     pub beneficiary: Option<U256>,
     pub registration_fee: Option<Vec<Fee>>,
     pub non_registration_fee: Option<Vec<Fee>>,

@@ -7,7 +7,7 @@ use intmax2_client_sdk::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
         },
-        private_zkp_server::PrivateZKPServerClient,
+        private_zkp_server::{PrivateZKPServerClient, PrivateZKPServerConfig},
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
         validity_prover::ValidityProverClient,
@@ -39,7 +39,14 @@ pub fn get_client() -> Result<Client, CliError> {
     let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
     let balance_prover: Box<dyn BalanceProverClientInterface> =
         if env.use_private_zkp_server.unwrap_or(true) {
-            Box::new(PrivateZKPServerClient::new(&env.balance_prover_base_url))
+            let private_zkp_server_config = PrivateZKPServerConfig {
+                max_retries: env.private_zkp_server_max_retires.unwrap_or(30),
+                retry_interval: env.private_zkp_server_retry_interval.unwrap_or(5),
+            };
+            Box::new(PrivateZKPServerClient::new(
+                &env.balance_prover_base_url,
+                &private_zkp_server_config,
+            ))
         } else {
             Box::new(BalanceProverClient::new(&env.balance_prover_base_url))
         };

@@ -29,9 +29,11 @@ use plonky2::{
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
 
-use crate::client::sync::utils::generate_spent_witness;
+use crate::client::{
+    strategy::utils::wait_till_validity_prover_synced, sync::utils::generate_spent_witness,
+};
 
-use super::{error::SyncError, utils::wait_till_validity_prover_synced};
+use super::error::SyncError;
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -186,7 +188,7 @@ pub async fn update_send_by_sender(
     tx_data: &TxData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     // sync check
-    wait_till_validity_prover_synced(validity_prover, tx_block_number).await?;
+    wait_till_validity_prover_synced(validity_prover, true, tx_block_number).await?;
     let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof);
     if tx_block_number <= prev_balance_pis.public_state.block_number {
         return Err(SyncError::InternalError(
@@ -282,7 +284,7 @@ pub async fn update_send_by_receiver(
     tx_block_number: u32,
     transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    wait_till_validity_prover_synced(validity_prover, tx_block_number).await?;
+    wait_till_validity_prover_synced(validity_prover, true, tx_block_number).await?;
 
     // inputs validation
     let sender_proof_set = transfer_data.sender_proof_set.as_ref().unwrap();
@@ -383,7 +385,7 @@ pub async fn update_no_send(
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
     to_block_number: u32,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    wait_till_validity_prover_synced(validity_prover, to_block_number).await?;
+    wait_till_validity_prover_synced(validity_prover, true, to_block_number).await?;
     let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof);
     let prev_block_number = prev_balance_pis.public_state.block_number;
     if to_block_number <= prev_block_number {

@@ -30,10 +30,12 @@ pub struct WithdrawalInfo {
     pub timeout: Vec<(MetaData, TransferData)>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_withdrawal_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
+    current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
@@ -101,9 +103,6 @@ pub async fn fetch_withdrawal_info(
         .get_block_number_by_tx_tree_root_batch(&tx_tree_roots)
         .await?;
 
-    // Current timestamp for timeout checking
-    let current_time = chrono::Utc::now().timestamp() as u64;
-
     // Process results and categorize transfers
     for ((meta, transfer_data), block_number) in valid_transfers.into_iter().zip(block_numbers) {
         match block_number {
@@ -149,6 +148,7 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
+    current_time: u64, // current timestamp for timeout checking
     process_status: &ProcessStatus,
     tx_timeout: u64,
 ) -> Result<WithdrawalInfo, StrategyError> {
@@ -157,7 +157,7 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
         order: CursorOrder::Asc,
         limit: None,
     };
-    let mut included_digests = process_status.processed_digests.clone(); // cleared after first fetch
+    let mut included_digests = process_status.pending_digests.clone(); // cleared after first fetch
 
     let mut settled = Vec::new();
     let mut pending = Vec::new();
@@ -174,6 +174,7 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
             store_vault_server,
             validity_prover,
             key,
+            current_time,
             &included_digests,
             &process_status.processed_digests,
             &cursor,

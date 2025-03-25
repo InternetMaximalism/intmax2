@@ -10,7 +10,10 @@ use crate::{
     },
     utils::{parse_h256_as_u256, str_privkey_to_keyset},
 };
-use intmax2_client_sdk::external_api::store_vault_server::generate_auth_for_get_data_sequence;
+use intmax2_client_sdk::external_api::{
+    s3_store_vault::generate_auth_for_get_data_sequence_s3,
+    store_vault_server::generate_auth_for_get_data_sequence,
+};
 use intmax2_interfaces::{
     api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{
@@ -62,10 +65,17 @@ pub async fn decrypt_tx_data(private_key: &str, data: &[u8]) -> Result<JsTxData,
 }
 
 #[wasm_bindgen]
-pub async fn generate_auth_for_store_vault(private_key: &str) -> Result<JsAuth, JsError> {
+pub async fn generate_auth_for_store_vault(
+    private_key: &str,
+    use_s3: bool,
+) -> Result<JsAuth, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
-    let auth = generate_auth_for_get_data_sequence(key);
+    let auth = if use_s3 {
+        generate_auth_for_get_data_sequence_s3(key)
+    } else {
+        generate_auth_for_get_data_sequence(key)
+    };
     Ok(auth.into())
 }
 
@@ -120,8 +130,7 @@ pub async fn fetch_encrypted_data(
 pub async fn sign_message(private_key: &str, message: &[u8]) -> Result<JsFlatG2, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
-    let signature = signature::sign::sign_message(key.privkey, message);
-
+    let signature = signature::sign_tools::sign_message(key.privkey, message);
     Ok(FlatG2::from(signature).into())
 }
 
@@ -137,7 +146,7 @@ pub async fn verify_signature(
     let signature = FlatG2::try_from(signature.clone())
         .map_err(|_| JsError::new("Failed to parse signature"))?;
 
-    let result = signature::sign::verify_signature(signature.into(), public_key, message);
+    let result = signature::sign_tools::verify_signature(signature.into(), public_key, message);
 
     Ok(result.is_ok())
 }

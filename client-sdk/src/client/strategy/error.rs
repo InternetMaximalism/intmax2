@@ -20,6 +20,9 @@ pub enum StrategyError {
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),
 
+    #[error("Validity prover is not up to date: {0}")]
+    ValidityProverIsNotSynced(String),
+
     #[error("Balance insufficient before sync")]
     BalanceInsufficientBeforeSync,
 

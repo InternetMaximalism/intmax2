@@ -13,8 +13,9 @@ use intmax2_zkp::{
 use crate::client::{
     client::Client,
     fee_payment::{consume_payment, select_unused_fees, FeeType},
-    strategy::{mining::MiningStatus, strategy::determine_claims},
-    sync::utils::wait_till_validity_prover_synced,
+    strategy::{
+        mining::MiningStatus, strategy::determine_claims, utils::wait_till_validity_prover_synced,
+    },
 };
 
 use super::{error::SyncError, utils::quote_withdrawal_claim_fee};
@@ -35,6 +36,7 @@ impl Client {
         let minings = determine_claims(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
+            &self.rollup_contract,
             &self.liquidity_contract,
             key,
             self.config.tx_timeout,
@@ -56,8 +58,12 @@ impl Client {
                 }
             };
 
-            wait_till_validity_prover_synced(self.validity_prover.as_ref(), claim_block_number)
-                .await?;
+            wait_till_validity_prover_synced(
+                self.validity_prover.as_ref(),
+                true,
+                claim_block_number,
+            )
+            .await?;
 
             // collect witnesses
             let deposit_block_number = mining.block.block_number;

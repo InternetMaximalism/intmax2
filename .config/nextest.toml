@@ -1,7 +1,7 @@
 [profile.default]
 slow-timeout = "2m"
 fail-fast = true
-test-threads = 1
+test-threads = "num-cpus"
 
 [profile.ci]
 fail-fast = false

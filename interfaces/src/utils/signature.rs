@@ -2,7 +2,7 @@ use intmax2_zkp::{
     common::signature::{
         flatten::FlatG2,
         key_set::KeySet,
-        sign::{sign_message, verify_signature},
+        sign_tools::{sign_message, verify_signature},
     },
     ethereum_types::u256::U256,
 };

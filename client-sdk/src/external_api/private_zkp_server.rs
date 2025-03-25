@@ -37,21 +37,27 @@ use plonky2::{
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
 use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
+use serde::{Deserialize, Serialize};
 
 use crate::external_api::utils::time::sleep_for;
 
 use super::utils::query::{get_request, post_request};
 
-const MAX_RETRIES: usize = 10;
-const RETRY_INTERVAL: usize = 5; // seconds
-
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrivateZKPServerConfig {
+    pub max_retries: usize,
+    pub retry_interval: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct PrivateZKPServerClient {
     base_url: String,
+
+    config: PrivateZKPServerConfig,
 
     // rsa public key is used to encrypt the prove request
     // because async OnceLock is not stable, we use RwLock + Option instead
@@ -59,9 +65,10 @@ pub struct PrivateZKPServerClient {
 }
 
 impl PrivateZKPServerClient {
-    pub fn new(base_url: &str) -> Self {
+    pub fn new(base_url: &str, config: &PrivateZKPServerConfig) -> Self {
         PrivateZKPServerClient {
             base_url: base_url.to_string(),
+            config: config.clone(),
             pubkey: Arc::new(RwLock::new(None)),
         }
     }
@@ -322,14 +329,14 @@ impl PrivateZKPServerClient {
                 )));
             }
 
-            if retries >= MAX_RETRIES {
+            if retries >= self.config.max_retries {
                 return Err(ServerError::UnknownError(format!(
                     "Failed to get proof after {} retries",
-                    MAX_RETRIES
+                    self.config.max_retries
                 )));
             }
             retries += 1;
-            sleep_for(RETRY_INTERVAL as u64).await;
+            sleep_for(self.config.retry_interval).await;
         }
     }
 

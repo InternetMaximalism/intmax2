@@ -1,11 +1,18 @@
 use intmax2_interfaces::api::block_builder::interface::FeeProof;
 use intmax2_zkp::{
     common::{
-        block_builder::BlockProposal, signature::utils::get_pubkey_hash, trees::tx_tree::TxTree,
+        block_builder::BlockProposal,
+        signature::{block_sign_payload::BlockSignPayload, utils::get_pubkey_hash},
+        trees::tx_tree::TxTree,
         tx::Tx,
     },
     constants::{NUM_SENDERS_IN_BLOCK, TX_TREE_HEIGHT},
-    ethereum_types::{account_id_packed::AccountIdPacked, bytes32::Bytes32, u256::U256},
+    ethereum_types::{
+        account_id::{AccountId, AccountIdPacked},
+        address::Address,
+        bytes32::Bytes32,
+        u256::U256,
+    },
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -14,7 +21,7 @@ use uuid::Uuid;
 pub struct TxRequest {
     pub request_id: String,
     pub pubkey: U256,
-    pub account_id: Option<u64>,
+    pub account_id: Option<AccountId>,
     pub tx: Tx,
     pub fee_proof: Option<FeeProof>,
 }
@@ -24,7 +31,7 @@ impl Default for TxRequest {
         Self {
             request_id: Uuid::default().to_string(),
             pubkey: U256::dummy_pubkey(),
-            account_id: Some(1), // account id of dummy pubkey is 1
+            account_id: Some(AccountId::dummy()),
             tx: Tx::default(),
             fee_proof: None,
         }
@@ -35,9 +42,7 @@ impl Default for TxRequest {
 pub struct ProposalMemo {
     pub created_at: u64,
     pub block_id: String,
-    pub is_registration_block: bool,
-    pub tx_tree_root: Bytes32,
-    pub expiry: u64,
+    pub block_sign_payload: BlockSignPayload,
     pub pubkeys: Vec<U256>,            // sorted & padded pubkeys
     pub pubkey_hash: Bytes32,          // hash of the sorted & padded pubkeys
     pub tx_requests: Vec<TxRequest>,   // not sorted tx requests
@@ -47,6 +52,8 @@ pub struct ProposalMemo {
 impl ProposalMemo {
     pub fn from_tx_requests(
         is_registration_block: bool,
+        block_builder_address: Address,
+        block_builder_nonce: u32,
         tx_requests: &[TxRequest],
         tx_timeout: u64,
     ) -> Self {
@@ -67,6 +74,13 @@ impl ProposalMemo {
         }
         let tx_tree_root: Bytes32 = tx_tree.get_root().into();
 
+        let block_sign_payload = BlockSignPayload {
+            is_registration_block,
+            tx_tree_root,
+            expiry: expiry.into(),
+            block_builder_address,
+            block_builder_nonce,
+        };
         let mut proposals = Vec::new();
         for r in tx_requests {
             let pubkey = r.pubkey;
@@ -76,19 +90,15 @@ impl ProposalMemo {
                 .unwrap() as u32;
             let tx_merkle_proof = tx_tree.prove(tx_index as u64);
             proposals.push(BlockProposal {
-                tx_tree_root,
-                expiry,
+                block_sign_payload: block_sign_payload.clone(),
                 tx_index,
                 tx_merkle_proof,
                 pubkeys: pubkeys.clone(),
                 pubkeys_hash: pubkey_hash,
             });
         }
-
         ProposalMemo {
-            is_registration_block,
-            tx_tree_root,
-            expiry,
+            block_sign_payload,
             pubkeys,
             pubkey_hash,
             tx_requests: tx_requests.to_vec(),
@@ -108,9 +118,9 @@ impl ProposalMemo {
     }
 
     // get the account id for a given pubkey
-    fn get_account_id(&self, pubkey: U256) -> Option<u64> {
+    fn get_account_id(&self, pubkey: U256) -> Option<AccountId> {
         if pubkey == U256::dummy_pubkey() {
-            return Some(1);
+            return Some(AccountId::dummy());
         }
         self.tx_requests
             .iter()
@@ -120,10 +130,10 @@ impl ProposalMemo {
 
     // get the account ids for the tx requests in the memo
     pub fn get_account_ids(&self) -> Option<AccountIdPacked> {
-        if self.is_registration_block {
+        if self.block_sign_payload.is_registration_block {
             None
         } else {
-            let account_ids: Vec<u64> = self
+            let account_ids: Vec<AccountId> = self
                 .pubkeys
                 .iter()
                 .map(|pubkey| self.get_account_id(*pubkey).unwrap())

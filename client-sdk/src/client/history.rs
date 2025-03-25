@@ -51,6 +51,9 @@ pub async fn fetch_deposit_history(
     key: KeySet,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
+    // We don't need to check validity prover's sync status like in strategy
+    // because fetching history is not a critical operation.
+    let current_time = chrono::Utc::now().timestamp() as u64;
     let user_data = client.get_user_data(key).await?;
 
     let mut history = Vec::new();
@@ -59,6 +62,7 @@ pub async fn fetch_deposit_history(
         client.validity_prover.as_ref(),
         &client.liquidity_contract,
         key,
+        current_time,
         &[],
         &[],
         cursor,
@@ -103,6 +107,7 @@ pub async fn fetch_transfer_history(
     key: KeySet,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
+    let current_time = chrono::Utc::now().timestamp() as u64;
     let user_data = client.get_user_data(key).await?;
 
     let mut history = Vec::new();
@@ -110,6 +115,7 @@ pub async fn fetch_transfer_history(
         client.store_vault_server.as_ref(),
         client.validity_prover.as_ref(),
         key,
+        current_time,
         &[],
         &[],
         cursor,
@@ -154,6 +160,7 @@ pub async fn fetch_tx_history(
     key: KeySet,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
+    let current_time = chrono::Utc::now().timestamp() as u64;
     let user_data = client.get_user_data(key).await?;
 
     let mut history = Vec::new();
@@ -161,6 +168,7 @@ pub async fn fetch_tx_history(
         client.store_vault_server.as_ref(),
         client.validity_prover.as_ref(),
         key,
+        current_time,
         &[],
         &[],
         cursor,
