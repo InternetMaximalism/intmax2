@@ -86,7 +86,8 @@ impl Worker {
                 transition_processor.prove(&prev_validity_pis, &validity_witness)
             })
             .await
-            .unwrap();
+            .map_err(|e| format!("panic while proving: {:?}", e))
+            .and_then(|r| r.map_err(|e| format!("error while proving: {:?}", e)));
 
             let result = match result {
                 Ok(proof) => {
@@ -97,16 +98,16 @@ impl Worker {
                         error: None,
                     }
                 }
-                Err(e) => {
+                Err(error) => {
                     log::error!(
                         "Error while proving for block number {}: {:?}",
                         block_number,
-                        e,
+                        error,
                     );
                     TransitionProofTaskResult {
                         block_number,
                         proof: None,
-                        error: Some(e.to_string()),
+                        error: Some(error),
                     }
                 }
             };
