@@ -238,9 +238,8 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
     }
 
     pub async fn cleanup_inactive_tasks(&self) -> Result<()> {
-        let mut conn = self.get_connection().await?;
-
         loop {
+            let mut conn = self.get_connection().await?;
             // get all running tasks
             let task_ids: Vec<u32> = conn.smembers(&self.running_key).await?;
             log::info!("running tasks: {:?}", task_ids);
@@ -253,9 +252,12 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
                 let worker_id: Option<String> = conn.get(&key).await?;
                 if worker_id.is_none() {
                     // move task from running to pending
-                    conn.smove::<_, _, _, ()>(&self.running_key, &self.pending_key, task_id)
+                    let moved: bool = conn
+                        .smove(&self.running_key, &self.pending_key, task_id)
                         .await?;
-                    log::warn!("task {} moved from running to pending", task_id);
+                    if moved {
+                        log::warn!("task {} moved from running to pending", task_id);
+                    }
                 }
             }
         }
