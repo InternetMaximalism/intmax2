@@ -60,6 +60,9 @@ const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
 const MAX_TASKS: u32 = 30;
 
+const ADD_TASKS_INTERVAL: u64 = 10;
+const GENERATE_VALIDITY_PROOF_INTERVAL: u64 = 2;
+
 #[derive(Clone)]
 pub struct Config {
     pub sync_interval: Option<u64>,
@@ -698,14 +701,17 @@ impl ValidityProver {
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
-        let to_block_number = last_block_number.min(last_validity_prover_block_number + MAX_TASKS);
+        if last_validity_prover_block_number == last_block_number {
+            // early return
+            return Ok(());
+        }
 
+        let to_block_number = last_block_number.min(last_validity_prover_block_number + MAX_TASKS);
         let mut prev_validity_pis = self
             .get_validity_witness(last_validity_prover_block_number)
             .await?
             .to_validity_pis()
             .unwrap();
-
         for block_number in (last_validity_prover_block_number + 1)..=to_block_number {
             if self.manager.check_task_exists(block_number).await? {
                 break;
@@ -716,6 +722,18 @@ impl ValidityProver {
                 prev_validity_pis: prev_validity_pis.clone(),
                 validity_witness: validity_witness.clone(),
             };
+
+            // check again if the validity proof is already generated
+            let current_last_validity_prover_block_number =
+                self.get_latest_validity_proof_block_number().await?;
+            if block_number <= current_last_validity_prover_block_number {
+                break;
+            }
+            log::info!(
+                "adding task for block number {} > validity block number {}",
+                block_number,
+                current_last_validity_prover_block_number
+            );
             self.manager.add_task(block_number, &task).await?;
 
             prev_validity_pis = validity_witness.to_validity_pis().unwrap();
@@ -748,7 +766,7 @@ impl ValidityProver {
                 if let Err(e) = generate_validity_proof_result {
                     log::error!("Panic error in generate validity proof: {:?}", e);
                 }
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                tokio::time::sleep(Duration::from_secs(GENERATE_VALIDITY_PROOF_INTERVAL)).await;
             }
         });
 
@@ -766,7 +784,7 @@ impl ValidityProver {
                 if let Err(e) = add_task_result {
                     log::error!("Panic error in add tasks: {:?}", e);
                 }
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                tokio::time::sleep(Duration::from_secs(ADD_TASKS_INTERVAL)).await;
             }
         });
 
