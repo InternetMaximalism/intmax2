@@ -199,11 +199,6 @@ impl RollupContract {
             if from_block > to_block {
                 break to_block;
             }
-            log::info!(
-                "get_blocks_posted_event: from_block={}, to_block={}",
-                from_block,
-                to_block
-            );
             let contract = self.get_contract().await?;
             let new_events = with_retry(|| async {
                 contract
@@ -218,12 +213,19 @@ impl RollupContract {
             .map_err(|_| {
                 BlockchainError::RPCError("failed to get blocks posted event".to_string())
             })?;
+            log::info!(
+                "get_blocks_posted_event: from_block={}, to_block={}, new_events={}",
+                from_block,
+                to_block,
+                new_events.len()
+            );
             events.extend(new_events);
             if is_final {
                 break to_block;
             }
             from_block += EVENT_BLOCK_RANGE;
         };
+        log::info!("num events: {}", events.len());
         let mut blocks_posted_events = Vec::new();
         for (event, meta) in events {
             blocks_posted_events.push(BlockPosted {
@@ -239,6 +241,12 @@ impl RollupContract {
             });
         }
         blocks_posted_events.sort_by_key(|event| event.block_number);
+        if !blocks_posted_events.is_empty() {
+            log::info!(
+                "✅ first get_blocks_posted_event block number: {:?}",
+                blocks_posted_events[0].block_number
+            );
+        }
         Ok((blocks_posted_events, final_to_block))
     }
 
@@ -253,11 +261,16 @@ impl RollupContract {
             data_decoder::decode_post_block_calldata, utils::get_batch_transaction,
         };
         let (blocks_posted_events, to_block) = self.get_blocks_posted_event(from_block).await?;
+        log::info!(
+            "❗first get_blocks_posted_event block number: {:?}",
+            blocks_posted_events[0].block_number
+        );
         let tx_hashes = blocks_posted_events
             .iter()
             .map(|e| e.tx_hash)
             .collect::<Vec<_>>();
         let instance = Instant::now();
+        log::info!("start get_batch_transaction");
         let txs = get_batch_transaction(&self.rpc_url, &tx_hashes).await?;
         log::info!("get_batch_transaction: {:?}", instance.elapsed());
         let mut full_blocks = Vec::new();
