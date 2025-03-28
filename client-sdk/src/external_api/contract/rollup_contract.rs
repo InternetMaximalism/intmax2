@@ -28,7 +28,7 @@ use super::{
     utils::{get_client, get_client_with_signer},
 };
 
-const EVENT_BLOCK_RANGE: u64 = 10000;
+const EVENT_BLOCK_RANGE: u64 = 1000;
 
 abigen!(Rollup, "abi/Rollup.json",);
 
@@ -574,5 +574,38 @@ mod tests {
             .await
             .unwrap();
         dbg!(&blocks.0[0]);
+    }
+
+    #[tokio::test]
+    async fn test_get_rollup_filter_events() {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Info)
+            .init();
+
+        let rpc_url = "https://sepolia-rpc.scroll.io/";
+        let chain_id = 534351;
+        let contract_address = "0xEDD64477FdC2B517580F61B6CB97AcAfa861B30E";
+        let deployed_block_number = 8515826;
+        // let contract_address = "0x860AE2Fb3bAa580c992E2aFf047E96741aD9E3e3";
+        // let deployed_block_number = 8310204;
+
+        let rollup_contract = RollupContract::new(
+            rpc_url,
+            chain_id,
+            contract_address.parse().unwrap(),
+            deployed_block_number,
+        );
+
+        let contract = rollup_contract.get_contract().await.unwrap();
+
+        let events = contract
+            .block_posted_filter()
+            .from_block(rollup_contract.deployed_block_number - 10)
+            .to_block(rollup_contract.deployed_block_number + 10)
+            .query()
+            .await
+            .unwrap();
+
+        dbg!(&events[0]);
     }
 }
