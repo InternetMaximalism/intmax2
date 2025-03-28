@@ -7,6 +7,7 @@ use ethers::{
     signers::{Signer as _, Wallet},
     types::{Address, BlockNumber, H256, U256},
 };
+use hashbrown::HashMap;
 
 use crate::external_api::utils::retry::with_retry;
 
@@ -98,4 +99,90 @@ pub async fn get_transaction(
         .await
         .map_err(|_| BlockchainError::RPCError("failed to get transaction".to_string()))?;
     Ok(tx)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn get_batch_transaction(
+    rpc_url: &str,
+    tx_hashes: &[H256],
+) -> Result<Vec<ethers::types::Transaction>, BlockchainError> {
+    use crate::external_api::utils::time::sleep_for;
+
+    let mut target_tx_hashes = tx_hashes.to_vec();
+    let mut fetched_txs = HashMap::new();
+    let mut retry_count = 0;
+    let max_tries = std::env::var("MAX_TRIES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    while !target_tx_hashes.is_empty() {
+        let (partial_fetched_txs, failed_tx_hashes) =
+            get_batch_transaction_inner(rpc_url, &target_tx_hashes).await?;
+        log::info!(
+            "Fetched {} transactions, failed {}",
+            partial_fetched_txs.len(),
+            failed_tx_hashes.len()
+        );
+        fetched_txs.extend(partial_fetched_txs);
+        if failed_tx_hashes.is_empty() {
+            break;
+        }
+        target_tx_hashes = failed_tx_hashes;
+        retry_count += 1;
+        if retry_count > max_tries {
+            return Err(BlockchainError::TxNotFoundBatch);
+        }
+        sleep_for(2).await;
+    }
+    let mut txs = Vec::new();
+    for tx_hash in tx_hashes {
+        txs.push(fetched_txs.get(tx_hash).unwrap().clone());
+    }
+    Ok(txs)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn get_batch_transaction_inner(
+    rpc_url: &str,
+    tx_hashes: &[H256],
+) -> Result<(HashMap<H256, ethers::types::Transaction>, Vec<H256>), BlockchainError> {
+    use crate::external_api::contract::utils::get_transaction;
+    use std::env;
+    use tokio::task::JoinSet;
+    let mut join_set = JoinSet::new();
+    let max_parallel_requests = env::var("MAX_PARALLEL_REQUESTS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(max_parallel_requests));
+    for &tx_hash in tx_hashes {
+        let permit = Arc::clone(&semaphore);
+        let rpc_url = rpc_url.to_string();
+        join_set.spawn(async move {
+            let _permit = permit.acquire().await.expect("Semaphore is never closed");
+            let tx = get_transaction(&rpc_url, tx_hash)
+                .await?
+                .ok_or(BlockchainError::TxNotFound(tx_hash))?;
+            Ok::<_, BlockchainError>((tx_hash, tx))
+        });
+    }
+
+    let mut fetched_txs = HashMap::new();
+    let mut failed_tx_hashes = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok((tx_hash, tx))) => {
+                fetched_txs.insert(tx_hash, tx);
+            }
+            Ok(Err(e)) => {
+                if let BlockchainError::TxNotFound(tx_hash) = e {
+                    failed_tx_hashes.push(tx_hash);
+                } else {
+                    return Err(e);
+                }
+            }
+            Err(e) => return Err(BlockchainError::JoinError(e.to_string())),
+        }
+    }
+    Ok((fetched_txs, failed_tx_hashes))
 }
