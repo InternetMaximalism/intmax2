@@ -247,6 +247,8 @@ impl RollupContract {
         &self,
         from_block: u64,
     ) -> Result<(Vec<FullBlockWithMeta>, u64), BlockchainError> {
+        use std::time::Instant;
+
         use crate::external_api::contract::{
             data_decoder::decode_post_block_calldata, utils::get_batch_transaction,
         };
@@ -255,7 +257,9 @@ impl RollupContract {
             .iter()
             .map(|e| e.tx_hash)
             .collect::<Vec<_>>();
+        let instance = Instant::now();
         let txs = get_batch_transaction(&self.rpc_url, &tx_hashes).await?;
+        log::info!("get_batch_transaction: {:?}", instance.elapsed());
         let mut full_blocks = Vec::new();
         for (tx, event) in txs.iter().zip(&blocks_posted_events) {
             let contract = self.get_contract().await?;

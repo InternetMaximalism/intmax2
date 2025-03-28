@@ -118,15 +118,15 @@ pub async fn get_batch_transaction(
     while !target_tx_hashes.is_empty() {
         let (partial_fetched_txs, failed_tx_hashes) =
             get_batch_transaction_inner(rpc_url, &target_tx_hashes).await?;
-        log::info!(
-            "Fetched {} transactions, failed {}",
-            partial_fetched_txs.len(),
-            failed_tx_hashes.len()
-        );
         fetched_txs.extend(partial_fetched_txs);
         if failed_tx_hashes.is_empty() {
             break;
         }
+        log::warn!(
+            "Fetched {} transactions, failed {}",
+            fetched_txs.len(),
+            failed_tx_hashes.len()
+        );
         target_tx_hashes = failed_tx_hashes;
         retry_count += 1;
         if retry_count > max_tries {
