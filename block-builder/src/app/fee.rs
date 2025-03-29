@@ -17,11 +17,17 @@ use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
     common::{
         block_builder::UserSignature,
-        signature::{key_set::KeySet, sign::get_pubkey_hash},
+        signature::{
+            block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
+        },
         witness::transfer_witness::TransferWitness,
     },
     constants::NUM_SENDERS_IN_BLOCK,
-    ethereum_types::{account_id_packed::AccountIdPacked, u256::U256},
+    ethereum_types::{
+        account_id::{AccountId, AccountIdPacked},
+        address::Address,
+        u256::U256,
+    },
 };
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -31,6 +37,7 @@ use uuid::Uuid;
 pub async fn validate_fee_proof(
     store_vault_server_client: &dyn StoreVaultClientInterface,
     beneficiary_pubkey: Option<U256>,
+    block_builder_address: Address,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
     sender: U256,
@@ -87,6 +94,11 @@ pub async fn validate_fee_proof(
                 ));
             }
         }
+        if collateral_block.block_builder_address != block_builder_address {
+            return Err(FeeError::FeeVerificationError(
+                "Invalid block builder address in collateral block".to_string(),
+            ));
+        }
 
         // validate signature
         let user_signature = UserSignature {
@@ -96,12 +108,15 @@ pub async fn validate_fee_proof(
         let mut pubkeys = vec![sender];
         pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
         let pubkey_hash = get_pubkey_hash(&pubkeys);
+        let block_sign_payload = BlockSignPayload {
+            is_registration_block: collateral_block.is_registration_block,
+            tx_tree_root: transfer_data.tx_tree_root,
+            expiry: collateral_block.expiry.into(),
+            block_builder_address,
+            block_builder_nonce: 0,
+        };
         user_signature
-            .verify(
-                transfer_data.tx_tree_root,
-                collateral_block.expiry,
-                pubkey_hash,
-            )
+            .verify(&block_sign_payload, pubkey_hash)
             .map_err(|e| {
                 FeeError::SignatureVerificationError(format!("Failed to verify signature: {}", e))
             })?;
@@ -269,7 +284,7 @@ pub async fn collect_fee(
                 tx: request.tx,
                 tx_index: proposal.tx_index,
                 tx_merkle_proof: proposal.tx_merkle_proof.clone(),
-                tx_tree_root: proposal.tx_tree_root,
+                tx_tree_root: proposal.block_sign_payload.tx_tree_root,
                 transfer: fee_proof.fee_transfer_witness.transfer,
                 transfer_index: fee_proof.fee_transfer_witness.transfer_index,
                 transfer_merkle_proof: fee_proof.fee_transfer_witness.transfer_merkle_proof.clone(),
@@ -299,18 +314,23 @@ pub async fn collect_fee(
             let pubkey_hash = get_pubkey_hash(&pubkeys);
             let account_ids = request.account_id.map(|id| {
                 let mut account_ids = vec![id];
-                account_ids.resize(NUM_SENDERS_IN_BLOCK, 1);
+                account_ids.resize(NUM_SENDERS_IN_BLOCK, AccountId::dummy());
                 AccountIdPacked::pack(&account_ids)
             });
-            let expiry = collateral_block.expiry;
             let signature = UserSignature {
                 pubkey: request.pubkey,
                 signature: collateral_block.signature.clone(),
             };
-
+            let block_sign_payload = BlockSignPayload {
+                is_registration_block: collateral_block.is_registration_block,
+                tx_tree_root: transfer_data.tx_tree_root,
+                expiry: collateral_block.expiry.into(),
+                block_builder_address: collateral_block.block_builder_address, // todo: check address
+                block_builder_nonce: 0,
+            };
             // validate signature again
             signature
-                .verify(transfer_data.tx_tree_root, expiry, pubkey_hash)
+                .verify(&block_sign_payload, pubkey_hash)
                 .map_err(|e| {
                     FeeError::SignatureVerificationError(format!(
                         "Failed to verify signature: {}",
@@ -323,9 +343,7 @@ pub async fn collect_fee(
 
             let block_post = BlockPostTask {
                 force_post: false,
-                is_registration_block: memo.is_registration_block,
-                tx_tree_root: transfer_data.tx_tree_root,
-                expiry,
+                block_sign_payload: memo.block_sign_payload.clone(),
                 pubkeys,
                 account_ids,
                 pubkey_hash,

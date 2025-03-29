@@ -4,6 +4,7 @@ use intmax2_client_sdk::{
     external_api::{
         contract::{
             block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
+            utils::get_address,
         },
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
@@ -20,7 +21,9 @@ use intmax2_zkp::{
         block_builder::{BlockProposal, UserSignature},
         tx::Tx,
     },
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{
+        account_id::AccountId, address::Address, u256::U256, u32limb_trait::U32LimbTrait,
+    },
 };
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
@@ -42,6 +45,7 @@ pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
 pub struct Config {
     pub block_builder_url: String,
     pub block_builder_private_key: H256,
+    pub block_builder_address: Address,
     pub eth_allowance_for_block: U256,
 
     pub initial_heart_beat_delay: u64,
@@ -115,7 +119,7 @@ impl BlockBuilder {
             let u = ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
             let mut buf = [0u8; 32];
             u.to_big_endian(&mut buf);
-            U256::from_bytes_be(&buf)
+            U256::from_bytes_be(&buf).unwrap()
         };
         let registration_fee = env
             .registration_fee
@@ -147,7 +151,7 @@ impl BlockBuilder {
         }
         let beneficiary_pubkey = if use_fee {
             if let Some(beneficiary_pubkey) = env.beneficiary_pubkey.as_ref() {
-                Some(U256::from_bytes_be(beneficiary_pubkey.as_bytes()))
+                Some(U256::from_bytes_be(beneficiary_pubkey.as_bytes()).unwrap())
             } else {
                 // generate from eth private key
                 let key = generate_intmax_account_from_eth_key(env.block_builder_private_key);
@@ -156,6 +160,10 @@ impl BlockBuilder {
         } else {
             None
         };
+        let block_builder_address = Address::from_bytes_be(
+            get_address(env.l2_chain_id, env.block_builder_private_key).as_bytes(),
+        )
+        .unwrap();
 
         // log configuration
         log::info!("eth_allowance_for_block: {}", eth_allowance_for_block);
@@ -168,6 +176,7 @@ impl BlockBuilder {
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
+            block_builder_address,
             eth_allowance_for_block,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
@@ -190,6 +199,7 @@ impl BlockBuilder {
         let storage_config = StorageConfig {
             use_fee: config.use_fee,
             use_collateral: config.use_collateral,
+            block_builder_address: config.block_builder_address,
             fee_beneficiary: config.beneficiary_pubkey.unwrap_or_default(),
             tx_timeout: env.tx_timeout,
             accepting_tx_interval: env.accepting_tx_interval,
@@ -206,6 +216,7 @@ impl BlockBuilder {
     /// Get fee information for the block builder
     pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
         BlockBuilderFeeInfo {
+            block_builder_address: self.config.block_builder_address,
             beneficiary: self.config.beneficiary_pubkey,
             registration_fee: convert_fee_vec(&self.config.registration_fee),
             non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
@@ -239,9 +250,10 @@ impl BlockBuilder {
 
         // Create and add transaction request
         let request_id = Uuid::new_v4().to_string();
+        let account_id = account_info.account_id.map(AccountId);
         let tx_request = TxRequest {
             pubkey,
-            account_id: account_info.account_id,
+            account_id,
             tx,
             fee_proof: fee_proof.clone(),
             request_id: request_id.clone(),
@@ -294,6 +306,7 @@ impl BlockBuilder {
         validate_fee_proof(
             self.store_vault_server_client.as_ref().as_ref(),
             self.config.beneficiary_pubkey,
+            self.config.block_builder_address,
             required_fee,
             required_collateral_fee,
             pubkey,

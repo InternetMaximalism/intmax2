@@ -274,7 +274,7 @@ impl ValidityProver {
             .execute(tx.as_mut())
             .await?;
 
-            let tx_tree_root = full_block.signature.tx_tree_root;
+            let tx_tree_root = full_block.signature.block_sign_payload.tx_tree_root;
             if tx_tree_root != Bytes32::default()
                 && validity_witness.to_validity_pis().unwrap().is_valid_block
             {

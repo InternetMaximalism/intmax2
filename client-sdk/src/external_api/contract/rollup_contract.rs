@@ -172,7 +172,7 @@ impl RollupContract {
         for (event, meta) in events {
             deposit_leaf_inserted_events.push(DepositLeafInserted {
                 deposit_index: event.deposit_index,
-                deposit_hash: Bytes32::from_bytes_be(&event.deposit_hash),
+                deposit_hash: Bytes32::from_bytes_be(&event.deposit_hash).unwrap(),
                 eth_block_number: meta.block_number.as_u64(),
                 eth_tx_index: meta.transaction_index.as_u64(),
             });
@@ -229,24 +229,18 @@ impl RollupContract {
         let mut blocks_posted_events = Vec::new();
         for (event, meta) in events {
             blocks_posted_events.push(BlockPosted {
-                prev_block_hash: Bytes32::from_bytes_be(&event.prev_block_hash),
-                block_builder: Address::from_bytes_be(event.block_builder.as_bytes()),
+                prev_block_hash: Bytes32::from_bytes_be(&event.prev_block_hash).unwrap(),
+                block_builder: Address::from_bytes_be(event.block_builder.as_bytes()).unwrap(),
                 timestamp: event.timestamp,
                 block_number: event.block_number.as_u32(),
-                deposit_tree_root: Bytes32::from_bytes_be(&event.deposit_tree_root),
-                signature_hash: Bytes32::from_bytes_be(&event.signature_hash),
+                deposit_tree_root: Bytes32::from_bytes_be(&event.deposit_tree_root).unwrap(),
+                signature_hash: Bytes32::from_bytes_be(&event.signature_hash).unwrap(),
                 tx_hash: meta.transaction_hash,
                 eth_block_number: meta.block_number.as_u64(),
                 eth_tx_index: meta.transaction_index.as_u64(),
             });
         }
         blocks_posted_events.sort_by_key(|event| event.block_number);
-        if !blocks_posted_events.is_empty() {
-            log::info!(
-                "✅ first get_blocks_posted_event block number: {:?}",
-                blocks_posted_events[0].block_number
-            );
-        }
         Ok((blocks_posted_events, final_to_block))
     }
 
@@ -255,22 +249,17 @@ impl RollupContract {
         &self,
         from_block: u64,
     ) -> Result<(Vec<FullBlockWithMeta>, u64), BlockchainError> {
-        use std::time::Instant;
-
         use crate::external_api::contract::{
             data_decoder::decode_post_block_calldata, utils::get_batch_transaction,
         };
+        use std::time::Instant;
         let (blocks_posted_events, to_block) = self.get_blocks_posted_event(from_block).await?;
-        log::info!(
-            "❗first get_blocks_posted_event block number: {:?}",
-            blocks_posted_events[0].block_number
-        );
         let tx_hashes = blocks_posted_events
             .iter()
             .map(|e| e.tx_hash)
             .collect::<Vec<_>>();
         let instance = Instant::now();
-        log::info!("start get_batch_transaction");
+        log::info!("start:get_batch_transaction");
         let txs = get_batch_transaction(&self.rpc_url, &tx_hashes).await?;
         log::info!("get_batch_transaction: {:?}", instance.elapsed());
         let mut full_blocks = Vec::new();
@@ -283,6 +272,7 @@ impl RollupContract {
                 event.deposit_tree_root,
                 event.timestamp,
                 event.block_number,
+                event.block_builder,
                 &tx.input,
             )
             .map_err(|e| {
@@ -332,6 +322,7 @@ impl RollupContract {
         msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
+        block_builder_nonce: u32,
         sender_flag: Bytes16,
         agg_pubkey: FlatG1,
         agg_signature: FlatG2,
@@ -353,6 +344,7 @@ impl RollupContract {
             .post_registration_block(
                 tx_tree_root,
                 expiry,
+                block_builder_nonce,
                 sender_flag,
                 agg_pubkey,
                 agg_signature,
@@ -373,6 +365,7 @@ impl RollupContract {
         msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
+        block_builder_nonce: u32,
         sender_flag: Bytes16,
         agg_pubkey: FlatG1,
         agg_signature: FlatG2,
@@ -393,6 +386,7 @@ impl RollupContract {
             .post_non_registration_block(
                 tx_tree_root,
                 expiry,
+                block_builder_nonce,
                 sender_flag,
                 agg_pubkey,
                 agg_signature,
@@ -455,7 +449,7 @@ impl RollupContract {
         let penalty = {
             let mut buf = [0u8; 32];
             penalty.to_big_endian(&mut buf);
-            U256::from_bytes_be(&buf)
+            U256::from_bytes_be(&buf).unwrap()
         };
         Ok(penalty)
     }
@@ -517,8 +511,9 @@ mod tests {
             .post_registration_block(
                 private_key,
                 0.into(),
-                signature.tx_tree_root,
-                signature.expiry.into(),
+                signature.block_sign_payload.tx_tree_root,
+                signature.block_sign_payload.expiry.into(),
+                signature.block_sign_payload.block_builder_nonce,
                 signature.sender_flag,
                 signature.agg_pubkey.clone(),
                 signature.agg_signature.clone(),
@@ -531,8 +526,9 @@ mod tests {
             .post_non_registration_block(
                 private_key,
                 BigUint::from(10u32).pow(18).try_into().unwrap(),
-                Bytes32::rand(&mut rng),
-                signature.expiry.into(),
+                signature.block_sign_payload.tx_tree_root,
+                signature.block_sign_payload.expiry.into(),
+                signature.block_sign_payload.block_builder_nonce,
                 signature.sender_flag,
                 signature.agg_pubkey,
                 signature.agg_signature,

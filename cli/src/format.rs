@@ -62,10 +62,10 @@ pub fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
     ensure!(address.starts_with("0x"), "Invalid prefix");
     let bytes = hex::decode(&address[2..])?;
     if bytes.len() == 20 {
-        let address = IAddress::from_bytes_be(&bytes);
+        let address = IAddress::from_bytes_be(&bytes).unwrap();
         Ok(GenericAddress::from_address(address))
     } else if bytes.len() == 32 {
-        let pubkey = IU256::from_bytes_be(&bytes);
+        let pubkey = IU256::from_bytes_be(&bytes).unwrap();
         Ok(GenericAddress::from_pubkey(pubkey))
     } else {
         bail!("Invalid length");
