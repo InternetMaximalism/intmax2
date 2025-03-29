@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::HashMap;
+
 use ethers::{
     core::k256::{ecdsa::SigningKey, SecretKey},
     middleware::SignerMiddleware,
@@ -7,7 +10,6 @@ use ethers::{
     signers::{Signer as _, Wallet},
     types::{Address, BlockNumber, H256, U256},
 };
-use hashbrown::HashMap;
 
 use crate::external_api::utils::retry::with_retry;
 
@@ -107,6 +109,7 @@ pub async fn get_batch_transaction(
     tx_hashes: &[H256],
 ) -> Result<Vec<ethers::types::Transaction>, BlockchainError> {
     use crate::external_api::utils::time::sleep_for;
+    use std::collections::HashMap;
 
     let mut target_tx_hashes = tx_hashes.to_vec();
     let mut fetched_txs = HashMap::new();
