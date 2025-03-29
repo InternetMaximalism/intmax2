@@ -42,13 +42,12 @@ impl BalanceProver {
 
         let validity_vd = verifiers.get_validity_vd();
         let balance_processor = BalanceProcessor::new(&validity_vd);
-        let balance_common_data = balance_processor.balance_circuit.data.common.clone();
         let balance_vd = balance_processor
             .balance_circuit
             .data
             .verifier_data()
             .clone();
-        let single_withdrawal_circuit = SingleWithdrawalCircuit::new(&balance_common_data);
+        let single_withdrawal_circuit = SingleWithdrawalCircuit::new(&balance_vd);
         let single_claim_processor = SingleClaimProcessor::new(&validity_vd);
 
         Ok(Self {
