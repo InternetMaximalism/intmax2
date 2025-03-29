@@ -28,7 +28,7 @@ use super::{
     utils::{get_client, get_client_with_signer},
 };
 
-const EVENT_BLOCK_RANGE: u64 = 1000;
+const EVENT_BLOCK_RANGE: u64 = 10000;
 
 abigen!(Rollup, "abi/Rollup.json",);
 
