@@ -66,6 +66,7 @@ impl LiquidityContract {
         l_1_scroll_messenger: EthAddress,
         rollup: EthAddress,
         withdrawal: EthAddress,
+        claim: EthAddress,
         analyzer: EthAddress,
         contribution: EthAddress,
         initial_erc20_tokens: Vec<EthAddress>,
@@ -76,6 +77,7 @@ impl LiquidityContract {
             l_1_scroll_messenger,
             rollup,
             withdrawal,
+            claim,
             analyzer,
             contribution,
             initial_erc20_tokens,
@@ -175,12 +177,18 @@ impl LiquidityContract {
         signer_private_key: H256,
         pubkey_salt_hash: Bytes32,
         amount: U256,
+        aml_permission: &[u8],
+        eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
         let amount = ethers::types::U256::from_big_endian(&amount.to_bytes_be());
         let mut tx = contract
-            .deposit_native_token(recipient_salt_hash)
+            .deposit_native_token(
+                recipient_salt_hash,
+                aml_permission.to_vec().into(),
+                eligibility_permission.to_vec().into(),
+            )
             .value(amount);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
@@ -194,12 +202,20 @@ impl LiquidityContract {
         pubkey_salt_hash: Bytes32,
         amount: U256,
         token_address: Address,
+        aml_permission: &[u8],
+        eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
         let amount = ethers::types::U256::from_big_endian(&amount.to_bytes_be());
         let token_address = EthAddress::from_slice(&token_address.to_bytes_be());
-        let mut tx = contract.deposit_erc20(token_address, recipient_salt_hash, amount);
+        let mut tx = contract.deposit_erc20(
+            token_address,
+            recipient_salt_hash,
+            amount,
+            aml_permission.to_vec().into(),
+            eligibility_permission.to_vec().into(),
+        );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
         handle_contract_call(&client, &mut tx, "deposit_erc20_token").await?;
@@ -212,18 +228,27 @@ impl LiquidityContract {
         pubkey_salt_hash: Bytes32,
         token_address: Address,
         token_id: U256,
+        aml_permission: &[u8],
+        eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
         let token_id = ethers::types::U256::from_big_endian(&token_id.to_bytes_be());
         let token_address = EthAddress::from_slice(&token_address.to_bytes_be());
-        let mut tx = contract.deposit_erc721(token_address, recipient_salt_hash, token_id);
+        let mut tx = contract.deposit_erc721(
+            token_address,
+            recipient_salt_hash,
+            token_id,
+            aml_permission.to_vec().into(),
+            eligibility_permission.to_vec().into(),
+        );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
         handle_contract_call(&client, &mut tx, "deposit_erc721_token").await?;
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn deposit_erc1155(
         &self,
         signer_private_key: H256,
@@ -231,13 +256,22 @@ impl LiquidityContract {
         token_address: Address,
         token_id: U256,
         amount: U256,
+        aml_permission: &[u8],
+        eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
         let amount = ethers::types::U256::from_big_endian(&amount.to_bytes_be());
         let token_id = ethers::types::U256::from_big_endian(&token_id.to_bytes_be());
         let token_address = EthAddress::from_slice(&token_address.to_bytes_be());
-        let mut tx = contract.deposit_erc1155(token_address, recipient_salt_hash, token_id, amount);
+        let mut tx = contract.deposit_erc1155(
+            token_address,
+            recipient_salt_hash,
+            token_id,
+            amount,
+            aml_permission.to_vec().into(),
+            eligibility_permission.to_vec().into(),
+        );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
         handle_contract_call(&client, &mut tx, "deposit_erc1155_token").await?;

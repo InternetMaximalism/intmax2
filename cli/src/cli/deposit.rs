@@ -55,6 +55,9 @@ pub async fn deposit(
 
     let deposit_data = deposit_result.deposit_data;
 
+    let aml_permission = vec![];
+    let eligibility_permission = vec![];
+
     match token_type {
         TokenType::NATIVE => {
             liquidity_contract
@@ -62,6 +65,8 @@ pub async fn deposit(
                     eth_private_key,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.amount,
+                    &aml_permission,
+                    &eligibility_permission,
                 )
                 .await?;
         }
@@ -72,6 +77,8 @@ pub async fn deposit(
                     deposit_data.pubkey_salt_hash,
                     deposit_data.amount,
                     deposit_data.token_address,
+                    &aml_permission,
+                    &eligibility_permission,
                 )
                 .await?;
         }
@@ -82,6 +89,8 @@ pub async fn deposit(
                     deposit_data.pubkey_salt_hash,
                     deposit_data.token_address,
                     deposit_data.token_id,
+                    &aml_permission,
+                    &eligibility_permission,
                 )
                 .await?;
         }
@@ -93,6 +102,8 @@ pub async fn deposit(
                     deposit_data.token_address,
                     deposit_data.token_id,
                     deposit_data.amount,
+                    &aml_permission,
+                    &eligibility_permission,
                 )
                 .await?;
         }

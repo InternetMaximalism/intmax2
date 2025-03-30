@@ -58,6 +58,7 @@ async fn deploy_contracts() -> anyhow::Result<()> {
             random_address,
             random_address,
             random_address,
+            random_address,
             vec![],
         )
         .await?;
