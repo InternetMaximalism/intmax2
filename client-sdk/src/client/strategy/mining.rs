@@ -52,11 +52,13 @@ impl Display for MiningStatus {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_mining_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
+    current_time: u64, // current timestamp for timeout checking
     claim_status: &ProcessStatus,
     tx_timeout: u64,
     deposit_timeout: u64,
@@ -67,6 +69,7 @@ pub async fn fetch_mining_info(
         validity_prover,
         liquidity_contract,
         key,
+        current_time,
         &ProcessStatus::default(),
         deposit_timeout,
     )
@@ -106,6 +109,7 @@ pub async fn fetch_mining_info(
         store_vault_server,
         validity_prover,
         key,
+        current_time,
         &ProcessStatus::default(),
         tx_timeout,
     )

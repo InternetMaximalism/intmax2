@@ -60,6 +60,18 @@ impl Observer {
             )
             .execute(&pool)
             .await?;
+
+            sqlx::query!(
+                r#"
+                INSERT INTO observer_block_sync_eth_block_num (singleton_key, block_sync_eth_block_num)
+                VALUES (TRUE, $1)
+                ON CONFLICT (singleton_key) DO UPDATE
+                SET block_sync_eth_block_num = $1
+                "#,
+                rollup_contract.deployed_block_number as i64
+            )
+            .execute(&pool)
+            .await?;
         }
 
         Ok(Observer {
@@ -312,7 +324,7 @@ impl Observer {
             .into_iter()
             .map(|d| DepositLeafInserted {
                 deposit_index: d.deposit_index as u32,
-                deposit_hash: Bytes32::from_bytes_be(&d.deposit_hash),
+                deposit_hash: Bytes32::from_bytes_be(&d.deposit_hash).unwrap(),
                 eth_block_number: d.eth_block_number as u64,
                 eth_tx_index: d.eth_tx_index as u64,
             })

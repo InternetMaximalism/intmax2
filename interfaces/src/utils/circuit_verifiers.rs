@@ -71,12 +71,11 @@ impl CircuitVerifiers {
             .data
             .verifier_data();
         let balance_vd = balance_processor.get_verifier_data();
-        let balance_common_data = balance_vd.common.clone();
-        let single_withdrawal_circuit = SingleWithdrawalCircuit::new(&balance_common_data);
+        let single_withdrawal_circuit = SingleWithdrawalCircuit::new(&balance_vd);
         let single_claim_processor =
             SingleClaimProcessor::new(&validity_processor.validity_circuit.data.verifier_data());
         Self {
-            balance_vd: balance_processor.get_verifier_data(),
+            balance_vd,
             validity_vd: validity_processor.validity_circuit.data.verifier_data(),
             transition_vd,
             single_withdrawal_vd: single_withdrawal_circuit.data.verifier_data(),
@@ -224,7 +223,8 @@ mod tests {
     ) {
         let mut rng = rand::thread_rng();
         let validity_processor = Arc::new(ValidityProcessor::<F, C, D>::new());
-        let mut validity_state_manager = ValidityStateManager::new(validity_processor.clone());
+        let mut validity_state_manager =
+            ValidityStateManager::new(validity_processor.clone(), Address::zero());
         let single_claim_processor =
             SingleClaimProcessor::new(&validity_processor.get_verifier_data());
 
@@ -243,12 +243,12 @@ mod tests {
         let deposit_index = validity_state_manager.deposit(&deposit).unwrap();
 
         // post empty block to sync deposit tree
-        validity_state_manager.tick(false, &[], 0).unwrap();
+        validity_state_manager.tick(false, &[], 0, 0).unwrap();
         let validity_proof = validity_state_manager.validity_proof.clone().unwrap();
 
         // lock time max passed in this block
         validity_state_manager
-            .tick(false, &[], LOCK_TIME_MAX as u64)
+            .tick(false, &[], LOCK_TIME_MAX as u64, 0)
             .unwrap();
 
         let update_witness = validity_state_manager

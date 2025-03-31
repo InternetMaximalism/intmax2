@@ -259,6 +259,9 @@ impl Client {
             }
         }
 
+        // get fee info
+        let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
+
         // fetch if this is first time tx
         let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
@@ -346,6 +349,8 @@ impl Client {
                 fee_index,
                 &transfers,
                 collateral_transfer,
+                is_registration_block,
+                fee_info.block_builder_address,
             )
             .await?;
             // save tx data for collateral block
@@ -487,15 +492,16 @@ impl Client {
 
         // verify expiry
         let current_time = chrono::Utc::now().timestamp() as u64;
-        if proposal.expiry == 0 {
+        let expiry: u64 = proposal.block_sign_payload.expiry.into();
+        if expiry == 0 {
             return Err(ClientError::InvalidBlockProposal(
                 "expiry 0 is not allowed".to_string(),
             ));
-        } else if proposal.expiry < current_time {
+        } else if expiry < current_time {
             return Err(ClientError::InvalidBlockProposal(
                 "proposal expired".to_string(),
             ));
-        } else if proposal.expiry > current_time + self.config.tx_timeout {
+        } else if expiry > current_time + self.config.tx_timeout {
             return Err(ClientError::InvalidBlockProposal(
                 "proposal expiry too far".to_string(),
             ));
@@ -506,7 +512,7 @@ impl Client {
         let tx_data = TxData {
             tx_index: proposal.tx_index,
             tx_merkle_proof: proposal.tx_merkle_proof.clone(),
-            tx_tree_root: proposal.tx_tree_root,
+            tx_tree_root: proposal.block_sign_payload.tx_tree_root,
             spent_witness: memo.spent_witness.clone(),
             sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
         };
@@ -541,7 +547,7 @@ impl Client {
                 tx: memo.tx,
                 tx_index: proposal.tx_index,
                 tx_merkle_proof: proposal.tx_merkle_proof.clone(),
-                tx_tree_root: proposal.tx_tree_root,
+                tx_tree_root: proposal.block_sign_payload.tx_tree_root,
             };
             let data_type = if transfer.recipient.is_pubkey {
                 DataType::Transfer
@@ -652,7 +658,7 @@ impl Client {
             .await?;
 
         let result = TxResult {
-            tx_tree_root: proposal.tx_tree_root,
+            tx_tree_root: proposal.block_sign_payload.tx_tree_root,
             transfer_digests,
             withdrawal_digests,
             transfer_data_vec,
@@ -697,11 +703,13 @@ impl Client {
     }
 
     pub async fn get_mining_list(&self, key: KeySet) -> Result<Vec<Mining>, ClientError> {
+        let current_time = chrono::Utc::now().timestamp() as u64;
         let minings = fetch_mining_info(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
+            current_time,
             &ProcessStatus::default(),
             self.config.tx_timeout,
             self.config.deposit_timeout,

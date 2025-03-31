@@ -35,6 +35,7 @@ pub async fn fetch_deposit_info(
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
+    current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
@@ -94,7 +95,7 @@ pub async fn fetch_deposit_info(
                 };
                 settled.push((meta, deposit_data));
             }
-            None if meta.timestamp + deposit_timeout < chrono::Utc::now().timestamp() as u64 => {
+            None if meta.timestamp + deposit_timeout < current_time => {
                 // Deposit has timed out
                 log::error!(
                     "Deposit digest: {}, deposit_hash: {} is timeout",
@@ -136,6 +137,7 @@ pub async fn fetch_all_unprocessed_deposit_info(
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
+    current_time: u64,
     process_status: &ProcessStatus,
     deposit_timeout: u64,
 ) -> Result<DepositInfo, StrategyError> {
@@ -144,7 +146,7 @@ pub async fn fetch_all_unprocessed_deposit_info(
         order: CursorOrder::Asc,
         limit: None,
     };
-    let mut included_digests = process_status.processed_digests.clone(); // cleared after first fetch
+    let mut included_digests = process_status.pending_digests.clone(); // cleared after first fetch
 
     let mut settled = Vec::new();
     let mut pending = Vec::new();
@@ -162,6 +164,7 @@ pub async fn fetch_all_unprocessed_deposit_info(
             validity_prover,
             liquidity_contract,
             key,
+            current_time,
             &included_digests,
             &process_status.processed_digests,
             &cursor,

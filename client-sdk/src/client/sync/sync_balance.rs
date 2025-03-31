@@ -74,6 +74,7 @@ impl Client {
         let (sequence, pending_info) = determine_sequence(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
+            &self.rollup_contract,
             &self.liquidity_contract,
             key,
             self.config.deposit_timeout,

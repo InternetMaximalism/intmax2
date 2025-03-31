@@ -26,10 +26,12 @@ pub struct TxInfo {
     pub timeout: Vec<(MetaData, TxData)>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_tx_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
+    current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
@@ -57,9 +59,6 @@ pub async fn fetch_tx_info(
     let block_numbers = validity_prover
         .get_block_number_by_tx_tree_root_batch(&tx_tree_roots)
         .await?;
-
-    // Current timestamp for timeout checking
-    let current_time = chrono::Utc::now().timestamp() as u64;
 
     // Process results and categorize transactions
     for ((meta, tx_data), block_number) in data_with_meta.into_iter().zip(block_numbers) {
@@ -106,6 +105,7 @@ pub async fn fetch_all_unprocessed_tx_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     key: KeySet,
+    current_time: u64,
     process_status: &ProcessStatus,
     tx_timeout: u64,
 ) -> Result<TxInfo, StrategyError> {
@@ -114,7 +114,7 @@ pub async fn fetch_all_unprocessed_tx_info(
         order: CursorOrder::Asc,
         limit: None,
     };
-    let mut included_digests = process_status.processed_digests.clone(); // cleared after first fetch
+    let mut included_digests = process_status.pending_digests.clone(); // cleared after first fetch
 
     let mut settled = Vec::new();
     let mut pending = Vec::new();
@@ -131,6 +131,7 @@ pub async fn fetch_all_unprocessed_tx_info(
             store_vault_server,
             validity_prover,
             key,
+            current_time,
             &included_digests,
             &process_status.processed_digests,
             &cursor,

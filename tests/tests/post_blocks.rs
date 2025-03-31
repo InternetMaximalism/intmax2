@@ -1,8 +1,18 @@
 use ethers::types::{Address, H256};
 use intmax2_client_sdk::external_api::{
-    contract::rollup_contract::RollupContract, utils::time::sleep_for,
+    contract::{rollup_contract::RollupContract, utils::get_address},
+    utils::time::sleep_for,
 };
-use intmax2_zkp::common::signature::SignatureContent;
+use intmax2_zkp::{
+    common::{
+        block_builder::{construct_signature, SenderWithSignature},
+        signature::{
+            block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
+        },
+    },
+    constants::NUM_SENDERS_IN_BLOCK,
+    ethereum_types::{self, bytes32::Bytes32, u32limb_trait::U32LimbTrait},
+};
 use num_bigint::BigUint;
 use serde::Deserialize;
 
@@ -32,16 +42,40 @@ async fn post_blocks() -> anyhow::Result<()> {
         env.rollup_contract_address,
         env.rollup_contract_deployed_block_number,
     );
+    let block_builder_address = ethereum_types::address::Address::from_bytes_be(
+        get_address(env.l2_chain_id, env.deployer_private_key).as_bytes(),
+    )
+    .unwrap();
 
     loop {
-        let (keys, signature) = SignatureContent::rand(&mut rng);
-        let pubkeys = keys.iter().map(|key| key.pubkey).collect::<Vec<_>>();
+        let payload = BlockSignPayload {
+            is_registration_block: true,
+            tx_tree_root: Bytes32::rand(&mut rng),
+            expiry: 0.into(),
+            block_builder_address,
+            block_builder_nonce: 0,
+        };
+        let keys = (0..NUM_SENDERS_IN_BLOCK)
+            .map(|_| KeySet::rand(&mut rng))
+            .collect::<Vec<_>>();
+        let mut pubkeys = keys.iter().map(|key| key.pubkey).collect::<Vec<_>>();
+        pubkeys.sort_by(|a, b| b.cmp(a));
+        let pubkey_hash = get_pubkey_hash(&pubkeys);
+        let signatures = keys
+            .iter()
+            .map(|key| SenderWithSignature {
+                sender: key.pubkey,
+                signature: Some(payload.sign(key.privkey, pubkey_hash)),
+            })
+            .collect::<Vec<_>>();
+        let signature = construct_signature(&payload, pubkey_hash, Bytes32::default(), &signatures);
         rollup_contract
             .post_registration_block(
                 env.deployer_private_key,
                 BigUint::from(10u32).pow(17).try_into().unwrap(),
-                signature.tx_tree_root,
-                signature.expiry.into(),
+                signature.block_sign_payload.tx_tree_root,
+                signature.block_sign_payload.expiry.into(),
+                0,
                 signature.sender_flag,
                 signature.agg_pubkey,
                 signature.agg_signature,
@@ -49,7 +83,7 @@ async fn post_blocks() -> anyhow::Result<()> {
                 pubkeys,
             )
             .await?;
-
+        println!("Posted a block ✅");
         sleep_for(7).await;
     }
 }

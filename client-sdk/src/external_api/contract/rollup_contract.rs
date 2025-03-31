@@ -28,7 +28,7 @@ use super::{
     utils::{get_client, get_client_with_signer},
 };
 
-const EVENT_BLOCK_RANGE: u64 = 10000;
+const EVENT_BLOCK_RANGE: u64 = 1000;
 
 abigen!(Rollup, "abi/Rollup.json",);
 
@@ -172,7 +172,7 @@ impl RollupContract {
         for (event, meta) in events {
             deposit_leaf_inserted_events.push(DepositLeafInserted {
                 deposit_index: event.deposit_index,
-                deposit_hash: Bytes32::from_bytes_be(&event.deposit_hash),
+                deposit_hash: Bytes32::from_bytes_be(&event.deposit_hash).unwrap(),
                 eth_block_number: meta.block_number.as_u64(),
                 eth_tx_index: meta.transaction_index.as_u64(),
             });
@@ -199,11 +199,6 @@ impl RollupContract {
             if from_block > to_block {
                 break to_block;
             }
-            log::info!(
-                "get_blocks_posted_event: from_block={}, to_block={}",
-                from_block,
-                to_block
-            );
             let contract = self.get_contract().await?;
             let new_events = with_retry(|| async {
                 contract
@@ -218,21 +213,28 @@ impl RollupContract {
             .map_err(|_| {
                 BlockchainError::RPCError("failed to get blocks posted event".to_string())
             })?;
+            log::info!(
+                "get_blocks_posted_event: from_block={}, to_block={}, new_events={}",
+                from_block,
+                to_block,
+                new_events.len()
+            );
             events.extend(new_events);
             if is_final {
                 break to_block;
             }
             from_block += EVENT_BLOCK_RANGE;
         };
+        log::info!("num events: {}", events.len());
         let mut blocks_posted_events = Vec::new();
         for (event, meta) in events {
             blocks_posted_events.push(BlockPosted {
-                prev_block_hash: Bytes32::from_bytes_be(&event.prev_block_hash),
-                block_builder: Address::from_bytes_be(event.block_builder.as_bytes()),
+                prev_block_hash: Bytes32::from_bytes_be(&event.prev_block_hash).unwrap(),
+                block_builder: Address::from_bytes_be(event.block_builder.as_bytes()).unwrap(),
                 timestamp: event.timestamp,
                 block_number: event.block_number.as_u32(),
-                deposit_tree_root: Bytes32::from_bytes_be(&event.deposit_tree_root),
-                signature_hash: Bytes32::from_bytes_be(&event.signature_hash),
+                deposit_tree_root: Bytes32::from_bytes_be(&event.deposit_tree_root).unwrap(),
+                signature_hash: Bytes32::from_bytes_be(&event.signature_hash).unwrap(),
                 tx_hash: meta.transaction_hash,
                 eth_block_number: meta.block_number.as_u64(),
                 eth_tx_index: meta.transaction_index.as_u64(),
@@ -248,67 +250,42 @@ impl RollupContract {
         from_block: u64,
     ) -> Result<(Vec<FullBlockWithMeta>, u64), BlockchainError> {
         use crate::external_api::contract::{
-            data_decoder::decode_post_block_calldata, utils::get_transaction,
+            data_decoder::decode_post_block_calldata, utils::get_batch_transaction,
         };
-        use std::env;
-        use tokio::task::JoinSet;
-
+        use std::time::Instant;
         let (blocks_posted_events, to_block) = self.get_blocks_posted_event(from_block).await?;
-
-        let mut full_blocks = Vec::with_capacity(blocks_posted_events.len());
-        let mut join_set = JoinSet::new();
-        let max_parallel_requests = env::var("MAX_PARALLEL_REQUESTS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(20);
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(max_parallel_requests));
-        // Spawn tasks for all events
-        for event in blocks_posted_events {
-            let rpc_url = self.rpc_url.clone();
-            let self_clone = self.clone();
-            let permit = Arc::clone(&semaphore);
-
-            join_set.spawn(async move {
-                let _permit = permit.acquire().await.expect("Semaphore is never closed");
-                let tx = get_transaction(&rpc_url, event.tx_hash)
-                    .await?
-                    .ok_or(BlockchainError::TxNotFound(event.tx_hash))?;
-
-                let contract = self_clone.get_contract().await?;
-                let functions = contract.abi().functions();
-
-                let full_block = decode_post_block_calldata(
-                    functions,
-                    event.prev_block_hash,
-                    event.deposit_tree_root,
-                    event.timestamp,
-                    event.block_number,
-                    &tx.input,
-                )
-                .map_err(|e| {
-                    BlockchainError::DecodeCallDataError(format!(
-                        "failed to decode post block calldata: {}",
-                        e
-                    ))
-                })?;
-
-                Ok::<_, BlockchainError>(FullBlockWithMeta {
-                    full_block,
-                    eth_block_number: event.eth_block_number,
-                    eth_tx_index: event.eth_tx_index,
-                })
+        let tx_hashes = blocks_posted_events
+            .iter()
+            .map(|e| e.tx_hash)
+            .collect::<Vec<_>>();
+        let instance = Instant::now();
+        log::info!("start:get_batch_transaction");
+        let txs = get_batch_transaction(&self.rpc_url, &tx_hashes).await?;
+        log::info!("get_batch_transaction: {:?}", instance.elapsed());
+        let mut full_blocks = Vec::new();
+        for (tx, event) in txs.iter().zip(&blocks_posted_events) {
+            let contract = self.get_contract().await?;
+            let functions = contract.abi().functions();
+            let full_block = decode_post_block_calldata(
+                functions,
+                event.prev_block_hash,
+                event.deposit_tree_root,
+                event.timestamp,
+                event.block_number,
+                event.block_builder,
+                &tx.input,
+            )
+            .map_err(|e| {
+                BlockchainError::DecodeCallDataError(format!(
+                    "failed to decode post block calldata: {}",
+                    e
+                ))
+            })?;
+            full_blocks.push(FullBlockWithMeta {
+                full_block,
+                eth_block_number: event.eth_block_number,
+                eth_tx_index: event.eth_tx_index,
             });
-        }
-
-        log::info!("get_full_block_with_meta: waiting for join_set");
-
-        // Collect results as they complete
-        while let Some(result) = join_set.join_next().await {
-            match result {
-                Ok(Ok(block)) => full_blocks.push(block),
-                Ok(Err(e)) => return Err(e),
-                Err(e) => return Err(BlockchainError::JoinError(e.to_string())),
-            }
         }
 
         // Sort by block number
@@ -345,6 +322,7 @@ impl RollupContract {
         msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
+        block_builder_nonce: u32,
         sender_flag: Bytes16,
         agg_pubkey: FlatG1,
         agg_signature: FlatG2,
@@ -366,6 +344,7 @@ impl RollupContract {
             .post_registration_block(
                 tx_tree_root,
                 expiry,
+                block_builder_nonce,
                 sender_flag,
                 agg_pubkey,
                 agg_signature,
@@ -386,6 +365,7 @@ impl RollupContract {
         msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
+        block_builder_nonce: u32,
         sender_flag: Bytes16,
         agg_pubkey: FlatG1,
         agg_signature: FlatG2,
@@ -406,6 +386,7 @@ impl RollupContract {
             .post_non_registration_block(
                 tx_tree_root,
                 expiry,
+                block_builder_nonce,
                 sender_flag,
                 agg_pubkey,
                 agg_signature,
@@ -468,7 +449,7 @@ impl RollupContract {
         let penalty = {
             let mut buf = [0u8; 32];
             penalty.to_big_endian(&mut buf);
-            U256::from_bytes_be(&buf)
+            U256::from_bytes_be(&buf).unwrap()
         };
         Ok(penalty)
     }
@@ -530,8 +511,9 @@ mod tests {
             .post_registration_block(
                 private_key,
                 0.into(),
-                signature.tx_tree_root,
-                signature.expiry.into(),
+                signature.block_sign_payload.tx_tree_root,
+                signature.block_sign_payload.expiry.into(),
+                signature.block_sign_payload.block_builder_nonce,
                 signature.sender_flag,
                 signature.agg_pubkey.clone(),
                 signature.agg_signature.clone(),
@@ -544,8 +526,9 @@ mod tests {
             .post_non_registration_block(
                 private_key,
                 BigUint::from(10u32).pow(18).try_into().unwrap(),
-                Bytes32::rand(&mut rng),
-                signature.expiry.into(),
+                signature.block_sign_payload.tx_tree_root,
+                signature.block_sign_payload.expiry.into(),
+                signature.block_sign_payload.block_builder_nonce,
                 signature.sender_flag,
                 signature.agg_pubkey,
                 signature.agg_signature,

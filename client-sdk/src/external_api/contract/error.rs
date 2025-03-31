@@ -26,6 +26,9 @@ pub enum BlockchainError {
     #[error("Transaction not found: {0:?}")]
     TxNotFound(H256),
 
+    #[error("Transaction not found in batch")]
+    TxNotFoundBatch,
+
     #[error("Transaction error: {0}")]
     TransactionError(String),
 

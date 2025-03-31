@@ -299,13 +299,11 @@ pub async fn select_unused_fees(
                 if timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
                     consume_payment(store_vault_server, key, &memo, "tx is timeout").await?;
                 }
-                return Err(SyncError::FeeError(format!(
-                    "there is pending fee: timestamp: {}",
-                    timestamp
-                )));
+                log::info!("fee: {} is not settled yet", memo.meta.digest);
+                continue;
             }
             Err(e) => {
-                log::warn!("invalid fee: {}", e);
+                log::warn!("invalid fee: {} reason: {}", memo.meta.digest, e,);
                 consume_payment(store_vault_server, key, &memo, &e.to_string()).await?;
             }
         }

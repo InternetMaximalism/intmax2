@@ -68,11 +68,11 @@ pub async fn wait_for_balance_synchronization(
             )))) => {
                 log::warn!("Pending transaction. Waiting for the balance to be updated...");
             }
-            Err(CliError::SyncError(SyncError::ValidityProverIsNotSynced(_))) => {
-                log::warn!(
-                    "Validity prover is not synced. Waiting for the balance to be updated..."
-                );
-            }
+            // Err(CliError::SyncError(SyncError::ValidityProverIsNotSynced(_))) => {
+            //     log::warn!(
+            //         "Validity prover is not synced. Waiting for the balance to be updated..."
+            //     );
+            // }
             Err(CliError::SyncError(SyncError::ServerError(ServerError::ServerError(
                 500,
                 message,
@@ -330,11 +330,11 @@ pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts
     let mut new_amount_bytes = vec![0; 32];
     new_amount_bytes[32 - amount_bytes.len()..].copy_from_slice(&amount_bytes);
 
-    U256::from_bytes_be(&new_amount_bytes)
+    U256::from_bytes_be(&new_amount_bytes).unwrap()
 }
 
 pub fn address_to_generic_address(eth_address: ethers::types::Address) -> GenericAddress {
-    GenericAddress::from_address(Address::from_bytes_be(eth_address.as_bytes()))
+    GenericAddress::from_address(Address::from_bytes_be(eth_address.as_bytes()).unwrap())
 }
 
 pub async fn log_polling_futures<F, E>(futures: &mut Vec<F>, senders: &[KeySet])

@@ -15,6 +15,7 @@ use intmax2_zkp::{
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
 };
 
+use super::{error::StrategyError, mining::Mining};
 use crate::{
     client::strategy::{
         common::fetch_user_data,
@@ -23,12 +24,13 @@ use crate::{
         transfer::fetch_all_unprocessed_transfer_info,
         tx::fetch_all_unprocessed_tx_info,
         tx_status::{get_tx_status, TxStatus},
+        utils::wait_till_validity_prover_synced,
         withdrawal::fetch_all_unprocessed_withdrawal_info,
     },
-    external_api::contract::liquidity_contract::LiquidityContract,
+    external_api::contract::{
+        liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+    },
 };
-
-use super::{error::StrategyError, mining::Mining};
 
 // Next sync action
 #[derive(Debug, Clone)]
@@ -73,12 +75,19 @@ pub struct PendingInfo {
 pub async fn determine_sequence(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
+    rollup_contract: &RollupContract,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
     deposit_timeout: u64,
     tx_timeout: u64,
 ) -> Result<(Vec<Action>, PendingInfo), StrategyError> {
     log::info!("determine_sequence");
+
+    // Wait until the validity prover catches up with the onchain block number
+    let current_time = chrono::Utc::now().timestamp() as u64;
+    let onchain_block_number = rollup_contract.get_latest_block_number().await?;
+    wait_till_validity_prover_synced(validity_prover, false, onchain_block_number).await?;
+
     let user_data = fetch_user_data(store_vault_server, key).await?;
     log::info!("Finish to fetch user data");
 
@@ -95,6 +104,7 @@ pub async fn determine_sequence(
         store_vault_server,
         validity_prover,
         key,
+        current_time,
         &user_data.tx_status,
         tx_timeout,
     )
@@ -117,6 +127,7 @@ pub async fn determine_sequence(
         validity_prover,
         liquidity_contract,
         key,
+        current_time,
         &user_data.deposit_status,
         deposit_timeout,
     )
@@ -125,6 +136,7 @@ pub async fn determine_sequence(
         store_vault_server,
         validity_prover,
         key,
+        current_time,
         &user_data.transfer_status,
         tx_timeout,
     )
@@ -288,6 +300,7 @@ async fn collect_receives(
 pub async fn determine_withdrawals(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
+    rollup_contract: &RollupContract,
     key: KeySet,
     tx_timeout: u64,
 ) -> Result<
@@ -298,11 +311,18 @@ pub async fn determine_withdrawals(
     StrategyError,
 > {
     log::info!("determine_withdrawals");
+
+    // Wait until the validity prover catches up with the onchain block number
+    let current_time = chrono::Utc::now().timestamp() as u64;
+    let onchain_block_number = rollup_contract.get_latest_block_number().await?;
+    wait_till_validity_prover_synced(validity_prover, false, onchain_block_number).await?;
+
     let user_data = fetch_user_data(store_vault_server, key).await?;
     let withdrawal_info = fetch_all_unprocessed_withdrawal_info(
         store_vault_server,
         validity_prover,
         key,
+        current_time,
         &user_data.withdrawal_status,
         tx_timeout,
     )
@@ -319,18 +339,26 @@ pub async fn determine_withdrawals(
 pub async fn determine_claims(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
+    rollup_contract: &RollupContract,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
     tx_timeout: u64,
     deposit_timeout: u64,
 ) -> Result<Vec<Mining>, StrategyError> {
     log::info!("determine_claims");
+
+    // Wait until the validity prover catches up with the onchain block number
+    let current_time = chrono::Utc::now().timestamp() as u64;
+    let onchain_block_number = rollup_contract.get_latest_block_number().await?;
+    wait_till_validity_prover_synced(validity_prover, false, onchain_block_number).await?;
+
     let user_data = fetch_user_data(store_vault_server, key).await?;
     let minings = fetch_mining_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
         key,
+        current_time,
         &user_data.claim_status,
         tx_timeout,
         deposit_timeout,

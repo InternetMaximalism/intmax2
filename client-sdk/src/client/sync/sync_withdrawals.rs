@@ -37,6 +37,7 @@ impl Client {
         let (withdrawals, pending) = determine_withdrawals(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
+            &self.rollup_contract,
             key,
             self.config.tx_timeout,
         )
