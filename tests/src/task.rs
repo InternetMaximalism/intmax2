@@ -9,7 +9,7 @@ pub trait AsyncTask {
     type Output: Send + Clone;
     type Error: std::error::Error + Send + Sync;
 
-    async fn execute(id: usize) -> Result<Self::Output, Self::Error>;
+    async fn execute(id: usize, account_index: u32) -> Result<Self::Output, Self::Error>;
 }
 
 struct TaskQueue<T: AsyncTask> {
@@ -38,13 +38,13 @@ impl<T: AsyncTask> TaskQueue<T> {
 pub async fn process_queue<T: AsyncTask + 'static>(
     total_tasks: usize,
     max_concurrent: usize,
-    offset: usize,
+    address_offset: usize,
 ) -> Vec<T::Output> {
     #[cfg(feature = "failpoints")]
     assert_eq!(max_concurrent, 1, "When the failpoints feature is enabled, please set the maximum degree of parallelism to 1.");
 
     let semaphore = Arc::new(Semaphore::new(max_concurrent));
-    let queue = Arc::new(Mutex::new(TaskQueue::<T>::new(total_tasks, offset)));
+    let queue = Arc::new(Mutex::new(TaskQueue::<T>::new(total_tasks, address_offset)));
     let queue_clone = queue.clone();
 
     let local = tokio::task::LocalSet::new();
@@ -65,7 +65,7 @@ pub async fn process_queue<T: AsyncTask + 'static>(
                 let permit = worker_semaphore.acquire().await.unwrap();
                 log::info!("Worker {} picked task {}", worker_id, task_id);
 
-                let result = T::execute(task_id).await;
+                let result = T::execute(task_id, 0).await;
 
                 {
                     let mut queue = worker_queue.lock().unwrap();

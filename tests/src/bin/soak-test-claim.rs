@@ -532,7 +532,7 @@ impl AsyncTask for RandomActionTask {
     type Output = ();
     type Error = VarError;
 
-    async fn execute(id: usize) -> Result<Self::Output, Self::Error> {
+    async fn execute(id: usize, account_index: u32) -> Result<Self::Output, Self::Error> {
         log::info!("Starting random action test (id: {})", id);
 
         let master_mnemonic =

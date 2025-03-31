@@ -222,7 +222,10 @@ impl TestSystem {
             mul_u256(amount, accounts.len(), max_transfers_per_transaction);
 
         // Transfer from admin to intermediates
-        log::info!("Transfer from admin to intermediates");
+        log::info!(
+            "Transfer from admin to intermediates: amount = {}",
+            amount_for_intermediates
+        );
         self.transfer_from(self.admin_key, intermediates, amount_for_intermediates)
             .await?;
         self.accounts.lock().unwrap().extend(intermediates.iter());
@@ -283,38 +286,31 @@ impl TestSystem {
             let num_using_accounts = concurrent_limit.min(num_accounts);
             let intmax_senders = self.accounts.lock().unwrap()[0..num_using_accounts].to_vec();
 
-            let futures = intmax_senders
-                .iter()
-                .enumerate()
-                .map(|(_, sender)| async move {
-                    tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
-                    wait_for_balance_synchronization(
-                        *sender,
-                        Duration::from_secs(TRANSFER_POLLING_DURATION),
-                    )
-                    .await
-                    .map_err(|err| {
-                        println!("transfer_with_error_handling Error: {:?}", err);
-                        err
-                    })?;
-
-                    Ok::<(), CliError>(())
-                });
-
             log::info!("Synchronize balances");
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(300)) => log::info!("synchronization timeout"),
-                errors = join_all(futures) => {
-                    for (i, error) in errors.iter().enumerate() {
-                        if let Err(e) = error {
-                            log::error!("Recipient ({}/{}) failed: {:?}", i + 1, num_using_accounts, e);
-                        } else {
-                            log::info!("Recipient ({}/{}) succeeded", i + 1, num_using_accounts);
-                        }
-                    }
+            for (i, sender) in intmax_senders.iter().enumerate() {
+                let result = wait_for_balance_synchronization(
+                    *sender,
+                    Duration::from_secs(TRANSFER_POLLING_DURATION),
+                )
+                .await;
 
-                    log::info!("Completed synchronization");
-                },
+                match result {
+                    Err(e) => {
+                        log::error!(
+                            "Recipient ({}/{}) failed to sync: {:?}",
+                            i + 1,
+                            num_using_accounts,
+                            e
+                        );
+                    }
+                    Ok(_) => {
+                        log::info!(
+                            "Recipient ({}/{}) succeeded to sync",
+                            i + 1,
+                            num_using_accounts
+                        );
+                    }
+                }
             }
 
             let futures = intmax_senders

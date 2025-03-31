@@ -326,7 +326,11 @@ pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts
     // validation for overflow
     assert!(amount_big.bits() <= 256);
 
-    U256::from_bytes_be(&amount_big.to_bytes_be())
+    let amount_bytes = amount_big.to_bytes_be();
+    let mut new_amount_bytes = vec![0; 32];
+    new_amount_bytes[32 - amount_bytes.len()..].copy_from_slice(&amount_bytes);
+
+    U256::from_bytes_be(&new_amount_bytes)
 }
 
 pub fn address_to_generic_address(eth_address: ethers::types::Address) -> GenericAddress {

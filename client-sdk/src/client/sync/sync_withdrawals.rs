@@ -42,8 +42,8 @@ impl Client {
         )
         .await?;
         self.update_pending_withdrawals(key, pending).await?;
-        fail::fail_point!("after update pending withdrawals", |_| {
-            Err(CliError::UnexpectedError(
+        fail::fail_point!("after-update-pending-withdrawals", |_| {
+            Err(SyncError::InternalError(
                 "Fail point after payment_memo_topic".to_string(),
             ))
         });
@@ -60,7 +60,7 @@ impl Client {
             .await?;
         }
         fail::fail_point!("after-sync-withdrawals", |_| {
-            Err(CliError::UnexpectedError(
+            Err(SyncError::InternalError(
                 "Fail point after payment_memo_topic".to_string(),
             ))
         });
@@ -149,6 +149,11 @@ impl Client {
             .collect::<Vec<_>>();
 
         // send withdrawal request
+        fail::fail_point!("before-request-withdrawal", |_| {
+            Err(SyncError::InternalError(
+                "Fail point before request withdrawal".to_string(),
+            ))
+        });
         self.withdrawal_server
             .request_withdrawal(
                 key,
@@ -161,9 +166,14 @@ impl Client {
                 log::error!("Failed to request withdrawal {}: {:?}", key.pubkey, e);
                 e
             })?;
+        fail::fail_point!("after-request-withdrawal", |_| {
+            Err(SyncError::InternalError(
+                "Fail point after request withdrawal".to_string(),
+            ))
+        });
 
         // consume fees
-        for used_fee in &collected_fees {
+        for (i, used_fee) in collected_fees.iter().enumerate() {
             // todo: batch consume
             consume_payment(
                 self.store_vault_server.as_ref(),
@@ -172,6 +182,13 @@ impl Client {
                 "used for withdrawal fee",
             )
             .await?;
+            fail::fail_point!("after-consume_payment", |_| {
+                Err(SyncError::InternalError(format!(
+                    "Fail point after consuming payment {}/{}",
+                    i,
+                    collected_fees.len()
+                )))
+            });
         }
 
         // update user data
@@ -180,6 +197,11 @@ impl Client {
 
         // save user data
         self.save_user_data(key, prev_digest, &user_data).await?;
+        fail::fail_point!("save-user-data", |_| {
+            Err(SyncError::InternalError(
+                "Fail point after save user data".to_string(),
+            ))
+        });
 
         Ok(())
     }

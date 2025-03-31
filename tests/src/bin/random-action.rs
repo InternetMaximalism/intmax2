@@ -40,6 +40,7 @@ struct EnvVar {
     transfer_admin_private_key: String,
     max_concurrent: Option<usize>,
     max_using_account: Option<usize>,
+    account_index: Option<u32>,
     account_offset: Option<usize>,
     action: Option<Action>,
 }
@@ -533,18 +534,13 @@ impl AsyncTask for RandomActionTask {
     type Output = ();
     type Error = VarError;
 
-    async fn execute(id: usize) -> Result<Self::Output, Self::Error> {
+    async fn execute(id: usize, account_index: u32) -> Result<Self::Output, Self::Error> {
         log::info!("Starting random action test (id: {})", id);
 
         let master_mnemonic =
             std::env::var("MASTER_MNEMONIC").expect("MASTER_MNEMONIC must be set");
-        let sender_keys = derive_custom_keys(
-            &master_mnemonic,
-            RANDOM_ACTION_ACCOUNT_INDEX,
-            2,
-            (id * 2) as u32,
-        )
-        .unwrap();
+        let sender_keys =
+            derive_custom_keys(&master_mnemonic, account_index, 2, (id * 2) as u32).unwrap();
 
         let test_system = TestSystem::new();
         let result = test_system
