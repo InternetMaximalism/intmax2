@@ -22,7 +22,7 @@ use intmax2_zkp::{
 };
 use serde::Deserialize;
 use tests::{
-    accounts::{derive_intmax_keys, mnemonic_to_account},
+    accounts::{derive_custom_intmax_keys, mnemonic_to_account},
     mul_u256, transfer_with_error_handling, wait_for_balance_synchronization,
 };
 
@@ -37,6 +37,7 @@ pub struct EnvVar {
     pub recipient_offset: Option<u32>,
     pub balance_prover_base_url: String,
     pub l1_chain_id: u64,
+    pub account_index: Option<u32>,
 
     #[serde(default = "default_url")]
     pub config_server_base_url: String,
@@ -76,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.master_mnemonic,
         config_server_base_url,
         config.eth_refill_offset,
+        config.account_index.unwrap_or(0),
     );
     system.run_soak_test().await?;
     log::info!("End soak test");
@@ -101,6 +103,7 @@ struct TestSystem {
     config_server_base_url: String,
     accounts: Arc<Mutex<Vec<KeySet>>>,
     eth_refill_offset: usize,
+    account_index: u32,
 }
 
 impl TestSystem {
@@ -109,6 +112,7 @@ impl TestSystem {
         master_mnemonic_phrase: String,
         config_server_base_url: String,
         eth_refill_offset: usize,
+        account_index: u32,
     ) -> Self {
         Self {
             admin_key,
@@ -116,6 +120,7 @@ impl TestSystem {
             accounts: Arc::new(Mutex::new(Vec::new())),
             config_server_base_url,
             eth_refill_offset,
+            account_index,
         }
     }
 
@@ -151,8 +156,9 @@ impl TestSystem {
 
         // Create new account and receive initial balance from admin
         let master_mnemonic_phrase = self.master_mnemonic_phrase.clone();
-        let new_accounts = derive_intmax_keys(
+        let new_accounts = derive_custom_intmax_keys(
             &master_mnemonic_phrase,
+            self.account_index,
             num_of_keys as u32,
             accounts_len as u32,
         )?;
@@ -178,8 +184,9 @@ impl TestSystem {
 
         // Create new account and receive initial balance from admin
         let master_mnemonic_phrase = self.master_mnemonic_phrase.clone();
-        let new_accounts = derive_intmax_keys(
+        let new_accounts = derive_custom_intmax_keys(
             &master_mnemonic_phrase,
+            self.account_index,
             num_of_keys as u32,
             accounts_len as u32,
         )?;
@@ -286,31 +293,38 @@ impl TestSystem {
             let num_using_accounts = concurrent_limit.min(num_accounts);
             let intmax_senders = self.accounts.lock().unwrap()[0..num_using_accounts].to_vec();
 
-            log::info!("Synchronize balances");
-            for (i, sender) in intmax_senders.iter().enumerate() {
-                let result = wait_for_balance_synchronization(
-                    *sender,
-                    Duration::from_secs(TRANSFER_POLLING_DURATION),
-                )
-                .await;
+            let futures = intmax_senders
+                .iter()
+                .enumerate()
+                .map(|(_, sender)| async move {
+                    tokio::time::sleep(Duration::from_secs(TRANSFER_WAITING_DURATION)).await;
+                    wait_for_balance_synchronization(
+                        *sender,
+                        Duration::from_secs(TRANSFER_POLLING_DURATION),
+                    )
+                    .await
+                    .map_err(|err| {
+                        println!("transfer_with_error_handling Error: {:?}", err);
+                        err
+                    })?;
 
-                match result {
-                    Err(e) => {
-                        log::error!(
-                            "Recipient ({}/{}) failed to sync: {:?}",
-                            i + 1,
-                            num_using_accounts,
-                            e
-                        );
+                    Ok::<(), CliError>(())
+                });
+
+            log::info!("Synchronize balances");
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(300)) => log::info!("synchronization timeout"),
+                errors = join_all(futures) => {
+                    for (i, error) in errors.iter().enumerate() {
+                        if let Err(e) = error {
+                            log::error!("Recipient ({}/{}) failed: {:?}", i + 1, num_using_accounts, e);
+                        } else {
+                            log::info!("Recipient ({}/{}) succeeded", i + 1, num_using_accounts);
+                        }
                     }
-                    Ok(_) => {
-                        log::info!(
-                            "Recipient ({}/{}) succeeded to sync",
-                            i + 1,
-                            num_using_accounts
-                        );
-                    }
-                }
+
+                    log::info!("Completed synchronization");
+                },
             }
 
             let futures = intmax_senders
@@ -352,7 +366,7 @@ impl TestSystem {
 
             log::info!("Starting transactions");
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(300)) => log::info!("transaction timeout"),
+                _ = tokio::time::sleep(Duration::from_secs(720)) => log::info!("transaction timeout"),
                 errors = join_all(futures) => {
                     for (i, error) in errors.iter().enumerate() {
                         if let Err(e) = error {

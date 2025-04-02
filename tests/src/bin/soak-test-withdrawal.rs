@@ -306,7 +306,8 @@ impl TestSystem {
                 .map(|(i, sender)| {
                     let f = async move {
                         log::info!("Starting withdrawal from {} (No.{})", sender.pubkey, i);
-                        let to = Address::from_bytes_be(trash_account.eth_address.as_bytes());
+                        let to =
+                            Address::from_bytes_be(trash_account.eth_address.as_bytes()).unwrap();
                         log::info!("withdrawal recipient: {}", to);
                         withdraw_directly_with_error_handling(
                             *sender,

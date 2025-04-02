@@ -2,3 +2,5 @@
 output*.log
 /data/*
 !/data/.gitkeep
+/decrypt-data
+!/decrypt-data/.gitkeep

@@ -38,7 +38,7 @@ pub struct EncryptedMessage<'a> {
     /// See source comments of [`Self::check_integrity`] for more information.
     auth_data: [u8; 2],
     /// The remote secp256k1 public key
-    public_key: U256,
+    pub public_key: U256,
     /// The IV, for use in AES during decryption, in the tag check
     iv: B128,
     /// The encrypted data

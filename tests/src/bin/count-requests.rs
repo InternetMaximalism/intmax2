@@ -44,7 +44,7 @@ fn process_stats(
     sorted_keys.sort();
     for key in sorted_keys.iter() {
         if let Some(count) = count_map.get(key) {
-            log::debug!("{}: {}", key, count);
+            log::debug!("key {}: {}", key, count);
         }
     }
 

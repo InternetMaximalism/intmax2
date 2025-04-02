@@ -104,6 +104,16 @@ const TRANSFER_SAFE_FAILPOINTS: &[&str] = &[
     "block-is-not-valid",
     "balance-insufficient-before-sync",
     "pending-tx-error",
+    "after-update-pending-withdrawals",
+];
+
+const WITHDRAWAL_SAFE_FAILPOINTS: &[&str] = &[
+    "after-update-pending-withdrawals",
+    "after-sync-withdrawals",
+    "before-request-withdrawal",
+    "after-request-withdrawal",
+    "after-consume_payment",
+    "save-user-data",
 ];
 
 impl TestSystem {
@@ -124,6 +134,9 @@ impl TestSystem {
         if cfg!(feature = "failpoints") && rand::thread_rng().gen_bool(0.5) {
             let failpoints = match action {
                 Action::Transfer => TRANSFER_SAFE_FAILPOINTS,
+                Action::Withdrawal => {
+                    &[TRANSFER_SAFE_FAILPOINTS, WITHDRAWAL_SAFE_FAILPOINTS].concat()
+                }
                 // For now, only use failpoints with Transfer action
                 _ => return None,
             };
@@ -412,7 +425,7 @@ impl TestSystem {
                 .await?;
         }
 
-        let to = Address::from_bytes_be(recipient_account.eth_address.as_bytes());
+        let to = Address::from_bytes_be(recipient_account.eth_address.as_bytes()).unwrap();
         log::info!("withdrawal recipient: {}", to);
 
         log::info!("Starting withdrawal {}", sender_key.pubkey);

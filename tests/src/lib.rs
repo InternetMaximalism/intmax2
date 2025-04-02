@@ -68,11 +68,6 @@ pub async fn wait_for_balance_synchronization(
             )))) => {
                 log::warn!("Pending transaction. Waiting for the balance to be updated...");
             }
-            // Err(CliError::SyncError(SyncError::ValidityProverIsNotSynced(_))) => {
-            //     log::warn!(
-            //         "Validity prover is not synced. Waiting for the balance to be updated..."
-            //     );
-            // }
             Err(CliError::SyncError(SyncError::ServerError(ServerError::ServerError(
                 500,
                 message,

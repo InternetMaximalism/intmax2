@@ -85,7 +85,10 @@ impl PrivateZKPServerClient {
     async fn fetch_pubkey(&self) -> Result<RsaPublicKey, ServerError> {
         let response: GetPublicKeyResponse =
             get_request::<(), _>(&self.base_url, "/v1/public-key", None).await?;
-        let public_key_bytes = BASE64_STANDARD.decode(&response.public_key).map_err(|e| {
+
+        // let public_key = "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1CH9K5XR1+f4rVEakUhLZbMh7t+LlL163IpFGlvzaulhPkZQNLk1XGnSPzxMlcTBb8FBmnrW18TlXfVxRjMl6pGEahi56sjLrFItGzqMyRn4JvLIfs7NnYBIqS86UtEtSHgpiQ/l94GJxOqYpZVTppcquORPhHSPp/CIWRWl4QYgbb4b6oUV71ltrKeD36XlCdbJlYsv8tVinbe/bdp+230FgOYXgZasCCWTNJH2QJ5UkfaPANYWY6YE3/BPi1af9Nb/AqRVbbWmI65C+K7RSEjO6/LdiNq+rbQF203xfYKOFUZwyoCbo0UD6gjZmbt15vVavmJSUcXxmYaPvkO+yT0f4iPTa1oSQwatAxd6vLTYYak20jY/o8N9K44V21im28m4m90w5Aq6ba2TplTXMf8oo3B/KYEbBEUfZam3RvliaHThzR80qzpd+kGXG9s8f3cK1YP/dkroWZrrH4UU5zLBj8XCYXBUEMek7ezkORpzEeWYzMhbsl5wbFSkPqujAgMBAAE=";
+        let public_key = &response.public_key;
+        let public_key_bytes = BASE64_STANDARD.decode(public_key).map_err(|e| {
             ServerError::DeserializationError(format!("Failed to decode public key: {:?}", e))
         })?;
         let public_key = RsaPublicKey::from_public_key_der(&public_key_bytes).map_err(|e| {
@@ -314,7 +317,7 @@ impl PrivateZKPServerClient {
         let start = std::time::Instant::now();
         loop {
             let response = self.get_request(&request_id).await?;
-            log::info!("{}: {}", request.prove_type, response.status);
+            log::info!("prove_type {}: {}", request.prove_type, response.status);
             if response.status == "success" {
                 if response.result.is_none() {
                     return Err(ServerError::InvalidResponse(format!(

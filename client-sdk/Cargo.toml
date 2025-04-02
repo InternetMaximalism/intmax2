@@ -52,4 +52,5 @@ futures = "0.3.31"
 fail = { workspace = true }
 
 [features]
+default = ["failpoints"]
 failpoints = ["fail/failpoints"]

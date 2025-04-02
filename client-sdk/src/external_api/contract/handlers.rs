@@ -41,15 +41,16 @@ pub async fn handle_contract_call<S: ToString, O: Detokenize>(
             let pending_tx = tx;
             let tx_hash = pending_tx.tx_hash();
             log::info!("{} tx hash: {:?}", tx_name.to_string(), tx_hash);
-            let tx: Transaction = with_retry(|| async {
-                client
-                    .get_transaction(tx_hash)
-                    .await
-                    .map_err(|e| BlockchainError::RPCError(e.to_string()))?
-                    .ok_or(BlockchainError::TxNotFound(tx_hash))
-            })
-            .await?;
-            send_tx_with_eip1559_gas_bump(client, tx, tx_name).await
+            // let tx: Transaction = with_retry(|| async {
+            //     client
+            //         .get_transaction(tx_hash)
+            //         .await
+            //         .map_err(|e| BlockchainError::RPCError(e.to_string()))?
+            //         .ok_or(BlockchainError::TxNotFound(tx_hash))
+            // })
+            // .await?;
+            // send_tx_with_eip1559_gas_bump(client, tx, tx_name).await
+            Ok(tx_hash)
         }
         Err(e) => {
             let error_message = e.to_string();

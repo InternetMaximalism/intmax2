@@ -1,7 +1,7 @@
 use ethers::types::{Address, H256};
 use intmax2_client_sdk::external_api::{
     contract::{rollup_contract::RollupContract, utils::get_address},
-    utils::time::sleep_for,
+    utils::{retry::with_retry, time::sleep_for},
 };
 use intmax2_zkp::{
     common::{
@@ -69,21 +69,24 @@ async fn post_blocks() -> anyhow::Result<()> {
             })
             .collect::<Vec<_>>();
         let signature = construct_signature(&payload, pubkey_hash, Bytes32::default(), &signatures);
-        rollup_contract
-            .post_registration_block(
+
+        with_retry(|| {
+            rollup_contract.post_registration_block(
                 env.deployer_private_key,
                 BigUint::from(10u32).pow(17).try_into().unwrap(),
                 signature.block_sign_payload.tx_tree_root,
                 signature.block_sign_payload.expiry.into(),
                 0,
                 signature.sender_flag,
-                signature.agg_pubkey,
-                signature.agg_signature,
-                signature.message_point,
-                pubkeys,
+                signature.agg_pubkey.clone(),
+                signature.agg_signature.clone(),
+                signature.message_point.clone(),
+                pubkeys.clone(),
             )
-            .await?;
+        })
+        .await?;
+
         println!("Posted a block ✅");
-        sleep_for(7).await;
+        sleep_for(10).await;
     }
 }

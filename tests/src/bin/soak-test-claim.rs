@@ -49,7 +49,7 @@ const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
 #[derive(Debug, Deserialize)]
 struct EnvVar {
     l1_rpc_url: String,
-    transfer_admin_private_key: String,
+    withdrawal_admin_private_key: String,
     max_concurrent: Option<usize>,
     max_using_account: Option<usize>,
     account_offset: Option<usize>,
@@ -97,7 +97,7 @@ impl TestSystem {
         Self {
             l1_rpc_url: config.l1_rpc_url,
             admin_key: private_key_to_account(
-                H256::from_str(&config.transfer_admin_private_key).unwrap(),
+                H256::from_str(&config.withdrawal_admin_private_key).unwrap(),
             ),
         }
     }
@@ -263,7 +263,7 @@ impl TestSystem {
         // }
 
         let deposit = Deposit {
-            depositor: Address::from_bytes_be(sender_key.eth_address.as_bytes()),
+            depositor: Address::from_bytes_be(sender_key.eth_address.as_bytes()).unwrap(),
             pubkey_salt_hash: Bytes32::rand(&mut rand::thread_rng()),
             amount: U256::from_str(&deposit_amount.to_string()).unwrap(),
             token_index: ETH_TOKEN_INDEX,
@@ -382,7 +382,7 @@ impl TestSystem {
         //         .await?;
         // }
 
-        let to = Address::from_bytes_be(recipient_account.eth_address.as_bytes());
+        let to = Address::from_bytes_be(recipient_account.eth_address.as_bytes()).unwrap();
         log::info!("withdrawal recipient: {}", to);
 
         log::info!("Starting withdrawal {}", sender_key.pubkey);
@@ -539,7 +539,8 @@ impl AsyncTask for RandomActionTask {
             std::env::var("MASTER_MNEMONIC").expect("MASTER_MNEMONIC must be set");
         let sender_keys = derive_custom_keys(
             &master_mnemonic,
-            RANDOM_ACTION_ACCOUNT_INDEX,
+            account_index,
+            // RANDOM_ACTION_ACCOUNT_INDEX,
             3,
             (id * 3) as u32,
         )
