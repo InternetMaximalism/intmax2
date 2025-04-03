@@ -61,10 +61,14 @@ pub async fn mining_list(key: KeySet) -> Result<(), CliError> {
     let minings = client.get_mining_list(key).await?;
     println!("Mining list:");
     for (i, mining) in minings.iter().enumerate() {
-        let maturity = format_timestamp(mining.maturity);
+        let block_number = mining
+            .block
+            .as_ref()
+            .map_or("N/A".to_string(), |b| b.block_number.to_string());
+        let maturity = mining.maturity.map_or("N/A".to_string(), format_timestamp);
         println!(
-            "#{}: deposit block :{}, deposit amount: {}, maturity: {}, status: {}",
-            i, mining.block.block_number, mining.deposit_data.amount, maturity, mining.status
+            "#{}: deposit included block :{}, deposit amount: {}, maturity: {}, status: {}",
+            i, block_number, mining.deposit_data.amount, maturity, mining.status
         );
     }
     Ok(())
