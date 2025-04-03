@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use intmax2_interfaces::utils::circuit_verifiers::CircuitVerifiers;
 use intmax2_zkp::{
-    circuits::claim::single_claim_processor::SingleClaimProcessor,
+    circuits::claim::{
+        determine_lock_time::LockTimeConfig, single_claim_processor::SingleClaimProcessor,
+    },
     utils::{hash_chain::hash_chain_processor::HashChainProcessor, wrapper::WrapperCircuit},
     wrapper_config::plonky2_config::PoseidonBN128GoldilocksConfig,
 };
@@ -28,8 +30,14 @@ pub struct AppState {
     pub claim_outer_wrap_circuit: Arc<WrapperCircuit<F, C, OuterC, D>>,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
+impl AppState {
+    pub fn new(is_faster_mining: bool) -> Self {
+        let lock_config = if is_faster_mining {
+            LockTimeConfig::faster()
+        } else {
+            LockTimeConfig::normal()
+        };
+
         let single_withdrawal_vd = CircuitVerifiers::load().get_single_withdrawal_vd();
         let withdrawal_processor = Arc::new(HashChainProcessor::new(&single_withdrawal_vd));
         let withdrawal_inner_wrap_circuit = Arc::new(WrapperCircuit::new(
@@ -40,7 +48,8 @@ impl Default for AppState {
         ));
 
         let validity_vd = CircuitVerifiers::load().get_validity_vd();
-        let single_claim_vd = SingleClaimProcessor::new(&validity_vd).get_verifier_data();
+        let single_claim_vd =
+            SingleClaimProcessor::new(&validity_vd, &lock_config).get_verifier_data();
         let claim_processor = Arc::new(HashChainProcessor::new(&single_claim_vd));
         let claim_inner_wrap_circuit = Arc::new(WrapperCircuit::new(
             &claim_processor.chain_end_circuit.data.verifier_data(),
