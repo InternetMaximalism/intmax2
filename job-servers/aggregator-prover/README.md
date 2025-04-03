@@ -10,11 +10,11 @@ cp .env.example .env
 ## Run
 
 ```sh
-cargo run -r # normal mode
+IS_FASTER_MINING=false cargo run -r # normal mode
 ```
 
 ```sh
-cargo run -r --features faster-mining # faster mining mode (lock time of mining is shortened)
+IS_FASTER_MINING=true cargo run -r # faster mining mode (lock time of mining is shortened)
 ```
 
 ## APIs
