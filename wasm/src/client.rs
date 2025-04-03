@@ -45,6 +45,8 @@ pub struct Config {
     /// If this time is exceeded, the tx request will be ignored
     pub tx_timeout: u64,
 
+    pub is_faster_mining: bool,
+
     /// Interval between retries for tx requests
     pub block_builder_request_interval: u64,
 
@@ -104,6 +106,7 @@ impl Config {
         withdrawal_server_url: String,
         deposit_timeout: u64,
         tx_timeout: u64,
+        is_faster_mining: bool,
 
         block_builder_request_interval: u64,
         block_builder_request_limit: u64,
@@ -132,6 +135,7 @@ impl Config {
             withdrawal_server_url,
             deposit_timeout,
             tx_timeout,
+            is_faster_mining,
             block_builder_request_interval,
             block_builder_request_limit,
             block_builder_query_wait_time,
@@ -178,6 +182,7 @@ pub fn get_client(config: &Config) -> Client {
     let client_config = ClientConfig {
         deposit_timeout: config.deposit_timeout,
         tx_timeout: config.tx_timeout,
+        is_faster_mining: config.is_faster_mining,
         block_builder_request_interval: config.block_builder_request_interval,
         block_builder_request_limit: config.block_builder_request_limit,
         block_builder_query_wait_time: config.block_builder_query_wait_time,

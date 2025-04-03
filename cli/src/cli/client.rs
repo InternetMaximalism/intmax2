@@ -77,6 +77,7 @@ pub fn get_client() -> Result<Client, CliError> {
         block_builder_query_wait_time: env.block_builder_query_wait_time,
         block_builder_query_interval: env.block_builder_query_interval,
         block_builder_query_limit: env.block_builder_query_limit,
+        is_faster_mining: env.is_faster_mining,
     };
 
     let client = Client {

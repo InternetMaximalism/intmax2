@@ -38,6 +38,7 @@ impl Client {
             self.validity_prover.as_ref(),
             &self.rollup_contract,
             &self.liquidity_contract,
+            self.config.is_faster_mining,
             key,
             self.config.tx_timeout,
             self.config.deposit_timeout,
@@ -118,7 +119,7 @@ impl Client {
             };
             let single_claim_proof = self
                 .balance_prover
-                .prove_single_claim(key, &claim_witness)
+                .prove_single_claim(key, self.config.is_faster_mining, &claim_witness)
                 .await?;
 
             let collected_fees = match &fee {

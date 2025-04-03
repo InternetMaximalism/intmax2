@@ -72,5 +72,6 @@ pub struct ProveSingleWithdrawalRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProveSingleClaimRequest {
+    pub is_faster_mining: bool,
     pub claim_witness: ClaimWitness<F, C, D>,
 }

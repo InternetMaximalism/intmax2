@@ -327,12 +327,13 @@ pub async fn determine_withdrawals(
     Ok((withdrawal_info.settled, pending_withdrawal_digests))
 }
 
-/// Determine the
+#[allow(clippy::too_many_arguments)]
 pub async fn determine_claims(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     rollup_contract: &RollupContract,
     liquidity_contract: &LiquidityContract,
+    is_faster_mining: bool,
     key: KeySet,
     tx_timeout: u64,
     deposit_timeout: u64,
@@ -350,6 +351,7 @@ pub async fn determine_claims(
         validity_prover,
         liquidity_contract,
         key,
+        is_faster_mining,
         current_time,
         &user_data.claim_status,
         tx_timeout,

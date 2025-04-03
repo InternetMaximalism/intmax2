@@ -636,6 +636,7 @@ impl Client {
             self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
+            self.config.is_faster_mining,
             current_time,
             &ProcessStatus::default(),
             self.config.tx_timeout,

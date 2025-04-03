@@ -10,7 +10,7 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::{
-    circuits::claim::determine_lock_time::get_lock_time,
+    circuits::claim::determine_lock_time::{get_lock_time, LockTimeConfig},
     common::{block::Block, signature::key_set::KeySet},
     ethereum_types::u256::U256,
 };
@@ -58,11 +58,18 @@ pub async fn fetch_mining_info(
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
+    is_faster_mining: bool,
     current_time: u64, // current timestamp for timeout checking
     claim_status: &ProcessStatus,
     tx_timeout: u64,
     deposit_timeout: u64,
 ) -> Result<Vec<Mining>, StrategyError> {
+    let lock_config = if is_faster_mining {
+        LockTimeConfig::faster()
+    } else {
+        LockTimeConfig::normal()
+    };
+
     // get all deposit info
     let deposit_info = fetch_all_unprocessed_deposit_info(
         store_vault_server,
@@ -123,7 +130,7 @@ pub async fn fetch_mining_info(
 
     for (meta, deposit_data) in candidate_deposits {
         let block = fetch_block(validity_prover, meta.block_number).await?;
-        let lock_time = get_lock_time(block.hash(), deposit_data.deposit_salt);
+        let lock_time = get_lock_time(&lock_config, block.hash(), deposit_data.deposit_salt);
         let maturity = block.timestamp + lock_time;
         let status = {
             if block.block_number <= last_block_number {

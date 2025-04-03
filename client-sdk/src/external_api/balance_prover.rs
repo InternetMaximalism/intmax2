@@ -169,9 +169,11 @@ impl BalanceProverClientInterface for BalanceProverClient {
     async fn prove_single_claim(
         &self,
         _key: KeySet,
+        is_faster_mining: bool,
         claim_witness: &ClaimWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let request = ProveSingleClaimRequest {
+            is_faster_mining,
             claim_witness: claim_witness.clone(),
         };
         let response: ProveResponse = post_request(

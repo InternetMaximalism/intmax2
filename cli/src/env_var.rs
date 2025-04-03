@@ -35,6 +35,9 @@ pub struct EnvVar {
     pub rollup_contract_deployed_block_number: u64,
     pub withdrawal_contract_address: Address,
 
+    // mining settings
+    pub is_faster_mining: bool,
+
     // optional block builder base url
     pub block_builder_base_url: Option<String>,
 
