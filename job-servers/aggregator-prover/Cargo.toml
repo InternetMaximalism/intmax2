@@ -34,4 +34,4 @@ redis = { version = "0.24", default-features = false, features = [
 
 [features]
 default = []
-faster-mining = ["intmax2-zkp/faster-mining"]
+# faster-mining = ["intmax2-zkp/faster-mining"]
