@@ -39,7 +39,7 @@ go run main.go --circuit=withdrawal_circuit_data
 go run main.go --circuit=claim_circuit_data
 ```
 
-#### Claim
+####  Faster Mining Claim
 
 ```bash
 go run main.go --circuit=faster_claim_circuit_data
