@@ -22,7 +22,7 @@ use intmax2_zkp::{
 use num_bigint::BigUint;
 use serde::Deserialize;
 
-const MAX_BATCH_TRANSFER: usize = 64;
+const MAX_BATCH_TRANSFER: usize = 63;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

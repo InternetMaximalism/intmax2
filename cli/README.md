@@ -203,7 +203,7 @@ recipient,amount,tokenIndex
 0x789...,300,3
 ```
 
-Note: Batch transfers are limited to a maximum of 64 transfers per transaction.
+Note: Batch transfers are limited to a maximum of 63 transfers per transaction.
 
 #### Withdrawal
 
