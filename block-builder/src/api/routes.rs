@@ -16,6 +16,11 @@ use crate::api::state::State;
 
 #[get("/fee-info")]
 pub async fn get_fee_info(state: Data<State>) -> Result<Json<BlockBuilderFeeInfo>, Error> {
+    state
+        .block_builder
+        .blockchain_health_check()
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
     let fee_info = state.block_builder.get_fee_info();
     Ok(Json(fee_info))
 }

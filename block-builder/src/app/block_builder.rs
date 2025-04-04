@@ -3,8 +3,9 @@ use intmax2_client_sdk::{
     client::key_from_eth::generate_intmax_account_from_eth_key,
     external_api::{
         contract::{
-            block_builder_registry::BlockBuilderRegistryContract, rollup_contract::RollupContract,
-            utils::get_address,
+            block_builder_registry::BlockBuilderRegistryContract,
+            rollup_contract::RollupContract,
+            utils::{get_address, get_eth_balance},
         },
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
@@ -117,9 +118,7 @@ impl BlockBuilder {
     fn create_config(env: &EnvVar) -> Result<Config, BlockBuilderError> {
         let eth_allowance_for_block = {
             let u = ethers::utils::parse_ether(env.eth_allowance_for_block.clone()).unwrap();
-            let mut buf = [0u8; 32];
-            u.to_big_endian(&mut buf);
-            U256::from_bytes_be(&buf).unwrap()
+            convert_u256_from_ether_to_intmax(u)
         };
         let registration_fee = env
             .registration_fee
@@ -225,6 +224,31 @@ impl BlockBuilder {
                 &self.config.non_registration_collateral_fee,
             ),
         }
+    }
+
+    /// Check RPC connection and block builder's balance
+    pub async fn blockchain_health_check(&self) -> Result<(), BlockBuilderError> {
+        log::info!("check_balance");
+        let rpc_url = self.registry_contract.rpc_url.clone();
+        let block_builder_address =
+            ethers::types::Address::from_slice(&self.config.block_builder_address.to_bytes_be());
+        let balance = get_eth_balance(&rpc_url, block_builder_address)
+            .await
+            .map_err(|e| {
+                BlockBuilderError::BlockChainHealthError(format!(
+                    "Failed to get block builder's balance: {}",
+                    e
+                ))
+            })?;
+        let balance = convert_u256_from_ether_to_intmax(balance);
+        log::info!("block builder balance: {}", balance);
+        if balance < self.config.eth_allowance_for_block {
+            return Err(BlockBuilderError::BlockChainHealthError(format!(
+                "Block builder's balance is not enough: current {} < required {}",
+                balance, self.config.eth_allowance_for_block
+            )));
+        }
+        Ok(())
     }
 
     /// Send a transaction request by the user
@@ -336,4 +360,12 @@ impl BlockBuilder {
         self.storage.add_signature(request_id, signature).await?;
         Ok(())
     }
+}
+
+fn convert_u256_from_ether_to_intmax(
+    u: ethers::types::U256,
+) -> intmax2_zkp::ethereum_types::u256::U256 {
+    let mut buf = [0u8; 32];
+    u.to_big_endian(&mut buf);
+    intmax2_zkp::ethereum_types::u256::U256::from_bytes_be(&buf).unwrap()
 }
