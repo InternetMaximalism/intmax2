@@ -295,7 +295,7 @@ impl PrivateZKPServerClient {
         Ok(response)
     }
 
-    pub(crate) async fn request_and_get_proof(
+    pub async fn request_and_get_proof(
         &self,
         key: KeySet,
         request: &ProveRequestWithType,
