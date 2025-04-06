@@ -8,7 +8,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     circuits::balance::balance_pis::BalancePublicInputs, common::signature::key_set::KeySet,
-    ethereum_types::bytes32::Bytes32, utils::leafable::Leafable,
+    ethereum_types::bytes32::Bytes32,
 };
 
 use crate::client::{
@@ -125,7 +125,7 @@ impl Client {
     ) -> Result<(), SyncError> {
         log::info!("sync_deposit: {:?}", meta);
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
-        let nullifier = deposit_data.deposit().unwrap().hash();
+        let nullifier: Bytes32 = deposit_data.deposit().unwrap().poseidon_hash().into();
         if user_data
             .full_private_state
             .nullifier_tree

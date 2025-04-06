@@ -246,8 +246,7 @@ pub async fn update_send_by_sender(
         full_private_state,
         tx_data.spent_witness.tx.nonce,
         &tx_data.spent_witness.transfers,
-    )
-    .await?;
+    )?;
     if update_private_state {
         spent_witness
             .update_private_state(full_private_state)
