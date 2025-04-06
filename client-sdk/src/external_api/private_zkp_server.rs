@@ -268,7 +268,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 }
 
 impl PrivateZKPServerClient {
-    pub(crate) async fn send_prove_request(
+    pub async fn send_prove_request(
         &self,
         request: &ProveRequestWithType,
     ) -> Result<String, ServerError> {
