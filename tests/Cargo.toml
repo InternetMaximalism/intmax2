@@ -16,7 +16,7 @@ reqwest = { workspace = true }
 ethers = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-thiserror = "2.0.3"
+thiserror = "2.0.12"
 actix-web = "4.10.2"
 hashbrown = "0.15.2"
 actix-cors = "0.7.0"
