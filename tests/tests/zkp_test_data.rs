@@ -7,6 +7,7 @@ use intmax2_interfaces::api::{
     },
     private_zkp_server::types::{ProveRequestWithType, ProveType},
 };
+use num_bigint::BigUint;
 use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
 use std::{fs, path::PathBuf, str::FromStr, sync::Arc};
 
@@ -81,6 +82,9 @@ fn generate_zkp_test_data() {
         .tick(false, &[], 0, lock_config.lock_time_max as u64)
         .unwrap();
     let mature_block_number = validity_state_manager.get_block_number();
+
+    // save key
+    save_key(&key);
 
     // generate claim witness
     {
@@ -398,5 +402,15 @@ fn save_proof_request(prefix: &str, request: &ProveRequestWithType) {
     let file_name = format!("{}{}.json", prefix, request.prove_type);
     let file_path = path.join(file_name);
     let json = serde_json::to_string_pretty(request).unwrap();
+    std::fs::write(file_path, json).unwrap();
+}
+
+fn save_key(key: &KeySet) {
+    let path = PathBuf::from_str("tests/test_data/private_zkp_server").unwrap();
+    fs::create_dir_all(&path).unwrap();
+    let file_name = "key.json".to_string();
+    let file_path = path.join(file_name);
+    let privkey: U256 = BigUint::from(key.privkey).try_into().unwrap();
+    let json = serde_json::to_string_pretty(&privkey).unwrap();
     std::fs::write(file_path, json).unwrap();
 }
