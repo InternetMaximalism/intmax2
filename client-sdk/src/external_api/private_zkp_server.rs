@@ -283,6 +283,16 @@ impl PrivateZKPServerClient {
         Ok(response.request_id)
     }
 
+    pub async fn send_test_prove_request(
+        &self,
+        encrypted_data: Vec<u8>,
+    ) -> Result<String, ServerError> {
+        let request = CreateProveRequest { encrypted_data };
+        let response: CreateProofResponse =
+            post_request(&self.base_url, "/v1/proof/create", Some(&request)).await?;
+        Ok(response.request_id)
+    }
+
     pub(crate) async fn get_request(
         &self,
         request_id: &str,
@@ -305,6 +315,52 @@ impl PrivateZKPServerClient {
         loop {
             let response = self.get_request(&request_id).await?;
             log::info!("{}: {}", request.prove_type, response.status);
+            if response.status == "success" {
+                if response.result.is_none() {
+                    return Err(ServerError::InvalidResponse(format!(
+                        "Proof result is missing: {}",
+                        response.error.unwrap_or_default()
+                    )));
+                }
+
+                let proof_with_result =
+                    ProofResultWithError::decrypt(key, None, &response.result.unwrap()).map_err(
+                        |e| {
+                            ServerError::DeserializationError(format!(
+                                "Failed to decrypt proof result: {:?}",
+                                e
+                            ))
+                        },
+                    )?;
+
+                return Ok(proof_with_result);
+            } else if response.status == "error" {
+                return Err(ServerError::InvalidResponse(format!(
+                    "Proof request failed: {}",
+                    response.error.unwrap_or_default()
+                )));
+            }
+
+            if retries >= self.config.max_retries {
+                return Err(ServerError::UnknownError(format!(
+                    "Failed to get proof after {} retries",
+                    self.config.max_retries
+                )));
+            }
+            retries += 1;
+            sleep_for(self.config.retry_interval).await;
+        }
+    }
+
+    pub async fn request_and_get_test_proof(
+        &self,
+        key: KeySet,
+        encoded_data: Vec<u8>,
+    ) -> Result<ProofResultWithError, ServerError> {
+        let request_id = self.send_test_prove_request(encoded_data).await?;
+        let mut retries = 0;
+        loop {
+            let response = self.get_request(&request_id).await?;
             if response.status == "success" {
                 if response.result.is_none() {
                     return Err(ServerError::InvalidResponse(format!(
