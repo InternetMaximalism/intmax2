@@ -2,6 +2,7 @@ pub mod balance_prover;
 pub mod block_builder;
 pub mod contract;
 pub mod indexer;
+pub mod predicate;
 pub mod private_zkp_server;
 pub mod s3_store_vault;
 pub mod store_vault_server;
