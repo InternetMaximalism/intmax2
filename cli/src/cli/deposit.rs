@@ -1,13 +1,21 @@
 use ethers::types::{Address, H256};
-use intmax2_client_sdk::external_api::contract::{
-    erc1155_contract::ERC1155Contract,
-    erc20_contract::ERC20Contract,
-    erc721_contract::ERC721Contract,
-    liquidity_contract::LiquidityContract,
-    utils::{get_address, get_eth_balance},
+use intmax2_client_sdk::external_api::{
+    contract::{
+        erc1155_contract::ERC1155Contract,
+        erc20_contract::ERC20Contract,
+        erc721_contract::ERC721Contract,
+        liquidity_contract::LiquidityContract,
+        utils::{get_address, get_eth_balance},
+    },
+    predicate::{PermissionRequest, PredicateClient},
 };
 use intmax2_interfaces::data::deposit_data::TokenType;
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
+use intmax2_zkp::{
+    common::signature::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
+};
+
+use crate::env_var::EnvVar;
 
 use super::{
     client::get_client,
@@ -38,16 +46,17 @@ pub async fn deposit(
 
     log::info!("Balance check done");
 
-    let token_address = convert_address(token_address);
-    let depositor = convert_address(get_address(liquidity_contract.chain_id, eth_private_key));
+    let token_address_int = convert_address(token_address);
+    let depositor = get_address(liquidity_contract.chain_id, eth_private_key);
+    let depositor_int = convert_address(depositor);
 
     let deposit_result = client
         .prepare_deposit(
-            depositor,
+            depositor_int,
             key.pubkey,
             amount,
             token_type,
-            token_address,
+            token_address_int,
             token_id,
             is_mining,
         )
@@ -55,7 +64,15 @@ pub async fn deposit(
 
     let deposit_data = deposit_result.deposit_data;
 
-    let aml_permission = vec![];
+    let aml_permission = fetch_predicate_permission(
+        depositor,
+        deposit_data.pubkey_salt_hash,
+        token_type,
+        amount,
+        token_address,
+        token_id,
+    )
+    .await?;
     let eligibility_permission = vec![];
 
     match token_type {
@@ -113,7 +130,7 @@ pub async fn deposit(
     if is_local()? {
         log::info!("get token index");
         let token_index = liquidity_contract
-            .get_token_index(token_type, token_address, token_id)
+            .get_token_index(token_type, token_address_int, token_id)
             .await?
             .ok_or(CliError::UnexpectedError(
                 "Cloud not find token index".to_string(),
@@ -212,4 +229,63 @@ async fn balance_check_and_approve(
     }
 
     Ok(())
+}
+
+async fn fetch_predicate_permission(
+    from: Address,
+    recipient_salt_hash: Bytes32,
+    token_type: TokenType,
+    amount: U256,
+    token_address: Address,
+    token_id: U256,
+) -> Result<Vec<u8>, CliError> {
+    let env = envy::from_env::<EnvVar>()?;
+    if env.predicate_base_url.is_none() && env.aml_permitter_contract_address.is_none() {
+        log::info!("AML predicate is not set");
+        return Ok(vec![]);
+    }
+    if !(env.predicate_base_url.is_some() && env.aml_permitter_contract_address.is_some()) {
+        return Err(CliError::EnvError(
+            "Both predicate base url and aml permitter contract address must be set".to_string(),
+        ));
+    }
+    let aml_permitter_contract_address = env.aml_permitter_contract_address.unwrap();
+
+    let predicate_client = PredicateClient::new(env.predicate_base_url.unwrap());
+    let recipient_salt_hash = H256::from_slice(&recipient_salt_hash.to_bytes_be());
+
+    let value = if token_type == TokenType::NATIVE {
+        amount
+    } else {
+        0.into()
+    };
+    let value = convert_u256(value);
+    let amount = convert_u256(amount);
+    let token_id = convert_u256(token_id);
+    let request = match token_type {
+        TokenType::NATIVE => PermissionRequest::Native {
+            recipient_salt_hash,
+            amount,
+        },
+        TokenType::ERC20 => PermissionRequest::ERC20 {
+            recipient_salt_hash,
+            token_address,
+            amount,
+        },
+        TokenType::ERC721 => PermissionRequest::ERC721 {
+            recipient_salt_hash,
+            token_address,
+            token_id,
+        },
+        TokenType::ERC1155 => PermissionRequest::ERC1155 {
+            recipient_salt_hash,
+            token_address,
+            token_id,
+            amount,
+        },
+    };
+    let permission = predicate_client
+        .get_deposit_permission(from, aml_permitter_contract_address, value, request)
+        .await?;
+    Ok(permission)
 }
