@@ -10,11 +10,10 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u256::U256},
 };
 use itertools::Itertools as _;
-use num_bigint::BigUint;
 
 use super::error::StrategyError;
 
@@ -75,7 +74,7 @@ pub async fn fetch_sender_proof_set(
     store_vault_server: &dyn StoreVaultClientInterface,
     ephemeral_key: U256,
 ) -> Result<SenderProofSet, StrategyError> {
-    let key = KeySet::new(BigUint::from(ephemeral_key).into());
+    let key = KeySet::new(ephemeral_key);
     let encrypted_sender_proof_set = store_vault_server
         .get_snapshot(key, &DataType::SenderProofSet.to_topic())
         .await?

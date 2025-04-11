@@ -3,7 +3,7 @@ use ethers::{core::utils::Anvil, types::H256};
 use intmax2_client_sdk::external_api::contract::{
     rollup_contract::RollupContract, utils::get_latest_block_number,
 };
-use intmax2_zkp::common::signature::SignatureContent;
+use intmax2_zkp::common::signature_content::SignatureContent;
 use server_common::logger::init_logger;
 use validity_prover::Env;
 

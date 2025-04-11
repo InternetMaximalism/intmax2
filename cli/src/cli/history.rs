@@ -9,7 +9,7 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::{
-    common::{signature::key_set::KeySet, transfer::Transfer},
+    common::{signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
 };
 

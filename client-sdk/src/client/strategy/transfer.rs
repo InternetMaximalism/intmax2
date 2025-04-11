@@ -20,7 +20,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
     utils::conversion::ToU64,
 };

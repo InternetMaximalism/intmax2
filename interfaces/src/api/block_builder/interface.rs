@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use intmax2_zkp::{
     common::{
-        block_builder::BlockProposal, signature::flatten::FlatG2, tx::Tx,
+        block_builder::BlockProposal, signature_content::flatten::FlatG2, tx::Tx,
         witness::transfer_witness::TransferWitness,
     },
     ethereum_types::{address::Address, u256::U256},

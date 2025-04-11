@@ -6,7 +6,7 @@ use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInt
 use intmax2_zkp::{
     common::{
         block_builder::{construct_signature, SenderWithSignature, UserSignature},
-        signature::block_sign_payload::BlockSignPayload,
+        signature_content::block_sign_payload::BlockSignPayload,
     },
     constants::NUM_SENDERS_IN_BLOCK,
     ethereum_types::{

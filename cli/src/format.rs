@@ -2,7 +2,7 @@ use anyhow::{bail, ensure};
 use ethers::types::{Address as EthAddress, H256};
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet},
+    common::{generic_address::GenericAddress, signature_content::key_set::KeySet},
     ethereum_types::{
         address::Address as IAddress, u256::U256 as IU256, u32limb_trait::U32LimbTrait as _,
     },
@@ -55,7 +55,11 @@ pub fn format_token_info(
 }
 
 pub fn privkey_to_keyset(privkey: H256) -> KeySet {
-    KeySet::new(BigUint::from_bytes_be(privkey.as_bytes()).into())
+    KeySet::new(
+        BigUint::from_bytes_be(privkey.as_bytes())
+            .try_into()
+            .unwrap(),
+    )
 }
 
 pub fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
@@ -63,10 +67,10 @@ pub fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
     let bytes = hex::decode(&address[2..])?;
     if bytes.len() == 20 {
         let address = IAddress::from_bytes_be(&bytes).unwrap();
-        Ok(GenericAddress::from_address(address))
+        Ok(address.into())
     } else if bytes.len() == 32 {
         let pubkey = IU256::from_bytes_be(&bytes).unwrap();
-        Ok(GenericAddress::from_pubkey(pubkey))
+        Ok(pubkey.into())
     } else {
         bail!("Invalid length");
     }

@@ -23,7 +23,7 @@ use intmax2_interfaces::{
     utils::signature::Auth,
 };
 use intmax2_zkp::{
-    common::signature::{self, flatten::FlatG2},
+    common::signature_content::{self, flatten::FlatG2},
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
@@ -130,7 +130,7 @@ pub async fn fetch_encrypted_data(
 pub async fn sign_message(private_key: &str, message: &[u8]) -> Result<JsFlatG2, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
-    let signature = signature::sign_tools::sign_message(key.privkey, message);
+    let signature = signature_content::sign_tools::sign_message(key.privkey, message);
     Ok(FlatG2::from(signature).into())
 }
 
@@ -146,7 +146,8 @@ pub async fn verify_signature(
     let signature = FlatG2::try_from(signature.clone())
         .map_err(|_| JsError::new("Failed to parse signature"))?;
 
-    let result = signature::sign_tools::verify_signature(signature.into(), public_key, message);
+    let result =
+        signature_content::sign_tools::verify_signature(signature.into(), public_key, message);
 
     Ok(result.is_ok())
 }

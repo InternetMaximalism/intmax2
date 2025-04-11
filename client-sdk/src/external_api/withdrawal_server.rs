@@ -18,7 +18,7 @@ use intmax2_interfaces::{
     utils::signature::Signable,
 };
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{address::Address, bytes32::Bytes32},
 };
 use plonky2::{

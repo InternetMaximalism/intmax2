@@ -1414,7 +1414,7 @@ dependencies = [
  "log",
  "num-bigint 0.4.6",
  "plonky2",
- "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
+ "plonky2_bn254",
  "redis 0.29.1",
  "reqwest 0.12.12",
  "serde",
@@ -1713,7 +1713,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2452,7 +2452,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3861,7 +3861,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "plonky2",
- "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
+ "plonky2_bn254",
  "plonky2_keccak",
  "rand 0.8.5",
  "rand_chacha 0.9.0",
@@ -3905,7 +3905,7 @@ dependencies = [
  "log",
  "num-traits",
  "plonky2",
- "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
+ "plonky2_bn254",
  "plonky2_keccak",
  "plonky2_u32",
  "rand 0.8.5",
@@ -3950,7 +3950,7 @@ dependencies = [
 [[package]]
 name = "intmax2-zkp"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#3a80dbb1b3639945c1fca9553ee719b1d8393b07"
+source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#fa1f57f6f3026d631bf4b2a89edf4801d80686bd"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3962,23 +3962,20 @@ dependencies = [
  "chrono",
  "env_logger",
  "ff",
- "hashbrown 0.14.5",
  "hex",
  "itertools 0.12.1",
  "lazy_static",
  "log",
  "num",
  "num-bigint 0.4.6",
- "num-traits",
  "plonky2",
- "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254?branch=audit)",
+ "plonky2_bn254",
  "plonky2_keccak",
  "plonky2_u32",
  "rand 0.8.5",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "uuid 1.16.0",
 ]
 
 [[package]]
@@ -4218,7 +4215,7 @@ dependencies = [
  "intmax2-zkp",
  "log",
  "plonky2",
- "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
+ "plonky2_bn254",
  "plonky2_keccak",
  "reqwest 0.12.12",
  "serde",
@@ -5115,30 +5112,7 @@ dependencies = [
 [[package]]
 name = "plonky2_bn254"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/plonky2_bn254?branch=audit#bf875be8b5a0806d7bb2a2d46fabc17d7f0f934e"
-dependencies = [
- "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.4.2",
- "ark-std 0.4.0",
- "env_logger",
- "hashbrown 0.14.5",
- "hex",
- "itertools 0.12.1",
- "log",
- "num",
- "num-bigint 0.4.6",
- "plonky2",
- "plonky2_u32",
- "rand 0.8.5",
- "starky",
-]
-
-[[package]]
-name = "plonky2_bn254"
-version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/plonky2_bn254#5cec2397fbaeb5530516ab3eb62510fb98bd9755"
+source = "git+https://github.com/InternetMaximalism/plonky2_bn254#806b9e402ce1d3865d11fa85ddbd780996618ba2"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5868,7 +5842,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6727,7 +6701,7 @@ dependencies = [
  "intmax2-zkp",
  "log",
  "plonky2",
- "plonky2_bn254 0.1.0 (git+https://github.com/InternetMaximalism/plonky2_bn254)",
+ "plonky2_bn254",
  "plonky2_keccak",
  "reqwest 0.12.12",
  "serde",
@@ -6944,7 +6918,7 @@ dependencies = [
  "getrandom 0.3.1",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7648,7 +7622,6 @@ checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
 dependencies = [
  "getrandom 0.3.1",
  "js-sys",
- "serde",
  "wasm-bindgen",
 ]
 
@@ -7971,7 +7944,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

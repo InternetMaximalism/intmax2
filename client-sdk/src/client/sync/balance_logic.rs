@@ -13,7 +13,7 @@ use intmax2_zkp::{
     common::{
         private_state::FullPrivateState,
         salt::Salt,
-        signature::key_set::KeySet,
+        signature_content::key_set::KeySet,
         witness::{
             deposit_witness::DepositWitness, private_transition_witness::PrivateTransitionWitness,
             receive_deposit_witness::ReceiveDepositWitness,
@@ -48,7 +48,7 @@ pub async fn receive_deposit(
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
     deposit_data: &DepositData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof);
+    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
     let receive_block_number = prev_balance_pis.public_state.block_number;
     // Generate witness
     let deposit_info = validity_prover
@@ -112,9 +112,9 @@ pub async fn receive_transfer(
                                                                   * proof */
     transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof);
+    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
     let receive_block_number = prev_balance_pis.public_state.block_number;
-    let sender_balance_pis = BalancePublicInputs::from_pis(&sender_balance_proof.public_inputs);
+    let sender_balance_pis = BalancePublicInputs::from_pis(&sender_balance_proof.public_inputs)?;
     if receive_block_number < prev_balance_pis.public_state.block_number {
         return Err(SyncError::InternalError(
             "receive block number is not greater than prev balance proof".to_string(),
@@ -143,7 +143,7 @@ pub async fn receive_transfer(
         transfer_index: transfer_data.transfer_index,
         transfer_merkle_proof: transfer_data.transfer_merkle_proof.clone(),
     };
-    let nullifier: Bytes32 = transfer_witness.transfer.commitment().into();
+    let nullifier = transfer_witness.transfer.nullifier();
     let private_transition_witness = PrivateTransitionWitness::new(
         full_private_state,
         transfer_data.transfer.token_index,
@@ -189,7 +189,7 @@ pub async fn update_send_by_sender(
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     // sync check
     wait_till_validity_prover_synced(validity_prover, true, tx_block_number).await?;
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof);
+    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
     if tx_block_number <= prev_balance_pis.public_state.block_number {
         return Err(SyncError::InternalError(
             "tx block number is not greater than prev balance proof".to_string(),
@@ -241,7 +241,7 @@ pub async fn update_send_by_sender(
             "sender leaf not found in sender leaves".to_string(),
         ))?;
     // update private state only if sender leaf has returned signature and validity_pis is valid
-    let update_private_state = sender_leaf.did_return_sig && validity_pis.is_valid_block;
+    let update_private_state = sender_leaf.signature_included && validity_pis.is_valid_block;
     let spent_witness = generate_spent_witness(
         full_private_state,
         tx_data.spent_witness.tx.nonce,
@@ -263,7 +263,7 @@ pub async fn update_send_by_sender(
             prev_balance_proof,
         )
         .await?;
-    let balance_pis = BalancePublicInputs::from_pis(&balance_proof.public_inputs);
+    let balance_pis = BalancePublicInputs::from_pis(&balance_proof.public_inputs)?;
     if balance_pis.private_commitment != full_private_state.to_private_state().commitment() {
         return Err(SyncError::InternalError(format!(
             "balance proof new private commitment {} is not equal to full private state commitment{}",
@@ -289,7 +289,7 @@ pub async fn update_send_by_receiver(
     let sender_proof_set = transfer_data.sender_proof_set.as_ref().unwrap();
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
     let prev_balance_proof = sender_proof_set.prev_balance_proof.decompress()?;
-    let prev_balance_pis = BalancePublicInputs::from_pis(&prev_balance_proof.public_inputs);
+    let prev_balance_pis = BalancePublicInputs::from_pis(&prev_balance_proof.public_inputs)?;
     let prev_block_number = prev_balance_pis.public_state.block_number;
     if tx_block_number <= prev_block_number {
         return Err(SyncError::InvalidTransferError(
@@ -332,7 +332,7 @@ pub async fn update_send_by_receiver(
         .ok_or(SyncError::InvalidTransferError(
             "sender leaf not found in sender leaves".to_string(),
         ))?;
-    if !sender_leaf.did_return_sig {
+    if !sender_leaf.signature_included {
         return Err(SyncError::InvalidTransferError(
             "sender did not return signature".to_string(),
         ));
@@ -385,7 +385,7 @@ pub async fn update_no_send(
     to_block_number: u32,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     wait_till_validity_prover_synced(validity_prover, true, to_block_number).await?;
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof);
+    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
     let prev_block_number = prev_balance_pis.public_state.block_number;
     if to_block_number <= prev_block_number {
         // no need to update balance proof

@@ -18,10 +18,9 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
 };
-use num_bigint::BigUint;
 
 #[derive(Debug, Clone)]
 pub struct WithdrawalInfo {
@@ -58,8 +57,7 @@ pub async fn fetch_withdrawal_info(
     // First, fetch and decrypt all sender proof sets
     let mut valid_transfers = Vec::new();
     for (meta, mut transfer_data) in data_with_meta {
-        let ephemeral_key =
-            KeySet::new(BigUint::from(transfer_data.sender_proof_set_ephemeral_key).into());
+        let ephemeral_key = KeySet::new(transfer_data.sender_proof_set_ephemeral_key);
 
         // Fetch encrypted sender proof set
         let encrypted_sender_proof_set = match store_vault_server

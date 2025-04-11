@@ -16,7 +16,7 @@ use intmax2_cli::{
 };
 use intmax2_client_sdk::client::sync::utils::generate_salt;
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{u256::U256 as IU256, u32limb_trait::U32LimbTrait},
 };
 use num_bigint::BigUint;
@@ -62,7 +62,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         } => {
             let key = privkey_to_keyset(private_key);
             let transfer = Transfer {
-                recipient: GenericAddress::from_pubkey(to.into()),
+                recipient: IU256::from(to).into(),
                 amount,
                 token_index,
                 salt: generate_salt(),
@@ -213,8 +213,10 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             println!("Public key: {}", key.pubkey.to_hex());
         }
         Commands::GenerateFromEthKey { eth_private_key } => {
-            let provisional = BigUint::from_bytes_be(eth_private_key.as_bytes());
-            let key = KeySet::generate_from_provisional(provisional.into());
+            let provisional: IU256 = BigUint::from_bytes_be(eth_private_key.as_bytes())
+                .try_into()
+                .unwrap();
+            let key = KeySet::new(provisional);
             let private_key = BigUint::from(key.privkey);
             let private_key: IU256 = private_key.try_into().unwrap();
             println!("Private key: {}", private_key.to_hex());

@@ -12,7 +12,7 @@ use intmax2_interfaces::{
         transfer_data::TransferData,
     },
 };
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::bytes32::Bytes32};
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub fn payment_memo_topic(name: &str) -> String {
