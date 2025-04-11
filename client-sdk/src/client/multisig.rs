@@ -1,5 +1,6 @@
-use ark_bn254::{G1Affine, G1Projective, G2Affine};
+use ark_bn254::G2Affine;
 use ark_ec::CurveGroup;
+use intmax2_interfaces::data::encryption::bls::v1::multisig::calc_simple_aggregated_pubkey;
 use intmax2_zkp::{
     common::signature::{
         key_set::KeySet,
@@ -7,8 +8,6 @@ use intmax2_zkp::{
     },
     ethereum_types::u256::U256,
 };
-use num::Zero as _;
-use plonky2_bn254::fields::{recover::RecoverFromX, sgn::Sgn};
 use std::ops::Add;
 
 #[derive(Debug, Clone)]
@@ -46,22 +45,6 @@ pub fn multi_signature_interaction_step2(
 pub struct Step3Response {
     pub aggregated_signature: G2Affine,
     pub aggregated_pubkey: U256,
-}
-
-pub fn calc_simple_aggregated_pubkey(signers: &[U256]) -> anyhow::Result<(U256, bool)> {
-    let mut aggregated_pubkey = G1Projective::zero();
-    for signer in signers {
-        let pubkey = G1Affine::recover_from_x((*signer).into());
-        aggregated_pubkey += pubkey;
-    }
-
-    if aggregated_pubkey.is_zero() {
-        return Err(anyhow::anyhow!("Invalid aggregated pubkey"));
-    }
-
-    let pubkey: G1Affine = aggregated_pubkey.into();
-
-    Ok((U256::from(pubkey.x), pubkey.y.sgn()))
 }
 
 pub fn multi_signature_interaction_step3(
