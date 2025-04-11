@@ -6,6 +6,7 @@ pub mod data;
 pub mod encrypted_data;
 pub mod fee;
 pub mod history;
+pub mod multisig;
 pub mod payment_memo;
 pub mod utils;
 pub mod wrapper;

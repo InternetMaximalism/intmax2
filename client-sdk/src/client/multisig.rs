@@ -11,47 +11,50 @@ use intmax2_zkp::{
 use std::ops::Add;
 
 #[derive(Debug, Clone)]
-pub struct Step1Response {
+pub struct MultisigStep1Response {
     pub client_pubkey: U256,
     pub message: Vec<u8>,
 }
 
-pub fn multi_signature_interaction_step1(client_key: KeySet, message: &[u8]) -> Step1Response {
-    Step1Response {
+pub fn multi_signature_interaction_step1(
+    client_key: KeySet,
+    message: &[u8],
+) -> MultisigStep1Response {
+    MultisigStep1Response {
         client_pubkey: client_key.pubkey,
         message: message.to_vec(),
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct Step2Response {
+pub struct MultisigStep2Response {
     pub server_signature: G2Affine,
     pub server_pubkey: U256,
 }
 
 pub fn multi_signature_interaction_step2(
     server_key: KeySet,
-    step1_response: &Step1Response,
-) -> Step2Response {
+    step1_response: &MultisigStep1Response,
+) -> MultisigStep2Response {
     let server_signature: G2Affine = sign_message(server_key.privkey, &step1_response.message);
 
-    Step2Response {
+    MultisigStep2Response {
         server_signature,
         server_pubkey: server_key.pubkey,
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct Step3Response {
+pub struct MultisigStep3Response {
     pub aggregated_signature: G2Affine,
     pub aggregated_pubkey: U256,
 }
 
 pub fn multi_signature_interaction_step3(
     client_key: KeySet,
-    step1_response: &Step1Response,
-    step2_response: &Step2Response,
-) -> anyhow::Result<Step3Response> {
+    step1_response: &MultisigStep1Response,
+    step2_response: &MultisigStep2Response,
+) -> anyhow::Result<MultisigStep3Response> {
     verify_signature(
         step2_response.server_signature,
         step2_response.server_pubkey,
@@ -78,7 +81,7 @@ pub fn multi_signature_interaction_step3(
         &step1_response.message,
     )?;
 
-    Ok(Step3Response {
+    Ok(MultisigStep3Response {
         aggregated_signature,
         aggregated_pubkey,
     })
