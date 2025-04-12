@@ -35,7 +35,8 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        claim::Claim, signature::key_set::KeySet, transfer::Transfer, withdrawal::Withdrawal,
+        claim::Claim, signature_content::key_set::KeySet, transfer::Transfer,
+        withdrawal::Withdrawal,
     },
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
     utils::conversion::ToU64,
@@ -484,7 +485,7 @@ impl WithdrawalServer {
         log::info!("fee collected: {:?}", transfers);
         let nullifiers: Vec<String> = transfers
             .iter()
-            .map(|t| Bytes32::from(t.commitment()).to_hex())
+            .map(|t| t.nullifier().to_hex())
             .collect::<Vec<_>>();
         let transfers: Vec<serde_json::Value> = transfers
             .iter()
@@ -517,5 +518,8 @@ impl WithdrawalServer {
 }
 
 pub fn privkey_to_keyset(privkey: H256) -> KeySet {
-    KeySet::new(BigUint::from_bytes_be(privkey.as_bytes()).into())
+    let privkey: U256 = BigUint::from_bytes_be(privkey.as_bytes())
+        .try_into()
+        .unwrap();
+    KeySet::new(privkey)
 }

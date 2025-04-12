@@ -42,7 +42,7 @@ pub fn quote_withdrawal_claim_fee(
     Ok(Some(fee.clone()))
 }
 
-pub async fn generate_spent_witness(
+pub fn generate_spent_witness(
     full_private_state: &FullPrivateState,
     tx_nonce: u32,
     transfers: &[Transfer],

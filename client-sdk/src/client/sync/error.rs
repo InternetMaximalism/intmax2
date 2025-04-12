@@ -5,7 +5,7 @@ use intmax2_interfaces::{
         proof_compression::ProofCompressionError,
     },
 };
-use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use intmax2_zkp::{circuits::balance::error::BalanceError, ethereum_types::bytes32::Bytes32};
 
 use crate::{
     client::{receive_validation::ReceiveValidationError, strategy::error::StrategyError},
@@ -67,4 +67,7 @@ pub enum SyncError {
 
     #[error("Balance proof not found")]
     BalanceProofNotFound,
+
+    #[error("Balance error: {0}")]
+    BalanceError(#[from] BalanceError),
 }

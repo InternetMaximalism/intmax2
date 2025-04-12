@@ -1,7 +1,9 @@
 use intmax2_interfaces::utils::circuit_verifiers::CircuitVerifiers;
 use intmax2_zkp::{
     circuits::{
-        claim::single_claim_processor::SingleClaimProcessor,
+        claim::{
+            determine_lock_time::LockTimeConfig, single_claim_processor::SingleClaimProcessor,
+        },
         withdrawal::single_withdrawal_circuit::SingleWithdrawalCircuit,
     },
     common::witness::{
@@ -34,6 +36,7 @@ pub struct BalanceProver {
     pub balance_processor: BalanceProcessor<F, C, D>,
     pub single_withdrawal_circuit: SingleWithdrawalCircuit<F, C, D>,
     pub single_claim_processor: SingleClaimProcessor<F, C, D>,
+    pub single_faster_claim_processor: SingleClaimProcessor<F, C, D>,
 }
 
 impl BalanceProver {
@@ -42,14 +45,17 @@ impl BalanceProver {
 
         let validity_vd = verifiers.get_validity_vd();
         let balance_processor = BalanceProcessor::new(&validity_vd);
-        let balance_common_data = balance_processor.balance_circuit.data.common.clone();
         let balance_vd = balance_processor
             .balance_circuit
             .data
             .verifier_data()
             .clone();
-        let single_withdrawal_circuit = SingleWithdrawalCircuit::new(&balance_common_data);
-        let single_claim_processor = SingleClaimProcessor::new(&validity_vd);
+        let single_withdrawal_circuit = SingleWithdrawalCircuit::new(&balance_vd);
+        let single_claim_processor =
+            SingleClaimProcessor::new(&validity_vd, &LockTimeConfig::normal());
+
+        let single_faster_claim_processor =
+            SingleClaimProcessor::new(&validity_vd, &LockTimeConfig::faster());
 
         Ok(Self {
             validity_vd,
@@ -57,6 +63,7 @@ impl BalanceProver {
             balance_processor,
             single_withdrawal_circuit,
             single_claim_processor,
+            single_faster_claim_processor,
         })
     }
 
@@ -150,10 +157,15 @@ impl BalanceProver {
 
     pub fn prove_single_claim(
         &self,
+        is_faster_mining: bool,
         claim_witness: &ClaimWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, BalanceProverError> {
-        let single_claim_proof = self
-            .single_claim_processor
+        let single_claim_processor = if is_faster_mining {
+            &self.single_faster_claim_processor
+        } else {
+            &self.single_claim_processor
+        };
+        let single_claim_proof = single_claim_processor
             .prove(claim_witness)
             .map_err(|e| BalanceProverError::ProveSingleWithdrawalError(e.to_string()))?;
         Ok(single_claim_proof)

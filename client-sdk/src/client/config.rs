@@ -10,6 +10,7 @@ pub struct ClientConfig {
     pub block_builder_query_wait_time: u64,
     pub block_builder_query_interval: u64,
     pub block_builder_query_limit: u64,
+    pub is_faster_mining: bool,
 }
 
 impl Default for ClientConfig {
@@ -22,6 +23,7 @@ impl Default for ClientConfig {
             block_builder_query_wait_time: 5,
             block_builder_query_interval: 5,
             block_builder_query_limit: 20,
+            is_faster_mining: false,
         }
     }
 }

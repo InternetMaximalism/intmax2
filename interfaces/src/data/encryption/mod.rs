@@ -1,7 +1,7 @@
 use ::rsa::RsaPublicKey;
 use bls::versioned_encryption::VersionedBlsEncryption;
 use errors::{BlsEncryptionError, RsaEncryptionError};
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use rsa::{decrypt_with_aes_key, encrypt_with_rsa, RsaEncryptedMessage};
 use serde::{de::DeserializeOwned, Serialize};
 

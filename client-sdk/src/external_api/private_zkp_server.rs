@@ -22,7 +22,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        signature::key_set::KeySet,
+        signature_content::key_set::KeySet,
         witness::{
             claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
             receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,
@@ -245,18 +245,20 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 
     async fn prove_single_claim(
         &self,
-        _key: KeySet,
+        key: KeySet,
+        is_faster_mining: bool,
         claim_witness: &ClaimWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let request = ProveSingleClaimRequest {
+            is_faster_mining,
             claim_witness: claim_witness.clone(),
         };
         let result = self
             .request_and_get_proof(
-                _key,
+                key,
                 &ProveRequestWithType {
                     prove_type: ProveType::SingleClaim,
-                    pubkey: _key.pubkey,
+                    pubkey: key.pubkey,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -266,7 +268,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 }
 
 impl PrivateZKPServerClient {
-    pub(crate) async fn send_prove_request(
+    pub async fn send_prove_request(
         &self,
         request: &ProveRequestWithType,
     ) -> Result<String, ServerError> {
@@ -293,7 +295,7 @@ impl PrivateZKPServerClient {
         Ok(response)
     }
 
-    pub(crate) async fn request_and_get_proof(
+    pub async fn request_and_get_proof(
         &self,
         key: KeySet,
         request: &ProveRequestWithType,

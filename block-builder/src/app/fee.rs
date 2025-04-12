@@ -17,7 +17,7 @@ use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
     common::{
         block_builder::UserSignature,
-        signature::{
+        signature_content::{
             block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
         },
         witness::transfer_witness::TransferWitness,

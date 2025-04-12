@@ -1,5 +1,5 @@
 use ethers::types::Address;
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::common::signature_content::key_set::KeySet;
 
 use super::{client::get_client, error::CliError, utils::convert_address};
 

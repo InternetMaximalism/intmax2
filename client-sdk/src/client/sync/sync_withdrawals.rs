@@ -4,7 +4,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        signature::key_set::KeySet,
+        signature_content::key_set::KeySet,
         witness::{transfer_witness::TransferWitness, withdrawal_witness::WithdrawalWitness},
     },
     ethereum_types::{bytes32::Bytes32, u256::U256},

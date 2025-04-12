@@ -40,6 +40,11 @@
 
 use redis::{aio::Connection, AsyncCommands as _, Client};
 use serde::{de::DeserializeOwned, Serialize};
+use tokio::time::sleep;
+
+const MAX_RETRIES: usize = 3;
+const RETRY_INTERVAL: u64 = 1;
+
 type Result<T> = std::result::Result<T, TaskManagerError>;
 
 #[derive(thiserror::Error, Debug)]
@@ -137,8 +142,9 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
             .await?;
         if exists == 1 {
             log::warn!("task {} already exists", task_id);
+        } else {
+            log::info!("task {} added", task_id);
         }
-
         Ok(())
     }
 
@@ -206,6 +212,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
 
         if let Some((task_id, task_json)) = result {
             let task: T = serde_json::from_str(&task_json)?;
+            log::info!("task {} assigned to worker", task_id);
             Ok(Some((task_id, task)))
         } else {
             Ok(None)
@@ -213,19 +220,21 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
     }
 
     pub async fn complete_task(&self, task_id: u32, result: &R) -> Result<()> {
-        let mut conn = self.get_connection().await?;
         let result_json = serde_json::to_string(result)?;
 
-        let mut pipe = redis::pipe();
-
-        pipe.atomic()
-            .hset(&self.results_key, task_id, &result_json)
+        let mut conn = self.get_connection().await?;
+        for _ in 0..MAX_RETRIES {
+            let result: bool = conn.hset(&self.results_key, task_id, &result_json).await?;
+            if result {
+                break;
+            }
+            log::error!("failed to set result for task {}", task_id);
+            sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL)).await;
+        }
+        // move task from running to completed
+        let _: () = conn
             .smove(&self.running_key, &self.completed_key, task_id)
-            .expire(&self.completed_key, self.ttl)
-            .expire(&self.results_key, self.ttl);
-
-        pipe.query_async::<_, ()>(&mut conn).await?;
-
+            .await?;
         Ok(())
     }
 
@@ -252,10 +261,32 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
                 let key = format!("{}:{}", self.heartbeat_prefix, task_id);
                 let worker_id: Option<String> = conn.get(&key).await?;
                 if worker_id.is_none() {
-                    // move task from running to pending
-                    conn.smove::<_, _, _, ()>(&self.running_key, &self.pending_key, task_id)
+                    // Check if task has result and move only if no result exists
+                    let script = redis::Script::new(
+                        r#"
+                        -- Check if result exists for this task
+                        local has_result = redis.call('HEXISTS', KEYS[1], ARGV[1])
+                        
+                        -- If no result exists, move from running to pending
+                        if has_result == 0 then
+                            local moved = redis.call('SMOVE', KEYS[2], KEYS[3], ARGV[1])
+                            return moved
+                        else
+                            -- Task already has result, don't move it
+                            return 0
+                        end
+                        "#,
+                    );
+                    let moved: i32 = script
+                        .key(&self.results_key)
+                        .key(&self.running_key)
+                        .key(&self.pending_key)
+                        .arg(task_id)
+                        .invoke_async(&mut conn)
                         .await?;
-                    log::warn!("task {} moved from running to pending", task_id);
+                    if moved == 1 {
+                        log::warn!("task {} moved from running to pending", task_id);
+                    }
                 }
             }
         }

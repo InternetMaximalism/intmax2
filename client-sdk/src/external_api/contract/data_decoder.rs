@@ -2,7 +2,7 @@ use ethers::abi::{Functions, Token};
 use intmax2_zkp::{
     common::{
         block::Block,
-        signature::{
+        signature_content::{
             block_sign_payload::BlockSignPayload,
             flatten::{FlatG1, FlatG2},
             utils::get_pubkey_hash,

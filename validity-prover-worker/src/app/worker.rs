@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use intmax2_interfaces::api::validity_prover::interface::{
     TransitionProofTask, TransitionProofTaskResult,
 };
-use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
+use intmax2_zkp::circuits::validity::transition::processor::ValidityTransitionProcessor;
 use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
 use server_common::redis::task_manager::TaskManager;
 use tokio::sync::RwLock;
@@ -18,6 +18,7 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 const TASK_POLLING_INTERVAL: u64 = 1;
+const RESTART_WAIT_INTERVAL: u64 = 30;
 
 type Result<T> = std::result::Result<T, WorkerError>;
 
@@ -30,7 +31,7 @@ struct Config {
 #[derive(Clone)]
 pub struct Worker {
     config: Config,
-    transition_processor: Arc<TransitionProcessor<F, C, D>>,
+    transition_processor: Arc<ValidityTransitionProcessor<F, C, D>>,
     manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
     worker_id: String,
     running_tasks: Arc<RwLock<HashSet<u32>>>,
@@ -39,7 +40,7 @@ pub struct Worker {
 impl Worker {
     pub fn new(
         env: &EnvVar,
-        transition_processor: Arc<TransitionProcessor<F, C, D>>,
+        transition_processor: Arc<ValidityTransitionProcessor<F, C, D>>,
     ) -> Result<Worker> {
         let config = Config {
             num_process: env.num_process,
@@ -86,34 +87,47 @@ impl Worker {
                 transition_processor.prove(&prev_validity_pis, &validity_witness)
             })
             .await
-            .unwrap();
-
-            let result = match result {
-                Ok(proof) => {
-                    log::info!("Proof generated for block_number {}", block_number,);
-                    TransitionProofTaskResult {
-                        block_number,
-                        proof: Some(proof),
-                        error: None,
-                    }
-                }
-                Err(e) => {
-                    log::error!(
-                        "Error while proving for block number {}: {:?}",
-                        block_number,
-                        e,
-                    );
-                    TransitionProofTaskResult {
-                        block_number,
-                        proof: None,
-                        error: Some(e.to_string()),
-                    }
-                }
+            .map_err(|e| format!("panic while proving: {:?}", e))
+            .and_then(|r| r.map_err(|e| format!("error while proving: {:?}", e)));
+            if let Err(e) = result {
+                log::error!(
+                    "error while proving for block number {}: {:?}",
+                    block_number,
+                    e
+                );
+                self.running_tasks.write().await.remove(&block_number);
+                continue;
+            }
+            log::info!("proof generated for block_number {}", block_number,);
+            let result = TransitionProofTaskResult {
+                block_number,
+                proof: result.ok(),
+                error: None,
             };
             self.manager.complete_task(block_number, &result).await?;
             self.running_tasks.write().await.remove(&block_number);
-
             log::info!("completed block_number {}", block_number);
+        }
+    }
+
+    async fn heartbeat(&self) -> Result<()> {
+        loop {
+            let running_tasks = self.running_tasks.read().await.clone();
+            for block_number in running_tasks {
+                if let Err(e) = self
+                    .manager
+                    .submit_heartbeat(&self.worker_id, block_number)
+                    .await
+                {
+                    log::error!("error while submitting heartbeat: {:?}", e);
+                } else {
+                    log::info!("submitted heartbeat for block_number {}", block_number);
+                }
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                self.config.heartbeat_interval,
+            ))
+            .await;
         }
     }
 
@@ -121,32 +135,26 @@ impl Worker {
         for _ in 0..self.config.num_process {
             let worker = self.clone();
             tokio::spawn(async move {
-                if let Err(e) = worker.work().await {
-                    eprintln!("Error: {:?}", e);
+                // restart loop
+                loop {
+                    if let Err(e) = worker.work().await {
+                        eprintln!("Error: {:?}. Restarting", e);
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(RESTART_WAIT_INTERVAL))
+                        .await;
                 }
             });
         }
-        log::info!("Worker started");
-
         let worker = self.clone();
-        let worker_id = self.worker_id.clone();
-        let heartbeat_interval = self.config.heartbeat_interval;
         tokio::spawn(async move {
+            // restart loop
             loop {
-                let running_tasks = worker.running_tasks.read().await.clone();
-                for block_number in running_tasks {
-                    if let Err(e) = worker
-                        .manager
-                        .submit_heartbeat(&worker_id, block_number)
-                        .await
-                    {
-                        log::error!("Error while submitting heartbeat: {:?}", e);
-                    } else {
-                        log::info!("submitted heartbeat for block_number {}", block_number);
-                    }
+                if let Err(e) = worker.heartbeat().await {
+                    eprintln!("Error: {:?}. Restarting", e);
                 }
-                tokio::time::sleep(tokio::time::Duration::from_secs(heartbeat_interval)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(RESTART_WAIT_INTERVAL)).await;
             }
         });
+        log::info!("worker {} started", self.worker_id);
     }
 }

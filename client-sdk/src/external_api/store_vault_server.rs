@@ -14,7 +14,7 @@ use intmax2_interfaces::{
     },
     utils::signature::{Auth, Signable, WithAuth},
 };
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::bytes32::Bytes32};
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 
 use super::utils::query::post_request;
 

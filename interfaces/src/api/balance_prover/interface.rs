@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use intmax2_zkp::{
     common::{
-        signature::key_set::KeySet,
+        signature_content::key_set::KeySet,
         witness::{
             claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
             receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,
@@ -73,6 +73,7 @@ pub trait BalanceProverClientInterface: Sync + Send {
     async fn prove_single_claim(
         &self,
         key: KeySet,
+        is_faster_mining: bool,
         claim_witness: &ClaimWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError>;
 }

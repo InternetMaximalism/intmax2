@@ -9,8 +9,11 @@ use crate::format::FormatTokenInfoError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
+    #[error("Envy error:{0}")]
+    EnvyError(#[from] EnvyError),
+
     #[error("Env error:{0}")]
-    EnvError(#[from] EnvyError),
+    EnvError(String),
 
     #[error("Sync error: {0}")]
     SyncError(#[from] SyncError),

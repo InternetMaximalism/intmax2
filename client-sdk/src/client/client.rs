@@ -26,8 +26,8 @@ use intmax2_interfaces::{
 use intmax2_zkp::{
     common::{
         block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
-        generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer,
-        trees::transfer_tree::TransferTree, tx::Tx, witness::spent_witness::SpentWitness,
+        signature_content::key_set::KeySet, transfer::Transfer, trees::transfer_tree::TransferTree,
+        tx::Tx, witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
@@ -238,13 +238,13 @@ impl Client {
         let is_registration_block = account_info.account_id.is_none();
 
         let fee_transfer = fee.map(|fee| Transfer {
-            recipient: GenericAddress::from_pubkey(fee_beneficiary.unwrap()),
+            recipient: fee_beneficiary.unwrap().into(),
             amount: fee.amount,
             token_index: fee.token_index,
             salt: generate_salt(),
         });
         let collateral_transfer = collateral_fee.map(|fee| Transfer {
-            recipient: GenericAddress::from_pubkey(fee_beneficiary.unwrap()),
+            recipient: fee_beneficiary.unwrap().into(),
             amount: fee.amount,
             token_index: fee.token_index,
             salt: generate_salt(),
@@ -285,7 +285,7 @@ impl Client {
         // generate spent proof
         let tx_nonce = user_data.full_private_state.nonce;
         let spent_witness =
-            generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers).await?;
+            generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers)?;
         let spent_proof = self.balance_prover.prove_spent(key, &spent_witness).await?;
         let tx = spent_witness.tx;
 
@@ -636,6 +636,7 @@ impl Client {
             self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
+            self.config.is_faster_mining,
             current_time,
             &ProcessStatus::default(),
             self.config.tx_timeout,

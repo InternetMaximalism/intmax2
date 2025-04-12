@@ -104,6 +104,8 @@ pub struct JsTxResult {
     pub tx_tree_root: String,
     pub transfer_digests: Vec<String>,
     pub withdrawal_digests: Vec<String>,
+    pub transfer_data_vec: Vec<JsTransferData>,
+    pub withdrawal_data_vec: Vec<JsTransferData>,
 }
 
 impl From<TxResult> for JsTxResult {
@@ -119,6 +121,16 @@ impl From<TxResult> for JsTxResult {
                 .withdrawal_digests
                 .into_iter()
                 .map(|x| x.to_hex())
+                .collect(),
+            transfer_data_vec: tx_result
+                .transfer_data_vec
+                .into_iter()
+                .map(JsTransferData::from)
+                .collect(),
+            withdrawal_data_vec: tx_result
+                .withdrawal_data_vec
+                .into_iter()
+                .map(JsTransferData::from)
                 .collect(),
         }
     }

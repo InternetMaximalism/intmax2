@@ -1,35 +1,54 @@
 # Intmax2 CLI Tool
 
-This CLI tool allows you to interact with the Intmax2 network. It includes functionalities such as:
+This CLI tool allows you to interact with the Intmax2 network. It provides a comprehensive set of commands for managing assets, transactions, and account operations on the Intmax2 rollup.
 
-- Generating keys (from scratch or from Ethereum private keys)
-- Depositing assets (native tokens, ERC20, ERC721, ERC1155) into the rollup
-- Transferring assets (single and batch transfers)
-- Checking balances and transaction history
-- Managing withdrawals (including syncing and claiming)
+## Features
+
+- **Account Management**: Generate keys, check balances, view transaction history
+- **Asset Operations**: Deposit, transfer, and withdraw assets
+- **Multi-Asset Support**: Native tokens, ERC20, ERC721, ERC1155
+- **Batch Operations**: Process multiple transfers in a single transaction
+- **Withdrawal Management**: Sync, claim, and check status of withdrawals
+- **Mining Operations**: View mining status and manage mining rewards
 
 ## Prerequisites
 
 - Rust and Cargo installed
 - Environment variables properly configured
 
-Please copy the `.env.example` file to `.env` and adjust it as needed:
+## Environment Setup
+
+Copy the `.env.example` file to `.env` and configure it for your environment:
 
 ```bash
 cp .env.example .env
 ```
 
-Set your Alchemy API keys for `L1_RPC_URL` and `L2_RPC_URL` in the `.env` file.
+### Key Environment Variables
 
-## Update
+- `L1_RPC_URL`: Ethereum RPC URL (e.g., Alchemy API endpoint for Sepolia)
+- `L2_RPC_URL`: Layer 2 RPC URL (e.g., Scroll Sepolia)
+- `INDEXER_BASE_URL`: URL for the Intmax2 indexer service
+- `STORE_VAULT_SERVER_BASE_URL`: URL for the store vault server
+- `BALANCE_PROVER_BASE_URL`: URL for the balance prover service
+- `VALIDITY_PROVER_BASE_URL`: URL for the validity prover service
+- `WITHDRAWAL_SERVER_BASE_URL`: URL for the withdrawal server
 
-To update the CLI tool to the latest version, simply pull the latest changes from the repository:
+The `.env.example` file contains default configurations for both staging testnet and local development environments.
+
+## Installation and Updates
+
+To update the CLI tool to the latest version, pull the latest changes from the repository:
 
 ```bash
 git pull
 ```
 
-After pulling the latest changes, the tool will automatically use the updated version when you run any commands.
+After pulling the latest changes, rebuild the tool:
+
+```bash
+cargo build -r
+```
 
 ## Commands
 
@@ -39,22 +58,29 @@ You can see all commands and options by running:
 cargo run -r -- --help
 ```
 
-Available Commands:
+### Available Commands
 
 - `generate-key`: Generate a new key pair
 - `generate-from-eth-key`: Generate a key pair from an Ethereum private key
 - `transfer`: Send a single transfer transaction
 - `batch-transfer`: Process multiple transfers from a CSV file
 - `deposit`: Deposit assets into the rollup
+- `withdrawal`: Initiate a withdrawal from the rollup
 - `balance`: Check account balance
 - `history`: View transaction history
 - `withdrawal-status`: Check withdrawal status
+- `mining-list`: View mining status and rewards
+- `claim-status`: Check claim status
 - `claim-withdrawals`: Claim processed withdrawals
 - `sync-withdrawals`: Synchronize withdrawal data
+- `sync-claims`: Synchronize claim data
+- `resync`: Resynchronize account data
 
-## Examples
+## Usage Examples
 
-### 1. Generate Keys
+### Account Management
+
+#### Generate Keys
 
 Generate a new key pair:
 ```bash
@@ -66,7 +92,26 @@ Generate from Ethereum private key:
 cargo run -r -- generate-from-eth-key --eth-private-key 0x...
 ```
 
-### 2. Deposit Assets
+#### Check Balance
+
+```bash
+cargo run -r -- balance --private-key 0x...
+```
+
+#### View Transaction History
+
+```bash
+cargo run -r -- history --private-key 0x...
+```
+
+With ordering and pagination:
+```bash
+cargo run -r -- history --private-key 0x... --order desc --from 1712345678
+```
+
+### Asset Operations
+
+#### Deposit Assets
 
 Native token:
 ```bash
@@ -108,22 +153,46 @@ cargo run -r -- deposit \
   --token-id 0
 ```
 
-### 3. Transfer Assets
+Mining deposit:
+```bash
+cargo run -r -- deposit \
+  --eth-private-key 0x... \
+  --private-key 0x... \
+  --token-type NATIVE \
+  --amount 100000000000000000 \ # only O.1 ETH, 1 ETH, 10 ETH, and 100 ETH are allowed
+  --is-mining true
+```
+
+#### Transfer Assets
 
 Single transfer:
 ```bash
 cargo run -r -- transfer \
   --private-key 0x... \
-  --to 0x... \
+  --to 0x... \ # recipient's intmax2 public key
   --amount 100 \
-  --token-index 0
+  --token-index 0 \
+  --wait true # wait for transaction to be settled onchain
 ```
 
-Batch transfer (using CSV):
+With fee token specification:
+```bash
+cargo run -r -- transfer \
+  --private-key 0x... \
+  --to 0x... \
+  --amount 100 \
+  --token-index 0 \
+  --fee-token-index 1
+```
+
+#### Batch Transfer
+
+Using CSV file:
 ```bash
 cargo run -r -- batch-transfer \
   --private-key 0x... \
-  --csv-path "transfers.csv"
+  --csv-path "transfers.csv" \
+  --fee-token-index 0
 ```
 
 Example CSV format (transfers.csv):
@@ -134,37 +203,95 @@ recipient,amount,tokenIndex
 0x789...,300,3
 ```
 
-Note: The batch transfer is limited to a maximum of 5 transfers per transaction. If you need to process more transfers, please split them into multiple CSV files or transactions.
+Note: Batch transfers are limited to a maximum of 63 transfers per transaction.
 
-### 4. Account Management
+#### Withdrawal
 
-Check balance:
+Initiate a withdrawal:
 ```bash
-cargo run -r -- balance --private-key 0x...
+cargo run -r -- withdrawal \
+  --private-key 0x... \
+  --to 0x... \
+  --amount 100 \
+  --token-index 0 \
+  --wait true
 ```
 
-View transaction history:
+With claim fee:
 ```bash
-cargo run -r -- history --private-key 0x...
+cargo run -r -- withdrawal \
+  --private-key 0x... \
+  --to 0x... \
+  --amount 100 \
+  --token-index 0 \
+  --with-claim-fee true
 ```
 
-### 5. Withdrawal Management
+### Withdrawal Management
 
-Check withdrawal status:
+#### Check Withdrawal Status
+
 ```bash
 cargo run -r -- withdrawal-status --private-key 0x...
 ```
 
-Sync withdrawals:
+#### Sync Withdrawals
+
 ```bash
 cargo run -r -- sync-withdrawals --private-key 0x...
 ```
 
-Claim withdrawals:
+With fee token specification:
+```bash
+cargo run -r -- sync-withdrawals --private-key 0x... --fee-token-index 1
+```
+
+#### Claim Withdrawals
+
 ```bash
 cargo run -r -- claim-withdrawals \
   --eth-private-key 0x... \
   --private-key 0x...
 ```
 
-Note: For all commands that require private keys, ensure you're using the correct format (0x-prefixed hexadecimal).
+### Mining and Claims
+
+#### Check Mining Status
+
+```bash
+cargo run -r -- mining-list --private-key 0x...
+```
+
+#### Check Claim Status
+
+```bash
+cargo run -r -- claim-status --private-key 0x...
+```
+
+#### Sync Claims
+
+```bash
+cargo run -r -- sync-claims \
+  --private-key 0x... \
+  --recipient 0x... \
+  --fee-token-index 0
+```
+
+### Account Synchronization
+
+Resync account data:
+```bash
+cargo run -r -- resync --private-key 0x...
+```
+
+Deep resync (regenerate all balance proofs):
+```bash
+cargo run -r -- resync --private-key 0x... --deep true
+```
+
+## Notes
+
+- For all commands that require private keys, ensure you're using the correct format (0x-prefixed hexadecimal).
+- When using the `wait` flag, the command will wait for the transaction to be processed before returning.
+- The `fee-token-index` parameter is optional for most commands. If not specified, the default token will be used for fees.
+- For security reasons, avoid storing private keys in plaintext files or environment variables in production environments.
