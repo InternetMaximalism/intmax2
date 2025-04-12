@@ -1,10 +1,21 @@
 # Aggregator-prover
 
-## Development
+## Environment Variables
 
 ```sh
 # env
 cp .env.example .env
+```
+
+## Run
+
+```sh
+IS_FASTER_MINING=false cargo run -r # normal mode
+```
+
+```sh
+IS_FASTER_MINING=true cargo run -r # faster mining mode (lock time of mining is shortened)
+```
 
 ## APIs
 
@@ -59,9 +70,11 @@ curl -X POST -d '{ "id": "1", "withdrawalAggregator": "0x420a5b76e11e80d97c7eb3a
 
 # get proof
 curl $PROVER_URL/proof/wrapper/withdrawal/1 | jq
-
+```
 
 ### Claim
+
+**NOTICE: Please use `faster_single_claim_proof.txt` instead of `single_claim_proof.txt`, and `faster_claim_proof.txt` instead of `claim_proof.txt` if you are using the faster mining mode.**
 
 ```sh
 # generate proof
@@ -104,7 +117,7 @@ curl -X POST -d '{ "id": "1", "claimAggregator": "0x420a5b76e11e80d97c7eb3a0b16a
 
 # get proof
 curl $PROVER_URL/proof/wrapper/claim/1 | jq
-
+```
 
 ## Docker
 

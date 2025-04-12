@@ -67,6 +67,10 @@ pub enum BlockBuilderError {
 
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
+
+    /// Error for health check in `get_fee_info`
+    #[error("{0}")]
+    BlockChainHealthError(String),
 }
 
 #[derive(Debug, thiserror::Error)]

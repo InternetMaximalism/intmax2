@@ -34,7 +34,16 @@ async fn main() -> Result<(), std::io::Error> {
             ));
         }
     };
-    let state = AppState::default();
+    let is_faster_mining = env::var("IS_FASTER_MINING").expect("IS_FASTER_MINING must be set");
+    let is_faster_mining = is_faster_mining
+        .parse::<bool>()
+        .expect("IS_FASTER_MINING must be a boolean");
+    if is_faster_mining {
+        log::info!("Faster mining is enabled");
+    } else {
+        log::info!("Faster mining is disabled");
+    }
+    let state = AppState::new(is_faster_mining);
     log::info!("Listening to requests at {}...", listen_address);
     HttpServer::new(move || {
         App::new()

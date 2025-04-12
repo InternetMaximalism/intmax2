@@ -5,12 +5,12 @@ use intmax2_interfaces::{
     },
     data::{
         deposit_data::{DepositData, TokenType},
-        meta_data::MetaDataWithBlockNumber,
+        meta_data::MetaData,
         user_data::ProcessStatus,
     },
 };
 use intmax2_zkp::{
-    circuits::claim::determine_lock_time::get_lock_time,
+    circuits::claim::determine_lock_time::{get_lock_time, LockTimeConfig},
     common::{block::Block, signature::key_set::KeySet},
     ethereum_types::u256::U256,
 };
@@ -26,15 +26,16 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub struct Mining {
-    pub meta: MetaDataWithBlockNumber,
+    pub meta: MetaData,
     pub deposit_data: DepositData,
-    pub block: Block,  // the first block that contains the deposit
-    pub maturity: u64, // maturity unix timestamp
+    pub block: Option<Block>,  // the first block that contains the deposit
+    pub maturity: Option<u64>, // maturity unix timestamp
     pub status: MiningStatus,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MiningStatus {
+    Pending,        // Pending, not yet processed
     Disqualified,   // Disqualified because there is a send tx before the maturity
     Locking,        // In locking period
     Claimable(u32), // Claimable with the block number at the time of claim
@@ -43,6 +44,7 @@ pub enum MiningStatus {
 impl Display for MiningStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            MiningStatus::Pending => write!(f, "Pending"),
             MiningStatus::Disqualified => write!(f, "Disqualified"),
             MiningStatus::Locking => write!(f, "Locking"),
             MiningStatus::Claimable(block_number) => {
@@ -58,11 +60,18 @@ pub async fn fetch_mining_info(
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
     key: KeySet,
+    is_faster_mining: bool,
     current_time: u64, // current timestamp for timeout checking
     claim_status: &ProcessStatus,
     tx_timeout: u64,
     deposit_timeout: u64,
 ) -> Result<Vec<Mining>, StrategyError> {
+    let lock_config = if is_faster_mining {
+        LockTimeConfig::faster()
+    } else {
+        LockTimeConfig::normal()
+    };
+
     // get all deposit info
     let deposit_info = fetch_all_unprocessed_deposit_info(
         store_vault_server,
@@ -74,8 +83,35 @@ pub async fn fetch_mining_info(
         deposit_timeout,
     )
     .await?;
+
+    let eligible_pending_deposits = deposit_info
+        .pending
+        .into_iter()
+        .filter(|(_, deposit_data)| {
+            if !deposit_data.is_eligible {
+                // skip ineligible deposits
+                return false;
+            }
+            if !validate_mining_deposit_criteria(deposit_data.token_type, deposit_data.amount) {
+                // skip deposits that do not meet the mining criteria
+                return false;
+            }
+            true
+        })
+        .collect::<Vec<_>>();
+    let pending_minings = eligible_pending_deposits
+        .into_iter()
+        .map(|(meta, deposit_data)| Mining {
+            meta,
+            deposit_data,
+            block: None,
+            maturity: None,
+            status: MiningStatus::Pending,
+        })
+        .collect::<Vec<_>>();
+
     // filter out ineligible deposits
-    let candidate_deposits = deposit_info
+    let eligible_settled_deposits = deposit_info
         .settled
         .into_iter()
         .filter(|(meta, deposit_data)| {
@@ -95,7 +131,8 @@ pub async fn fetch_mining_info(
             true
         })
         .collect::<Vec<_>>();
-    if candidate_deposits.is_empty() {
+
+    if eligible_settled_deposits.is_empty() {
         // early return if no eligible deposits
         return Ok(vec![]);
     }
@@ -116,14 +153,14 @@ pub async fn fetch_mining_info(
     .await?;
     let settled_txs = tx_info.settled;
 
-    let mut minings = Vec::new();
+    let mut settled_minings = Vec::new();
     let current_block_number = validity_prover.get_block_number().await?;
     let current_block = fetch_block(validity_prover, current_block_number).await?;
     let current_time = current_block.timestamp;
 
-    for (meta, deposit_data) in candidate_deposits {
+    for (meta, deposit_data) in eligible_settled_deposits {
         let block = fetch_block(validity_prover, meta.block_number).await?;
-        let lock_time = get_lock_time(block.hash(), deposit_data.deposit_salt);
+        let lock_time = get_lock_time(&lock_config, block.hash(), deposit_data.deposit_salt);
         let maturity = block.timestamp + lock_time;
         let status = {
             if block.block_number <= last_block_number {
@@ -153,15 +190,21 @@ pub async fn fetch_mining_info(
                 MiningStatus::Claimable(current_block_number)
             }
         };
-        minings.push(Mining {
-            meta,
+        settled_minings.push(Mining {
+            meta: meta.meta,
             deposit_data,
-            block,
-            maturity,
+            block: Some(block),
+            maturity: Some(maturity),
             status,
         });
     }
-    Ok(minings)
+
+    let all_minings = pending_minings
+        .into_iter()
+        .chain(settled_minings.clone())
+        .collect::<Vec<_>>();
+
+    Ok(all_minings)
 }
 
 pub fn validate_mining_deposit_criteria(token_type: TokenType, amount: U256) -> bool {

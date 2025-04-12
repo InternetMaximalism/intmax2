@@ -322,17 +322,17 @@ impl From<Block> for JsBlock {
 pub struct JsMining {
     pub meta: JsMetaData,
     pub deposit_data: JsDepositData,
-    pub block: JsBlock,
-    pub maturity: u64,
+    pub block: Option<JsBlock>,
+    pub maturity: Option<u64>,
     pub status: String,
 }
 
 impl From<Mining> for JsMining {
     fn from(mining: Mining) -> Self {
         Self {
-            meta: mining.meta.meta.into(),
+            meta: mining.meta.into(),
             deposit_data: mining.deposit_data.into(),
-            block: mining.block.into(),
+            block: mining.block.map(|b| b.into()),
             maturity: mining.maturity,
             status: mining.status.to_string(),
         }

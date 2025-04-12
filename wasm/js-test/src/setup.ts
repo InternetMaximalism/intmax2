@@ -20,6 +20,7 @@ export const env = cleanEnv(process.env, {
     // Timeout configurations
     DEPOSIT_TIMEOUT: num(),
     TX_TIMEOUT: num(),
+    IS_FASTER_MINING: bool(),
 
     // Block builder client configurations
     BLOCK_BUILDER_REQUEST_INTERVAL: num(),
@@ -52,6 +53,7 @@ export const config = new Config(
     env.WITHDRAWAL_SERVER_BASE_URL,
     BigInt(env.DEPOSIT_TIMEOUT),
     BigInt(env.TX_TIMEOUT),
+    env.IS_FASTER_MINING,
     BigInt(env.BLOCK_BUILDER_REQUEST_INTERVAL),
     BigInt(env.BLOCK_BUILDER_REQUEST_LIMIT),
     BigInt(env.BLOCK_BUILDER_QUERY_WAIT_TIME),

@@ -38,6 +38,7 @@ impl Client {
             self.validity_prover.as_ref(),
             &self.rollup_contract,
             &self.liquidity_contract,
+            self.config.is_faster_mining,
             key,
             self.config.tx_timeout,
             self.config.deposit_timeout,
@@ -66,7 +67,8 @@ impl Client {
             .await?;
 
             // collect witnesses
-            let deposit_block_number = mining.block.block_number;
+            let block = mining.block.unwrap(); // safe to unwrap because it's already settled
+            let deposit_block_number = block.block_number;
             let update_witness = self
                 .validity_prover
                 .get_update_witness(key.pubkey, claim_block_number, deposit_block_number, false)
@@ -100,7 +102,7 @@ impl Client {
                 .await?;
             let public_witness = DepositTimePublicWitness {
                 prev_block,
-                block: mining.block,
+                block,
                 prev_deposit_merkle_proof,
                 deposit_merkle_proof,
             };
@@ -118,7 +120,7 @@ impl Client {
             };
             let single_claim_proof = self
                 .balance_prover
-                .prove_single_claim(key, &claim_witness)
+                .prove_single_claim(key, self.config.is_faster_mining, &claim_witness)
                 .await?;
 
             let collected_fees = match &fee {
@@ -166,12 +168,12 @@ impl Client {
 
             // update user data
             let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
-            user_data.claim_status.process(mining.meta.meta.clone());
+            user_data.claim_status.process(mining.meta.clone());
 
             // save user data
             self.save_user_data(key, prev_digest, &user_data).await?;
 
-            log::info!("Claimed {}", mining.meta.meta.digest.clone());
+            log::info!("Claimed {}", mining.meta.digest.clone());
         }
         Ok(())
     }

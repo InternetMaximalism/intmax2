@@ -14,6 +14,12 @@ go run setup/main.go --circuit=withdrawal_circuit_data
 go run setup/main.go --circuit=claim_circuit_data
 ```
 
+#### Faster Mining Claim
+
+```bash
+go run setup/main.go --circuit=faster_claim_circuit_data
+```
+
 ## Run
 
 ```bash
@@ -32,6 +38,13 @@ go run main.go --circuit=withdrawal_circuit_data
 ```bash
 go run main.go --circuit=claim_circuit_data
 ```
+
+####  Faster Mining Claim
+
+```bash
+go run main.go --circuit=faster_claim_circuit_data
+```
+
 
 ## APIs
 

@@ -35,14 +35,16 @@ function getWithdrawHash(w: JsContractWithdrawal): string {
 
 export async function deposit(privateKey: string, l1RpcUrl: string, liquidityContractAddress: string, l2RpcUrl: string, rollupContractAddress: string, amount: bigint, tokenType: number, tokenAddress: string, tokenId: string, pubkeySaltHash: string, depositor: string) {
     const { liquidityContract, rollupContract } = await getContract(privateKey, l1RpcUrl, liquidityContractAddress, l2RpcUrl, rollupContractAddress);
+    const amlPermission = "0x"
+    const eligibilityPermission = "0x"
     if (tokenType === 0) {
-        await liquidityContract.depositNativeToken(pubkeySaltHash, { value: amount });
+        await liquidityContract.depositNativeToken(pubkeySaltHash, amlPermission, eligibilityPermission, { value: amount });
     } else if (tokenType === 1) {
-        await liquidityContract.depositERC20(tokenAddress, pubkeySaltHash, amount);
+        await liquidityContract.depositERC20(tokenAddress, pubkeySaltHash, amount, amlPermission, eligibilityPermission,);
     } else if (tokenType === 2) {
-        await liquidityContract.depositERC721(tokenAddress, tokenId, pubkeySaltHash);
+        await liquidityContract.depositERC721(tokenAddress, tokenId, pubkeySaltHash, amlPermission, eligibilityPermission,);
     } else if (tokenType === 3) {
-        await liquidityContract.depositERC1155(tokenAddress, tokenId, pubkeySaltHash, amount);
+        await liquidityContract.depositERC1155(tokenAddress, tokenId, pubkeySaltHash, amount, amlPermission, eligibilityPermission,);
     } else {
         throw new Error("Invalid token type");
     }

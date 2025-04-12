@@ -100,7 +100,7 @@ pub async fn prove_single_claim(
 ) -> Result<Json<ProveResponse>, Error> {
     let request = request.into_inner();
     let proof = state
-        .prove_single_claim(&request.claim_witness)
+        .prove_single_claim(request.is_faster_mining, &request.claim_witness)
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(ProveResponse { proof }))
 }

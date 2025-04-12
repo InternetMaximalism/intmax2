@@ -319,7 +319,7 @@ impl TestSystem {
         );
 
         let transfer_amount = U256::from(17);
-        let fee = U256::from(1000);
+        let fee = U256::from_hex("0x246139ca800").unwrap(); // 2500000000000
         let transfer_amount_with_fee = transfer_amount.add(fee);
 
         // Abort test if balance is insufficient
@@ -408,7 +408,7 @@ impl TestSystem {
         );
 
         let transfer_amount = U256::from(19);
-        let fee = U256::from(1000);
+        let fee = U256::from_hex("0x1fd512913000").unwrap(); // 2500000000000 + 32500000000000
         let transfer_amount_with_fee = transfer_amount.add(fee);
 
         // Abort test if balance is insufficient

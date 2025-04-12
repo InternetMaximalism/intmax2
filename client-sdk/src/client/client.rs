@@ -314,7 +314,7 @@ impl Client {
         // generate spent proof
         let tx_nonce = user_data.full_private_state.nonce;
         let spent_witness =
-            generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers).await?;
+            generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers)?;
         let spent_proof = self.balance_prover.prove_spent(key, &spent_witness).await?;
         let tx = spent_witness.tx;
 
@@ -709,6 +709,7 @@ impl Client {
             self.validity_prover.as_ref(),
             &self.liquidity_contract,
             key,
+            self.config.is_faster_mining,
             current_time,
             &ProcessStatus::default(),
             self.config.tx_timeout,

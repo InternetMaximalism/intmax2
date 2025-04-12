@@ -60,7 +60,7 @@ pub async fn generate_fee_proof(
             // spent proof
             let transfers = vec![collateral_transfer];
             let collateral_spent_witness =
-                generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers).await?;
+                generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers)?;
             let tx = collateral_spent_witness.tx;
             let spent_proof = balance_prover
                 .prove_spent(key, &collateral_spent_witness)

@@ -2110,13 +2110,14 @@ dependencies = [
 [[package]]
 name = "intmax2-zkp"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#7cba5ec92b9528aebebd1ca1188dcb124b227834"
+source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=cli#3a80dbb1b3639945c1fca9553ee719b1d8393b07"
 dependencies = [
  "anyhow",
  "ark-bn254",
  "ark-ec",
  "ark-ff 0.4.2",
  "ark-std 0.4.0",
+ "base64 0.22.1",
  "bincode",
  "chrono",
  "env_logger",
@@ -3706,9 +3707,9 @@ dependencies = [
 
 [[package]]
 name = "tinyvec"
-version = "1.8.1"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "022db8904dfa342efe721985167e9fcd16c29b226db4397ed752a761cfce81e8"
+checksum = "09b3661f17e86524eccd4371ab0429194e0d7c008abb45f7a7495b1719463c71"
 dependencies = [
  "tinyvec_macros",
 ]
