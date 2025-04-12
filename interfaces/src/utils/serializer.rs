@@ -14,7 +14,9 @@ use plonky2::{
     impl_gate_serializer, read_gate_impl,
     util::serialization::GateSerializer,
 };
-use plonky2_u32::gates::{add_many_u32::U32AddManyGate, comparison::ComparisonGate};
+use plonky2_u32::gates::{
+    add_many_u32::U32AddManyGate, comparison::ComparisonGate, subtraction_u32::U32SubtractionGate,
+};
 
 #[derive(Debug)]
 pub struct U32GateSerializer;
@@ -38,6 +40,7 @@ impl<F: RichField + Extendable<D>, const D: usize> GateSerializer<F, D> for U32G
         ReducingExtensionGate<D>,
         ReducingGate<D>,
         ComparisonGate<F, D>,
-        U32AddManyGate<F, D>
+        U32AddManyGate<F, D>,
+        U32SubtractionGate<F, D>
     }
 }
