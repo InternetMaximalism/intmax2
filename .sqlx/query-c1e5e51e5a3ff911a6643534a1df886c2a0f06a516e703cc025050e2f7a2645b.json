@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT digest, timestamp FROM s3_snapshot_data\n            WHERE pubkey = $1 AND topic = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "timestamp",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "c1e5e51e5a3ff911a6643534a1df886c2a0f06a516e703cc025050e2f7a2645b"
+}
