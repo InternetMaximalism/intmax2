@@ -12,7 +12,7 @@ use intmax2_interfaces::{
     utils::{digest::get_digest, signature::Auth},
 };
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _},
 };
 
@@ -21,15 +21,15 @@ pub fn get_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
     format!("{}/{}/{}", topic, pubkey.to_hex(), digest.to_hex())
 }
 
-// get metadata side car file path for local object
-pub fn get_metadata_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
-    format!(
-        "{}/{}/{}.metadata.json",
-        topic,
-        pubkey.to_hex(),
-        digest.to_hex()
-    )
-}
+// // get metadata side car file path for local object
+// pub fn get_metadata_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
+//     format!(
+//         "{}/{}/{}.metadata.json",
+//         topic,
+//         pubkey.to_hex(),
+//         digest.to_hex()
+//     )
+// }
 
 #[derive(Clone)]
 pub struct LocalStoreVaultClient {
@@ -151,18 +151,18 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
 
     async fn get_data_sequence(
         &self,
-        key: KeySet,
-        topic: &str,
-        cursor: &MetaDataCursor,
+        _key: KeySet,
+        _topic: &str,
+        _cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         todo!()
     }
 
     async fn get_data_sequence_with_auth(
         &self,
-        topic: &str,
-        cursor: &MetaDataCursor,
-        auth: &Auth,
+        _topic: &str,
+        _cursor: &MetaDataCursor,
+        _auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         todo!()
     }
@@ -182,9 +182,5 @@ mod tests {
 
         let path = get_path(topic, U256::from(1), Bytes32::default());
         let path = Path::new(&path);
-
-    
-
-        dbg!(path);
     }
 }
