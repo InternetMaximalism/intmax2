@@ -19,6 +19,7 @@ const BALANCE_VD_BYTES: &[u8] =
     include_bytes!("../../circuit_data/balance_verifier_circuit_data.bin");
 const SINGLE_WITHDRAWAL_VD_BYTES: &[u8] =
     include_bytes!("../../circuit_data/single_withdrawal_verifier_circuit_data.bin");
+const SPENT_VD_BYTES: &[u8] = include_bytes!("../../circuit_data/spent_verifier_circuit_data.bin");
 
 fn circuit_data_path() -> PathBuf {
     PathBuf::from("circuit_data")
@@ -40,6 +41,10 @@ fn single_withdrawal_circuit_data_path() -> PathBuf {
     circuit_data_path().join("single_withdrawal_verifier_circuit_data.bin")
 }
 
+fn spent_circuit_data_path() -> PathBuf {
+    circuit_data_path().join("spent_verifier_circuit_data.bin")
+}
+
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
@@ -49,6 +54,7 @@ pub struct CircuitVerifiers {
     validity_vd: VerifierCircuitData<F, C, D>,
     transition_vd: VerifierCircuitData<F, C, D>,
     single_withdrawal_vd: VerifierCircuitData<F, C, D>,
+    spent_vd: VerifierCircuitData<F, C, D>,
 }
 
 impl CircuitVerifiers {
@@ -63,11 +69,18 @@ impl CircuitVerifiers {
             .verifier_data();
         let balance_vd = balance_processor.get_verifier_data();
         let single_withdrawal_circuit = SingleWithdrawalCircuit::new(&balance_vd);
+        let spent_vd = balance_processor
+            .balance_transition_processor
+            .sender_processor
+            .spent_circuit
+            .data
+            .verifier_data();
         Self {
             balance_vd,
             validity_vd: validity_processor.validity_circuit.data.verifier_data(),
             transition_vd,
             single_withdrawal_vd: single_withdrawal_circuit.data.verifier_data(),
+            spent_vd,
         }
     }
 
@@ -79,6 +92,7 @@ impl CircuitVerifiers {
             &single_withdrawal_circuit_data_path(),
             &self.single_withdrawal_vd,
         )?;
+        save_verifier_circuit_data(&spent_circuit_data_path(), &self.spent_vd)?;
         Ok(())
     }
 
@@ -89,11 +103,13 @@ impl CircuitVerifiers {
             deserialize_verifier_circuit_data(SINGLE_WITHDRAWAL_VD_BYTES.to_vec()).unwrap();
         let transition_vd =
             deserialize_verifier_circuit_data(TRANSITION_VD_BYTES.to_vec()).unwrap();
+        let spent_vd = deserialize_verifier_circuit_data(SPENT_VD_BYTES.to_vec()).unwrap();
         Self {
             balance_vd,
             validity_vd,
             transition_vd,
             single_withdrawal_vd,
+            spent_vd,
         }
     }
 
@@ -111,6 +127,10 @@ impl CircuitVerifiers {
 
     pub fn get_single_withdrawal_vd(&self) -> VerifierCircuitData<F, C, D> {
         self.single_withdrawal_vd.clone()
+    }
+
+    pub fn get_spent_vd(&self) -> VerifierCircuitData<F, C, D> {
+        self.spent_vd.clone()
     }
 }
 

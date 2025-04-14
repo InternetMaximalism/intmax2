@@ -10,7 +10,7 @@ use ethers::{
 };
 use intmax2_zkp::{
     common::{
-        signature::flatten::{FlatG1, FlatG2},
+        signature_content::flatten::{FlatG1, FlatG2},
         witness::full_block::FullBlock,
     },
     ethereum_types::{
@@ -477,7 +477,7 @@ fn encode_flat_g2(g2: &FlatG2) -> [[u8; 32]; 4] {
 mod tests {
     use ethers::{core::utils::Anvil, types::H256};
     use intmax2_zkp::{
-        common::signature::SignatureContent,
+        common::signature_content::SignatureContent,
         ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
     };
     use num_bigint::BigUint;

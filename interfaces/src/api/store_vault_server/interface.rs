@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u256::U256},
 };
 use serde::{Deserialize, Serialize};

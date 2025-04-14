@@ -8,7 +8,7 @@ use intmax2_interfaces::{
     data::encryption::BlsEncryption,
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait as _},
 };
 use serde::{Deserialize, Serialize};
@@ -177,7 +177,7 @@ pub async fn generate_withdrawal_transfers(
         ))?;
         let withdrawal_fee_transfer = Transfer {
             token_index: withdrawal_fee.token_index,
-            recipient: GenericAddress::from_pubkey(withdrawal_beneficiary),
+            recipient: withdrawal_beneficiary.into(),
             amount: withdrawal_fee.amount,
             salt: generate_salt(),
         };
@@ -193,7 +193,7 @@ pub async fn generate_withdrawal_transfers(
             ))?;
             let claim_fee_transfer = Transfer {
                 token_index: claim_fee.token_index,
-                recipient: GenericAddress::from_pubkey(claim_beneficiary),
+                recipient: claim_beneficiary.into(),
                 amount: claim_fee.amount,
                 salt: generate_salt(),
             };
@@ -272,8 +272,7 @@ pub async fn select_unused_fees(
         .into_iter()
         .filter(|memo| {
             memo.transfer_data.transfer.token_index == fee.token_index
-                && memo.transfer_data.transfer.recipient
-                    == GenericAddress::from_pubkey(fee_beneficiary)
+                && memo.transfer_data.transfer.recipient == fee_beneficiary.into()
         })
         .collect::<Vec<_>>();
     sorted_fee_memo.sort_by_key(|memo| memo.transfer_data.transfer.amount);

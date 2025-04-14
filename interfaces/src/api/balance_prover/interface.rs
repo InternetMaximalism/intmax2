@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use intmax2_zkp::{
     common::{
-        signature::key_set::KeySet,
+        signature_content::key_set::KeySet,
         witness::{
             claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
             receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,

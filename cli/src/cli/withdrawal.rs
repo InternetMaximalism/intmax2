@@ -2,7 +2,7 @@ use intmax2_client_sdk::client::{
     fee_payment::generate_fee_payment_memo, sync::utils::generate_salt,
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{address::Address, u256::U256},
 };
 
@@ -19,7 +19,7 @@ pub async fn send_withdrawal(
 ) -> Result<(), CliError> {
     let client = get_client()?;
     let withdrawal_transfer = Transfer {
-        recipient: GenericAddress::from_address(to),
+        recipient: to.into(),
         token_index,
         amount,
         salt: generate_salt(),

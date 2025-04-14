@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
+use intmax2_zkp::circuits::validity::transition::processor::ValidityTransitionProcessor;
 use server_common::logger::init_logger;
 use validity_prover_worker::{app::worker::Worker, EnvVar};
 
@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
     init_logger()?;
 
     let env = envy::from_env::<EnvVar>().unwrap();
-    let transition_processor = Arc::new(TransitionProcessor::new());
+    let transition_processor = Arc::new(ValidityTransitionProcessor::new());
     log::info!("initialized transition processor");
 
     let worker = Worker::new(&env, transition_processor.clone())?;

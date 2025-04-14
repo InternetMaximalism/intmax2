@@ -6,7 +6,7 @@ use intmax2_client_sdk::external_api::{
 use intmax2_zkp::{
     common::{
         block_builder::{construct_signature, SenderWithSignature},
-        signature::{
+        signature_content::{
             block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
         },
     },

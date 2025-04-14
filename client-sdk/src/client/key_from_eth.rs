@@ -1,6 +1,6 @@
 use ark_bn254::Fr;
 use ethers::types::H256;
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use num_bigint::BigUint;
 use num_traits::identities::Zero;
 use sha2::{Digest, Sha512};
@@ -15,7 +15,9 @@ pub fn generate_intmax_account_from_eth_key(eth_private_key: H256) -> KeySet {
         if provisional_private_key.is_zero() {
             continue;
         }
-        return KeySet::generate_from_provisional(provisional_private_key);
+        let provisional_private_key: U256 =
+            BigUint::from(provisional_private_key).try_into().unwrap();
+        return KeySet::new(provisional_private_key);
     }
 }
 
@@ -66,7 +68,7 @@ mod test {
 
         for test_case in test_cases.iter() {
             let account = generate_intmax_account_from_eth_key(test_case.private_key);
-            assert!(!account.is_dummy);
+            assert!(!account.is_dummy());
             assert_eq!(account.pubkey.to_hex(), test_case.public_key);
         }
     }

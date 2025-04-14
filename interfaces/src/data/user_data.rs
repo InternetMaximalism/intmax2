@@ -71,7 +71,7 @@ impl UserData {
             .as_ref()
             .map(|bp| bp.decompress())
             .transpose()?;
-        let balance_pis = get_prev_balance_pis(self.pubkey, &balance_proof);
+        let balance_pis = get_prev_balance_pis(self.pubkey, &balance_proof)?;
         Ok(balance_pis.public_state.block_number)
     }
 

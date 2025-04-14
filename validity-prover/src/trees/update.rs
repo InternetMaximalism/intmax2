@@ -135,7 +135,7 @@ pub async fn update_trees<
             let mut account_registration_proofs = Vec::new();
             for sender_leaf in &sender_leaves {
                 let is_dummy_pubkey = sender_leaf.sender.is_dummy_pubkey();
-                let will_update = sender_leaf.did_return_sig && !is_dummy_pubkey;
+                let will_update = sender_leaf.signature_included && !is_dummy_pubkey;
                 let proof = if will_update {
                     account_tree
                         .prove_and_insert(
@@ -169,7 +169,7 @@ pub async fn update_trees<
                     .unwrap();
                 let prev_leaf = account_tree.get_leaf(timestamp, account_id).await?;
                 let prev_last_block_number = prev_leaf.value as u32;
-                let last_block_number = if sender_leaf.did_return_sig {
+                let last_block_number = if sender_leaf.signature_included {
                     block_number
                 } else {
                     prev_last_block_number

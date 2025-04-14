@@ -2,7 +2,7 @@ use intmax2_interfaces::api::block_builder::interface::FeeProof;
 use intmax2_zkp::{
     common::{
         block_builder::BlockProposal,
-        signature::{block_sign_payload::BlockSignPayload, utils::get_pubkey_hash},
+        signature_content::{block_sign_payload::BlockSignPayload, utils::get_pubkey_hash},
         trees::tx_tree::TxTree,
         tx::Tx,
     },

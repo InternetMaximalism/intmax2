@@ -7,8 +7,8 @@ use intmax2_interfaces::{
     utils::digest::get_digest,
 };
 use intmax2_zkp::{
-    circuits::balance::balance_pis::BalancePublicInputs, common::signature::key_set::KeySet,
-    ethereum_types::bytes32::Bytes32,
+    circuits::balance::balance_pis::BalancePublicInputs,
+    common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32,
 };
 
 use crate::client::{
@@ -153,7 +153,7 @@ impl Client {
         )
         .await?;
         // validation
-        let new_balance_pis = BalancePublicInputs::from_pis(&new_balance_proof.public_inputs);
+        let new_balance_pis = BalancePublicInputs::from_pis(&new_balance_proof.public_inputs)?;
         if new_balance_pis.private_commitment != user_data.private_commitment() {
             return Err(SyncError::InternalError(
                 "private commitment mismatch".to_string(),
@@ -178,7 +178,7 @@ impl Client {
         log::info!("sync_transfer: {:?}", meta);
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         // nullifier check
-        let nullifier: Bytes32 = transfer_data.transfer.commitment().into();
+        let nullifier = transfer_data.transfer.nullifier();
         if user_data
             .full_private_state
             .nullifier_tree
@@ -231,7 +231,7 @@ impl Client {
             transfer_data,
         )
         .await?;
-        let new_balance_pis = BalancePublicInputs::from_pis(&new_balance_proof.public_inputs);
+        let new_balance_pis = BalancePublicInputs::from_pis(&new_balance_proof.public_inputs)?;
         if new_balance_pis.private_commitment != user_data.private_commitment() {
             return Err(SyncError::InternalError(
                 "private commitment mismatch".to_string(),
@@ -266,7 +266,7 @@ impl Client {
             tx_data,
         )
         .await?;
-        let balance_pis = BalancePublicInputs::from_pis(&balance_proof.public_inputs);
+        let balance_pis = BalancePublicInputs::from_pis(&balance_proof.public_inputs)?;
         // validation
         if balance_pis.public_state.block_number != meta.block_number {
             return Err(SyncError::BalanceProofBlockNumberMismatch {
@@ -319,7 +319,7 @@ impl Client {
             to_block_number,
         )
         .await?;
-        let new_balance_pis = BalancePublicInputs::from_pis(&new_balance_proof.public_inputs);
+        let new_balance_pis = BalancePublicInputs::from_pis(&new_balance_proof.public_inputs)?;
         let new_block_number = new_balance_pis.public_state.block_number;
         if new_block_number != to_block_number {
             return Err(SyncError::BalanceProofBlockNumberMismatch {

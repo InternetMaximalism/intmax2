@@ -1,5 +1,5 @@
 use intmax2_interfaces::data::deposit_data::TokenType;
-use intmax2_zkp::common::{signature::key_set::KeySet, trees::asset_tree::AssetLeaf};
+use intmax2_zkp::common::{signature_content::key_set::KeySet, trees::asset_tree::AssetLeaf};
 
 use crate::cli::{client::get_client, history::format_timestamp};
 

@@ -45,11 +45,11 @@ impl TryFrom<JsGenericAddress> for GenericAddress {
         if js_generic_address.is_pubkey {
             let pubkey = U256::from_hex(&js_generic_address.data)
                 .map_err(|_| JsError::new("Failed to parse pubkey"))?;
-            Ok(GenericAddress::from_pubkey(pubkey))
+            Ok(pubkey.into())
         } else {
             let address = Address::from_hex(&js_generic_address.data)
                 .map_err(|_| JsError::new("Failed to parse address"))?;
-            Ok(GenericAddress::from_address(address))
+            Ok(address.into())
         }
     }
 }

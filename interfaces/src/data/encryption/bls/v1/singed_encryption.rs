@@ -1,5 +1,5 @@
 use intmax2_zkp::{
-    common::signature::{
+    common::signature_content::{
         flatten::FlatG2,
         key_set::KeySet,
         sign_tools::{sign_message, verify_signature},

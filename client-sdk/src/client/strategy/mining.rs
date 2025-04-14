@@ -11,7 +11,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     circuits::claim::determine_lock_time::{get_lock_time, LockTimeConfig},
-    common::{block::Block, signature::key_set::KeySet},
+    common::{block::Block, signature_content::key_set::KeySet},
     ethereum_types::u256::U256,
 };
 use num_bigint::BigUint;

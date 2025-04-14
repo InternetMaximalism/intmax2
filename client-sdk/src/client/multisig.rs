@@ -2,7 +2,7 @@ use ark_bn254::G2Affine;
 use ark_ec::CurveGroup;
 use intmax2_interfaces::data::encryption::bls::v1::multisig::calc_simple_aggregated_pubkey;
 use intmax2_zkp::{
-    common::signature::{
+    common::signature_content::{
         key_set::KeySet,
         sign_tools::{sign_message, verify_signature},
     },

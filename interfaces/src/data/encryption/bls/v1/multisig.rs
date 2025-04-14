@@ -1,6 +1,6 @@
 use ark_bn254::{G1Affine, G1Projective};
 use ark_std::Zero as _;
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use plonky2_bn254::fields::{recover::RecoverFromX, sgn::Sgn};
 
 use super::{
@@ -66,7 +66,10 @@ pub fn decrypt_bls_interaction_step2(
     // parse the encrypted message from bytes
     let encrypted_message = EncryptedMessage::parse(&mut encrypted_data)?;
 
-    let server_ecdh_share = ecdh_xy(&encrypted_message.get_public_key(), &server_key.privkey);
+    let server_ecdh_share = ecdh_xy(
+        &encrypted_message.get_public_key(),
+        &server_key.privkey_fr(),
+    );
 
     Ok(MultiEciesStep2Response {
         server_ecdh_share,
@@ -90,7 +93,10 @@ pub fn decrypt_bls_interaction_step3(
     // parse the encrypted message from bytes
     let encrypted_message = EncryptedMessage::parse(&mut encrypted_data)?;
 
-    let client_ecdh_share = ecdh_xy(&encrypted_message.get_public_key(), &client_key.privkey);
+    let client_ecdh_share = ecdh_xy(
+        &encrypted_message.get_public_key(),
+        &client_key.privkey_fr(),
+    );
 
     let aggregated_ecdh_share =
         aggregate_ecdh_x(&[client_ecdh_share, step2_response.server_ecdh_share]);
