@@ -167,20 +167,3 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         todo!()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256};
-
-    use super::get_path;
-
-    #[test]
-    fn test_path() {
-        let topic = "v1/topic";
-
-        let path = get_path(topic, U256::from(1), Bytes32::default());
-        let path = Path::new(&path);
-    }
-}
