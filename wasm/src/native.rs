@@ -171,6 +171,20 @@ pub async fn get_account_info(config: &Config, public_key: &str) -> Result<JsAcc
 }
 
 #[wasm_bindgen]
+pub fn calc_simple_aggregated_pubkey(signers: Vec<String>) -> Result<String, JsError> {
+    init_logger();
+    let signers: Vec<U256> = signers
+        .iter()
+        .map(|s| U256::from_hex(s).map_err(|_| JsError::new("Failed to parse public key")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let aggregated_pubkey = multisig::simple_aggregated_pubkey(&signers);
+
+    Ok(aggregated_pubkey
+        .map_err(|_| JsError::new("Failed to calculate aggregated public key"))?
+        .to_hex())
+}
+
+#[wasm_bindgen]
 pub fn decrypt_bls_interaction_step1(
     client_key: &str,
     encrypted_data: &[u8],
@@ -224,11 +238,11 @@ pub fn decrypt_bls_interaction_step3(
 
 #[wasm_bindgen]
 pub fn multi_signature_interaction_step1(
-    client_key: &str,
+    client_private_key: &str,
     message: &[u8],
 ) -> Result<JsMultisigStep1Response, JsError> {
     init_logger();
-    let client_key = str_privkey_to_keyset(client_key)?;
+    let client_key = str_privkey_to_keyset(client_private_key)?;
     let response_step1 = multisig::multi_signature_interaction_step1(client_key, message);
 
     Ok(JsMultisigStep1Response::from(response_step1))
@@ -236,11 +250,11 @@ pub fn multi_signature_interaction_step1(
 
 #[wasm_bindgen]
 pub fn multi_signature_interaction_step2(
-    server_key: &str,
+    server_private_key: &str,
     step1_response: &JsMultisigStep1Response,
 ) -> Result<JsMultisigStep2Response, JsError> {
     init_logger();
-    let server_key = str_privkey_to_keyset(server_key)?;
+    let server_key = str_privkey_to_keyset(server_private_key)?;
     let response_step2 = multisig::multi_signature_interaction_step2(
         server_key,
         &step1_response.try_into().unwrap(),
@@ -251,12 +265,12 @@ pub fn multi_signature_interaction_step2(
 
 #[wasm_bindgen]
 pub fn multi_signature_interaction_step3(
-    client_key: &str,
+    client_private_key: &str,
     step1_response: &JsMultisigStep1Response,
     step2_response: &JsMultisigStep2Response,
 ) -> Result<JsMultisigStep3Response, JsError> {
     init_logger();
-    let client_key = str_privkey_to_keyset(client_key)?;
+    let client_key = str_privkey_to_keyset(client_private_key)?;
     let response_step3 = multisig::multi_signature_interaction_step3(
         client_key,
         &step1_response.try_into().unwrap(),

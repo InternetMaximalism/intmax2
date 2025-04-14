@@ -10,6 +10,10 @@ use intmax2_zkp::{
 };
 use std::ops::Add;
 
+pub fn simple_aggregated_pubkey(signers: &[U256]) -> anyhow::Result<U256> {
+    calc_simple_aggregated_pubkey(signers).map(|(pubkey, _)| pubkey)
+}
+
 #[derive(Debug, Clone)]
 pub struct MultisigStep1Response {
     pub client_pubkey: U256,
@@ -55,6 +59,10 @@ pub fn multi_signature_interaction_step3(
     step1_response: &MultisigStep1Response,
     step2_response: &MultisigStep2Response,
 ) -> anyhow::Result<MultisigStep3Response> {
+    if client_key.pubkey != step1_response.client_pubkey {
+        return Err(anyhow::anyhow!("Client pubkey mismatch"));
+    }
+
     verify_signature(
         step2_response.server_signature,
         step2_response.server_pubkey,
