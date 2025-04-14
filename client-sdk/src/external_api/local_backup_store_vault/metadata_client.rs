@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 use super::error::IOError;
 
+#[derive(Clone, Debug)]
 pub struct MetaDataClient {
-    pub root_path: PathBuf,
+    root_path: PathBuf,
 }
 
 impl MetaDataClient {
@@ -53,6 +54,11 @@ impl MetaDataClient {
             .chain(read_records.iter())
             .cloned()
             .collect::<Vec<_>>();
+        self.write(topic, pubkey, &all_records)?;
+        Ok(())
+    }
+
+    pub fn write(&self, topic: &str, pubkey: U256, records: &[MetaData]) -> Result<(), IOError> {
         let dir_path = self.dir_path(topic, pubkey);
         if !dir_path.exists() {
             std::fs::create_dir_all(&dir_path)
@@ -60,7 +66,7 @@ impl MetaDataClient {
         }
         let file_path = self.file_path(topic, pubkey);
         let mut writer = csv::Writer::from_writer(vec![]);
-        for record in all_records {
+        for record in records {
             writer
                 .serialize(record)
                 .map_err(|e| IOError::WriteError(e.to_string()))?;

@@ -1,168 +1,129 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
-use async_trait::async_trait;
 use intmax2_interfaces::{
     api::{
         error::ServerError,
         store_vault_server::{
-            interface::{SaveDataEntry, StoreVaultClientInterface},
+            interface::SaveDataEntry,
             types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
         },
     },
-    utils::{digest::get_digest, signature::Auth},
+    data::meta_data::MetaData,
+    utils::digest::get_digest,
 };
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _},
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
+
+use super::{
+    error::LocalStoreVaultError, local_data_client::LocalDataClient,
+    metadata_client::MetaDataClient,
 };
 
-// get path for local object
-pub fn get_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
-    format!("{}/{}/{}", topic, pubkey.to_hex(), digest.to_hex())
-}
-
-// // get metadata side car file path for local object
-// pub fn get_metadata_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
-//     format!(
-//         "{}/{}/{}.metadata.json",
-//         topic,
-//         pubkey.to_hex(),
-//         digest.to_hex()
-//     )
-// }
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LocalStoreVaultClient {
-    pub root_path: PathBuf,
-    pub external_client: Option<Arc<Box<dyn StoreVaultClientInterface>>>,
+    pub data_client: LocalDataClient,
+    pub metadata_client: MetaDataClient,
 }
 
 impl LocalStoreVaultClient {
-    pub fn new(
-        root_path: PathBuf,
-        external_client: Option<Arc<Box<dyn StoreVaultClientInterface>>>,
-    ) -> Self {
+    pub fn new(root_path: PathBuf) -> Self {
         LocalStoreVaultClient {
-            root_path,
-            external_client,
+            data_client: LocalDataClient::new(root_path.clone()),
+            metadata_client: MetaDataClient::new(root_path),
         }
-    }
-
-    fn external_client(&self) -> Option<&Arc<Box<dyn StoreVaultClientInterface>>> {
-        self.external_client.as_ref()
-    }
-
-    fn write(&self, topic: &str, data: &[u8]) -> Result<(), ServerError> {
-        let file_path = self.root_path.join(topic);
-        if !file_path.exists() {
-            fs::create_dir_all(&file_path).map_err(|e| {
-                ServerError::InternalError(format!("failed to create directory: {}", e))
-            })?;
-        }
-        fs::write(file_path, data)
-            .map_err(|e| ServerError::InternalError(format!("failed to write file: {}", e)))?;
-        Ok(())
-    }
-
-    fn read(&self, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
-        let file_path = self.root_path.join(topic);
-        if !file_path.exists() {
-            return Ok(None);
-        }
-        let data = fs::read(file_path)
-            .map_err(|e| ServerError::InternalError(format!("failed to read file: {}", e)))?;
-        Ok(Some(data))
     }
 }
 
-#[async_trait(?Send)]
-impl StoreVaultClientInterface for LocalStoreVaultClient {
-    async fn save_snapshot(
+impl LocalStoreVaultClient {
+    pub async fn save_snapshot(
         &self,
         key: KeySet,
         topic: &str,
-        prev_digest: Option<Bytes32>,
         data: &[u8],
-    ) -> Result<(), ServerError> {
-        if let Some(client) = self.external_client() {
-            return client.save_snapshot(key, topic, prev_digest, data).await;
-        }
-        self.write(topic, data)?;
+    ) -> Result<(), LocalStoreVaultError> {
+        let digest = get_digest(data);
+        self.data_client.write(topic, key.pubkey, digest, data)?;
+        self.metadata_client.write(
+            topic,
+            key.pubkey,
+            &[MetaData {
+                timestamp: chrono::Utc::now().timestamp() as u64,
+                digest,
+            }],
+        )?;
         Ok(())
     }
 
-    async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
-        if let Some(client) = self.external_client() {
-            let data = client.get_snapshot(key, topic).await?;
-            if let Some(data) = &data {
-                // save the data to local store
-                self.write(topic, data)?;
-            }
-            return Ok(data);
-        } else {
-            return self.read(topic);
-        }
-    }
-
-    async fn save_data_batch(
+    pub async fn get_snapshot(
         &self,
         key: KeySet,
-        entries: &[SaveDataEntry],
-    ) -> Result<Vec<Bytes32>, ServerError> {
-        if let Some(client) = self.external_client() {
-            return client.save_data_batch(key, entries).await;
+        topic: &str,
+    ) -> Result<Option<Vec<u8>>, LocalStoreVaultError> {
+        let meta = self.metadata_client.read(topic, key.pubkey)?;
+        if meta.is_empty() {
+            return Ok(None);
         }
-        let mut digests = Vec::new();
-        for entry in entries {
-            let digest = get_digest(&entry.data);
-            let path = get_path(&entry.topic, key.pubkey, digest);
-            self.write(&path, &entry.data)?;
-            digests.push(digest);
+        if meta.len() > 1 {
+            return Err(LocalStoreVaultError::DataInconsistencyError(
+                "Multiple snapshots found".to_string(),
+            ));
         }
-        Ok(digests)
+        let digest = meta[0].digest;
+        let data = self.data_client.read(topic, key.pubkey, digest)?;
+        Ok(data)
     }
 
-    async fn get_data_batch(
+    pub async fn save_data_batch(
+        &self,
+        key: KeySet,
+        entries_with_meta: &[(SaveDataEntry, MetaData)],
+    ) -> Result<(), LocalStoreVaultError> {
+        for (entry, meta) in entries_with_meta {
+            self.data_client
+                .write(&entry.topic, key.pubkey, meta.digest, &entry.data)?;
+            self.metadata_client
+                .append(&entry.topic, key.pubkey, &[meta.clone()])?;
+        }
+        Ok(())
+    }
+
+    pub async fn get_data_batch(
         &self,
         key: KeySet,
         topic: &str,
         digests: &[Bytes32],
-    ) -> Result<Vec<DataWithMetaData>, ServerError> {
-        if let Some(client) = self.external_client() {
-            let data_with_meta = client.get_data_batch(key, topic, digests).await?;
-            for data in &data_with_meta {
-                let path = get_path(topic, key.pubkey, data.meta.digest);
-                self.write(&path, &data.data)?;
-            }
-            return Ok(data_with_meta);
-        }
+    ) -> Result<Vec<DataWithMetaData>, LocalStoreVaultError> {
         let mut data_with_meta = Vec::new();
         for digest in digests {
-            let path = get_path(topic, key.pubkey, *digest);
-            if let Some(data) = self.read(&path)? {
-                data_with_meta.push(DataWithMetaData {
-                    data,
-                    meta: Default::default(),
-                });
-            }
+            let data = self
+                .data_client
+                .read(topic, key.pubkey, *digest)?
+                .ok_or_else(|| {
+                    LocalStoreVaultError::DataNotFoundError(format!(
+                        "Data not found for topic: {}, pubkey: {}, digest: {}",
+                        topic, key.pubkey, digest
+                    ))
+                })?;
+            let meta = self
+                .metadata_client
+                .read(topic, key.pubkey)?
+                .into_iter()
+                .find(|m| m.digest == *digest)
+                .ok_or_else(|| {
+                    LocalStoreVaultError::DataNotFoundError(format!(
+                        "MetaData not found for topic: {}, pubkey: {}, digest: {}",
+                        topic, key.pubkey, digest
+                    ))
+                })?;
+            data_with_meta.push(DataWithMetaData { data, meta });
         }
-        todo!()
+        Ok(data_with_meta)
     }
 
-    async fn get_data_sequence(
+    pub async fn get_data_sequence(
         &self,
         _key: KeySet,
         _topic: &str,
         _cursor: &MetaDataCursor,
-    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        todo!()
-    }
-
-    async fn get_data_sequence_with_auth(
-        &self,
-        _topic: &str,
-        _cursor: &MetaDataCursor,
-        _auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
         todo!()
     }

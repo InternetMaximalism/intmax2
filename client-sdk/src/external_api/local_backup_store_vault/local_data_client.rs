@@ -4,6 +4,7 @@ use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U
 
 use super::error::IOError;
 
+#[derive(Clone, Debug)]
 pub struct LocalDataClient {
     pub root_path: PathBuf,
 }
