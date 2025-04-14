@@ -1,7 +1,7 @@
 use intmax2_client_sdk::client::multisig;
 use intmax2_interfaces::data::encryption::bls::v1::multisig as multisig_encryption;
 use intmax2_zkp::{
-    common::signature::flatten::FlatG2,
+    common::signature_content::flatten::FlatG2,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use std::convert::TryFrom;

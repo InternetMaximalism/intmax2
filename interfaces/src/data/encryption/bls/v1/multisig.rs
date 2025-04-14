@@ -130,7 +130,7 @@ pub fn calc_simple_aggregated_pubkey(signers: &[U256]) -> anyhow::Result<(U256, 
 
 #[cfg(test)]
 mod test {
-    use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
+    use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 
     use crate::data::encryption::bls::v1::multisig::{
         calc_simple_aggregated_pubkey, decrypt_bls_interaction,

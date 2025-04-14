@@ -97,7 +97,7 @@ pub fn multi_signature_interaction_step3(
 
 #[cfg(test)]
 mod test {
-    use intmax2_zkp::common::signature::{key_set::KeySet, sign_tools::verify_signature};
+    use intmax2_zkp::common::signature_content::{key_set::KeySet, sign_tools::verify_signature};
 
     use crate::client::multisig::{
         multi_signature_interaction_step1, multi_signature_interaction_step2,
