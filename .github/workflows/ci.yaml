@@ -117,10 +117,8 @@ jobs:
           cp withdrawal-server/.env.example withdrawal-server/.env
           cp tests/.env.example tests/.env
       - name: Install sqlx-cli and setup databases
-        env:
-          SQLX_OFFLINE: "true"
         run: |
-          cargo install sqlx-cli
+          cargo install sqlx-cli --version=0.8.3
           cd store-vault-server && sqlx database setup && cd -
           cd validity-prover && sqlx database setup && cd -
           cd withdrawal-server && sqlx database setup && cd -
