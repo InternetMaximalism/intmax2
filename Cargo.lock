@@ -3845,6 +3845,7 @@ dependencies = [
  "chrono",
  "config",
  "console",
+ "csv",
  "dialoguer",
  "dotenv",
  "env_logger",
