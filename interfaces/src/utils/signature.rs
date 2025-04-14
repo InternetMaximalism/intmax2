@@ -9,7 +9,7 @@ use intmax2_zkp::{
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Auth {
     pub pubkey: U256,

@@ -171,7 +171,7 @@ impl FromStr for CursorOrder {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataCursorResponse {
     pub next_cursor: Option<MetaData>,

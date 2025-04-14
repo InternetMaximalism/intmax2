@@ -1,12 +1,9 @@
 use std::path::PathBuf;
 
 use intmax2_interfaces::{
-    api::{
-        error::ServerError,
-        store_vault_server::{
-            interface::SaveDataEntry,
-            types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
-        },
+    api::store_vault_server::{
+        interface::SaveDataEntry,
+        types::{CursorOrder, DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
     },
     data::meta_data::MetaData,
     utils::digest::get_digest,
@@ -121,10 +118,35 @@ impl LocalStoreVaultClient {
 
     pub async fn get_data_sequence(
         &self,
-        _key: KeySet,
-        _topic: &str,
-        _cursor: &MetaDataCursor,
-    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        key: KeySet,
+        topic: &str,
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), LocalStoreVaultError> {
+        // get metadata list
+        let meta = self.metadata_client.read(topic, key.pubkey)?;
+        if meta.is_empty() {
+            return Ok((Vec::new(), MetaDataCursorResponse::default()));
+        }
+        let _meta_result = match cursor.order {
+            CursorOrder::Asc => {
+                let cursor_meta = cursor.cursor.clone().unwrap_or_default();
+                meta.iter()
+                    .filter(|m| m > &&cursor_meta)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            }
+            CursorOrder::Desc => {
+                let cursor_meta = cursor.cursor.clone().unwrap_or(MetaData {
+                    timestamp: i64::MAX as u64,
+                    digest: Bytes32::default(),
+                });
+                meta.iter()
+                    .filter(|m| m < &&cursor_meta)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            }
+        };
+
         todo!()
     }
 }
