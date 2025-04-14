@@ -1,17 +1,9 @@
-use std::path::PathBuf;
-
 use csv;
 use intmax2_interfaces::data::meta_data::MetaData;
-use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait};
-use serde::{Deserialize, Serialize};
+use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait};
+use std::path::PathBuf;
 
 use super::error::IOError;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct MetaDataRecord {
-    pub digest: Bytes32,
-    pub timestamp: u64,
-}
 
 pub struct MetaDataClient {
     pub root_path: PathBuf,
@@ -38,7 +30,7 @@ impl MetaDataClient {
         file_path
     }
 
-    pub fn read(&self, topic: &str, pubkey: U256) -> Result<Vec<MetaDataRecord>, IOError> {
+    pub fn read(&self, topic: &str, pubkey: U256) -> Result<Vec<MetaData>, IOError> {
         let file_path = self.file_path(topic, pubkey);
         if !file_path.exists() {
             return Ok(vec![]);
@@ -48,7 +40,7 @@ impl MetaDataClient {
         let mut reader = csv::Reader::from_reader(file_content.as_bytes());
         let mut records = Vec::new();
         for result in reader.deserialize() {
-            let record: MetaDataRecord = result.map_err(|e| IOError::ParseError(e.to_string()))?;
+            let record: MetaData = result.map_err(|e| IOError::ParseError(e.to_string()))?;
             records.push(record);
         }
         Ok(records)
@@ -56,14 +48,11 @@ impl MetaDataClient {
 
     pub fn append(&self, topic: &str, pubkey: U256, records: &[MetaData]) -> Result<(), IOError> {
         let read_records = self.read(topic, pubkey)?;
-        let records = records
+        let all_records = records
             .iter()
-            .map(|record| MetaDataRecord {
-                digest: record.digest,
-                timestamp: record.timestamp,
-            })
+            .chain(read_records.iter())
+            .cloned()
             .collect::<Vec<_>>();
-        let all_records = records.into_iter().chain(read_records).collect::<Vec<_>>();
         let dir_path = self.dir_path(topic, pubkey);
         if !dir_path.exists() {
             std::fs::create_dir_all(&dir_path)
@@ -87,7 +76,7 @@ impl MetaDataClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use intmax2_zkp::ethereum_types::u256::U256;
+    use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256};
 
     #[test]
     fn test_metadata_client() {
