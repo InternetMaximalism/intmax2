@@ -302,7 +302,12 @@ pub async fn update_send_by_receiver(
         ));
     }
 
-    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs);
+    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs).map_err(|e| {
+        SyncError::InternalError(format!(
+            "failed to convert spent proof to spent public inputs: {}",
+            e
+        ))
+    })?;
     if spent_pis.prev_private_commitment != prev_balance_pis.private_commitment {
         return Err(SyncError::InvalidTransferError(
            format!("balance proof's prev_private_commitment: {} != spent_proof.prev_private_commitment: {}",

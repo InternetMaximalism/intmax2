@@ -85,7 +85,11 @@ pub async fn fetch_transfer_info(
                 };
 
                 let spent_pis =
-                    SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec());
+                    SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec())
+                        .map_err(|e| {
+                            log::error!("failed to decompress spent proof: {}", e);
+                            StrategyError::UnexpectedError(e.to_string())
+                        })?;
                 if spent_pis.tx != transfer_data.tx {
                     log::error!("tx in sender proof set is different from tx in transfer data");
                     continue;
