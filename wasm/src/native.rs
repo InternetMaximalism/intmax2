@@ -26,7 +26,10 @@ use intmax2_interfaces::{
     data::{
         data_type::DataType,
         deposit_data::DepositData,
-        encryption::{bls::v1::multisig as multisig_encryption, BlsEncryption as _},
+        encryption::{
+            bls::v1::{algorithm::encrypt_bls, multisig as multisig_encryption},
+            BlsEncryption as _,
+        },
         transfer_data::TransferData,
         tx_data::TxData,
     },
@@ -182,6 +185,16 @@ pub fn calc_simple_aggregated_pubkey(signers: Vec<String>) -> Result<String, JsE
     Ok(aggregated_pubkey
         .map_err(|_| JsError::new("Failed to calculate aggregated public key"))?
         .to_hex())
+}
+
+#[wasm_bindgen]
+pub fn encrypt_message(pubkey: &str, data: &[u8]) -> Vec<u8> {
+    init_logger();
+    let pubkey = U256::from_hex(pubkey)
+        .map_err(|_| JsError::new("Failed to parse public key"))
+        .unwrap();
+
+    encrypt_bls(pubkey, data)
 }
 
 #[wasm_bindgen]

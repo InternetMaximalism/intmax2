@@ -71,6 +71,80 @@ async function main() {
   }
   await test3();
 
+  // Test encryption interaction
+  const testEncryptionInteraction = async () => {
+    const client_key = await generate_intmax_account_from_eth_key("1d7ca104307dae85de604175a38546b4bd358b014b9690fe6dd322dc6790f41a");
+    const server_key = await generate_intmax_account_from_eth_key("1ce9e55589f4b29fa5ca76860c1351d84a9d519505755171190f02add3a4759b");
+
+    const message = Buffer.from("hello world", "utf-8");
+    const aggregated_pubkey = calc_simple_aggregated_pubkey([client_key.pubkey, server_key.pubkey]);
+    const encrypted_message = pkg.encrypt_message(aggregated_pubkey, message);
+
+    const response_step1 = pkg.decrypt_bls_interaction_step1(server_key.privkey, encrypted_message);
+    const response_step2 = pkg.decrypt_bls_interaction_step2(client_key.privkey, response_step1);
+    const response_step3 = pkg.decrypt_bls_interaction_step3(server_key.privkey, response_step1, response_step2);
+    const decrypted_message = response_step3.message;
+    if (!message.equals(Buffer.from(decrypted_message))) {
+      console.log("decrypted_message", Buffer.from(decrypted_message).toString("utf-8"));
+      console.log("message", message.toString("utf-8"));
+      throw new Error("Invalid decrypted message");
+    }
+  }
+  await testEncryptionInteraction();
+
+  // Test encryption interaction with wrong client key
+  const testEncryptionInteractionWithWrongClientKey = async () => {
+    const client_key = await generate_intmax_account_from_eth_key("1d7ca104307dae85de604175a38546b4bd358b014b9690fe6dd322dc6790f41a");
+    const server_key = await generate_intmax_account_from_eth_key("1ce9e55589f4b29fa5ca76860c1351d84a9d519505755171190f02add3a4759b");
+
+    const message = Buffer.from("hello world", "utf-8");
+    const aggregated_pubkey = calc_simple_aggregated_pubkey([client_key.pubkey, server_key.pubkey]);
+    const encrypted_message = pkg.encrypt_message(aggregated_pubkey, message);
+
+    const wrong_client_key = await generate_intmax_account_from_eth_key("2b2fc905c05ab0ded82327c9be57ce9827a10461ba448ba7b3468e89f875794e");
+    const response_step1 = pkg.decrypt_bls_interaction_step1(wrong_client_key.privkey, encrypted_message);
+    const response_step2 = pkg.decrypt_bls_interaction_step2(server_key.privkey, response_step1);
+
+    try {
+      pkg.decrypt_bls_interaction_step3(wrong_client_key.privkey, response_step1, response_step2);
+
+      throw new Error("Should be failed because of invalid client key");
+    } catch (e) {
+      const errorMessage = (e as Error).message;
+      if (errorMessage !== "tag check failure in read_header") {
+        throw new Error("Should be failed because of unexpected error message");
+      }
+    }
+  }
+  await testEncryptionInteractionWithWrongClientKey();
+
+
+  // Test encryption interaction with wrong server key
+  const testEncryptionInteractionWithWrongServerKey = async () => {
+    const client_key = await generate_intmax_account_from_eth_key("1d7ca104307dae85de604175a38546b4bd358b014b9690fe6dd322dc6790f41a");
+    const server_key = await generate_intmax_account_from_eth_key("1ce9e55589f4b29fa5ca76860c1351d84a9d519505755171190f02add3a4759b");
+
+    const message = Buffer.from("hello world", "utf-8");
+    const aggregated_pubkey = calc_simple_aggregated_pubkey([client_key.pubkey, server_key.pubkey]);
+    const encrypted_message = pkg.encrypt_message(aggregated_pubkey, message);
+
+    const wrong_server_key = await generate_intmax_account_from_eth_key("2b2fc905c05ab0ded82327c9be57ce9827a10461ba448ba7b3468e89f875794e");
+    const response_step1 = pkg.decrypt_bls_interaction_step1(client_key.privkey, encrypted_message);
+    const response_step2 = pkg.decrypt_bls_interaction_step2(wrong_server_key.privkey, response_step1);
+
+    try {
+      pkg.decrypt_bls_interaction_step3(client_key.privkey, response_step1, response_step2);
+
+      throw new Error("Should be failed because of invalid server key");
+    } catch (e) {
+      const errorMessage = (e as Error).message;
+      if (errorMessage !== "tag check failure in read_header") {
+        throw new Error("Should be failed because of unexpected error message");
+      }
+    }
+  }
+  await testEncryptionInteractionWithWrongServerKey();
+
   console.log("Done");
 }
 
