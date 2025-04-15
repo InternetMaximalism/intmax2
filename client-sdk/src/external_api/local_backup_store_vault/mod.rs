@@ -54,7 +54,7 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
             digest: get_digest(data),
         };
         self.local_store_vault
-            .local_save_snapshot(key, topic, data, &meta)?;
+            .local_save_snapshot(key.pubkey, topic, data, &meta)?;
         Ok(())
     }
 
@@ -72,7 +72,7 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
                     digest,
                 };
                 self.local_store_vault
-                    .local_save_snapshot(key, topic, data, &meta)?;
+                    .local_save_snapshot(key.pubkey, topic, data, &meta)?;
             }
         }
         Ok(data)
@@ -93,7 +93,7 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
             entries_with_meta.push((entries.clone(), meta));
         }
         self.local_store_vault
-            .local_save_data_batch(key.pubkey, &entries_with_meta)?;
+            .local_save_data_batch(&entries_with_meta)?;
         Ok(digests)
     }
 
@@ -119,7 +119,7 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
             ));
         }
         self.local_store_vault
-            .local_save_data_batch(key.pubkey, &entries_with_meta)?;
+            .local_save_data_batch(&entries_with_meta)?;
         Ok(data_with_meta)
     }
 
@@ -148,7 +148,7 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
             ));
         }
         self.local_store_vault
-            .local_save_data_batch(key.pubkey, &entries_with_meta)?;
+            .local_save_data_batch(&entries_with_meta)?;
         Ok((data_with_meta, next_cursor))
     }
 
@@ -177,7 +177,7 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
             ));
         }
         self.local_store_vault
-            .local_save_data_batch(auth.pubkey, &entries_with_meta)?;
+            .local_save_data_batch(&entries_with_meta)?;
         Ok((data_with_meta, next_cursor))
     }
 }
