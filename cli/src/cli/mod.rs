@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod claim;
 pub mod client;
 pub mod deposit;

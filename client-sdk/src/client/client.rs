@@ -46,12 +46,13 @@ use crate::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
         },
-        local_backup_store_vault::diff_data_client::make_backup_csv,
+        local_backup_store_vault::diff_data_client::make_backup_csv_from_entries,
         utils::time::sleep_for,
     },
 };
 
 use super::{
+    backup::make_history_backup,
     config::ClientConfig,
     error::ClientError,
     fee_payment::{quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers},
@@ -180,7 +181,7 @@ impl Client {
         let deposit_digest = *digests.first().ok_or(ClientError::UnexpectedError(
             "deposit_digest not found".to_string(),
         ))?;
-        let backup_csv = make_backup_csv(&[save_entry])
+        let backup_csv = make_backup_csv_from_entries(&[save_entry])
             .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {}", e)))?;
         let result = DepositResult {
             deposit_data,
@@ -598,7 +599,7 @@ impl Client {
             .into_iter()
             .chain(misc_entries.into_iter())
             .collect::<Vec<_>>();
-        let backup_csv = make_backup_csv(&all_entries)
+        let backup_csv = make_backup_csv_from_entries(&all_entries)
             .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {}", e)))?;
 
         let result = TxResult {
@@ -759,6 +760,16 @@ impl Client {
         )
         .await?;
         Ok(withdrawal_transfers)
+    }
+
+    pub async fn make_history_backup(
+        &self,
+        key: KeySet,
+        from: u64,
+        chunk_size: usize,
+    ) -> Result<Vec<String>, ClientError> {
+        let csvs = make_history_backup(self, key, from, chunk_size).await?;
+        Ok(csvs)
     }
 }
 

@@ -1,3 +1,4 @@
+pub mod backup;
 #[allow(clippy::module_inception)]
 pub mod client;
 pub mod config;

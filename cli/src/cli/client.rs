@@ -32,7 +32,7 @@ pub fn get_client() -> Result<Client, CliError> {
     let env = envy::from_env::<EnvVar>()?;
     let block_builder = Box::new(BlockBuilderClient::new());
 
-    let root_path = PathBuf::from("data");
+    let root_path = get_backup_root_path(&env)?;
     if env.store_vault_type != StoreVaultType::Local && env.store_vault_server_base_url.is_none() {
         return Err(CliError::EnvError(
             "store_vault_server_base_url is required".to_string(),
@@ -122,4 +122,16 @@ pub fn get_client() -> Result<Client, CliError> {
     };
 
     Ok(client)
+}
+
+pub fn get_backup_root_path(env: &EnvVar) -> Result<PathBuf, CliError> {
+    let root_path = env.local_backup_path.clone().map_or_else(
+        || {
+            let mut path = dirs::home_dir().unwrap();
+            path.push(".intmax2/backup");
+            path
+        },
+        PathBuf::from,
+    );
+    Ok(root_path)
 }

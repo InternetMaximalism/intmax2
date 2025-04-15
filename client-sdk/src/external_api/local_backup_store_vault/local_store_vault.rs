@@ -18,7 +18,7 @@ use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct LocalStoreVaultClient {
@@ -210,15 +210,23 @@ impl LocalStoreVaultClient {
         Ok((data_with_meta, next_cursor))
     }
 
-    pub fn load_diff(&self, diff_file_path: PathBuf) -> Result<(), LocalStoreVaultError> {
+    pub fn incorporate_diff(&self, diff_file_path: &Path) -> Result<(), LocalStoreVaultError> {
         let records = self.diff_data_client.read(diff_file_path)?;
         for record in records {
-            let topic = record.topic.clone();
-            let pubkey = record.pubkey;
-            let digest = record.digest;
-            let data = record.data;
-            self.data_client
-                .write(&topic, pubkey.into(), digest, &data)?;
+            self.data_client.write(
+                &record.topic,
+                record.pubkey.into(),
+                record.digest,
+                &record.data,
+            )?;
+            self.metadata_client.append(
+                &record.topic,
+                record.pubkey.into(),
+                &[MetaData {
+                    timestamp: record.timestamp,
+                    digest: record.digest,
+                }],
+            )?;
         }
         Ok(())
     }

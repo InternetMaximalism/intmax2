@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 use ethers::types::{Address as EthAddress, H256};
 use intmax2_interfaces::{
@@ -120,6 +122,10 @@ pub enum Commands {
         private_key: H256,
         #[clap(long, default_value = "false")]
         deep: bool,
+    },
+    IncorporateBackup {
+        #[clap(long)]
+        path: PathBuf,
     },
     GenerateKey,
     GenerateFromEthKey {

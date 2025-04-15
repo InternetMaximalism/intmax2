@@ -3,6 +3,7 @@ use colored::Colorize as _;
 use intmax2_cli::{
     args::{Args, Commands},
     cli::{
+        backup::incorporate_backup,
         claim::claim_withdrawals,
         deposit::deposit,
         error::CliError,
@@ -203,6 +204,9 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         Commands::Resync { private_key, deep } => {
             let key = privkey_to_keyset(private_key);
             resync(key, deep).await?;
+        }
+        Commands::IncorporateBackup { path } => {
+            incorporate_backup(&path)?;
         }
         Commands::GenerateKey => {
             let mut rng = rand::thread_rng();

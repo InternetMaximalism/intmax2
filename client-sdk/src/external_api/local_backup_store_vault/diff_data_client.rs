@@ -6,7 +6,7 @@ use intmax2_interfaces::{
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
-use std::path::PathBuf;
+use std::path::Path;
 
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize)]
@@ -23,9 +23,9 @@ pub struct DiffRecord {
 pub struct DiffDataClient;
 
 impl DiffDataClient {
-    pub fn read(&self, file_path: PathBuf) -> Result<Vec<DiffRecord>, IOError> {
+    pub fn read(&self, file_path: &Path) -> Result<Vec<DiffRecord>, IOError> {
         let file_content =
-            std::fs::read_to_string(&file_path).map_err(|e| IOError::ReadError(e.to_string()))?;
+            std::fs::read_to_string(file_path).map_err(|e| IOError::ReadError(e.to_string()))?;
         let mut reader = csv::Reader::from_reader(file_content.as_bytes());
         let mut records = Vec::new();
         for result in reader.deserialize() {
@@ -36,7 +36,7 @@ impl DiffDataClient {
     }
 }
 
-pub fn make_backup_csv(entries: &[SaveDataEntry]) -> Result<String, IOError> {
+pub fn make_backup_csv_from_entries(entries: &[SaveDataEntry]) -> Result<String, IOError> {
     let mut records = Vec::new();
     for entry in entries {
         let record = DiffRecord {
@@ -48,6 +48,10 @@ pub fn make_backup_csv(entries: &[SaveDataEntry]) -> Result<String, IOError> {
         };
         records.push(record);
     }
+    make_backup_csv_from_records(&records)
+}
+
+pub fn make_backup_csv_from_records(records: &[DiffRecord]) -> Result<String, IOError> {
     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     for record in records {
         wtr.serialize(record)
