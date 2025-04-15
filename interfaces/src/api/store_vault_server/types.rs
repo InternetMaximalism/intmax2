@@ -9,6 +9,16 @@ use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256};
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StoreVaultType {
+    Local,
+    LegacyRemote,
+    Remote,
+    RemoteWithBackup,
+    LegacyRemoteWithBackup,
+}
+
 // a prefix to make the content unique
 fn content_prefix(path: &str) -> Vec<u8> {
     format!("intmax2/v1/store-vault-server/{}", path)

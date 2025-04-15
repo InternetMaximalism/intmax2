@@ -9,7 +9,9 @@ use intmax2_client_sdk::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
         },
-        local_backup_store_vault::LocalBackupStoreVaultClient,
+        local_backup_store_vault::{
+            local_store_vault::LocalStoreVaultClient, LocalBackupStoreVaultClient,
+        },
         private_zkp_server::{PrivateZKPServerClient, PrivateZKPServerConfig},
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
@@ -19,7 +21,7 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::api::{
     balance_prover::interface::BalanceProverClientInterface,
-    store_vault_server::interface::StoreVaultClientInterface,
+    store_vault_server::{interface::StoreVaultClientInterface, types::StoreVaultType},
 };
 
 use crate::env_var::EnvVar;
@@ -30,23 +32,38 @@ pub fn get_client() -> Result<Client, CliError> {
     let env = envy::from_env::<EnvVar>()?;
     let block_builder = Box::new(BlockBuilderClient::new());
 
-    let use_s3 = env.use_s3.unwrap_or(true);
-    let inner_store_vault_server: Box<dyn StoreVaultClientInterface> = if use_s3 {
-        Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
-    } else {
-        Box::new(StoreVaultServerClient::new(
-            &env.store_vault_server_base_url,
-        ))
-    };
-
-    let use_local_backup = env.use_local_backup.unwrap_or(false);
-    let store_vault_server = if use_local_backup {
-        Box::new(LocalBackupStoreVaultClient::new(
-            Arc::new(inner_store_vault_server),
-            PathBuf::from("data"),
-        ))
-    } else {
-        inner_store_vault_server
+    let root_path = PathBuf::from("data");
+    if env.store_vault_type != StoreVaultType::Local && env.store_vault_server_base_url.is_none() {
+        return Err(CliError::EnvError(
+            "store_vault_server_base_url is required".to_string(),
+        ));
+    }
+    let store_vault_server: Box<dyn StoreVaultClientInterface> = match env.store_vault_type {
+        StoreVaultType::Local => Box::new(LocalStoreVaultClient::new(root_path)),
+        StoreVaultType::LegacyRemote => Box::new(StoreVaultServerClient::new(
+            &env.store_vault_server_base_url.unwrap(),
+        )),
+        StoreVaultType::Remote => Box::new(S3StoreVaultClient::new(
+            &env.store_vault_server_base_url.unwrap(),
+        )),
+        StoreVaultType::RemoteWithBackup => {
+            let inner_store_vault_server: Box<dyn StoreVaultClientInterface> = Box::new(
+                S3StoreVaultClient::new(&env.store_vault_server_base_url.unwrap()),
+            );
+            Box::new(LocalBackupStoreVaultClient::new(
+                Arc::new(inner_store_vault_server),
+                root_path,
+            ))
+        }
+        StoreVaultType::LegacyRemoteWithBackup => {
+            let inner_store_vault_server: Box<dyn StoreVaultClientInterface> = Box::new(
+                StoreVaultServerClient::new(&env.store_vault_server_base_url.unwrap()),
+            );
+            Box::new(LocalBackupStoreVaultClient::new(
+                Arc::new(inner_store_vault_server),
+                root_path,
+            ))
+        }
     };
     let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
     let balance_prover: Box<dyn BalanceProverClientInterface> =
