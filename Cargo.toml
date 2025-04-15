@@ -23,7 +23,7 @@ version = "0.1.19"
 edition = "2021"
 
 [workspace.dependencies]
-intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp", branch = "cli" }
+intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp" }
 plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
 plonky2_bn254 = { git = "https://github.com/InternetMaximalism/plonky2_bn254" }
 plonky2_keccak = { git = "https://github.com/InternetMaximalism/plonky2_keccak" }
