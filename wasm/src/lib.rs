@@ -349,6 +349,22 @@ pub async fn quote_claim_fee(config: &Config, fee_token_index: u32) -> Result<Js
     Ok(fee_quote.into())
 }
 
+#[wasm_bindgen]
+pub async fn make_history_backup(
+    config: &Config,
+    private_key: &str,
+    from: u64,
+    chunk_size: u32,
+) -> Result<Vec<String>, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    let csvs = client
+        .make_history_backup(key, from, chunk_size as usize)
+        .await?;
+    Ok(csvs)
+}
+
 fn init_logger() {
     console_error_panic_hook::set_once();
     // wasm_logger::init(wasm_logger::Config::default());
