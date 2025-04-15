@@ -346,6 +346,12 @@ impl Client {
         key: KeySet,
         pending_info: PendingInfo,
     ) -> Result<(), SyncError> {
+        if pending_info.pending_deposit_digests.is_empty()
+            && pending_info.pending_transfer_digests.is_empty()
+        {
+            // early return if there is no pending info
+            return Ok(());
+        }
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         user_data.deposit_status.pending_digests = pending_info.pending_deposit_digests;
         user_data.transfer_status.pending_digests = pending_info.pending_transfer_digests;

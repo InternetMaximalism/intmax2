@@ -59,6 +59,12 @@ impl LocalStoreVaultClient {
         data: &[u8],
         meta: &MetaData,
     ) -> Result<(), LocalStoreVaultError> {
+        log::info!(
+            "local_save_snapshot: topic: {}, pubkey: {}, digest: {}",
+            topic,
+            key.pubkey,
+            meta.digest
+        );
         self.data_client
             .write(topic, key.pubkey, meta.digest, data)?;
         self.metadata_client
@@ -76,7 +82,7 @@ impl LocalStoreVaultClient {
             return Ok(None);
         }
         // get the latest metadata
-        let meta = meta.iter().max_by_key(|m| m.timestamp).unwrap();
+        let meta = meta.iter().max().unwrap();
         let digest = meta.digest;
         let data = self.data_client.read(topic, key.pubkey, digest)?;
         Ok(data)
@@ -88,6 +94,12 @@ impl LocalStoreVaultClient {
         entries_with_meta: &[(SaveDataEntry, MetaData)],
     ) -> Result<(), LocalStoreVaultError> {
         for (entry, meta) in entries_with_meta {
+            log::info!(
+                "local_save_data_batch: topic: {}, pubkey: {}, digest: {}",
+                entry.topic,
+                pubkey,
+                meta.digest
+            );
             self.data_client
                 .write(&entry.topic, pubkey, meta.digest, &entry.data)?;
             self.metadata_client

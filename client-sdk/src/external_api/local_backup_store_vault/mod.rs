@@ -45,6 +45,7 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
         prev_digest: Option<Bytes32>,
         data: &[u8],
     ) -> Result<(), ServerError> {
+        log::info!("save_snapshot");
         self.store_vault
             .save_snapshot(key, topic, prev_digest, data)
             .await?;
