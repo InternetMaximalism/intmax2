@@ -1,4 +1,8 @@
 use super::error::IOError;
+use csv::WriterBuilder;
+use intmax2_interfaces::{
+    api::store_vault_server::interface::SaveDataEntry, utils::digest::get_digest,
+};
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
@@ -30,4 +34,28 @@ impl DiffDataClient {
         }
         Ok(records)
     }
+}
+
+pub fn make_backup_csv(entries: &[SaveDataEntry]) -> Result<String, IOError> {
+    let mut records = Vec::new();
+    for entry in entries {
+        let record = DiffRecord {
+            topic: entry.topic.clone(),
+            pubkey: entry.pubkey.into(),
+            digest: get_digest(&entry.data),
+            timestamp: chrono::Utc::now().timestamp() as u64,
+            data: entry.data.clone(),
+        };
+        records.push(record);
+    }
+    let mut wtr = WriterBuilder::new().from_writer(vec![]);
+    for record in records {
+        wtr.serialize(record)
+            .map_err(|e| IOError::SerializeError(e.to_string()))?;
+    }
+    let csv_bytes = wtr
+        .into_inner()
+        .map_err(|e| IOError::WriteError(e.to_string()))?;
+    let csv_content = String::from_utf8(csv_bytes).unwrap();
+    Ok(csv_content)
 }

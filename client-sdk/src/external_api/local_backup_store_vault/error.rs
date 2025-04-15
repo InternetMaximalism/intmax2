@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum IOError {
     #[error("Failed to create directory: {0}")]
     CreateDirAllError(String),
@@ -10,9 +10,11 @@ pub enum IOError {
     DeleteError(String),
     #[error("Parse error: {0}")]
     ParseError(String),
+    #[error("Serialize error: {0}")]
+    SerializeError(String),
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum LocalStoreVaultError {
     #[error(transparent)]
     IOError(#[from] IOError),
