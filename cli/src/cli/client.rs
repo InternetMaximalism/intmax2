@@ -1,3 +1,5 @@
+use std::{path::PathBuf, sync::Arc};
+
 use intmax2_client_sdk::{
     client::{client::Client, config::ClientConfig},
     external_api::{
@@ -7,6 +9,7 @@ use intmax2_client_sdk::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
         },
+        local_backup_store_vault::LocalBackupStoreVaultClient,
         private_zkp_server::{PrivateZKPServerClient, PrivateZKPServerConfig},
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
@@ -28,7 +31,7 @@ pub fn get_client() -> Result<Client, CliError> {
     let block_builder = Box::new(BlockBuilderClient::new());
 
     let use_s3 = env.use_s3.unwrap_or(true);
-    let store_vault_server: Box<dyn StoreVaultClientInterface> = if use_s3 {
+    let inner_store_vault_server: Box<dyn StoreVaultClientInterface> = if use_s3 {
         Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
     } else {
         Box::new(StoreVaultServerClient::new(
@@ -36,6 +39,15 @@ pub fn get_client() -> Result<Client, CliError> {
         ))
     };
 
+    let use_local_backup = env.use_local_backup.unwrap_or(false);
+    let store_vault_server = if use_local_backup {
+        Box::new(LocalBackupStoreVaultClient::new(
+            Arc::new(inner_store_vault_server),
+            PathBuf::from("data"),
+        ))
+    } else {
+        inner_store_vault_server
+    };
     let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
     let balance_prover: Box<dyn BalanceProverClientInterface> =
         if env.use_private_zkp_server.unwrap_or(true) {

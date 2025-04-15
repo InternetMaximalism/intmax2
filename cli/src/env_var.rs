@@ -11,6 +11,7 @@ pub struct EnvVar {
     pub indexer_base_url: String,
     pub store_vault_server_base_url: String,
     pub use_s3: Option<bool>,
+    pub use_local_backup: Option<bool>,
     pub validity_prover_base_url: String,
     pub balance_prover_base_url: String,
     pub use_private_zkp_server: Option<bool>,

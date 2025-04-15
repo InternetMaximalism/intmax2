@@ -218,10 +218,7 @@ impl LocalStoreVaultClient {
 
 impl From<LocalStoreVaultError> for ServerError {
     fn from(error: LocalStoreVaultError) -> Self {
-        ServerError::InternalError(format!(
-            "LocalStoreVaultClient error: {}",
-            error.to_string()
-        ))
+        ServerError::InternalError(format!("LocalStoreVaultClient error: {}", error))
     }
 }
 
