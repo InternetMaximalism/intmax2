@@ -558,7 +558,6 @@ impl Client {
 
         // Save payment memo after posting signature because it's not critical data,
         // and we should reduce the time before posting the signature.
-
         let mut misc_entries = Vec::new();
         for memo_entry in memo.payment_memos.iter() {
             let (position, transfer_data) = transfer_data_vec
