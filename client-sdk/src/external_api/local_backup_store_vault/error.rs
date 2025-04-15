@@ -22,4 +22,7 @@ pub enum LocalStoreVaultError {
 
     #[error("Data inconsistency error: {0}")]
     DataInconsistencyError(String),
+
+    #[error("Lock error: {0}")]
+    LockError(String),
 }

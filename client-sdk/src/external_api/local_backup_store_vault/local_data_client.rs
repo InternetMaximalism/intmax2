@@ -54,6 +54,10 @@ impl LocalDataClient {
             fs::create_dir_all(&dir_path).map_err(|e| IOError::CreateDirAllError(e.to_string()))?;
         }
         let file_path = self.file_path(topic, pubkey, digest);
+        if file_path.exists() {
+            // If the file already exists, we do not overwrite it.
+            return Ok(());
+        }
         fs::write(file_path, data).map_err(|e| IOError::WriteError(e.to_string()))?;
         Ok(())
     }

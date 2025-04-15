@@ -1,6 +1,7 @@
 use csv;
 use intmax2_interfaces::data::meta_data::MetaData;
 use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait};
+use itertools::Itertools;
 use std::path::PathBuf;
 
 use super::error::IOError;
@@ -49,11 +50,13 @@ impl MetaDataClient {
 
     pub fn append(&self, topic: &str, pubkey: U256, records: &[MetaData]) -> Result<(), IOError> {
         let read_records = self.read(topic, pubkey)?;
-        let all_records = records
+        let mut all_records = records
             .iter()
             .chain(read_records.iter())
             .cloned()
+            .dedup() // deduplicate records
             .collect::<Vec<_>>();
+        all_records.sort();
         self.write(topic, pubkey, &all_records)?;
         Ok(())
     }

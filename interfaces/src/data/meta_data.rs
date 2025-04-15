@@ -12,10 +12,16 @@ pub struct MetaData {
 
 impl PartialOrd for MetaData {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MetaData {
+    fn cmp(&self, other: &Self) -> Ordering {
         if self.timestamp == other.timestamp {
-            Some(self.digest.to_hex().cmp(&other.digest.to_hex()))
+            self.digest.to_hex().cmp(&other.digest.to_hex())
         } else {
-            Some(self.timestamp.cmp(&other.timestamp))
+            self.timestamp.cmp(&other.timestamp)
         }
     }
 }

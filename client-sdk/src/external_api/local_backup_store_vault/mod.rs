@@ -9,7 +9,8 @@ use intmax2_interfaces::{
             types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
         },
     },
-    utils::signature::Auth,
+    data::meta_data::MetaData,
+    utils::{digest::get_digest, signature::Auth},
 };
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use local_store_vault::LocalStoreVaultClient;
@@ -44,11 +45,36 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
         prev_digest: Option<Bytes32>,
         data: &[u8],
     ) -> Result<(), ServerError> {
-        todo!()
+        self.store_vault
+            .save_snapshot(key, topic, prev_digest, data)
+            .await?;
+        let meta = MetaData {
+            timestamp: chrono::Utc::now().timestamp() as u64,
+            digest: get_digest(data),
+        };
+        self.local_store_vault
+            .local_save_snapshot(key, topic, data, &meta)?;
+        Ok(())
     }
 
     async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
-        todo!()
+        let data = self.store_vault.get_snapshot(key, topic).await?;
+        if let Some(data) = &data {
+            let digest = get_digest(data);
+            let local_prev_digest = self
+                .local_store_vault
+                .local_get_prev_snapshot_digest(key, topic)?;
+            if local_prev_digest != Some(digest) {
+                // save the data to local store vault
+                let meta = MetaData {
+                    timestamp: chrono::Utc::now().timestamp() as u64,
+                    digest,
+                };
+                self.local_store_vault
+                    .local_save_snapshot(key, topic, data, &meta)?;
+            }
+        }
+        Ok(data)
     }
 
     async fn save_data_batch(
@@ -56,7 +82,18 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
         key: KeySet,
         entries: &[SaveDataEntry],
     ) -> Result<Vec<Bytes32>, ServerError> {
-        todo!()
+        let digests = self.store_vault.save_data_batch(key, entries).await?;
+        let mut entries_with_meta = Vec::new();
+        for (digest, entries) in digests.iter().zip(entries.iter()) {
+            let meta = MetaData {
+                timestamp: chrono::Utc::now().timestamp() as u64,
+                digest: *digest,
+            };
+            entries_with_meta.push((entries.clone(), meta));
+        }
+        self.local_store_vault
+            .local_save_data_batch(key.pubkey, &entries_with_meta)?;
+        Ok(digests)
     }
 
     async fn get_data_batch(
@@ -65,7 +102,24 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
         topic: &str,
         digests: &[Bytes32],
     ) -> Result<Vec<DataWithMetaData>, ServerError> {
-        todo!()
+        let data_with_meta = self.store_vault.get_data_batch(key, topic, digests).await?;
+        let mut entries_with_meta = Vec::new();
+        for DataWithMetaData { meta, data } in &data_with_meta {
+            entries_with_meta.push((
+                SaveDataEntry {
+                    topic: topic.to_string(),
+                    pubkey: key.pubkey,
+                    data: data.clone(),
+                },
+                MetaData {
+                    timestamp: meta.timestamp,
+                    digest: meta.digest,
+                },
+            ));
+        }
+        self.local_store_vault
+            .local_save_data_batch(key.pubkey, &entries_with_meta)?;
+        Ok(data_with_meta)
     }
 
     async fn get_data_sequence(
@@ -74,7 +128,27 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        todo!()
+        let (data_with_meta, next_cursor) = self
+            .store_vault
+            .get_data_sequence(key, topic, cursor)
+            .await?;
+        let mut entries_with_meta = Vec::new();
+        for DataWithMetaData { meta, data } in &data_with_meta {
+            entries_with_meta.push((
+                SaveDataEntry {
+                    topic: topic.to_string(),
+                    pubkey: key.pubkey,
+                    data: data.clone(),
+                },
+                MetaData {
+                    timestamp: meta.timestamp,
+                    digest: meta.digest,
+                },
+            ));
+        }
+        self.local_store_vault
+            .local_save_data_batch(key.pubkey, &entries_with_meta)?;
+        Ok((data_with_meta, next_cursor))
     }
 
     async fn get_data_sequence_with_auth(
@@ -83,6 +157,26 @@ impl StoreVaultClientInterface for LocalBackupStoreVaultClient {
         cursor: &MetaDataCursor,
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        todo!()
+        let (data_with_meta, next_cursor) = self
+            .store_vault
+            .get_data_sequence_with_auth(topic, cursor, auth)
+            .await?;
+        let mut entries_with_meta = Vec::new();
+        for DataWithMetaData { meta, data } in &data_with_meta {
+            entries_with_meta.push((
+                SaveDataEntry {
+                    topic: topic.to_string(),
+                    pubkey: auth.pubkey,
+                    data: data.clone(),
+                },
+                MetaData {
+                    timestamp: meta.timestamp,
+                    digest: meta.digest,
+                },
+            ));
+        }
+        self.local_store_vault
+            .local_save_data_batch(auth.pubkey, &entries_with_meta)?;
+        Ok((data_with_meta, next_cursor))
     }
 }

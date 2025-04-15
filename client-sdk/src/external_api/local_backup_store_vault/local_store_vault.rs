@@ -38,7 +38,21 @@ impl LocalStoreVaultClient {
 }
 
 impl LocalStoreVaultClient {
-    pub async fn local_save_snapshot(
+    pub fn local_get_prev_snapshot_digest(
+        &self,
+        key: KeySet,
+        topic: &str,
+    ) -> Result<Option<Bytes32>, LocalStoreVaultError> {
+        let meta = self.metadata_client.read(topic, key.pubkey)?;
+        if meta.is_empty() {
+            return Ok(None);
+        }
+        // get the latest metadata
+        let meta = meta.iter().max_by_key(|m| m.timestamp).unwrap();
+        Ok(Some(meta.digest))
+    }
+
+    pub fn local_save_snapshot(
         &self,
         key: KeySet,
         topic: &str,
@@ -52,7 +66,7 @@ impl LocalStoreVaultClient {
         Ok(())
     }
 
-    pub async fn local_get_snapshot(
+    pub fn local_get_snapshot(
         &self,
         key: KeySet,
         topic: &str,
@@ -68,21 +82,21 @@ impl LocalStoreVaultClient {
         Ok(data)
     }
 
-    pub async fn local_save_data_batch(
+    pub fn local_save_data_batch(
         &self,
-        key: KeySet,
+        pubkey: U256,
         entries_with_meta: &[(SaveDataEntry, MetaData)],
     ) -> Result<(), LocalStoreVaultError> {
         for (entry, meta) in entries_with_meta {
             self.data_client
-                .write(&entry.topic, key.pubkey, meta.digest, &entry.data)?;
+                .write(&entry.topic, pubkey, meta.digest, &entry.data)?;
             self.metadata_client
-                .append(&entry.topic, key.pubkey, &[meta.clone()])?;
+                .append(&entry.topic, pubkey, &[meta.clone()])?;
         }
         Ok(())
     }
 
-    pub async fn local_get_data_batch(
+    pub fn local_get_data_batch(
         &self,
         key: KeySet,
         topic: &str,
@@ -115,7 +129,7 @@ impl LocalStoreVaultClient {
         Ok(data_with_meta)
     }
 
-    pub async fn local_get_data_sequence(
+    pub fn local_get_data_sequence(
         &self,
         pubkey: U256,
         topic: &str,
@@ -217,19 +231,27 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         &self,
         key: KeySet,
         topic: &str,
-        _prev_digest: Option<Bytes32>,
+        prev_digest: Option<Bytes32>,
         data: &[u8],
     ) -> Result<(), ServerError> {
+        let stored_prev_digest = self.local_get_prev_snapshot_digest(key, topic)?;
+        if stored_prev_digest != prev_digest {
+            return Err(LocalStoreVaultError::LockError(format!(
+                "prev_digest mismatch with stored digest: {:?}",
+                stored_prev_digest
+            ))
+            .into());
+        }
         let meta = MetaData {
-            timestamp: 0,
-            digest: Bytes32::default(),
+            timestamp: chrono::Utc::now().timestamp() as u64,
+            digest: get_digest(data),
         };
-        self.local_save_snapshot(key, topic, data, &meta).await?;
+        self.local_save_snapshot(key, topic, data, &meta)?;
         Ok(())
     }
 
     async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
-        let data = self.local_get_snapshot(key, topic).await?;
+        let data = self.local_get_snapshot(key, topic)?;
         Ok(data)
     }
 
@@ -246,7 +268,7 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
             };
             entries_with_meta.push((entry.clone(), meta));
         }
-        self.local_save_data_batch(key, &entries_with_meta).await?;
+        self.local_save_data_batch(key.pubkey, &entries_with_meta)?;
         Ok(entries_with_meta
             .iter()
             .map(|(_, meta)| meta.digest)
@@ -259,7 +281,7 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         topic: &str,
         digests: &[Bytes32],
     ) -> Result<Vec<DataWithMetaData>, ServerError> {
-        let data_with_meta = self.local_get_data_batch(key, topic, digests).await?;
+        let data_with_meta = self.local_get_data_batch(key, topic, digests)?;
         Ok(data_with_meta)
     }
 
@@ -269,9 +291,8 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        let (data_with_meta, cursor_response) = self
-            .local_get_data_sequence(key.pubkey, topic, cursor)
-            .await?;
+        let (data_with_meta, cursor_response) =
+            self.local_get_data_sequence(key.pubkey, topic, cursor)?;
         Ok((data_with_meta, cursor_response))
     }
 
@@ -281,9 +302,8 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         cursor: &MetaDataCursor,
         auth: &Auth,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        let (data_with_meta, cursor_response) = self
-            .local_get_data_sequence(auth.pubkey, topic, cursor)
-            .await?;
+        let (data_with_meta, cursor_response) =
+            self.local_get_data_sequence(auth.pubkey, topic, cursor)?;
         Ok((data_with_meta, cursor_response))
     }
 }
