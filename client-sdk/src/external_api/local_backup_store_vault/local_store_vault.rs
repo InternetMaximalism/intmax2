@@ -212,6 +212,11 @@ impl LocalStoreVaultClient {
 
     pub fn incorporate_diff(&self, diff_file_path: &Path) -> Result<(), LocalStoreVaultError> {
         let records = self.diff_data_client.read(diff_file_path)?;
+        log::info!(
+            "Incorporating diff file: {} with {} records",
+            diff_file_path.display(),
+            records.len()
+        );
         for record in records {
             self.data_client.write(
                 &record.topic,
