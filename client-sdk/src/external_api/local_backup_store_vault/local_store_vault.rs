@@ -2,12 +2,17 @@ use super::{
     diff_data_client::DiffDataClient, error::LocalStoreVaultError,
     local_data_client::LocalDataClient, metadata_client::MetaDataClient,
 };
+use async_trait::async_trait;
 use intmax2_interfaces::{
-    api::store_vault_server::{
-        interface::SaveDataEntry,
-        types::{CursorOrder, DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
+    api::{
+        error::ServerError,
+        store_vault_server::{
+            interface::{SaveDataEntry, StoreVaultClientInterface},
+            types::{CursorOrder, DataWithMetaData, MetaDataCursor, MetaDataCursorResponse},
+        },
     },
     data::meta_data::MetaData,
+    utils::{digest::get_digest, signature::Auth},
 };
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
@@ -33,7 +38,7 @@ impl LocalStoreVaultClient {
 }
 
 impl LocalStoreVaultClient {
-    pub async fn save_snapshot(
+    pub async fn local_save_snapshot(
         &self,
         key: KeySet,
         topic: &str,
@@ -47,7 +52,7 @@ impl LocalStoreVaultClient {
         Ok(())
     }
 
-    pub async fn get_snapshot(
+    pub async fn local_get_snapshot(
         &self,
         key: KeySet,
         topic: &str,
@@ -63,7 +68,7 @@ impl LocalStoreVaultClient {
         Ok(data)
     }
 
-    pub async fn save_data_batch(
+    pub async fn local_save_data_batch(
         &self,
         key: KeySet,
         entries_with_meta: &[(SaveDataEntry, MetaData)],
@@ -77,7 +82,7 @@ impl LocalStoreVaultClient {
         Ok(())
     }
 
-    pub async fn get_data_batch(
+    pub async fn local_get_data_batch(
         &self,
         key: KeySet,
         topic: &str,
@@ -110,14 +115,14 @@ impl LocalStoreVaultClient {
         Ok(data_with_meta)
     }
 
-    pub async fn get_data_sequence(
+    pub async fn local_get_data_sequence(
         &self,
-        key: KeySet,
+        pubkey: U256,
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), LocalStoreVaultError> {
         // get metadata list
-        let meta = self.metadata_client.read(topic, key.pubkey)?;
+        let meta = self.metadata_client.read(topic, pubkey)?;
         if meta.is_empty() {
             return Ok((Vec::new(), MetaDataCursorResponse::default()));
         }
@@ -157,11 +162,11 @@ impl LocalStoreVaultClient {
         for meta in &metadata {
             let data = self
                 .data_client
-                .read(topic, key.pubkey, meta.digest)?
+                .read(topic, pubkey, meta.digest)?
                 .ok_or_else(|| {
                     LocalStoreVaultError::DataNotFoundError(format!(
                         "Data not found for topic: {}, pubkey: {}, digest: {}",
-                        topic, key.pubkey, meta.digest
+                        topic, pubkey, meta.digest
                     ))
                 })?;
             data_with_meta.push(DataWithMetaData {
@@ -194,5 +199,91 @@ impl LocalStoreVaultClient {
         // metadata is also deleted because the directory is the same
         self.data_client.delete_all(topic, pubkey)?;
         Ok(())
+    }
+}
+
+impl From<LocalStoreVaultError> for ServerError {
+    fn from(error: LocalStoreVaultError) -> Self {
+        ServerError::InternalError(format!(
+            "LocalStoreVaultClient error: {}",
+            error.to_string()
+        ))
+    }
+}
+
+#[async_trait(?Send)]
+impl StoreVaultClientInterface for LocalStoreVaultClient {
+    async fn save_snapshot(
+        &self,
+        key: KeySet,
+        topic: &str,
+        _prev_digest: Option<Bytes32>,
+        data: &[u8],
+    ) -> Result<(), ServerError> {
+        let meta = MetaData {
+            timestamp: 0,
+            digest: Bytes32::default(),
+        };
+        self.local_save_snapshot(key, topic, data, &meta).await?;
+        Ok(())
+    }
+
+    async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
+        let data = self.local_get_snapshot(key, topic).await?;
+        Ok(data)
+    }
+
+    async fn save_data_batch(
+        &self,
+        key: KeySet,
+        entries: &[SaveDataEntry],
+    ) -> Result<Vec<Bytes32>, ServerError> {
+        let mut entries_with_meta = Vec::new();
+        for entry in entries {
+            let meta = MetaData {
+                timestamp: chrono::Utc::now().timestamp() as u64,
+                digest: get_digest(entry.data.as_slice()),
+            };
+            entries_with_meta.push((entry.clone(), meta));
+        }
+        self.local_save_data_batch(key, &entries_with_meta).await?;
+        Ok(entries_with_meta
+            .iter()
+            .map(|(_, meta)| meta.digest)
+            .collect())
+    }
+
+    async fn get_data_batch(
+        &self,
+        key: KeySet,
+        topic: &str,
+        digests: &[Bytes32],
+    ) -> Result<Vec<DataWithMetaData>, ServerError> {
+        let data_with_meta = self.local_get_data_batch(key, topic, digests).await?;
+        Ok(data_with_meta)
+    }
+
+    async fn get_data_sequence(
+        &self,
+        key: KeySet,
+        topic: &str,
+        cursor: &MetaDataCursor,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        let (data_with_meta, cursor_response) = self
+            .local_get_data_sequence(key.pubkey, topic, cursor)
+            .await?;
+        Ok((data_with_meta, cursor_response))
+    }
+
+    async fn get_data_sequence_with_auth(
+        &self,
+        topic: &str,
+        cursor: &MetaDataCursor,
+        auth: &Auth,
+    ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        let (data_with_meta, cursor_response) = self
+            .local_get_data_sequence(auth.pubkey, topic, cursor)
+            .await?;
+        Ok((data_with_meta, cursor_response))
     }
 }
