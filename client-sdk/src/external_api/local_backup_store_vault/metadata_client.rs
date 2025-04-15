@@ -58,7 +58,7 @@ impl MetaDataClient {
         Ok(())
     }
 
-    pub fn write(&self, topic: &str, pubkey: U256, records: &[MetaData]) -> Result<(), IOError> {
+    fn write(&self, topic: &str, pubkey: U256, records: &[MetaData]) -> Result<(), IOError> {
         let dir_path = self.dir_path(topic, pubkey);
         if !dir_path.exists() {
             std::fs::create_dir_all(&dir_path)
@@ -97,11 +97,5 @@ mod tests {
         // Write metadata
         let meta = MetaData { digest, timestamp };
         client.append(topic, pubkey, &[meta]).unwrap();
-
-        // Read metadata
-        // let records = client.read(topic, pubkey).unwrap();
-        // assert_eq!(records.len(), 1);
-        // assert_eq!(records[0].digest, digest);
-        // assert_eq!(records[0].timestamp, timestamp);
     }
 }
