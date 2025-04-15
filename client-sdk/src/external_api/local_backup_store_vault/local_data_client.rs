@@ -57,6 +57,14 @@ impl LocalDataClient {
         fs::write(file_path, data).map_err(|e| IOError::WriteError(e.to_string()))?;
         Ok(())
     }
+
+    pub fn delete_all(&self, topic: &str, pubkey: U256) -> Result<(), IOError> {
+        let dir_path = self.dir_path(topic, pubkey);
+        if dir_path.exists() {
+            fs::remove_dir_all(&dir_path).map_err(|e| IOError::DeleteError(e.to_string()))?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

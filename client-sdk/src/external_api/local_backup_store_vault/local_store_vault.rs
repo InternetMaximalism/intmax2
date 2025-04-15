@@ -9,7 +9,10 @@ use intmax2_interfaces::{
     },
     data::meta_data::MetaData,
 };
-use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
+use intmax2_zkp::{
+    common::signature_content::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u256::U256},
+};
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -184,6 +187,12 @@ impl LocalStoreVaultClient {
             self.data_client
                 .write(&topic, pubkey.into(), digest, &data)?;
         }
+        Ok(())
+    }
+
+    pub fn delete_all(&self, topic: &str, pubkey: U256) -> Result<(), LocalStoreVaultError> {
+        // metadata is also deleted because the directory is the same
+        self.data_client.delete_all(topic, pubkey)?;
         Ok(())
     }
 }

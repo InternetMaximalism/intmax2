@@ -6,6 +6,8 @@ pub enum IOError {
     ReadError(String),
     #[error("Write error: {0}")]
     WriteError(String),
+    #[error("Delete error: {0}")]
+    DeleteError(String),
     #[error("Parse error: {0}")]
     ParseError(String),
 }
