@@ -3,7 +3,7 @@ use colored::Colorize as _;
 use intmax2_cli::{
     args::{Args, Commands},
     cli::{
-        backup::incorporate_backup,
+        backup::{incorporate_backup, make_history_backup},
         claim::claim_withdrawals,
         deposit::deposit,
         error::CliError,
@@ -204,6 +204,16 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         Commands::Resync { private_key, deep } => {
             let key = privkey_to_keyset(private_key);
             resync(key, deep).await?;
+        }
+        Commands::MakeBackup {
+            private_key,
+            dir,
+            from,
+        } => {
+            let key = privkey_to_keyset(private_key);
+            let from = from.unwrap_or_default();
+            let dir = dir.unwrap_or_default();
+            make_history_backup(key, &dir, from).await?;
         }
         Commands::IncorporateBackup { path } => {
             incorporate_backup(&path)?;

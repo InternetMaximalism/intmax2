@@ -123,6 +123,14 @@ pub enum Commands {
         #[clap(long, default_value = "false")]
         deep: bool,
     },
+    MakeBackup {
+        #[clap(long)]
+        private_key: H256,
+        #[clap(long)]
+        dir: Option<PathBuf>,
+        #[clap(long)]
+        from: Option<u64>,
+    },
     IncorporateBackup {
         #[clap(long)]
         path: PathBuf,

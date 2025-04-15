@@ -29,6 +29,9 @@ pub enum CliError {
     #[error("CSV deserialize error: {0}")]
     CSVDeserializeError(#[from] csv::Error),
 
+    #[error("Backup error: {0}")]
+    BackupError(String),
+
     #[error("Too many transfer: {0}")]
     TooManyTransfer(usize),
 
