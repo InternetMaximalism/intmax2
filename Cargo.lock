@@ -3873,6 +3873,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "serde_urlencoded",
+ "serde_with",
  "sha2",
  "sha3",
  "simplelog",

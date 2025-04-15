@@ -1,14 +1,17 @@
 use super::error::IOError;
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use serde::{Deserialize, Serialize};
+use serde_with::{base64::Base64, serde_as};
 use std::path::PathBuf;
 
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DiffRecord {
     pub topic: String,
     pub pubkey: Bytes32,
     pub digest: Bytes32,
     pub timestamp: u64,
+    #[serde_as(as = "Base64")]
     pub data: Vec<u8>,
 }
 

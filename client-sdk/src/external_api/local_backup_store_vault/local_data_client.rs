@@ -1,5 +1,6 @@
 use std::{fs, path::PathBuf};
 
+use base64::{prelude::BASE64_STANDARD, Engine};
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait};
 
 use super::error::IOError;
@@ -24,7 +25,7 @@ impl LocalDataClient {
     fn file_path(&self, topic: &str, pubkey: U256, digest: Bytes32) -> PathBuf {
         let mut file_path = self.dir_path(topic, pubkey);
         file_path.push(digest.to_hex());
-        file_path.set_extension("dat");
+        file_path.set_extension("txt");
         file_path
     }
 
@@ -38,7 +39,11 @@ impl LocalDataClient {
         if !file_path.exists() {
             return Ok(None);
         }
-        let data = fs::read(file_path).map_err(|e| IOError::ReadError(e.to_string()))?;
+        let data_base64 =
+            fs::read_to_string(file_path).map_err(|e| IOError::ReadError(e.to_string()))?;
+        let data = BASE64_STANDARD
+            .decode(&data_base64)
+            .map_err(|e| IOError::ReadError(e.to_string()))?;
         Ok(Some(data))
     }
 
@@ -58,7 +63,8 @@ impl LocalDataClient {
             // If the file already exists, we do not overwrite it.
             return Ok(());
         }
-        fs::write(file_path, data).map_err(|e| IOError::WriteError(e.to_string()))?;
+        let data_base64 = BASE64_STANDARD.encode(data);
+        fs::write(file_path, data_base64).map_err(|e| IOError::WriteError(e.to_string()))?;
         Ok(())
     }
 
