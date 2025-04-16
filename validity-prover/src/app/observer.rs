@@ -1,14 +1,14 @@
 use intmax2_client_sdk::external_api::{
     contract::{
-        liquidity_contract::{Deposited, LiquidityContract},
+        liquidity_contract::LiquidityContract,
         rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
     },
     utils::time::sleep_for,
 };
-use intmax2_interfaces::api::validity_prover::interface::DepositInfo;
+use intmax2_interfaces::api::validity_prover::interface::{DepositInfo, Deposited};
 use intmax2_zkp::{
     common::witness::full_block::FullBlock,
-    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
+    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
     utils::leafable::Leafable,
 };
 
@@ -265,6 +265,51 @@ impl Observer {
             }
             None => Ok(None),
         }
+    }
+
+    pub async fn get_deposited_event(
+        &self,
+        pubkey_salt_hash: Bytes32,
+    ) -> Result<Option<Deposited>, ObserverError> {
+        let record = sqlx::query!(
+            "SELECT deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash
+             FROM deposited_events 
+             WHERE pubkey_salt_hash = $1",
+            pubkey_salt_hash.to_hex()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        match record {
+            Some(r) => {
+                let tx_hash = Bytes32::from_hex(&r.tx_hash)?;
+                let depositor = r.depositor.parse()?;
+                let amount = U256::from_hex(&r.amount)?;
+                let deposited_at = r.deposited_at as u64;
+                Ok(Some(Deposited {
+                    deposit_id: r.deposit_id as u64,
+                    depositor,
+                    pubkey_salt_hash,
+                    token_index: r.token_index as u32,
+                    amount,
+                    is_eligible: r.is_eligible,
+                    deposited_at,
+                    tx_hash,
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub async fn get_deposited_event_batch(
+        &self,
+        pubkey_salt_hashes: Vec<Bytes32>,
+    ) -> Result<Vec<Option<Deposited>>, ObserverError> {
+        let mut result = Vec::new();
+        for pubkey_salt_hash in pubkey_salt_hashes {
+            let event = self.get_deposited_event(pubkey_salt_hash).await?;
+            result.push(event);
+        }
+        Ok(result)
     }
 
     /// get the latest value of the deposit index included in the block

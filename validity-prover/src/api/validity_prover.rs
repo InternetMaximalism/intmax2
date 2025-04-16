@@ -13,9 +13,10 @@ use intmax2_interfaces::api::validity_prover::{
         GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
         GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
         GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
-        GetDepositMerkleProofResponse, GetLatestIncludedDepositIndexResponse,
-        GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-        GetValidityWitnessQuery, GetValidityWitnessResponse,
+        GetDepositMerkleProofResponse, GetDepositedEventBatchRequest,
+        GetDepositedEventBatchResponse, GetDepositedEventQuery, GetDepositedEventResponse,
+        GetLatestIncludedDepositIndexResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
+        GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
     },
 };
 use intmax2_zkp::circuits::validity::validity_pis::ValidityPublicInputs;
@@ -162,6 +163,35 @@ pub async fn get_deposit_info_batch(
     Ok(Json(response))
 }
 
+#[get("/get-deposited-event")]
+pub async fn get_deposited_event(
+    state: Data<State>,
+    query: QsQuery<GetDepositedEventQuery>,
+) -> Result<Json<GetDepositedEventResponse>, Error> {
+    let query = query.into_inner();
+    let response = state
+        .get_deposited_event(query)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(response))
+}
+
+#[post("/get-deposited-event-batch")]
+pub async fn get_deposited_event_batch(
+    state: Data<State>,
+    request: Json<GetDepositedEventBatchRequest>,
+) -> Result<Json<GetDepositedEventBatchResponse>, Error> {
+    let request = request.into_inner();
+    if request.pubkey_salt_hashes.len() > MAX_BATCH_SIZE {
+        return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
+    }
+    let response = state
+        .get_deposited_event_batch(&request)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(response))
+}
+
 #[get("/get-block-number-by-tx-tree-root")]
 pub async fn get_block_number_by_tx_tree_root(
     state: Data<State>,
@@ -230,6 +260,8 @@ pub fn validity_prover_scope() -> actix_web::Scope {
         .service(get_validity_pis)
         .service(get_deposit_info)
         .service(get_deposit_info_batch)
+        .service(get_deposited_event)
+        .service(get_deposited_event_batch)
         .service(get_block_number_by_tx_tree_root)
         .service(get_block_number_by_tx_tree_root_batch)
         .service(get_block_merkle_proof)

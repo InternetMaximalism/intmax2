@@ -75,7 +75,7 @@ pub struct ValidityProver {
     config: Config,
     manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
     validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
-    observer: Observer,
+    pub observer: Observer,
     account_tree: SqlIndexedMerkleTree,
     block_tree: SqlIncrementalMerkleTree<Bytes32>,
     deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
