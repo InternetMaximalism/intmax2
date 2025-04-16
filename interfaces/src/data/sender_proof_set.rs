@@ -29,7 +29,8 @@ impl Validation for SenderProofSet {
         let prev_balance_proof = self.prev_balance_proof.decompress()?;
         let balance_vd = CircuitVerifiers::load().get_balance_vd();
         balance_vd.verify(prev_balance_proof.clone())?;
-        let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs);
+        let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs)
+            .map_err(|e| anyhow::anyhow!("Failed to convert spent proof public inputs: {}", e))?;
         let prev_balance_pis = BalancePublicInputs::from_pis(&prev_balance_proof.public_inputs)?;
         // Validation of public inputs
         if !spent_pis.is_valid {

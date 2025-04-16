@@ -82,7 +82,9 @@ pub async fn validate_receive(
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
-    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs);
+    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs).map_err(|e| {
+        ReceiveValidationError::ValidationError(format!("Failed to decompress spent proof: {}", e))
+    })?;
     if spent_pis.tx != transfer_data.tx {
         return Err(ReceiveValidationError::GeneralError(
             "Tx in spent proof is not the same as transfer witness tx".to_string(),

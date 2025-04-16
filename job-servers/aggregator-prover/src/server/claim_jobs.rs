@@ -40,7 +40,7 @@ pub async fn generate_claim_proof_job(
         .conditional_set(ExistenceCheck::NX)
         .get(true)
         .with_expiration(SetExpiry::EX(config::get("proof_expiration")));
-    let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec());
+    let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec())?;
     let proof_content = ClaimProofContent {
         proof: claim_proof,
         claim,

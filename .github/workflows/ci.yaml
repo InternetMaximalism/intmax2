@@ -118,7 +118,7 @@ jobs:
           cp tests/.env.example tests/.env
       - name: Install sqlx-cli and setup databases
         run: |
-          cargo install sqlx-cli
+          cargo install sqlx-cli --version=0.8.3
           cd store-vault-server && sqlx database setup && cd -
           cd validity-prover && sqlx database setup && cd -
           cd withdrawal-server && sqlx database setup && cd -
