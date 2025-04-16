@@ -34,7 +34,7 @@ chrono.workspace = true
 log = { version = "0.4.14", default-features = false }                                                  # log 0.4.26 is required for plonky2
 plonky2_u32 = { git = "https://github.com/InternetMaximalism/plonky2-u32.git", branch = "intmax2-dev" }
 aes-gcm = "0.10.3"
-rsa = "0.9.7"
+rsa = "0.9.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
