@@ -169,7 +169,8 @@ impl WithdrawalServer {
             .map_err(|_| WithdrawalServerError::SingleWithdrawalVerificationError)?;
 
         let withdrawal =
-            Withdrawal::from_u64_slice(&single_withdrawal_proof.public_inputs.to_u64_vec());
+            Withdrawal::from_u64_slice(&single_withdrawal_proof.public_inputs.to_u64_vec())
+                .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
 
         // validate fee
         let direct_withdrawal_tokens = self
@@ -259,7 +260,8 @@ impl WithdrawalServer {
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
     ) -> Result<(), WithdrawalServerError> {
-        let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec());
+        let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec())
+            .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
         let nullifier = claim.nullifier;
         let nullifier_str = nullifier.to_hex();
 

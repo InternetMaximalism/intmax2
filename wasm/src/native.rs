@@ -7,18 +7,31 @@ use crate::{
         cursor::JsMetaDataCursor,
         data::{JsDepositData, JsTransferData, JsTxData},
         encrypted_data::JsEncryptedData,
+        multisig::{
+            JsMultiEciesStep1Response, JsMultiEciesStep2Response, JsMultiEciesStep3Response,
+            JsMultisigStep1Response, JsMultisigStep2Response, JsMultisigStep3Response,
+        },
     },
     utils::{parse_h256_as_u256, str_privkey_to_keyset},
 };
-use intmax2_client_sdk::external_api::{
-    s3_store_vault::generate_auth_for_get_data_sequence_s3,
-    store_vault_server::generate_auth_for_get_data_sequence,
+use intmax2_client_sdk::{
+    client::multisig,
+    external_api::{
+        s3_store_vault::generate_auth_for_get_data_sequence_s3,
+        store_vault_server::generate_auth_for_get_data_sequence,
+    },
 };
 use intmax2_interfaces::{
     api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{
-        data_type::DataType, deposit_data::DepositData, encryption::BlsEncryption as _,
-        transfer_data::TransferData, tx_data::TxData,
+        data_type::DataType,
+        deposit_data::DepositData,
+        encryption::{
+            bls::v1::{algorithm::encrypt_bls, multisig as multisig_encryption},
+            BlsEncryption as _,
+        },
+        transfer_data::TransferData,
+        tx_data::TxData,
     },
     utils::signature::Auth,
 };
@@ -159,4 +172,125 @@ pub async fn get_account_info(config: &Config, public_key: &str) -> Result<JsAcc
     let client = get_client(config);
     let account_info = client.validity_prover.get_account_info(pubkey).await?;
     Ok(account_info.into())
+}
+
+#[wasm_bindgen]
+pub fn calc_simple_aggregated_pubkey(signers: Vec<String>) -> Result<String, JsError> {
+    init_logger();
+    let signers: Vec<U256> = signers
+        .iter()
+        .map(|s| U256::from_hex(s).map_err(|_| JsError::new("Failed to parse public key")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let aggregated_pubkey = multisig::simple_aggregated_pubkey(&signers);
+
+    Ok(aggregated_pubkey
+        .map_err(|_| JsError::new("Failed to calculate aggregated public key"))?
+        .to_hex())
+}
+
+#[wasm_bindgen]
+pub fn encrypt_message(pubkey: &str, data: &[u8]) -> Vec<u8> {
+    init_logger();
+    let pubkey = U256::from_hex(pubkey)
+        .map_err(|_| JsError::new("Failed to parse public key"))
+        .unwrap();
+
+    encrypt_bls(pubkey, data)
+}
+
+#[wasm_bindgen]
+pub fn decrypt_bls_interaction_step1(
+    client_key: &str,
+    encrypted_data: &[u8],
+) -> Result<JsMultiEciesStep1Response, JsError> {
+    init_logger();
+    let client_key = str_privkey_to_keyset(client_key)?;
+    let response_step1 =
+        multisig_encryption::decrypt_bls_interaction_step1(client_key, encrypted_data);
+
+    Ok(JsMultiEciesStep1Response {
+        encrypted_data: response_step1.encrypted_data,
+        client_pubkey: response_step1.client_pubkey.to_hex(),
+    })
+}
+
+#[wasm_bindgen]
+pub fn decrypt_bls_interaction_step2(
+    server_key: &str,
+    step1_response: &JsMultiEciesStep1Response,
+) -> Result<JsMultiEciesStep2Response, JsError> {
+    init_logger();
+    let server_key = str_privkey_to_keyset(server_key)?;
+    let response_step2 = multisig_encryption::decrypt_bls_interaction_step2(
+        server_key,
+        &step1_response.try_into().unwrap(),
+    )
+    .map_err(|e| JsError::new(&format!("{}", e)))?;
+
+    Ok(response_step2.into())
+}
+
+#[wasm_bindgen]
+pub fn decrypt_bls_interaction_step3(
+    client_key: &str,
+    step1_response: &JsMultiEciesStep1Response,
+    step2_response: &JsMultiEciesStep2Response,
+) -> Result<JsMultiEciesStep3Response, JsError> {
+    init_logger();
+    let client_key = str_privkey_to_keyset(client_key)?;
+    let response_step3 = multisig_encryption::decrypt_bls_interaction_step3(
+        client_key,
+        &step1_response.try_into().unwrap(),
+        &step2_response.try_into().unwrap(),
+    )
+    .map_err(|e| JsError::new(&format!("{}", e)))?;
+
+    Ok(JsMultiEciesStep3Response {
+        message: response_step3.message,
+    })
+}
+
+#[wasm_bindgen]
+pub fn multi_signature_interaction_step1(
+    client_private_key: &str,
+    message: &[u8],
+) -> Result<JsMultisigStep1Response, JsError> {
+    init_logger();
+    let client_key = str_privkey_to_keyset(client_private_key)?;
+    let response_step1 = multisig::multi_signature_interaction_step1(client_key, message);
+
+    Ok(JsMultisigStep1Response::from(response_step1))
+}
+
+#[wasm_bindgen]
+pub fn multi_signature_interaction_step2(
+    server_private_key: &str,
+    step1_response: &JsMultisigStep1Response,
+) -> Result<JsMultisigStep2Response, JsError> {
+    init_logger();
+    let server_key = str_privkey_to_keyset(server_private_key)?;
+    let response_step2 = multisig::multi_signature_interaction_step2(
+        server_key,
+        &step1_response.try_into().unwrap(),
+    );
+
+    Ok(JsMultisigStep2Response::from(response_step2))
+}
+
+#[wasm_bindgen]
+pub fn multi_signature_interaction_step3(
+    client_private_key: &str,
+    step1_response: &JsMultisigStep1Response,
+    step2_response: &JsMultisigStep2Response,
+) -> Result<JsMultisigStep3Response, JsError> {
+    init_logger();
+    let client_key = str_privkey_to_keyset(client_private_key)?;
+    let response_step3 = multisig::multi_signature_interaction_step3(
+        client_key,
+        &step1_response.try_into().unwrap(),
+        &step2_response.try_into().unwrap(),
+    )
+    .map_err(|e| JsError::new(&format!("{}", e)))?;
+
+    Ok(JsMultisigStep3Response::from(response_step3))
 }

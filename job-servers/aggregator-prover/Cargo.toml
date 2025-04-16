@@ -17,7 +17,7 @@ rand = "0.8.5"
 serde_qs = "0.13.0"
 base64 = "0.22.1"
 intmax2-interfaces = { path = "../../interfaces" }
-intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp", branch = "cli", default-features = false }
+intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp" }
 plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
 tokio = "1.39.2"
 hex = "0.4.3"
@@ -34,4 +34,3 @@ redis = { version = "0.24", default-features = false, features = [
 
 [features]
 default = []
-# faster-mining = ["intmax2-zkp/faster-mining"]

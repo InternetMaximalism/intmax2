@@ -65,18 +65,17 @@ impl EciesSender {
 
     pub fn encrypt_message(&self, data: &[u8], out: &mut BytesMut) {
         let mut rng = rand::thread_rng();
+        let key = KeySet::rand(&mut rng);
+        let receiver_public_key = self.receiver_public_key;
+        let x = ecdh_x(&receiver_public_key, &key.privkey_fr());
 
         out.reserve(U256_SIZE + 16 + data.len() + 32);
 
         let total_size = U256_SIZE + 16 + data.len() + 32;
         let auth_tag: u16 = u16::try_from(total_size % 65536).unwrap(); // TODO: Is it correct?
         out.extend_from_slice(&auth_tag.to_be_bytes());
-
-        let key = KeySet::rand(&mut rng);
         out.extend_from_slice(&key.pubkey.to_bytes_be()); // 32 bytes
 
-        let receiver_public_key = self.receiver_public_key;
-        let x = ecdh_x(&receiver_public_key, &key.privkey_fr());
         let mut key = [0u8; 32];
         kdf(x, &[], &mut key);
 
