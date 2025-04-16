@@ -19,7 +19,10 @@ use intmax2_zkp::{
     },
 };
 
-use crate::external_api::{contract::utils::get_latest_block_number, utils::retry::with_retry};
+use crate::external_api::{
+    contract::{utils::get_latest_block_number, EVENT_BLOCK_RANGE},
+    utils::retry::with_retry,
+};
 
 use super::{
     error::BlockchainError,
@@ -27,8 +30,6 @@ use super::{
     proxy_contract::ProxyContract,
     utils::{get_client, get_client_with_signer},
 };
-
-const EVENT_BLOCK_RANGE: u64 = 1000;
 
 abigen!(Rollup, "abi/Rollup.json",);
 

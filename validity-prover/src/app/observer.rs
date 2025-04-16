@@ -1,5 +1,8 @@
 use intmax2_client_sdk::external_api::{
-    contract::rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
+    contract::{
+        liquidity_contract::LiquidityContract,
+        rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
+    },
     utils::time::sleep_for,
 };
 use intmax2_interfaces::api::validity_prover::interface::DepositInfo;
@@ -19,12 +22,14 @@ const SLEEP_TIME: u64 = 10;
 #[derive(Clone)]
 pub struct Observer {
     rollup_contract: RollupContract,
+    liquidity_contract: LiquidityContract,
     pool: DbPool,
 }
 
 impl Observer {
     pub async fn new(
         rollup_contract: RollupContract,
+        liquidity_contract: LiquidityContract,
         database_url: &str,
         database_max_connections: u32,
         database_timeout: u64,
@@ -76,6 +81,7 @@ impl Observer {
 
         Ok(Observer {
             rollup_contract,
+            liquidity_contract,
             pool,
         })
     }
