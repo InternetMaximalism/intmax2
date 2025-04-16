@@ -105,6 +105,7 @@ impl ValidityProver {
             &env.l1_rpc_url,
             env.l1_chain_id,
             env.liquidity_contract_address,
+            env.liquidity_contract_deployed_block_number,
         );
 
         let observer = Observer::new(

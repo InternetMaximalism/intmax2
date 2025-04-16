@@ -21,6 +21,9 @@ pub enum ObserverError {
     #[error("Deposit sync error: {0}")]
     DepositSyncError(String),
 
+    #[error("Sync L1 deposits error: {0}")]
+    SyncL1DepositedEventsError(String), 
+
     #[error("Block not found: {0}")]
     BlockNotFound(u32),
 
