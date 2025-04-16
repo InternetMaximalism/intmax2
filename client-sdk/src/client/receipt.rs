@@ -60,5 +60,5 @@ pub async fn validate_transfer_receipt(
         &transfer_receipt.data,
     )
     .await?;
-    todo!()
+    Ok(transfer_receipt.data.clone())
 }
