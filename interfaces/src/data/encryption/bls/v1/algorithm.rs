@@ -3,10 +3,9 @@ use aes::{
     Aes128,
 };
 use alloy_primitives::B128;
-use ark_std::Zero;
 use ctr::Ctr64BE;
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use rand::Rng;
@@ -41,7 +40,7 @@ pub fn decrypt_bls(key: KeySet, encrypted_data: &[u8]) -> anyhow::Result<Vec<u8>
         anyhow::bail!("Unsupported version");
     }
 
-    if key.privkey.is_zero() {
+    if key.privkey == U256::zero() {
         anyhow::bail!("Invalid private key");
     }
 
@@ -77,7 +76,7 @@ impl EciesSender {
         out.extend_from_slice(&key.pubkey.to_bytes_be()); // 32 bytes
 
         let receiver_public_key = self.receiver_public_key;
-        let x = ecdh_x(&receiver_public_key, &key.privkey);
+        let x = ecdh_x(&receiver_public_key, &key.privkey_fr());
         let mut key = [0u8; 32];
         kdf(x, &[], &mut key);
 
@@ -117,7 +116,7 @@ impl EciesReceiver {
         let encrypted_message = EncryptedMessage::parse(data)?;
 
         // derive keys from the secret key and the encrypted message
-        let keys = encrypted_message.derive_keys(&self.key.privkey);
+        let keys = encrypted_message.derive_keys(&self.key.privkey_fr());
 
         // check message integrity and decrypt the message
         encrypted_message.check_and_decrypt(keys)
@@ -133,7 +132,7 @@ mod test {
     use alloy_primitives::B128;
     use ctr::Ctr64BE;
     use intmax2_zkp::{
-        common::signature::key_set::KeySet,
+        common::signature_content::key_set::KeySet,
         ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
     };
     use rand::Rng;
@@ -178,7 +177,7 @@ mod test {
         let key = KeySet::rand(&mut rng);
         out.extend_from_slice(&key.pubkey.to_bytes_be()); // 32 bytes
 
-        let x = ecdh_x(&receiver_public_key, &key.privkey);
+        let x = ecdh_x(&receiver_public_key, &key.privkey_fr());
         let mut key = [0u8; 32];
         kdf(x, &[], &mut key);
 

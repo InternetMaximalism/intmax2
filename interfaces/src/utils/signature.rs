@@ -1,5 +1,5 @@
 use intmax2_zkp::{
-    common::signature::{
+    common::signature_content::{
         flatten::FlatG2,
         key_set::KeySet,
         sign_tools::{sign_message, verify_signature},
@@ -61,7 +61,8 @@ impl Auth {
         };
         let serialized = bincode::serialize(&sign_content).unwrap();
         let digest = sha2::Sha256::digest(&serialized);
-        verify_signature(self.signature.clone().into(), self.pubkey, &digest)
+        verify_signature(self.signature.clone().into(), self.pubkey, &digest)?;
+        Ok(())
     }
 }
 
@@ -86,7 +87,7 @@ pub fn current_time() -> u64 {
 mod test {
     use super::{sign_message, verify_signature};
     use intmax2_zkp::{
-        common::signature::key_set::KeySet,
+        common::signature_content::key_set::KeySet,
         ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
     };
 

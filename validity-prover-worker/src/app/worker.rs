@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use intmax2_interfaces::api::validity_prover::interface::{
     TransitionProofTask, TransitionProofTaskResult,
 };
-use intmax2_zkp::circuits::validity::transition::processor::TransitionProcessor;
+use intmax2_zkp::circuits::validity::transition::processor::ValidityTransitionProcessor;
 use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
 use server_common::redis::task_manager::TaskManager;
 use tokio::sync::RwLock;
@@ -31,7 +31,7 @@ struct Config {
 #[derive(Clone)]
 pub struct Worker {
     config: Config,
-    transition_processor: Arc<TransitionProcessor<F, C, D>>,
+    transition_processor: Arc<ValidityTransitionProcessor<F, C, D>>,
     manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
     worker_id: String,
     running_tasks: Arc<RwLock<HashSet<u32>>>,
@@ -40,7 +40,7 @@ pub struct Worker {
 impl Worker {
     pub fn new(
         env: &EnvVar,
-        transition_processor: Arc<TransitionProcessor<F, C, D>>,
+        transition_processor: Arc<ValidityTransitionProcessor<F, C, D>>,
     ) -> Result<Worker> {
         let config = Config {
             num_process: env.num_process,

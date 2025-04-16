@@ -1,7 +1,7 @@
 use intmax2_interfaces::api::withdrawal_server::interface::ClaimFeeInfo;
 use intmax2_zkp::{
     common::{
-        signature::key_set::KeySet,
+        signature_content::key_set::KeySet,
         witness::{
             claim_witness::ClaimWitness,
             deposit_time_witness::{DepositTimePublicWitness, DepositTimeWitness},

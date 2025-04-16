@@ -1,4 +1,4 @@
-use intmax2_zkp::{common::signature::key_set::KeySet, ethereum_types::u256::U256};
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use serde::{Deserialize, Serialize};
 
 use crate::data::encryption::bls::v1::singed_encryption::V1SignedEncryption;

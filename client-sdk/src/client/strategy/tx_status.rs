@@ -62,12 +62,7 @@ pub async fn get_tx_status(
         None => return Ok(TxStatus::Failed("sender leaf not found".to_string())),
     };
 
-    fail::fail_point!("sender-did-not-return-sig", |_| {
-        Ok(TxStatus::Failed(
-            "sender did'nt returned signature".to_string(),
-        ))
-    });
-    if !sender_leaf.did_return_sig {
+    if !sender_leaf.signature_included {
         return Ok(TxStatus::Failed(
             "sender did'nt returned signature".to_string(),
         ));

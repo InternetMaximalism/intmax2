@@ -1,6 +1,6 @@
 use ethers::types::H256;
 use intmax2_interfaces::api::withdrawal_server::interface::WithdrawalStatus;
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::common::signature_content::key_set::KeySet;
 
 use crate::cli::client::get_client;
 

@@ -1,6 +1,6 @@
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
-    common::{signature::key_set::KeySet, trees::asset_tree::AssetLeaf},
+    common::{signature_content::key_set::KeySet, trees::asset_tree::AssetLeaf},
     ethereum_types::{address::Address, u256::U256},
 };
 

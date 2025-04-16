@@ -11,7 +11,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        signature::{
+        signature_content::{
             block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
         },
         transfer::Transfer,

@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use async_trait::async_trait;
 use intmax2_zkp::{
-    common::{claim::Claim, signature::key_set::KeySet},
+    common::{claim::Claim, signature_content::key_set::KeySet},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use plonky2::{

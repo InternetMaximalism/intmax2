@@ -1,5 +1,5 @@
 use intmax2_zkp::{
-    common::{block_builder::BlockProposal, signature::flatten::FlatG2, tx::Tx},
+    common::{block_builder::BlockProposal, signature_content::flatten::FlatG2, tx::Tx},
     ethereum_types::u256::U256,
 };
 use serde::{Deserialize, Serialize};

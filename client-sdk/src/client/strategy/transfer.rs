@@ -20,7 +20,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
     utils::conversion::ToU64,
 };
@@ -85,7 +85,11 @@ pub async fn fetch_transfer_info(
                 };
 
                 let spent_pis =
-                    SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec());
+                    SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec())
+                        .map_err(|e| {
+                            log::error!("failed to decompress spent proof: {}", e);
+                            StrategyError::UnexpectedError(e.to_string())
+                        })?;
                 if spent_pis.tx != transfer_data.tx {
                     log::error!("tx in sender proof set is different from tx in transfer data");
                     continue;

@@ -1,6 +1,6 @@
 use intmax2_interfaces::utils::signature::Auth;
 use intmax2_zkp::{
-    common::signature::flatten::FlatG2,
+    common::signature_content::flatten::FlatG2,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use wasm_bindgen::prelude::wasm_bindgen;

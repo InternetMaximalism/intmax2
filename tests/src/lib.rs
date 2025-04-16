@@ -18,7 +18,9 @@ use intmax2_interfaces::{
     data::deposit_data::TokenType,
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{
+        generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer,
+    },
     ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;
@@ -329,7 +331,7 @@ pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts
 }
 
 pub fn address_to_generic_address(eth_address: ethers::types::Address) -> GenericAddress {
-    GenericAddress::from_address(Address::from_bytes_be(eth_address.as_bytes()).unwrap())
+    GenericAddress::from(Address::from_bytes_be(eth_address.as_bytes()).unwrap())
 }
 
 pub async fn log_polling_futures<F, E>(futures: &mut Vec<F>, senders: &[KeySet])

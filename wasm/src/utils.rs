@@ -1,6 +1,6 @@
 use ethers::types::H256;
 use intmax2_zkp::{
-    common::signature::key_set::KeySet,
+    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use num_bigint::BigUint;
@@ -16,7 +16,8 @@ pub fn str_privkey_to_keyset(privkey: &str) -> Result<KeySet, JsError> {
 }
 
 fn h256_to_keyset(h256: H256) -> KeySet {
-    KeySet::new(BigUint::from_bytes_be(h256.as_bytes()).into())
+    let key: U256 = BigUint::from_bytes_be(h256.as_bytes()).try_into().unwrap();
+    KeySet::new(key)
 }
 
 pub fn parse_h256(s: &str) -> Result<H256, JsError> {

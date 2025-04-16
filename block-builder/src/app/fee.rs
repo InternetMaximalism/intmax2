@@ -17,7 +17,7 @@ use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
     common::{
         block_builder::UserSignature,
-        signature::{
+        signature_content::{
             block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
         },
         witness::transfer_witness::TransferWitness,
@@ -159,7 +159,9 @@ async fn validate_fee_single(
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
-    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs);
+    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs).map_err(|e| {
+        FeeError::FeeVerificationError(format!("Failed to decompress spent proof: {}", e))
+    })?;
     if spent_pis.tx != transfer_witness.tx {
         return Err(FeeError::FeeVerificationError(
             "Tx in spent proof is not the same as transfer witness tx".to_string(),

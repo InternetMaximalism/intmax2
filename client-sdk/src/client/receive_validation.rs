@@ -10,8 +10,7 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::{
-    circuits::balance::send::spent_circuit::SpentPublicInputs,
-    common::{generic_address::GenericAddress, transfer::Transfer},
+    circuits::balance::send::spent_circuit::SpentPublicInputs, common::transfer::Transfer,
     ethereum_types::u256::U256,
 };
 use thiserror::Error;
@@ -55,7 +54,7 @@ pub async fn validate_receive(
         .map_err(|e| StrategyError::ValidationError(e.to_string()))?;
 
     let recipient = transfer_data.transfer.recipient;
-    if recipient != GenericAddress::from_pubkey(recipient_pubkey) {
+    if recipient != recipient_pubkey.into() {
         return Err(ReceiveValidationError::GeneralError(
             "Recipient is not the same as the key".to_string(),
         ));
@@ -83,7 +82,9 @@ pub async fn validate_receive(
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
-    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs);
+    let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs).map_err(|e| {
+        ReceiveValidationError::ValidationError(format!("Failed to decompress spent proof: {}", e))
+    })?;
     if spent_pis.tx != transfer_data.tx {
         return Err(ReceiveValidationError::GeneralError(
             "Tx in spent proof is not the same as transfer witness tx".to_string(),

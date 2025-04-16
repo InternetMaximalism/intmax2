@@ -4,7 +4,7 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
 use intmax2_zkp::{
-    common::{signature::key_set::KeySet, transfer::Transfer},
+    common::{signature_content::key_set::KeySet, transfer::Transfer},
     constants::NUM_TRANSFERS_IN_TX,
     ethereum_types::u32limb_trait::U32LimbTrait,
 };

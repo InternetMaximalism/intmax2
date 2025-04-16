@@ -42,7 +42,7 @@ pub async fn generate_withdrawal_proof_job(
         .get(true)
         .with_expiration(SetExpiry::EX(config::get("proof_expiration")));
     let withdrawal =
-        Withdrawal::from_u64_slice(&single_withdrawal_proof.public_inputs.to_u64_vec());
+        Withdrawal::from_u64_slice(&single_withdrawal_proof.public_inputs.to_u64_vec())?;
     let proof_content = WithdrawalProofContent {
         proof: withdrawal_proof,
         withdrawal,
