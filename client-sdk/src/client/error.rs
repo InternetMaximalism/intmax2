@@ -5,7 +5,10 @@ use intmax2_interfaces::{
 
 use crate::external_api::contract::error::BlockchainError;
 
-use super::{strategy::error::StrategyError, sync::error::SyncError};
+use super::{
+    receive_validation::ReceiveValidationError, strategy::error::StrategyError,
+    sync::error::SyncError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
@@ -15,11 +18,14 @@ pub enum ClientError {
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),
 
-    #[error("Strategy error: {0}")]
+    #[error(transparent)]
     StrategyError(#[from] StrategyError),
 
-    #[error("Sync error: {0}")]
+    #[error(transparent)]
     SyncError(#[from] SyncError),
+
+    #[error(transparent)]
+    ReceiveValidationError(#[from] ReceiveValidationError),
 
     #[error("Proof compression error: {0}")]
     ProofCompressionError(#[from] ProofCompressionError),
@@ -56,4 +62,7 @@ pub enum ClientError {
 
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
+
+    #[error("Deserialization error: {0}")]
+    DeserializeError(String),
 }

@@ -38,7 +38,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
-        fee_payment::generate_withdrawal_transfers,
+        fee_payment::generate_withdrawal_transfers, receipt::generate_transfer_receipt,
         strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt,
     },
     external_api::{
@@ -57,6 +57,7 @@ use super::{
     fee_proof::{generate_fee_proof, quote_transfer_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     misc::payment_memo::PaymentMemo,
+    receipt::validate_transfer_receipt,
     strategy::{
         mining::{fetch_mining_info, Mining},
         tx_status::{get_tx_status, TxStatus},
@@ -747,6 +748,23 @@ impl Client {
         )
         .await?;
         Ok(withdrawal_transfers)
+    }
+
+    pub async fn generate_transfer_receipt(
+        &self,
+        key: KeySet,
+        transfer_digest: Bytes32,
+        receiver: U256,
+    ) -> Result<String, ClientError> {
+        generate_transfer_receipt(self, key, transfer_digest, receiver).await
+    }
+
+    pub async fn validate_transfer_receipt(
+        &self,
+        key: KeySet,
+        transfer_receipt: &str,
+    ) -> Result<TransferData, ClientError> {
+        validate_transfer_receipt(self, key, transfer_receipt).await
     }
 }
 
