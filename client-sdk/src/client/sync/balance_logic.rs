@@ -52,7 +52,7 @@ pub async fn receive_deposit(
     let receive_block_number = prev_balance_pis.public_state.block_number;
     // Generate witness
     let deposit_info = validity_prover
-        .get_deposit_info(deposit_data.deposit_hash().unwrap())
+        .get_deposit_info(deposit_data.pubkey_salt_hash)
         .await?
         .ok_or(SyncError::DepositInfoNotFound(
             deposit_data.deposit_hash().unwrap(),

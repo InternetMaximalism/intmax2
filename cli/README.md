@@ -160,7 +160,7 @@ cargo run -r -- deposit \
   --private-key 0x... \
   --token-type NATIVE \
   --amount 100000000000000000 \ # only O.1 ETH, 1 ETH, 10 ETH, and 100 ETH are allowed
-  --is-mining true
+  --mining 
 ```
 
 #### Transfer Assets
