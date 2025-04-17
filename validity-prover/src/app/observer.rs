@@ -343,9 +343,15 @@ impl Observer {
 
     pub async fn get_deposit_info(
         &self,
-        deposit_hash: Bytes32,
+        pubkey_salt_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ObserverError> {
-        let event = sqlx::query!(
+        let deposited_event = self.get_deposited_event(pubkey_salt_hash).await?;
+        if deposited_event.is_none() {
+            return Ok(None);
+        }
+        let deposited_event = deposited_event.unwrap();
+        let deposit_hash = deposited_event.to_deposit().hash();
+        let leaf_inserted_event = sqlx::query!(
             r#"
             SELECT deposit_index, eth_block_number, eth_tx_index 
             FROM deposit_leaf_events 
@@ -356,9 +362,18 @@ impl Observer {
         .fetch_optional(&self.pool)
         .await?;
 
-        let event = match event {
+        let event = match leaf_inserted_event {
             Some(e) => e,
-            None => return Ok(None),
+            None => {
+                return Ok(Some(DepositInfo {
+                    deposit_id: deposited_event.deposit_id,
+                    token_index: deposited_event.token_index,
+                    deposit_hash,
+                    block_number: None,
+                    deposit_index: None,
+                    l1_deposit_tx_hash: deposited_event.tx_hash,
+                }))
+            }
         };
 
         let block = sqlx::query!(
@@ -378,8 +393,11 @@ impl Observer {
         match block {
             Some(b) => Ok(Some(DepositInfo {
                 deposit_hash,
-                block_number: b.block_number as u32,
-                deposit_index: event.deposit_index as u32,
+                token_index: deposited_event.token_index,
+                block_number: Some(b.block_number as u32),
+                deposit_index: Some(event.deposit_index as u32),
+                deposit_id: deposited_event.deposit_id,
+                l1_deposit_tx_hash: deposited_event.tx_hash,
             })),
             None => Ok(None),
         }

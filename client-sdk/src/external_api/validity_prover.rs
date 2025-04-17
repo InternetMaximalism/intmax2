@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use intmax2_interfaces::api::{
     error::ServerError,
     validity_prover::{
-        interface::{
-            AccountInfo, DepositInfo, Deposited, ValidityProverClientInterface, MAX_BATCH_SIZE,
-        },
+        interface::{AccountInfo, DepositInfo, ValidityProverClientInterface, MAX_BATCH_SIZE},
         types::{
             GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
             GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
@@ -12,11 +10,9 @@ use intmax2_interfaces::api::{
             GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
             GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
             GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
-            GetDepositMerkleProofResponse, GetDepositedEventBatchRequest,
-            GetDepositedEventBatchResponse, GetDepositedEventQuery, GetDepositedEventResponse,
-            GetLatestIncludedDepositIndexResponse, GetNextDepositIndexResponse,
-            GetUpdateWitnessQuery, GetUpdateWitnessResponse, GetValidityWitnessQuery,
-            GetValidityWitnessResponse,
+            GetDepositMerkleProofResponse, GetLatestIncludedDepositIndexResponse,
+            GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
+            GetValidityWitnessQuery, GetValidityWitnessResponse,
         },
     },
 };
@@ -112,9 +108,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
 
     async fn get_deposit_info(
         &self,
-        deposit_hash: Bytes32,
+        pubkey_salt_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ServerError> {
-        let query = GetDepositInfoQuery { deposit_hash };
+        let query = GetDepositInfoQuery { pubkey_salt_hash };
         let response: GetDepositInfoResponse = get_request(
             &self.base_url,
             "/validity-prover/get-deposit-info",
@@ -126,13 +122,13 @@ impl ValidityProverClientInterface for ValidityProverClient {
 
     async fn get_deposit_info_batch(
         &self,
-        deposit_hashes: &[Bytes32],
+        pubkey_salt_hashes: &[Bytes32],
     ) -> Result<Vec<Option<DepositInfo>>, ServerError> {
-        let mut all_deposit_info = Vec::with_capacity(deposit_hashes.len());
+        let mut all_deposit_info = Vec::with_capacity(pubkey_salt_hashes.len());
 
-        for chunk in deposit_hashes.chunks(MAX_BATCH_SIZE) {
+        for chunk in pubkey_salt_hashes.chunks(MAX_BATCH_SIZE) {
             let request = GetDepositInfoBatchRequest {
-                deposit_hashes: chunk.to_vec(),
+                pubkey_salt_hashes: chunk.to_vec(),
             };
 
             let response: GetDepositInfoBatchResponse = post_request(
@@ -146,44 +142,6 @@ impl ValidityProverClientInterface for ValidityProverClient {
         }
 
         Ok(all_deposit_info)
-    }
-
-    async fn get_deposited_event(
-        &self,
-        pubkey_salt_hash: Bytes32,
-    ) -> Result<Option<Deposited>, ServerError> {
-        let query = GetDepositedEventQuery { pubkey_salt_hash };
-        let response: GetDepositedEventResponse = get_request(
-            &self.base_url,
-            "/validity-prover/get-deposited-event",
-            Some(query),
-        )
-        .await?;
-        Ok(response.deposited_event)
-    }
-
-    async fn get_deposited_event_batch(
-        &self,
-        pubkey_salt_hashes: &[Bytes32],
-    ) -> Result<Vec<Option<Deposited>>, ServerError> {
-        let mut all_deposited_events = Vec::with_capacity(pubkey_salt_hashes.len());
-
-        for chunk in pubkey_salt_hashes.chunks(MAX_BATCH_SIZE) {
-            let request = GetDepositedEventBatchRequest {
-                pubkey_salt_hashes: chunk.to_vec(),
-            };
-
-            let response: GetDepositedEventBatchResponse = post_request(
-                &self.base_url,
-                "/validity-prover/get-deposited-event-batch",
-                Some(&request),
-            )
-            .await?;
-
-            all_deposited_events.extend(response.deposited_events);
-        }
-
-        Ok(all_deposited_events)
     }
 
     async fn get_block_number_by_tx_tree_root(

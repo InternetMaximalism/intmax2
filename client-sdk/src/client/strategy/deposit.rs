@@ -33,7 +33,7 @@ pub struct DepositInfo {
 pub async fn fetch_deposit_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    liquidity_contract: &LiquidityContract,
+    _liquidity_contract: &LiquidityContract,
     key: KeySet,
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
@@ -54,46 +54,31 @@ pub async fn fetch_deposit_info(
     )
     .await?;
 
-    // First, collect all deposits that have valid token indices
-    let mut deposits_with_token_index = Vec::new();
-    for (meta, mut deposit_data) in data_with_meta {
-        let token_index = liquidity_contract
-            .get_token_index(
-                deposit_data.token_type,
-                deposit_data.token_address,
-                deposit_data.token_id,
-            )
-            .await?;
-        if let Some(index) = token_index {
-            deposit_data.set_token_index(index);
-            deposits_with_token_index.push((meta, deposit_data));
-        } else {
-            log::error!("Token not found: {:?}", deposit_data);
-            // Skip deposits with invalid tokens
-        }
-    }
-
     // Batch fetch deposit info for all valid deposits
-    let deposit_hashes: Vec<_> = deposits_with_token_index
+    let pubkey_salt_hashes: Vec<_> = data_with_meta
         .iter()
-        .map(|(_, deposit_data)| deposit_data.deposit_hash().unwrap()) // unwrap is safe because token index has been set.
+        .map(|(_, deposit_data)| deposit_data.pubkey_salt_hash)
         .collect();
     let deposit_infos = validity_prover
-        .get_deposit_info_batch(&deposit_hashes)
+        .get_deposit_info_batch(&pubkey_salt_hashes)
         .await?;
 
     // Process results and categorize deposits
-    for ((meta, deposit_data), deposit_info) in
-        deposits_with_token_index.into_iter().zip(deposit_infos)
-    {
+    for ((meta, mut deposit_data), deposit_info) in data_with_meta.into_iter().zip(deposit_infos) {
         match deposit_info {
             Some(info) => {
-                // Deposit is settled
-                let meta = MetaDataWithBlockNumber {
-                    meta,
-                    block_number: info.block_number,
-                };
-                settled.push((meta, deposit_data));
+                deposit_data.set_token_index(info.token_index);
+
+                // deposit is settled
+                if let Some(block_number) = info.block_number {
+                    let meta = MetaDataWithBlockNumber { meta, block_number };
+                    settled.push((meta, deposit_data));
+                } else {
+                    // Deposit is pending
+                    // todo: check if the deposit is cancelled using liquidity contract
+                    log::info!("Deposit {} is pending", meta.digest);
+                    pending.push((meta, deposit_data));
+                }
             }
             None if meta.timestamp + deposit_timeout < current_time => {
                 // Deposit has timed out

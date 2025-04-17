@@ -430,11 +430,11 @@ impl ValidityProver {
 
     pub async fn get_deposit_info(
         &self,
-        deposit_hash: Bytes32,
+        pubkey_salt_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ValidityProverError> {
         let deposit_info = self
             .observer
-            .get_deposit_info(deposit_hash)
+            .get_deposit_info(pubkey_salt_hash)
             .await
             .map_err(ValidityProverError::ObserverError)?;
         Ok(deposit_info)

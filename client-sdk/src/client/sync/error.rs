@@ -56,6 +56,9 @@ pub enum SyncError {
     #[error("Deposit info not found: {0}")]
     DepositInfoNotFound(Bytes32),
 
+    #[error("Deposit is not settled: {0}")]
+    DepositIsNotSettled(Bytes32),
+
     #[error("Invalid transfer error: {0}")]
     InvalidTransferError(String),
 

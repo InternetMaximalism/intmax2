@@ -1,6 +1,6 @@
 use futures::future;
 use intmax2_interfaces::api::validity_prover::{
-    interface::{DepositInfo, Deposited},
+    interface::DepositInfo,
     types::{
         GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
         GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
@@ -8,9 +8,8 @@ use intmax2_interfaces::api::validity_prover::{
         GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
         GetDepositInfoBatchRequest, GetDepositInfoBatchResponse, GetDepositInfoQuery,
         GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
-        GetDepositedEventBatchRequest, GetDepositedEventBatchResponse, GetDepositedEventQuery,
-        GetDepositedEventResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-        GetValidityWitnessQuery, GetValidityWitnessResponse,
+        GetUpdateWitnessQuery, GetUpdateWitnessResponse, GetValidityWitnessQuery,
+        GetValidityWitnessResponse,
     },
 };
 use intmax2_zkp::common::{
@@ -199,7 +198,7 @@ impl State {
         } else {
             let deposit_info = self
                 .validity_prover
-                .get_deposit_info(request.deposit_hash)
+                .get_deposit_info(request.pubkey_salt_hash)
                 .await?;
             // the result is mutable
             self.cache
@@ -214,9 +213,9 @@ impl State {
         request: &GetDepositInfoBatchRequest,
     ) -> anyhow::Result<GetDepositInfoBatchResponse> {
         // should use batch query instead
-        let mut futures = Vec::with_capacity(request.deposit_hashes.len());
-        for &deposit_hash in &request.deposit_hashes {
-            let query = GetDepositInfoQuery { deposit_hash };
+        let mut futures = Vec::with_capacity(request.pubkey_salt_hashes.len());
+        for &pubkey_salt_hash in &request.pubkey_salt_hashes {
+            let query = GetDepositInfoQuery { pubkey_salt_hash };
             let future = async move { self.get_deposit_info(query).await };
             futures.push(future);
         }
@@ -226,47 +225,6 @@ impl State {
             .collect::<anyhow::Result<Vec<_>>>()?;
         let deposit_info = responses.into_iter().map(|r| r.deposit_info).collect();
         Ok(GetDepositInfoBatchResponse { deposit_info })
-    }
-
-    pub async fn get_deposited_event(
-        &self,
-        request: GetDepositedEventQuery,
-    ) -> anyhow::Result<GetDepositedEventResponse> {
-        type V = Option<Deposited>;
-        let key = format!("get_deposited_event:{}", serde_qs::to_string(&request)?);
-        if let Some(deposited_event) = self.cache.get::<V>(&key).await? {
-            Ok(GetDepositedEventResponse { deposited_event })
-        } else {
-            let deposited_event = self
-                .validity_prover
-                .observer
-                .get_deposited_event(request.pubkey_salt_hash)
-                .await?;
-            // the result is mutable
-            self.cache
-                .set_with_ttl::<V>(&key, &deposited_event, self.config.dynamic_ttl)
-                .await?;
-            Ok(GetDepositedEventResponse { deposited_event })
-        }
-    }
-
-    pub async fn get_deposited_event_batch(
-        &self,
-        request: &GetDepositedEventBatchRequest,
-    ) -> anyhow::Result<GetDepositedEventBatchResponse> {
-        // should use batch query instead
-        let mut futures = Vec::with_capacity(request.pubkey_salt_hashes.len());
-        for &pubkey_salt_hash in &request.pubkey_salt_hashes {
-            let query = GetDepositedEventQuery { pubkey_salt_hash };
-            let future = async move { self.get_deposited_event(query).await };
-            futures.push(future);
-        }
-        let responses = future::join_all(futures)
-            .await
-            .into_iter()
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        let deposited_events = responses.into_iter().map(|r| r.deposited_event).collect();
-        Ok(GetDepositedEventBatchResponse { deposited_events })
     }
 
     pub async fn get_block_number_by_tx_tree_root(
