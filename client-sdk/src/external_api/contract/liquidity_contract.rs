@@ -9,7 +9,10 @@ use ethers::{
     types::{Address as EthAddress, H256},
 };
 use intmax2_interfaces::{
-    api::withdrawal_server::interface::ContractWithdrawal, data::deposit_data::TokenType,
+    api::{
+        validity_prover::interface::Deposited, withdrawal_server::interface::ContractWithdrawal,
+    },
+    data::deposit_data::TokenType,
 };
 use intmax2_zkp::ethereum_types::{
     address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _,
@@ -28,17 +31,6 @@ use super::{
 };
 
 abigen!(Liquidity, "abi/Liquidity.json",);
-
-pub struct Deposited {
-    pub deposit_id: u64,
-    pub depositor: Address,
-    pub pubkey_salt_hash: Bytes32,
-    pub token_index: u32,
-    pub amount: U256,
-    pub is_eligible: bool,
-    pub deposited_at: u64,
-    pub tx_hash: Bytes32,
-}
 
 #[derive(Debug, Clone)]
 pub struct LiquidityContract {
@@ -177,6 +169,16 @@ impl LiquidityContract {
             U256::from_bytes_be(&buf).unwrap()
         };
         Ok((token_type, token_address, token_id))
+    }
+
+    pub async fn get_last_deposit_id(&self) -> Result<u64, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let deposit_id = with_retry(|| async { contract.get_last_deposit_id().call().await })
+            .await
+            .map_err(|e| {
+                BlockchainError::RPCError(format!("Error getting last deposit id: {:?}", e))
+            })?;
+        Ok(deposit_id.as_u64())
     }
 
     pub async fn check_if_claimable(

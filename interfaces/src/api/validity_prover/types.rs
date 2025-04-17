@@ -1,4 +1,4 @@
-use super::interface::DepositInfo;
+use super::interface::{DepositInfo, Deposited};
 use crate::api::validity_prover::interface::AccountInfo;
 use intmax2_zkp::{
     common::{
@@ -68,6 +68,30 @@ pub struct GetDepositInfoBatchRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetDepositInfoBatchResponse {
     pub deposit_info: Vec<Option<DepositInfo>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDepositedEventQuery {
+    pub pubkey_salt_hash: Bytes32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDepositedEventResponse {
+    pub deposited_event: Option<Deposited>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDepositedEventBatchRequest {
+    pub pubkey_salt_hashes: Vec<Bytes32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDepositedEventBatchResponse {
+    pub deposited_events: Vec<Option<Deposited>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
