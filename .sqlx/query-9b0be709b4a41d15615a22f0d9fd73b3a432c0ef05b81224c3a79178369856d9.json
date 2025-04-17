@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash\n             FROM deposited_events \n             WHERE pubkey_salt_hash = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deposit_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "depositor",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "pubkey_salt_hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "token_index",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "amount",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_eligible",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "deposited_at",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "deposit_hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "tx_hash",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9b0be709b4a41d15615a22f0d9fd73b3a432c0ef05b81224c3a79178369856d9"
+}
