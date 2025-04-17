@@ -181,6 +181,19 @@ impl LiquidityContract {
         Ok(deposit_id.as_u64())
     }
 
+    pub async fn check_if_deposit_exists(&self, deposit_id: u64) -> Result<bool, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let deposit_id = ethers::types::U256::from(deposit_id);
+        let deposit_data: DepositData =
+            with_retry(|| async { contract.get_deposit_data(deposit_id).call().await })
+                .await
+                .map_err(|e| {
+                    BlockchainError::RPCError(format!("Error while getting deposit data: {:?}", e))
+                })?;
+        let exists = deposit_data.sender != EthAddress::zero();
+        Ok(exists)
+    }
+
     pub async fn check_if_claimable(
         &self,
         withdrawal_hash: Bytes32,

@@ -33,7 +33,7 @@ pub struct DepositInfo {
 pub async fn fetch_deposit_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    _liquidity_contract: &LiquidityContract,
+    liquidity_contract: &LiquidityContract,
     key: KeySet,
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
@@ -69,15 +69,29 @@ pub async fn fetch_deposit_info(
             Some(info) => {
                 deposit_data.set_token_index(info.token_index);
 
-                // deposit is settled
                 if let Some(block_number) = info.block_number {
+                    // deposit is settled
                     let meta = MetaDataWithBlockNumber { meta, block_number };
                     settled.push((meta, deposit_data));
                 } else {
-                    // Deposit is pending
-                    // todo: check if the deposit is cancelled using liquidity contract
-                    log::info!("Deposit {} is pending", meta.digest);
-                    pending.push((meta, deposit_data));
+                    // deposit is not settled
+
+                    let exists = liquidity_contract
+                        .check_if_deposit_exists(info.deposit_id)
+                        .await?;
+                    if exists {
+                        // deposit is not relayed to L2 yet
+                        log::info!("Deposit {} is pending", meta.digest);
+                        pending.push((meta, deposit_data));
+                    } else {
+                        // deposit is canceled
+                        log::info!(
+                            "Deposit digest: {}, deposit_hash: {} is canceled",
+                            meta.digest,
+                            deposit_data.deposit_hash().unwrap()
+                        );
+                        timeout.push((meta, deposit_data));
+                    }
                 }
             }
             None if meta.timestamp + deposit_timeout < current_time => {
