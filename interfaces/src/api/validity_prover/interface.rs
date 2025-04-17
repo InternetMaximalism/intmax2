@@ -107,6 +107,16 @@ pub trait ValidityProverClientInterface: Sync + Send {
         deposit_hashes: &[Bytes32],
     ) -> Result<Vec<Option<DepositInfo>>, ServerError>;
 
+    async fn get_deposited_event(
+        &self,
+        pubkey_salt_hash: Bytes32,
+    ) -> Result<Option<Deposited>, ServerError>;
+
+    async fn get_deposited_event_batch(
+        &self,
+        pubkey_salt_hashes: &[Bytes32],
+    ) -> Result<Vec<Option<Deposited>>, ServerError>;
+
     async fn get_block_number_by_tx_tree_root(
         &self,
         tx_tree_root: Bytes32,
