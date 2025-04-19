@@ -1,4 +1,5 @@
 pub mod algorithm;
+pub mod chaum_pedersen;
 pub mod error;
 pub mod message;
 pub mod multisig;

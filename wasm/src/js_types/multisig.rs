@@ -1,26 +1,18 @@
 use intmax2_client_sdk::client::multisig;
-use intmax2_interfaces::data::encryption::bls::v1::multisig as multisig_encryption;
+use intmax2_interfaces::data::encryption::bls::v1::{
+    chaum_pedersen::ZKProof,
+    multisig as multisig_encryption,
+    utils::{g1_point_to_xy, xy_to_g1_point},
+};
 use intmax2_zkp::{
     common::signature_content::flatten::FlatG2,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
+use num_bigint::BigUint;
 use std::convert::TryFrom;
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 use super::auth::JsFlatG2;
-
-impl From<multisig_encryption::MultiEciesStep2Response> for JsMultiEciesStep2Response {
-    fn from(response: multisig_encryption::MultiEciesStep2Response) -> Self {
-        let (server_ecdh_share, y_parity) = response.server_ecdh_share;
-        Self {
-            server_ecdh_share: JsEllipticCurvePoint {
-                x: server_ecdh_share.to_hex(),
-                y_parity,
-            },
-            server_pubkey: response.server_pubkey.to_hex(),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
@@ -61,9 +53,47 @@ pub struct JsEllipticCurvePoint {
 
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
+pub struct JsZKProofForEcdhShare {
+    pub a: JsEllipticCurvePoint,
+    pub b: JsEllipticCurvePoint,
+    pub z: String,
+}
+
+#[derive(Debug, Clone)]
+#[wasm_bindgen(getter_with_clone)]
 pub struct JsMultiEciesStep2Response {
     pub server_ecdh_share: JsEllipticCurvePoint,
+    pub server_proof: JsZKProofForEcdhShare,
     pub server_pubkey: String, // hex string
+}
+
+impl From<multisig_encryption::MultiEciesStep2Response> for JsMultiEciesStep2Response {
+    fn from(response: multisig_encryption::MultiEciesStep2Response) -> Self {
+        let (server_ecdh_share, y_parity) = g1_point_to_xy(response.server_ecdh_share);
+        let server_proof_a = g1_point_to_xy(response.server_proof.a);
+        let server_proof_b = g1_point_to_xy(response.server_proof.b);
+        let server_proof_z: U256 = BigUint::from(response.server_proof.z)
+            .try_into()
+            .expect("Must not fail because z is a scalar of G1");
+        Self {
+            server_ecdh_share: JsEllipticCurvePoint {
+                x: server_ecdh_share.to_hex(),
+                y_parity,
+            },
+            server_proof: JsZKProofForEcdhShare {
+                a: JsEllipticCurvePoint {
+                    x: server_proof_a.0.to_hex(),
+                    y_parity: server_proof_a.1,
+                },
+                b: JsEllipticCurvePoint {
+                    x: server_proof_b.0.to_hex(),
+                    y_parity: server_proof_b.1,
+                },
+                z: server_proof_z.to_hex(),
+            },
+            server_pubkey: response.server_pubkey.to_hex(),
+        }
+    }
 }
 
 impl TryFrom<&JsMultiEciesStep2Response> for multisig_encryption::MultiEciesStep2Response {
@@ -73,11 +103,29 @@ impl TryFrom<&JsMultiEciesStep2Response> for multisig_encryption::MultiEciesStep
         let server_ecdh_share = U256::from_hex(&response.server_ecdh_share.x).map_err(|_| {
             JsError::new("Failed to parse server ECDH share in decrypt_bls_interaction_step2")
         })?;
+        let server_proof_a_x = U256::from_hex(&response.server_proof.a.x).map_err(|_| {
+            JsError::new("Failed to parse server proof a in decrypt_bls_interaction_step2")
+        })?;
+        let server_proof_b_x = U256::from_hex(&response.server_proof.b.x).map_err(|_| {
+            JsError::new("Failed to parse server proof b in decrypt_bls_interaction_step2")
+        })?;
+        let server_proof_z = U256::from_hex(&response.server_proof.z).map_err(|_| {
+            JsError::new("Failed to parse server proof s in decrypt_bls_interaction_step2")
+        })?;
+        let server_proof = ZKProof {
+            a: xy_to_g1_point(server_proof_a_x, response.server_proof.a.y_parity),
+            b: xy_to_g1_point(server_proof_b_x, response.server_proof.b.y_parity),
+            z: BigUint::from(server_proof_z).into(),
+        };
         let server_pubkey = U256::from_hex(&response.server_pubkey).map_err(|_| {
             JsError::new("Failed to parse server public key in decrypt_bls_interaction_step2")
         })?;
         Ok(Self {
-            server_ecdh_share: (server_ecdh_share, response.server_ecdh_share.y_parity),
+            server_ecdh_share: xy_to_g1_point(
+                server_ecdh_share,
+                response.server_ecdh_share.y_parity,
+            ),
+            server_proof,
             server_pubkey,
         })
     }

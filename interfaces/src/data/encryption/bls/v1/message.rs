@@ -6,7 +6,6 @@ use aes::{
     Aes128,
 };
 use alloy_primitives::{B128, B256};
-use ark_bn254::Fr;
 use ctr::Ctr64BE;
 use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait};
 
@@ -35,7 +34,7 @@ pub struct EncryptedMessage<'a> {
     ///
     /// See source comments of [`Self::check_integrity`] for more information.
     auth_data: [u8; 2],
-    /// The remote secp256k1 public key
+    /// The remote public key
     public_key: U256,
     /// The IV, for use in AES during decryption, in the tag check
     iv: B128,
@@ -98,7 +97,7 @@ impl<'a> EncryptedMessage<'a> {
 
     /// Use the given secret and this encrypted message to derive the shared secret, and use the
     /// shared secret to derive the mac and encryption keys.
-    pub fn derive_keys(&self, secret_key: &Fr) -> RLPxSymmetricKeys {
+    pub fn derive_keys(&self, secret_key: &U256) -> RLPxSymmetricKeys {
         // perform ECDH to get the shared secret, using the remote public key from the message and
         // the given secret key
         let x = ecdh_x(&self.public_key, secret_key);

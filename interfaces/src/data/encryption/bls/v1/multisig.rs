@@ -2,8 +2,10 @@ use ark_bn254::{G1Affine, G1Projective};
 use ark_std::Zero as _;
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use plonky2_bn254::fields::{recover::RecoverFromX, sgn::Sgn};
+use rand::thread_rng;
 
 use super::{
+    chaum_pedersen::{partial_decrypt_with_proof, verify_share, ZKProof},
     message::EncryptedMessage,
     utils::{aggregate_ecdh_x, ecdh_xy},
 };
@@ -52,8 +54,24 @@ pub fn decrypt_bls_interaction_step1(
 
 #[derive(Debug, Clone)]
 pub struct MultiEciesStep2Response {
-    pub server_ecdh_share: (U256, bool),
+    pub server_ecdh_share: G1Affine,
+    pub server_proof: ZKProof,
     pub server_pubkey: U256,
+}
+
+impl MultiEciesStep2Response {
+    fn validate(&self, remote_public_key_x: U256) -> anyhow::Result<()> {
+        if !verify_share(
+            self.server_pubkey,
+            remote_public_key_x,
+            &self.server_ecdh_share,
+            &self.server_proof,
+        ) {
+            anyhow::bail!("Invalid share");
+        }
+
+        Ok(())
+    }
 }
 
 pub fn decrypt_bls_interaction_step2(
@@ -66,13 +84,15 @@ pub fn decrypt_bls_interaction_step2(
     // parse the encrypted message from bytes
     let encrypted_message = EncryptedMessage::parse(&mut encrypted_data)?;
 
-    let server_ecdh_share = ecdh_xy(
+    let (server_ecdh_share, server_proof) = partial_decrypt_with_proof(
         &encrypted_message.get_public_key(),
-        &server_key.privkey_fr(),
+        &server_key.privkey,
+        &mut thread_rng(),
     );
 
     Ok(MultiEciesStep2Response {
         server_ecdh_share,
+        server_proof,
         server_pubkey: server_key.pubkey,
     })
 }
@@ -93,10 +113,9 @@ pub fn decrypt_bls_interaction_step3(
     // parse the encrypted message from bytes
     let encrypted_message = EncryptedMessage::parse(&mut encrypted_data)?;
 
-    let client_ecdh_share = ecdh_xy(
-        &encrypted_message.get_public_key(),
-        &client_key.privkey_fr(),
-    );
+    step2_response.validate(encrypted_message.get_public_key())?;
+
+    let client_ecdh_share = ecdh_xy(&encrypted_message.get_public_key(), &client_key.privkey);
 
     let aggregated_ecdh_share =
         aggregate_ecdh_x(&[client_ecdh_share, step2_response.server_ecdh_share]);

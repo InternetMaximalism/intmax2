@@ -67,7 +67,7 @@ impl EciesSender {
         let mut rng = rand::thread_rng();
         let key = KeySet::rand(&mut rng);
         let receiver_public_key = self.receiver_public_key;
-        let x = ecdh_x(&receiver_public_key, &key.privkey_fr());
+        let x = ecdh_x(&receiver_public_key, &key.privkey);
 
         out.reserve(U256_SIZE + 16 + data.len() + 32);
 
@@ -115,7 +115,7 @@ impl EciesReceiver {
         let encrypted_message = EncryptedMessage::parse(data)?;
 
         // derive keys from the secret key and the encrypted message
-        let keys = encrypted_message.derive_keys(&self.key.privkey_fr());
+        let keys = encrypted_message.derive_keys(&self.key.privkey);
 
         // check message integrity and decrypt the message
         encrypted_message.check_and_decrypt(keys)
@@ -176,7 +176,7 @@ mod test {
         let key = KeySet::rand(&mut rng);
         out.extend_from_slice(&key.pubkey.to_bytes_be()); // 32 bytes
 
-        let x = ecdh_x(&receiver_public_key, &key.privkey_fr());
+        let x = ecdh_x(&receiver_public_key, &key.privkey);
         let mut key = [0u8; 32];
         kdf(x, &[], &mut key);
 
