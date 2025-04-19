@@ -139,3 +139,68 @@ pub fn verify_share(
     // Check if both equations hold
     left1 == proof.a && left2 == proof.b
 }
+
+#[cfg(test)]
+mod test {
+    use ark_ff::One;
+    use intmax2_zkp::common::signature_content::key_set::KeySet;
+
+    use super::*;
+
+    #[test]
+    fn test_partial_decrypt_with_proof() {
+        let mut rng = rand::thread_rng();
+        let server_key = KeySet::rand(&mut rng);
+        let client_key = KeySet::rand(&mut rng);
+
+        let (di, proof) =
+            partial_decrypt_with_proof(&server_key.pubkey, &client_key.privkey, &mut rng);
+
+        assert!(verify_share(
+            client_key.pubkey,
+            server_key.pubkey,
+            &di,
+            &proof
+        ));
+    }
+
+    #[test]
+    fn test_partial_decrypt_with_proof_fail() {
+        let mut rng = rand::thread_rng();
+        let server_key = KeySet::rand(&mut rng);
+        let client_key = KeySet::rand(&mut rng);
+
+        let (di, proof) =
+            partial_decrypt_with_proof(&server_key.pubkey, &client_key.privkey, &mut rng);
+
+        // Modify the proof to make it invalid
+        let mut invalid_proof = proof.clone();
+        invalid_proof.z += Scalar::one();
+
+        assert!(!verify_share(
+            client_key.pubkey,
+            server_key.pubkey,
+            &di,
+            &invalid_proof
+        ));
+    }
+
+    #[test]
+    fn test_partial_decrypt_with_proof_invalid_server_key() {
+        let mut rng = rand::thread_rng();
+        let server_key = KeySet::rand(&mut rng);
+        let client_key = KeySet::rand(&mut rng);
+
+        let (di, proof) =
+            partial_decrypt_with_proof(&server_key.pubkey, &client_key.privkey, &mut rng);
+
+        // Modify the server key to make it invalid
+        let invalid_server_key = KeySet::rand(&mut rng);
+        assert!(!verify_share(
+            client_key.pubkey,
+            invalid_server_key.pubkey,
+            &di,
+            &proof
+        ));
+    }
+}
