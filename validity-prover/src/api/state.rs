@@ -198,7 +198,7 @@ impl State {
         } else {
             let deposit_info = self
                 .validity_prover
-                .get_deposit_info(request.deposit_hash)
+                .get_deposit_info(request.pubkey_salt_hash)
                 .await?;
             // the result is mutable
             self.cache
@@ -213,9 +213,9 @@ impl State {
         request: &GetDepositInfoBatchRequest,
     ) -> anyhow::Result<GetDepositInfoBatchResponse> {
         // should use batch query instead
-        let mut futures = Vec::with_capacity(request.deposit_hashes.len());
-        for &deposit_hash in &request.deposit_hashes {
-            let query = GetDepositInfoQuery { deposit_hash };
+        let mut futures = Vec::with_capacity(request.pubkey_salt_hashes.len());
+        for &pubkey_salt_hash in &request.pubkey_salt_hashes {
+            let query = GetDepositInfoQuery { pubkey_salt_hash };
             let future = async move { self.get_deposit_info(query).await };
             futures.push(future);
         }

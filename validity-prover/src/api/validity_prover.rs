@@ -152,7 +152,7 @@ pub async fn get_deposit_info_batch(
     request: Json<GetDepositInfoBatchRequest>,
 ) -> Result<Json<GetDepositInfoBatchResponse>, Error> {
     let request = request.into_inner();
-    if request.deposit_hashes.len() > MAX_BATCH_SIZE {
+    if request.pubkey_salt_hashes.len() > MAX_BATCH_SIZE {
         return Err(actix_web::error::ErrorBadRequest("Batch size is too large"));
     }
     let response = state

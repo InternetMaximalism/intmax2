@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO observer_l1_deposit_sync_eth_block_num (singleton_key, l1_deposit_sync_eth_block_num)\n            VALUES (TRUE, $1)\n            ON CONFLICT (singleton_key) DO UPDATE\n            SET l1_deposit_sync_eth_block_num = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d41c1e8ade83b8b05a82b9a2515278ed0049aae393d7139bdfedcd1df9f8f54"
+}

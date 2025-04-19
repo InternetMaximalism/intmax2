@@ -4,7 +4,9 @@ use std::{
     time::Duration,
 };
 
-use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
+use intmax2_client_sdk::external_api::contract::{
+    liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+};
 use intmax2_interfaces::{
     api::validity_prover::interface::{
         AccountInfo, DepositInfo, TransitionProofTask, TransitionProofTaskResult,
@@ -73,7 +75,7 @@ pub struct ValidityProver {
     config: Config,
     manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
     validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
-    observer: Observer,
+    pub observer: Observer,
     account_tree: SqlIndexedMerkleTree,
     block_tree: SqlIncrementalMerkleTree<Bytes32>,
     deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
@@ -99,8 +101,16 @@ impl ValidityProver {
             env.rollup_contract_address,
             env.rollup_contract_deployed_block_number,
         );
+        let liquidity_contract = LiquidityContract::new(
+            &env.l1_rpc_url,
+            env.l1_chain_id,
+            env.liquidity_contract_address,
+            env.liquidity_contract_deployed_block_number,
+        );
+
         let observer = Observer::new(
             rollup_contract,
+            liquidity_contract,
             &env.database_url,
             env.database_max_connections,
             env.database_timeout,
@@ -420,11 +430,11 @@ impl ValidityProver {
 
     pub async fn get_deposit_info(
         &self,
-        deposit_hash: Bytes32,
+        pubkey_salt_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ValidityProverError> {
         let deposit_info = self
             .observer
-            .get_deposit_info(deposit_hash)
+            .get_deposit_info(pubkey_salt_hash)
             .await
             .map_err(ValidityProverError::ObserverError)?;
         Ok(deposit_info)

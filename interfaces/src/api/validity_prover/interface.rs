@@ -2,10 +2,11 @@ use async_trait::async_trait;
 use intmax2_zkp::{
     circuits::validity::validity_pis::ValidityPublicInputs,
     common::{
+        deposit::Deposit,
         trees::{block_hash_tree::BlockHashMerkleProof, deposit_tree::DepositMerkleProof},
         witness::{update_witness::UpdateWitness, validity_witness::ValidityWitness},
     },
-    ethereum_types::{bytes32::Bytes32, u256::U256},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
 };
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
@@ -24,9 +25,12 @@ pub const MAX_BATCH_SIZE: usize = 128;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DepositInfo {
+    pub deposit_id: u64,
+    pub token_index: u32,
     pub deposit_hash: Bytes32,
-    pub block_number: u32,
-    pub deposit_index: u32,
+    pub block_number: Option<u32>,
+    pub deposit_index: Option<u32>,
+    pub l1_deposit_tx_hash: Bytes32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +39,31 @@ pub struct AccountInfo {
     pub account_id: Option<u64>,
     pub block_number: u32,
     pub last_block_number: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deposited {
+    pub deposit_id: u64,
+    pub depositor: Address,
+    pub pubkey_salt_hash: Bytes32,
+    pub token_index: u32,
+    pub amount: U256,
+    pub is_eligible: bool,
+    pub deposited_at: u64,
+    pub tx_hash: Bytes32,
+}
+
+impl Deposited {
+    pub fn to_deposit(&self) -> Deposit {
+        Deposit {
+            depositor: self.depositor,
+            pubkey_salt_hash: self.pubkey_salt_hash,
+            amount: self.amount,
+            token_index: self.token_index,
+            is_eligible: self.is_eligible,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,12 +102,12 @@ pub trait ValidityProverClientInterface: Sync + Send {
 
     async fn get_deposit_info(
         &self,
-        deposit_hash: Bytes32,
+        pubkey_salt_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ServerError>;
 
     async fn get_deposit_info_batch(
         &self,
-        deposit_hashes: &[Bytes32],
+        pubkey_salt_hashes: &[Bytes32],
     ) -> Result<Vec<Option<DepositInfo>>, ServerError>;
 
     async fn get_block_number_by_tx_tree_root(

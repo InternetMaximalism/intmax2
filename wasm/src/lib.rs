@@ -8,7 +8,7 @@ use intmax2_zkp::{
 };
 use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
-    data::{JsDepositResult, JsTxResult, JsUserData},
+    data::{JsDepositResult, JsTransferData, JsTxResult, JsUserData},
     fee::{JsFee, JsFeeQuote},
     payment_memo::JsPaymentMemoEntry,
     utils::{parse_address, parse_bytes32, parse_u256},
@@ -363,6 +363,39 @@ pub async fn make_history_backup(
         .make_history_backup(key, from, chunk_size as usize)
         .await?;
     Ok(csvs)
+}
+
+#[wasm_bindgen]
+pub async fn generate_transfer_receipt(
+    config: &Config,
+    private_key: &str,
+    transfer_digest: &str,
+    receiver: &str,
+) -> Result<String, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let transfer_digest = parse_bytes32(transfer_digest)?;
+    let receiver = parse_h256_as_u256(receiver)?;
+    let client = get_client(config);
+    let receipt = client
+        .generate_transfer_receipt(key, transfer_digest, receiver)
+        .await?;
+    Ok(receipt)
+}
+
+#[wasm_bindgen]
+pub async fn validate_transfer_receipt(
+    config: &Config,
+    private_key: &str,
+    transfer_receipt: &str,
+) -> Result<JsTransferData, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    let transfer_data = client
+        .validate_transfer_receipt(key, transfer_receipt)
+        .await?;
+    Ok(transfer_data.into())
 }
 
 fn init_logger() {

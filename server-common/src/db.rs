@@ -59,7 +59,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Q: Send + 'q + sqlx::Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -75,7 +75,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -94,7 +94,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -137,7 +137,7 @@ impl<'c> Executor<'c> for TracingPool {
         Q: Send + 'q + sqlx::Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -153,7 +153,7 @@ impl<'c> Executor<'c> for TracingPool {
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -172,7 +172,7 @@ impl<'c> Executor<'c> for TracingPool {
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),

@@ -1,5 +1,5 @@
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
-use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use intmax2_zkp::ethereum_types::{bytes32::Bytes32, EthereumTypeError};
 use server_common::redis::task_manager::TaskManagerError;
 
 use crate::trees::merkle_tree::error::MerkleTreeError;
@@ -15,11 +15,17 @@ pub enum ObserverError {
     #[error("Deserialization error: {0}")]
     DeserializationError(#[from] bincode::Error),
 
+    #[error("Ethereum type error: {0}")]
+    EthereumTypeError(#[from] EthereumTypeError),
+
     #[error("Full block sync error: {0}")]
     FullBlockSyncError(String),
 
     #[error("Deposit sync error: {0}")]
     DepositSyncError(String),
+
+    #[error("Sync L1 deposits error: {0}")]
+    SyncL1DepositedEventsError(String),
 
     #[error("Block not found: {0}")]
     BlockNotFound(u32),

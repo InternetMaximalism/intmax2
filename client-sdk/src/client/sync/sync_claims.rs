@@ -80,12 +80,16 @@ impl Client {
                     deposit_block_number, last_block_number
                 )));
             }
-            let deposit_hash = mining.deposit_data.deposit_hash().unwrap(); // safe to unwrap because it's already settled
+            let deposit_hash = mining.deposit_data.deposit_hash().unwrap();
             let deposit_info = self
                 .validity_prover
-                .get_deposit_info(deposit_hash)
+                .get_deposit_info(mining.deposit_data.pubkey_salt_hash)
                 .await?
                 .ok_or(SyncError::DepositInfoNotFound(deposit_hash))?;
+            let deposit_index = deposit_info
+                .deposit_index
+                .ok_or(SyncError::DepositIsNotSettled(deposit_info.deposit_hash))?;
+
             let prev_block = self
                 .validity_prover
                 .get_validity_witness(deposit_block_number - 1)
@@ -94,11 +98,11 @@ impl Client {
                 .block;
             let prev_deposit_merkle_proof = self
                 .validity_prover
-                .get_deposit_merkle_proof(deposit_block_number - 1, deposit_info.deposit_index)
+                .get_deposit_merkle_proof(deposit_block_number - 1, deposit_index)
                 .await?;
             let deposit_merkle_proof = self
                 .validity_prover
-                .get_deposit_merkle_proof(deposit_block_number, deposit_info.deposit_index)
+                .get_deposit_merkle_proof(deposit_block_number, deposit_index)
                 .await?;
             let public_witness = DepositTimePublicWitness {
                 prev_block,
@@ -108,7 +112,7 @@ impl Client {
             };
             let deposit_time_witness = DepositTimeWitness {
                 public_witness,
-                deposit_index: deposit_info.deposit_index,
+                deposit_index,
                 deposit: mining.deposit_data.deposit().unwrap(),
                 deposit_salt: mining.deposit_data.deposit_salt,
                 pubkey: key.pubkey,

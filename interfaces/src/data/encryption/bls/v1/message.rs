@@ -102,8 +102,6 @@ impl<'a> EncryptedMessage<'a> {
         // perform ECDH to get the shared secret, using the remote public key from the message and
         // the given secret key
         let x = ecdh_x(&self.public_key, secret_key);
-        println!("ecdh: {:?}", x.to_hex());
-
         self.derive_keys_with_ecdh(x)
     }
 

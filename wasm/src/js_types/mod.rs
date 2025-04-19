@@ -3,6 +3,7 @@ pub mod auth;
 pub mod common;
 pub mod cursor;
 pub mod data;
+pub mod deposit;
 pub mod encrypted_data;
 pub mod fee;
 pub mod history;

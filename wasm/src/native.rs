@@ -6,11 +6,13 @@ use crate::{
         auth::{JsAuth, JsFlatG2},
         cursor::JsMetaDataCursor,
         data::{JsDepositData, JsTransferData, JsTxData},
+        deposit::JsDepositInfo,
         encrypted_data::JsEncryptedData,
         multisig::{
             JsMultiEciesStep1Response, JsMultiEciesStep2Response, JsMultiEciesStep3Response,
             JsMultisigStep1Response, JsMultisigStep2Response, JsMultisigStep3Response,
         },
+        utils::parse_bytes32,
     },
     utils::{parse_h256_as_u256, str_privkey_to_keyset},
 };
@@ -140,6 +142,30 @@ pub async fn fetch_encrypted_data(
 }
 
 #[wasm_bindgen]
+pub async fn get_account_info(config: &Config, public_key: &str) -> Result<JsAccountInfo, JsError> {
+    init_logger();
+    let pubkey = parse_h256_as_u256(public_key)?;
+    let client = get_client(config);
+    let account_info = client.validity_prover.get_account_info(pubkey).await?;
+    Ok(account_info.into())
+}
+
+#[wasm_bindgen]
+pub async fn get_deposit_info(
+    config: &Config,
+    pubkey_salt_hash: &str,
+) -> Result<Option<JsDepositInfo>, JsError> {
+    init_logger();
+    let pubkey_salt_hash = parse_bytes32(pubkey_salt_hash)?;
+    let client = get_client(config);
+    let deposit_info = client
+        .validity_prover
+        .get_deposit_info(pubkey_salt_hash)
+        .await?;
+    Ok(deposit_info.map(JsDepositInfo::from))
+}
+
+#[wasm_bindgen]
 pub async fn sign_message(private_key: &str, message: &[u8]) -> Result<JsFlatG2, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
@@ -163,15 +189,6 @@ pub async fn verify_signature(
         signature_content::sign_tools::verify_signature(signature.into(), public_key, message);
 
     Ok(result.is_ok())
-}
-
-#[wasm_bindgen]
-pub async fn get_account_info(config: &Config, public_key: &str) -> Result<JsAccountInfo, JsError> {
-    init_logger();
-    let pubkey = parse_h256_as_u256(public_key)?;
-    let client = get_client(config);
-    let account_info = client.validity_prover.get_account_info(pubkey).await?;
-    Ok(account_info.into())
 }
 
 #[wasm_bindgen]

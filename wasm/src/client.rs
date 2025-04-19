@@ -80,9 +80,6 @@ pub struct Config {
     /// Address of the rollup contract
     pub rollup_contract_address: String,
 
-    /// Scroll block number when the rollup contract was deployed
-    pub rollup_contract_deployed_block_number: u64,
-
     /// Address of the withdrawal contract
     pub withdrawal_contract_address: String,
 
@@ -120,7 +117,6 @@ impl Config {
         l2_rpc_url: String,
         l2_chain_id: u64,
         rollup_contract_address: String,
-        rollup_contract_deployed_block_number: u64,
         withdrawal_contract_address: String,
         use_private_zkp_server: bool,
         use_s3: bool,
@@ -147,7 +143,6 @@ impl Config {
             l2_rpc_url,
             l2_chain_id,
             rollup_contract_address,
-            rollup_contract_deployed_block_number,
             withdrawal_contract_address,
             use_private_zkp_server,
             use_s3,
@@ -194,13 +189,14 @@ pub fn get_client(config: &Config) -> Client {
         &config.l1_rpc_url,
         config.l1_chain_id,
         config.liquidity_contract_address.parse().unwrap(),
+        0,
     );
 
     let rollup_contract = RollupContract::new(
         &config.l2_rpc_url,
         config.l2_chain_id,
         config.rollup_contract_address.parse().unwrap(),
-        config.rollup_contract_deployed_block_number,
+        0,
     );
     let withdrawal_contract = WithdrawalContract::new(
         &config.l2_rpc_url,
