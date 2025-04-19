@@ -96,11 +96,7 @@ pub async fn fetch_deposit_info(
             }
             None if meta.timestamp + deposit_timeout < current_time => {
                 // Deposit has timed out
-                log::error!(
-                    "Deposit digest: {}, deposit_hash: {} is timeout",
-                    meta.digest,
-                    deposit_data.deposit_hash().unwrap()
-                );
+                log::error!("Deposit digest: {} is timeout", meta.digest,);
                 timeout.push((meta, deposit_data));
             }
             None => {
