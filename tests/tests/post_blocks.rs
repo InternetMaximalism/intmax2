@@ -29,7 +29,7 @@ pub struct EnvVar {
 #[tokio::test]
 #[ignore]
 async fn post_blocks() -> anyhow::Result<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = intmax2_interfaces::utils::random::default_rng();
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();

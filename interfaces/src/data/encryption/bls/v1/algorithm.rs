@@ -20,10 +20,10 @@ pub use alloy_primitives::bytes::BytesMut;
 
 const ENCRYPTION_VERSION: u8 = 1;
 
-pub fn encrypt_bls(pubkey: U256, data: &[u8]) -> Vec<u8> {
+pub fn encrypt_bls<R: Rng>(pubkey: U256, data: &[u8], rng: &mut R) -> Vec<u8> {
     let sender = EciesSender::new(pubkey);
     let mut encrypted_data = BytesMut::new();
-    sender.encrypt_message(data, &mut encrypted_data);
+    sender.encrypt_message(data, &mut encrypted_data, rng);
 
     let version = ENCRYPTION_VERSION;
     let mut version_data = BytesMut::new();
@@ -63,19 +63,17 @@ impl EciesSender {
         }
     }
 
-    pub fn encrypt_message(&self, data: &[u8], out: &mut BytesMut) {
-        let mut rng = rand::thread_rng();
-        let key = KeySet::rand(&mut rng);
-        let receiver_public_key = self.receiver_public_key;
-        let x = ecdh_x(&receiver_public_key, &key.privkey);
-
+    pub fn encrypt_message<R: Rng>(&self, data: &[u8], out: &mut BytesMut, rng: &mut R) {
         out.reserve(U256_SIZE + 16 + data.len() + 32);
 
         let total_size = U256_SIZE + 16 + data.len() + 32;
         let auth_tag: u16 = u16::try_from(total_size % 65536).unwrap(); // TODO: Is it correct?
         out.extend_from_slice(&auth_tag.to_be_bytes());
+
+        let key = KeySet::rand(rng);
         out.extend_from_slice(&key.pubkey.to_bytes_be()); // 32 bytes
 
+        let x = ecdh_x(&self.receiver_public_key, &key.privkey);
         let mut key = [0u8; 32];
         kdf(x, &[], &mut key);
 
@@ -136,6 +134,8 @@ mod test {
     };
     use rand::Rng;
 
+    use crate::utils::random::default_rng;
+
     use super::{
         decrypt_bls, ecdh_x, encrypt_bls, hmac_sha256, kdf, sha256, BytesMut, EciesReceiver,
         EciesSender, U256_SIZE,
@@ -143,14 +143,14 @@ mod test {
 
     #[test]
     fn test_ecies_encryption() {
-        let mut rand = rand::thread_rng();
-        let receiver_key = KeySet::rand(&mut rand);
+        let mut rng = default_rng();
+        let receiver_key = KeySet::rand(&mut rng);
         let sender = EciesSender::new(receiver_key.pubkey);
 
         let data = b"hello world";
 
         let mut encrypted_data = BytesMut::new();
-        sender.encrypt_message(data, &mut encrypted_data);
+        sender.encrypt_message(data, &mut encrypted_data, &mut rng);
 
         let receiver = EciesReceiver::new(receiver_key);
         let decrypted_data = receiver.decrypt_message(&mut encrypted_data).unwrap();
@@ -165,7 +165,7 @@ mod test {
     ) {
         let invalid_auth_tag = 0u16;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
 
         out.reserve(U256_SIZE + 16 + data.len() + 32);
 
@@ -202,8 +202,8 @@ mod test {
 
     #[test]
     fn test_ecies_encryption_with_invalid_auth_tag() {
-        let mut rand = rand::thread_rng();
-        let receiver_key = KeySet::rand(&mut rand);
+        let mut rng = default_rng();
+        let receiver_key = KeySet::rand(&mut rng);
 
         let data = b"hello world";
 
@@ -223,13 +223,13 @@ mod test {
 
     #[test]
     fn test_e2e_encryption() {
-        let mut rand = rand::thread_rng();
-        let key = KeySet::rand(&mut rand);
+        let mut rng = default_rng();
+        let key = KeySet::rand(&mut rng);
 
         let data = b"hello world";
         println!("data: {:?}", data.to_vec());
 
-        let encrypted_data = encrypt_bls(key.pubkey, data);
+        let encrypted_data = encrypt_bls(key.pubkey, data, &mut rng);
         println!("encrypted data: {:?}", encrypted_data);
 
         let decrypted_data = decrypt_bls(key, &encrypted_data).unwrap();
@@ -241,7 +241,8 @@ mod test {
     fn encrypt_with_unsupported_version(pubkey: U256, data: &[u8]) -> Vec<u8> {
         let sender = EciesSender::new(pubkey);
         let mut encrypted_data = BytesMut::new();
-        sender.encrypt_message(data, &mut encrypted_data);
+
+        sender.encrypt_message(data, &mut encrypted_data, &mut default_rng());
 
         let version = 2u8;
         let mut version_data = BytesMut::new();
@@ -253,8 +254,8 @@ mod test {
 
     #[test]
     fn test_e2e_encryption_with_unsupported_version() {
-        let mut rand = rand::thread_rng();
-        let key = KeySet::rand(&mut rand);
+        let mut rng = default_rng();
+        let key = KeySet::rand(&mut rng);
 
         let data = b"hello world";
 

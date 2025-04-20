@@ -35,7 +35,7 @@ use intmax2_interfaces::{
         transfer_data::TransferData,
         tx_data::TxData,
     },
-    utils::signature::Auth,
+    utils::{random::default_rng, signature::Auth},
 };
 use intmax2_zkp::{
     common::signature_content::{self, flatten::FlatG2},
@@ -212,7 +212,7 @@ pub fn encrypt_message(pubkey: &str, data: &[u8]) -> Vec<u8> {
         .map_err(|_| JsError::new("Failed to parse public key"))
         .unwrap();
 
-    encrypt_bls(pubkey, data)
+    encrypt_bls(pubkey, data, &mut default_rng())
 }
 
 #[wasm_bindgen]

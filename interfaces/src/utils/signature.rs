@@ -85,6 +85,8 @@ pub fn current_time() -> u64 {
 
 #[cfg(test)]
 mod test {
+    use crate::utils::random::default_rng;
+
     use super::{sign_message, verify_signature};
     use intmax2_zkp::{
         common::signature_content::key_set::KeySet,
@@ -93,7 +95,7 @@ mod test {
 
     #[test]
     fn test_sign_verify() {
-        let mut rnd = rand::thread_rng();
+        let mut rnd = default_rng();
         let key = KeySet::rand(&mut rnd);
         let hash = Bytes32::rand(&mut rnd);
         let signature = sign_message(key.privkey, &hash.to_bytes_be());
@@ -102,7 +104,7 @@ mod test {
 
     #[test]
     fn test_auth_verify() {
-        let mut rnd = rand::thread_rng();
+        let mut rnd = default_rng();
         let key = KeySet::rand(&mut rnd);
         let content = b"test";
         let auth = super::Auth::sign(key, 10, content);

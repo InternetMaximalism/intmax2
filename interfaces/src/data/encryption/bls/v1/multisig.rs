@@ -2,7 +2,8 @@ use ark_bn254::{G1Affine, G1Projective};
 use ark_std::Zero as _;
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use plonky2_bn254::fields::{recover::RecoverFromX, sgn::Sgn};
-use rand::thread_rng;
+
+use crate::utils::random::default_rng;
 
 use super::{
     chaum_pedersen::{partial_decrypt_with_proof, verify_share, ZKProof},
@@ -87,7 +88,7 @@ pub fn decrypt_bls_interaction_step2(
     let (server_ecdh_share, server_proof) = partial_decrypt_with_proof(
         &encrypted_message.get_public_key(),
         &server_key.privkey,
-        &mut thread_rng(),
+        &mut default_rng(),
     );
 
     Ok(MultiEciesStep2Response {
@@ -151,24 +152,27 @@ pub fn calc_simple_aggregated_pubkey(signers: &[U256]) -> anyhow::Result<(U256, 
 mod test {
     use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 
-    use crate::data::encryption::bls::v1::multisig::{
-        calc_simple_aggregated_pubkey, decrypt_bls_interaction,
+    use crate::{
+        data::encryption::bls::v1::multisig::{
+            calc_simple_aggregated_pubkey, decrypt_bls_interaction,
+        },
+        utils::random::default_rng,
     };
 
     use super::super::algorithm::{encrypt_bls, BytesMut, EciesSender};
 
     #[test]
     fn test_e2e_encryption_interaction() {
-        let mut rand = rand::thread_rng();
-        let server_key = KeySet::rand(&mut rand);
-        let client_key = KeySet::rand(&mut rand);
+        let mut rng = default_rng();
+        let server_key = KeySet::rand(&mut rng);
+        let client_key = KeySet::rand(&mut rng);
         let (pubkey, _) =
             calc_simple_aggregated_pubkey(&[server_key.pubkey, client_key.pubkey]).unwrap();
 
         let data = b"hello world";
         println!("data: {:?}", data.to_vec());
 
-        let encrypted_data = encrypt_bls(pubkey, data);
+        let encrypted_data = encrypt_bls(pubkey, data, &mut rng);
         println!("encrypted data: {:?}", encrypted_data);
 
         let decrypted_data =
@@ -179,9 +183,10 @@ mod test {
     }
 
     fn encrypt_with_unsupported_version(pubkey: U256, data: &[u8]) -> Vec<u8> {
+        let mut rng = default_rng();
         let sender = EciesSender::new(pubkey);
         let mut encrypted_data = BytesMut::new();
-        sender.encrypt_message(data, &mut encrypted_data);
+        sender.encrypt_message(data, &mut encrypted_data, &mut rng);
 
         let version = 2u8;
         let mut version_data = BytesMut::new();
@@ -193,9 +198,9 @@ mod test {
 
     #[test]
     fn test_e2e_encryption_interaction_with_unsupported_version() {
-        let mut rand = rand::thread_rng();
-        let server_key = KeySet::rand(&mut rand);
-        let client_key = KeySet::rand(&mut rand);
+        let mut rng = default_rng();
+        let server_key = KeySet::rand(&mut rng);
+        let client_key = KeySet::rand(&mut rng);
         let (pubkey, _) =
             calc_simple_aggregated_pubkey(&[server_key.pubkey, client_key.pubkey]).unwrap();
 

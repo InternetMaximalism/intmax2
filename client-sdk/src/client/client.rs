@@ -22,6 +22,7 @@ use intmax2_interfaces::{
         tx_data::TxData,
         user_data::{Balances, ProcessStatus},
     },
+    utils::random::default_rng,
 };
 use intmax2_zkp::{
     common::{
@@ -174,7 +175,7 @@ impl Client {
             pubkey,
             data: deposit_data.encrypt(pubkey, None)?,
         };
-        let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
+        let ephemeral_key = KeySet::rand(&mut default_rng());
         let digests = self
             .store_vault_server
             .save_data_batch(ephemeral_key, &[save_entry.clone()])
@@ -303,7 +304,7 @@ impl Client {
             spent_proof,
             prev_balance_proof,
         };
-        let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
+        let ephemeral_key = KeySet::rand(&mut default_rng());
         self.store_vault_server
             .save_snapshot(
                 ephemeral_key,

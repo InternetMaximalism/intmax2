@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     data::encryption::bls::v1::algorithm::{decrypt_bls, encrypt_bls},
-    utils::digest::get_digest,
+    utils::{digest::get_digest, random::default_rng},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -33,7 +33,7 @@ pub struct V1SignedEncryption {
 
 impl V1SignedEncryption {
     pub fn encrypt(receiver: U256, sender_key: Option<KeySet>, data: &[u8]) -> Self {
-        let data = encrypt_bls(receiver, data);
+        let data = encrypt_bls(receiver, data, &mut default_rng());
         let digest = get_digest(&data);
         let signature: Option<FlatG2> =
             sender_key.map(|key| sign_message(key.privkey, &digest.to_bytes_be()).into());

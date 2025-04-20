@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn random_vec() {
-        let mut rng = rand::thread_rng();
+        let mut rng = intmax2_interfaces::utils::random::default_rng();
         let mut popped_bits = (0..10).map(|_| rng.gen_bool(0.5)).collect::<Vec<_>>();
         let mut popped_path = BitPath::from_bits_le(&popped_bits);
 

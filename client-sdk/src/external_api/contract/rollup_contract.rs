@@ -505,7 +505,7 @@ mod tests {
             )
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = intmax2_interfaces::utils::random::default_rng();
         let (keys, signature) = SignatureContent::rand(&mut rng);
         let pubkeys = keys.iter().map(|e| e.pubkey).collect::<Vec<_>>();
         rollup_contract

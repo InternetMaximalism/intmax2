@@ -19,7 +19,7 @@ async fn post_blocks() -> anyhow::Result<()> {
     let block_builder_private_key: [u8; 32] = anvil.keys()[1].to_bytes().into();
     let block_builder_private_key = H256::from_slice(&block_builder_private_key);
 
-    let mut rng = rand::thread_rng();
+    let mut rng = intmax2_interfaces::utils::random::default_rng();
     let rollup_contract = RollupContract::new(
         &env.l2_rpc_url,
         env.l2_chain_id,

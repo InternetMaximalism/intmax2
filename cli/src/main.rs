@@ -16,6 +16,7 @@ use intmax2_cli::{
     format::{format_token_info, parse_generic_address, privkey_to_keyset},
 };
 use intmax2_client_sdk::client::sync::utils::generate_salt;
+use intmax2_interfaces::utils::random::default_rng;
 use intmax2_zkp::{
     common::{signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{u256::U256 as IU256, u32limb_trait::U32LimbTrait},
@@ -218,7 +219,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             incorporate_backup(&path)?;
         }
         Commands::GenerateKey => {
-            let mut rng = rand::thread_rng();
+            let mut rng = default_rng();
             let key = KeySet::rand(&mut rng);
             let private_key = BigUint::from(key.privkey);
             let private_key: IU256 = private_key.try_into().unwrap();
