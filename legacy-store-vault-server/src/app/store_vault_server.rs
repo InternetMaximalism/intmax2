@@ -121,7 +121,7 @@ impl StoreVaultServer {
         let data: Vec<Vec<u8>> = entries.iter().map(|entry| entry.data.clone()).collect();
         let timestamps = vec![chrono::Utc::now().timestamp(); entries.len()];
 
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
             INSERT INTO historical_data (digest, pubkey, topic, data, timestamp)
             SELECT
@@ -130,7 +130,6 @@ impl StoreVaultServer {
                 UNNEST($3::text[]),
                 UNNEST($4::bytea[]),
                 UNNEST($5::bigint[])
-            ON CONFLICT (digest) DO NOTHING
             "#,
             &digests_hex,
             &pubkeys,
@@ -139,7 +138,19 @@ impl StoreVaultServer {
             &timestamps
         )
         .execute(&self.pool)
-        .await?;
+        .await;
+
+        match result {
+            Ok(_) => {}
+            Err(sqlx::Error::Database(error))
+                if error.constraint() == Some("historical_data_pkey") =>
+            {
+                return Err(StoreVaultError::SaveHistoryError(
+                    "data with the specified digest already in history".to_owned(),
+                ))
+            }
+            Err(err) => return Err(err.into()),
+        }
 
         Ok(digests)
     }
@@ -274,5 +285,355 @@ impl StoreVaultServer {
             total_count,
         };
         Ok((result, response_cursor))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use intmax2_interfaces::utils::digest::get_digest;
+    use intmax2_zkp::ethereum_types::u256::U256;
+    use sqlx::{Executor, PgPool, Postgres};
+    use tokio::time::sleep;
+
+    use super::*;
+
+    /// test case 1: It is expected to get an error while preservation a snapshot for the not existing previous digest.
+    ///
+    /// test case 2: It is expected to get an error while preservation a snapshot for the invalid previous digest.
+    ///
+    /// test case 3: It is expected to get an error while preservation a snapshot for the None previous digest but previous object is exist.
+    #[sqlx::test]
+    async fn save_snapshot_with_invalid_digest_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let vault = StoreVaultServer {
+            pool: DbPool::new(pool),
+        };
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let data_1 = b"test data 1";
+        let data_2 = b"test data 2";
+        let digest_1 = get_digest(data_1);
+        let digest_2 = get_digest(data_2);
+
+        let result = vault
+            .save_snapshot(topic, pubkey, Some(digest_1), data_2)
+            .await;
+        // test case 1
+        assert!(matches!(result, Err(StoreVaultError::LockError(_))));
+
+        vault
+            .save_snapshot(topic, pubkey, None, data_1)
+            .await
+            .unwrap();
+
+        let result = vault
+            .save_snapshot(topic, pubkey, Some(digest_2), data_2)
+            .await;
+        // test case 2
+        assert!(matches!(result, Err(StoreVaultError::LockError(_))));
+
+        let result = vault.save_snapshot(topic, pubkey, None, data_2).await;
+        // test case 3
+        assert!(matches!(result, Err(StoreVaultError::LockError(_))));
+    }
+
+    /// test case 1: it is expected to update the timestep, digest and data while preservation a new object with the same public key and topic.
+    #[sqlx::test]
+    async fn save_snapshot_with_existed_digest_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let vault = StoreVaultServer {
+            pool: DbPool::new(pool),
+        };
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let data_1 = b"test data 1";
+        let data_2 = b"test data 2";
+        let digest_1 = get_digest(data_1);
+        let digest_2 = get_digest(data_2);
+
+        vault
+            .save_snapshot(topic, pubkey, None, data_1)
+            .await
+            .unwrap();
+        let (_, _, timestamp_stage_1) = select_snapshot(pubkey, topic, &vault.pool).await;
+
+        vault
+            .save_snapshot(topic, pubkey, Some(digest_1), data_2)
+            .await
+            .unwrap();
+        let (data_stage_2, digest_stage_2, timestamp_stage_2) =
+            select_snapshot(pubkey, topic, &vault.pool).await;
+
+        // test case 1
+        assert!(timestamp_stage_2 >= timestamp_stage_1);
+        assert_eq!(Bytes32::from_hex(&digest_stage_2).unwrap(), digest_2);
+        assert_eq!(data_stage_2, data_2);
+    }
+
+    /// test case 1: It is expected to get a correct URLS list while preservation a butch data into history.
+    ///
+    /// test case 2: It is expected to get an error while preservation an existing digest in history.
+    #[sqlx::test]
+    async fn batch_save_data_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let vault = StoreVaultServer {
+            pool: DbPool::new(pool),
+        };
+
+        let entry_1 = SaveDataEntry {
+            topic: "topic".to_owned(),
+            pubkey: U256::from(1),
+            data: b"test data".to_vec(),
+        };
+        let entry_1_digest = get_digest(&entry_1.data);
+
+        let urls = vault.batch_save_data(&[entry_1.clone()]).await.unwrap();
+        // test case 1
+        assert_eq!(urls, vec![entry_1_digest]);
+
+        let result = vault.batch_save_data(&[entry_1]).await;
+        // test case 2
+        assert!(matches!(result, Err(StoreVaultError::SaveHistoryError(_))));
+    }
+
+    /// test case 1: It is expected to get an empty list when requesting a history with existing topic and pubkey, but absent digests.
+    ///
+    /// test case 2: It is expected to get an empty list when requesting a history with existing digests, but absent topic and pubkey.
+    ///
+    /// test case 3: It is expected to get a correct list when requesting a history with existing topic, pubkey and digests.
+    #[sqlx::test]
+    async fn get_data_batch_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let vault = StoreVaultServer {
+            pool: DbPool::new(pool),
+        };
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let data = b"test data";
+        let digest = get_digest(data);
+
+        // save test data
+        vault
+            .batch_save_data(&[SaveDataEntry {
+                topic: topic.to_owned(),
+                pubkey,
+                data: data.to_vec(),
+            }])
+            .await
+            .unwrap();
+
+        let list = vault
+            .get_data_batch(topic, pubkey, &[get_digest(b"non existent data")])
+            .await
+            .unwrap();
+        // test case 1
+        assert!(list.is_empty());
+
+        let list = vault
+            .get_data_batch("non existent topic", U256::from(u32::MAX), &[digest])
+            .await
+            .unwrap();
+        // test case 2
+        assert!(list.is_empty());
+
+        let list = vault
+            .get_data_batch(topic, pubkey, &[digest])
+            .await
+            .unwrap();
+        // test case 3
+        assert_eq!(
+            list.iter().map(|u| u.data.clone()).collect::<Vec<_>>(),
+            vec![data]
+        );
+        assert_eq!(
+            list.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![digest]
+        );
+    }
+
+    /// test case 1: It is expected to get an empty data and metadata list when requesting a history with absent topic and pubkey.
+    ///
+    /// test case 2: Correct behavior of data requests sorted by increasing is expected:
+    /// at the first request, the metadata contains a cursor that can be used in the second request,
+    /// the second request that receives all the remaining data (exclude cursor).
+    ///
+    /// test case 3: Similarly, test case 2, but the sorting of decrease is used.
+    #[sqlx::test]
+    async fn get_data_sequence_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let vault = StoreVaultServer {
+            pool: DbPool::new(pool),
+        };
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let entry_1 = SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            data: b"test data 1".to_vec(),
+        };
+        let entry_2 = SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            data: b"test data 2".to_vec(),
+        };
+        let entry_3 = SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            data: b"test data 3".to_vec(),
+        };
+        let entry_1_digest = get_digest(&entry_1.data);
+        let entry_2_digest = get_digest(&entry_2.data);
+        let entry_3_digest = get_digest(&entry_3.data);
+
+        // save test data
+        vault.batch_save_data(&[entry_1.clone()]).await.unwrap();
+        sleep(Duration::from_secs(1)).await;
+        vault.batch_save_data(&[entry_2.clone()]).await.unwrap();
+        sleep(Duration::from_secs(1)).await;
+        vault.batch_save_data(&[entry_3.clone()]).await.unwrap();
+
+        let (urls, metadata) = vault
+            .get_data_sequence(
+                "non existent topic",
+                U256::from(u32::MAX),
+                &MetaDataCursor::default(),
+            )
+            .await
+            .unwrap();
+        // test case 1
+        assert!(urls.is_empty());
+        assert!(metadata.next_cursor.is_none());
+        assert!(!metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: None,
+                    order: CursorOrder::Asc,
+                    limit: Some(2),
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 2
+        assert_eq!(
+            urls.iter().map(|u| u.data.clone()).collect::<Vec<_>>(),
+            vec![entry_1.data.clone(), entry_2.data.clone()]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_1_digest, entry_2_digest]
+        );
+        assert_eq!(next_cursor.digest, entry_2_digest);
+        assert!(metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: Some(next_cursor),
+                    order: CursorOrder::Asc,
+                    limit: None,
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 2
+        assert_eq!(
+            urls.iter().map(|u| u.data.clone()).collect::<Vec<_>>(),
+            vec![entry_3.data.clone()]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_3_digest]
+        );
+        assert_eq!(next_cursor.digest, entry_3_digest);
+        assert!(!metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: None,
+                    order: CursorOrder::Desc,
+                    limit: Some(2),
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 3
+        assert_eq!(
+            urls.iter().map(|u| u.data.clone()).collect::<Vec<_>>(),
+            vec![entry_3.data, entry_2.data]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_3_digest, entry_2_digest]
+        );
+        assert_eq!(next_cursor.digest, entry_2_digest);
+        assert!(metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: Some(next_cursor),
+                    order: CursorOrder::Desc,
+                    limit: None,
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 3
+        assert_eq!(
+            urls.iter().map(|u| u.data.clone()).collect::<Vec<_>>(),
+            vec![entry_1.data]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_1_digest]
+        );
+        assert_eq!(next_cursor.digest, entry_1_digest);
+        assert!(!metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+    }
+
+    async fn select_snapshot(
+        pubkey: U256,
+        topic: &str,
+        executor: impl Executor<'_, Database = Postgres>,
+    ) -> (Vec<u8>, String, i64) {
+        let record = sqlx::query!(
+            r#"
+            SELECT data, digest, timestamp FROM snapshot_data
+            WHERE pubkey = $1 AND topic = $2
+            "#,
+            pubkey.to_hex(),
+            topic,
+        )
+        .fetch_one(executor)
+        .await
+        .unwrap();
+
+        (record.data, record.digest, record.timestamp)
     }
 }
