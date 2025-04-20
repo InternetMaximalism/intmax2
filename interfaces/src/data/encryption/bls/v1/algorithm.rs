@@ -67,7 +67,7 @@ impl EciesSender {
         out.reserve(U256_SIZE + 16 + data.len() + 32);
 
         let total_size = U256_SIZE + 16 + data.len() + 32;
-        let auth_tag: u16 = u16::try_from(total_size % 65536).unwrap(); // TODO: Is it correct?
+        let auth_tag: u16 = u16::try_from(total_size % 65536).unwrap();
         out.extend_from_slice(&auth_tag.to_be_bytes());
 
         let key = KeySet::rand(rng);
