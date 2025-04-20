@@ -113,6 +113,8 @@ jobs:
           cp balance-prover/.env.example balance-prover/.env
           cp block-builder/.env.example block-builder/.env
           cp store-vault-server/.env.example store-vault-server/.env
+          cp legacy-store-vault-server/.env.example legacy-store-vault-server/.env
+          sed -i 's/store_vault_server/legacy_store_vault_server/' legacy-store-vault-server/.env
           cp validity-prover/.env.example validity-prover/.env
           cp withdrawal-server/.env.example withdrawal-server/.env
           cp tests/.env.example tests/.env
@@ -120,6 +122,7 @@ jobs:
         run: |
           cargo install sqlx-cli --version=0.8.3
           cd store-vault-server && sqlx database setup && cd -
+          cd legacy-store-vault-server && sqlx database setup && cd -
           cd validity-prover && sqlx database setup && cd -
           cd withdrawal-server && sqlx database setup && cd -
       - name: Start Anvil
