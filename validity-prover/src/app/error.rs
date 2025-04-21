@@ -21,6 +21,9 @@ pub enum ObserverError {
     #[error("Deserialization error: {0}")]
     DeserializationError(#[from] bincode::Error),
 
+    #[error("Event fetch error: {0}")]
+    EventFetchError(String),
+
     #[error("Ethereum type error: {0}")]
     EthereumTypeError(#[from] EthereumTypeError),
 

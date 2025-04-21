@@ -7,6 +7,25 @@ pub enum EventType {
     BlockPosted,
 }
 
+
+#[derive(Debug, Clone, Copy)]
+pub enum ChainType {
+    L1,
+    L2,
+}
+
+impl EventType {
+    pub fn to_chain_type(&self) -> ChainType {
+        match self {
+            EventType::Deposited => ChainType::L1,
+            EventType::DepositLeafInserted => ChainType::L2,
+            EventType::BlockPosted => ChainType::L2,
+        }
+    }
+}
+
+
+
 #[derive(Clone)]
 pub struct CheckPointStore {
     pool: DbPool,

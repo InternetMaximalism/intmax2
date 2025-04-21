@@ -1,14 +1,16 @@
+use ethers::types::Address;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{FullBlockWithMeta, RollupContract},
+    utils::get_latest_block_number,
 };
 use intmax2_zkp::common::witness::full_block::FullBlock;
 
-use server_common::db::{DbPool, DbPoolConfig};
+use server_common::db::DbPool;
 use tracing::{info, instrument};
 
 use super::{
-    check_point_store::{CheckPointStore, EventType},
+    check_point_store::{ChainType, CheckPointStore, EventType},
     error::ObserverError,
 };
 
@@ -18,6 +20,16 @@ pub struct ObserverConfig {
     pub backward_sync_block_number: u64,
     pub max_tries: u32,
     pub sleep_time: u64,
+
+    // chain config
+    pub l1_rpc_url: String,
+    pub l1_chain_id: u64,
+    pub l2_rpc_url: String,
+    pub l2_chain_id: u64,
+    pub rollup_contract_address: Address,
+    pub rollup_contract_deployed_block_number: u64,
+    pub liquidity_contract_address: Address,
+    pub liquidity_contract_deployed_block_number: u64,
 }
 
 #[derive(Clone)]
@@ -30,14 +42,18 @@ pub struct Observer {
 }
 
 impl Observer {
-    pub async fn new(
-        config: ObserverConfig,
-        rollup_contract: RollupContract,
-        liquidity_contract: LiquidityContract,
-        pool: DbPool,
-    ) -> Result<Self, ObserverError> {
+    pub async fn new(config: ObserverConfig, pool: DbPool) -> Result<Self, ObserverError> {
         let check_point_store = CheckPointStore::new(pool.clone());
-
+        let rollup_contract = RollupContract::new(
+            &config.l2_rpc_url,
+            config.l2_chain_id,
+            config.rollup_contract_address,
+        );
+        let liquidity_contract = LiquidityContract::new(
+            &config.l1_rpc_url,
+            config.l1_chain_id,
+            config.liquidity_contract_address,
+        );
         // Initialize with genesis block if table is empty
         let count = sqlx::query!("SELECT COUNT(*) as count FROM full_blocks")
             .fetch_one(&pool)
@@ -146,9 +162,29 @@ impl Observer {
         Ok(next_event_id)
     }
 
+    pub fn default_eth_block_number(&self, event_type: EventType) -> u64 {
+        match event_type.to_chain_type() {
+            ChainType::L1 => self.config.l1_chain_id,
+            ChainType::L2 => self.config.l2_chain_id,
+        }
+    }
+
+    pub async fn get_current_eth_block_number(
+        &self,
+        event_type: EventType,
+    ) -> Result<u64, ObserverError> {
+        let current_eth_block_number = match event_type.to_chain_type() {
+            ChainType::L1 => get_latest_block_number(&self.config.l1_rpc_url).await?,
+            ChainType::L2 => get_latest_block_number(&self.config.l2_rpc_url).await?,
+        };
+        Ok(current_eth_block_number)
+    }
+
     #[instrument(skip(self))]
     pub async fn single_sync_deposit_leaf_inserted(&self) -> Result<(), ObserverError> {
         let event_type = EventType::DepositLeafInserted;
+
+        // syncするべきかどうかの判定をする
         let local_next_event_id = self.get_local_next_event_id(event_type).await?;
         let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
         if local_next_event_id >= onchain_next_event_id {
@@ -163,8 +199,24 @@ impl Observer {
         let checkpoint_eth_block_number =
             self.check_point_store.get_check_point(event_type).await?;
         let local_last_eth_block_number = self.get_local_last_eth_block_number(event_type).await?;
+        // 大きい方を取る。両方がNoneの場合はdefault_eth_block_numberを使う
+        let from_eth_block_number = checkpoint_eth_block_number
+            .max(local_last_eth_block_number)
+            .unwrap_or(self.default_eth_block_number(event_type));
 
-        let start_eth_block_number = checkpoint_eth_block_number.max(local_last_eth_block_number);
+        // どこまでblockを同期したらいいのか？-> onchainの最新eth_block_numberを取得
+        let to_eth_block_number = self
+            .get_current_eth_block_number(event_type)
+            .await?
+            .min(from_eth_block_number + self.config.event_block_interval - 1);
+
+        let events = self
+            .rollup_contract
+            .get_deposit_leaf_inserted_events(from_eth_block_number, to_eth_block_number)
+            .await
+            .map_err(|e| ObserverError::EventFetchError(e.to_string()))?;
+
+        // もしeventにgapがある場合はbackward syncを行う
 
         todo!();
     }

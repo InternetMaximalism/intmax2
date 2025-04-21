@@ -88,46 +88,33 @@ impl ValidityProver {
         let config = Config {
             sync_interval: env.sync_interval,
         };
-
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
             env.task_ttl as usize,
             env.heartbeat_interval as usize,
         )?);
-
-        let rollup_contract = RollupContract::new(
-            &env.l2_rpc_url,
-            env.l2_chain_id,
-            env.rollup_contract_address,
-        );
-        let liquidity_contract = LiquidityContract::new(
-            &env.l1_rpc_url,
-            env.l1_chain_id,
-            env.liquidity_contract_address,
-        );
-
         let observer_pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
             idle_timeout: env.database_timeout,
             url: env.database_url.to_string(),
         })
         .await?;
-
         let observer_config = ObserverConfig {
             event_block_interval: 10000,
             backward_sync_block_number: 1000,
             max_tries: 5,
             sleep_time: 10,
+            l1_rpc_url: env.l1_rpc_url.clone(),
+            l1_chain_id: env.l1_chain_id,
+            l2_rpc_url: env.l2_rpc_url.clone(),
+            l2_chain_id: env.l2_chain_id,
+            rollup_contract_address: env.rollup_contract_address,
+            rollup_contract_deployed_block_number: env.rollup_contract_deployed_block_number,
+            liquidity_contract_address: env.liquidity_contract_address,
+            liquidity_contract_deployed_block_number: env.liquidity_contract_deployed_block_number,
         };
-
-        let observer = Observer::new(
-            observer_config,
-            rollup_contract,
-            liquidity_contract,
-            observer_pool,
-        )
-        .await?;
+        let observer = Observer::new(observer_config, observer_pool).await?;
 
         let pool = Pool::connect(&env.database_url).await?;
         let account_tree =

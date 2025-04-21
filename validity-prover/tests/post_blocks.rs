@@ -24,7 +24,6 @@ async fn post_blocks() -> anyhow::Result<()> {
         &env.l2_rpc_url,
         env.l2_chain_id,
         env.rollup_contract_address,
-        env.rollup_contract_deployed_block_number,
     );
 
     let block_number = get_latest_block_number(&env.l2_rpc_url).await?;
