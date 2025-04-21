@@ -1,3 +1,5 @@
+use std::fmt;
+
 use server_common::db::DbPool;
 
 #[derive(Debug, Clone, Copy)]
@@ -7,6 +9,15 @@ pub enum EventType {
     BlockPosted,
 }
 
+impl fmt::Display for EventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EventType::Deposited => write!(f, "Deposited"),
+            EventType::DepositLeafInserted => write!(f, "DepositLeafInserted"),
+            EventType::BlockPosted => write!(f, "BlockPosted"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum ChainType {
@@ -24,8 +35,6 @@ impl EventType {
     }
 }
 
-
-
 #[derive(Clone)]
 pub struct CheckPointStore {
     pool: DbPool,
@@ -36,10 +45,7 @@ impl CheckPointStore {
         Self { pool }
     }
 
-    pub async fn get_check_point(
-        &self,
-        event_type: EventType,
-    ) -> Result<Option<u64>, sqlx::Error> {
+    pub async fn get_check_point(&self, event_type: EventType) -> Result<Option<u64>, sqlx::Error> {
         let eth_block_number = match event_type {
             EventType::Deposited => {
                 sqlx::query!("SELECT l1_deposit_sync_eth_block_num FROM observer_l1_deposit_sync_eth_block_num WHERE singleton_key = TRUE")
@@ -47,7 +53,7 @@ impl CheckPointStore {
                     .await?
                     .map(|row| row.l1_deposit_sync_eth_block_num)
             }
-            EventType::DepositLeafInserted => { 
+            EventType::DepositLeafInserted => {
                 sqlx::query!("SELECT deposit_sync_eth_block_num FROM observer_deposit_sync_eth_block_num WHERE singleton_key = TRUE")
                     .fetch_optional(&self.pool)
                     .await?

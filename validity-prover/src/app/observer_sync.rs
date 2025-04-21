@@ -4,8 +4,11 @@ use intmax2_client_sdk::external_api::contract::{
     rollup_contract::{FullBlockWithMeta, RollupContract},
     utils::get_latest_block_number,
 };
-use intmax2_zkp::common::witness::full_block::FullBlock;
+use intmax2_zkp::{
+    common::witness::full_block::FullBlock, ethereum_types::u32limb_trait::U32LimbTrait as _,
+};
 
+use log::warn;
 use server_common::db::DbPool;
 use tracing::{info, instrument};
 
@@ -181,6 +184,50 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
+    pub async fn fetch_and_write_deposit_leaf_inserted_event(
+        &self,
+        expected_next_event_id: u64,
+        from_eth_block_number: u64,
+        to_eth_block_number: u64,
+    ) -> Result<u64, ObserverError> {
+        let events = self
+            .rollup_contract
+            .get_deposit_leaf_inserted_events(from_eth_block_number, to_eth_block_number)
+            .await
+            .map_err(|e| ObserverError::EventFetchError(e.to_string()))?;
+        let events = events
+            .into_iter()
+            .skip_while(|e| e.deposit_index < expected_next_event_id as u32)
+            .collect::<Vec<_>>();
+        if events.is_empty() {
+            return Ok(expected_next_event_id);
+        }
+        let first = events.first().unwrap();
+        if first.deposit_index != expected_next_event_id as u32 {
+            return Err(ObserverError::EventGapDetected {
+                event_type: EventType::DepositLeafInserted,
+                expected_next_event_id,
+                got_event_id: first.deposit_index as u64,
+            });
+        }
+        let mut tx = self.pool.begin().await?;
+        for event in &events {
+            sqlx::query!(
+            "INSERT INTO deposit_leaf_events (deposit_index, deposit_hash, eth_block_number, eth_tx_index) 
+            VALUES ($1, $2, $3, $4)",
+            event.deposit_index as i32,
+            event.deposit_hash.to_bytes_be(),
+            event.eth_block_number as i64,
+            event.eth_tx_index as i64
+            )
+            .execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        let next_event_id = events.last().unwrap().deposit_index as u64 + 1;
+        Ok(next_event_id)
+    }
+
+    #[instrument(skip(self))]
     pub async fn single_sync_deposit_leaf_inserted(&self) -> Result<(), ObserverError> {
         let event_type = EventType::DepositLeafInserted;
 
@@ -210,13 +257,51 @@ impl Observer {
             .await?
             .min(from_eth_block_number + self.config.event_block_interval - 1);
 
-        let events = self
-            .rollup_contract
-            .get_deposit_leaf_inserted_events(from_eth_block_number, to_eth_block_number)
-            .await
-            .map_err(|e| ObserverError::EventFetchError(e.to_string()))?;
-
-        // もしeventにgapがある場合はbackward syncを行う
+        let next_event_id = match event_type {
+            EventType::DepositLeafInserted => {
+                self.fetch_and_write_deposit_leaf_inserted_event(
+                    local_next_event_id,
+                    from_eth_block_number,
+                    to_eth_block_number,
+                )
+                .await
+            }
+            _ => {
+                todo!()
+            }
+        };
+        match next_event_id {
+            Ok(next_event_id) => {
+                // checkpointを更新する
+                self.check_point_store
+                    .set_check_point(event_type, to_eth_block_number)
+                    .await?;
+                info!(
+                    "Sync success. Event type: {}, Local next event id: {}, Onchain next event id: {}, From eth block number: {}, To eth block number: {}",
+                    event_type, local_next_event_id, next_event_id, from_eth_block_number, to_eth_block_number
+                );
+            }
+            Err(ObserverError::EventGapDetected {
+                event_type,
+                expected_next_event_id,
+                got_event_id,
+            }) => {
+                let backward_eth_block_number = from_eth_block_number
+                    .saturating_sub(self.config.backward_sync_block_number)
+                    .max(self.default_eth_block_number(event_type));
+                self.check_point_store
+                    .set_check_point(event_type, backward_eth_block_number)
+                    .await?;
+                warn!(
+                    "Event gap detected. Event type: {}, Expected next event id: {}, Got event id: {}. Backward to {}",
+                    event_type, expected_next_event_id, got_event_id, backward_eth_block_number
+                );
+            }
+            Err(e) => {
+                // それ以外のエラーはそのまま返す. 他のエラーと一緒に上位の関数で処理する
+                return Err(e);
+            }
+        }
 
         todo!();
     }

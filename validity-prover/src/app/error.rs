@@ -4,6 +4,8 @@ use server_common::redis::task_manager::TaskManagerError;
 
 use crate::trees::merkle_tree::error::MerkleTreeError;
 
+use super::check_point_store::EventType;
+
 #[derive(Debug, thiserror::Error)]
 pub enum CheckPointError {
     #[error("Database error: {0}")]
@@ -23,6 +25,15 @@ pub enum ObserverError {
 
     #[error("Event fetch error: {0}")]
     EventFetchError(String),
+
+    #[error(
+        "Event gap detected: {event_type} expected: {expected_next_event_id} < got: {got_event_id}"
+    )]
+    EventGapDetected {
+        event_type: EventType,
+        expected_next_event_id: u64,
+        got_event_id: u64,
+    },
 
     #[error("Ethereum type error: {0}")]
     EthereumTypeError(#[from] EthereumTypeError),
