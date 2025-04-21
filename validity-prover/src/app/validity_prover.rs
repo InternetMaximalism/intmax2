@@ -40,7 +40,7 @@ use server_common::{
     redis::task_manager::TaskManager,
 };
 
-use super::{error::ValidityProverError, observer::Observer};
+use super::{error::ValidityProverError, observer_sync::Observer};
 use crate::{
     trees::{
         deposit_hash::DepositHash,

@@ -1,5 +1,6 @@
 use server_common::db::DbPool;
 
+#[derive(Debug, Clone, Copy)]
 pub enum EventType {
     Deposited,
     DepositLeafInserted,
@@ -18,9 +19,9 @@ impl CheckPointStore {
 
     pub async fn get_check_point(
         &self,
-        check_point_type: EventType,
+        event_type: EventType,
     ) -> Result<Option<u64>, sqlx::Error> {
-        let eth_block_number = match check_point_type {
+        let eth_block_number = match event_type {
             EventType::Deposited => {
                 sqlx::query!("SELECT l1_deposit_sync_eth_block_num FROM observer_l1_deposit_sync_eth_block_num WHERE singleton_key = TRUE")
                     .fetch_optional(&self.pool)
@@ -45,10 +46,10 @@ impl CheckPointStore {
 
     pub async fn set_check_point(
         &self,
-        check_point_type: EventType,
+        event_type: EventType,
         eth_block_number: u64,
     ) -> Result<(), sqlx::Error> {
-        match check_point_type {
+        match event_type {
             EventType::Deposited => {
                 sqlx::query!("UPDATE observer_l1_deposit_sync_eth_block_num SET l1_deposit_sync_eth_block_num = $1 WHERE singleton_key = TRUE", eth_block_number as i64)
                     .execute(&self.pool)
