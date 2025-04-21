@@ -11,5 +11,3 @@ pub mod proxy_contract;
 pub mod rollup_contract;
 pub mod utils;
 pub mod withdrawal_contract;
-
-pub mod config;

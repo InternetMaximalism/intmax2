@@ -19,10 +19,9 @@ use intmax2_zkp::{
     },
 };
 
-use crate::external_api::{contract::utils::get_latest_block_number, utils::retry::with_retry};
+use crate::external_api::utils::retry::with_retry;
 
 use super::{
-    config::EventConfig,
     error::BlockchainError,
     handlers::handle_contract_call,
     proxy_contract::ProxyContract,
@@ -86,10 +85,6 @@ impl RollupContract {
         }
     }
 
-    pub async fn get_eth_block_number(&self) -> Result<u64, BlockchainError> {
-        get_latest_block_number(&self.rpc_url).await
-    }
-
     pub async fn deploy(rpc_url: &str, chain_id: u64, private_key: H256) -> anyhow::Result<Self> {
         let client = get_client_with_signer(rpc_url, chain_id, private_key).await?;
         let impl_contract = Rollup::deploy::<()>(Arc::new(client), ())?.send().await?;
@@ -119,178 +114,6 @@ impl RollupContract {
         let client = get_client_with_signer(&self.rpc_url, self.chain_id, private_key).await?;
         let contract = Rollup::new(self.address, Arc::new(client));
         Ok(contract)
-    }
-
-    pub async fn get_deposit_leaf_inserted_events(
-        &self,
-        from_block: u64,
-    ) -> Result<(Vec<DepositLeafInserted>, u64), BlockchainError> {
-        log::info!(
-            "get_deposit_leaf_inserted_event: from_block={:?}",
-            from_block
-        );
-        let mut events = Vec::new();
-        let mut from_block = from_block;
-        let mut is_final = false;
-        let final_to_block = loop {
-            let mut to_block = from_block + EVENT_BLOCK_RANGE - 1;
-            let latest_block_number = get_latest_block_number(&self.rpc_url).await?;
-            if to_block > latest_block_number {
-                to_block = latest_block_number;
-                is_final = true;
-            }
-            if from_block > to_block {
-                break to_block;
-            }
-            log::info!(
-                "get_deposit_leaf_inserted_event: from_block={}, to_block={}",
-                from_block,
-                to_block
-            );
-            let contract = self.get_contract().await?;
-            let new_events = with_retry(|| async {
-                contract
-                    .deposit_leaf_inserted_filter()
-                    .address(self.address.into())
-                    .from_block(from_block)
-                    .to_block(to_block)
-                    .query_with_meta()
-                    .await
-            })
-            .await
-            .map_err(|_| {
-                BlockchainError::RPCError("failed to get deposit leaf inserted event".to_string())
-            })?;
-            events.extend(new_events);
-            if is_final {
-                break to_block;
-            }
-            from_block += EVENT_BLOCK_RANGE;
-        };
-        let mut deposit_leaf_inserted_events = Vec::new();
-        for (event, meta) in events {
-            deposit_leaf_inserted_events.push(DepositLeafInserted {
-                deposit_index: event.deposit_index,
-                deposit_hash: Bytes32::from_bytes_be(&event.deposit_hash).unwrap(),
-                eth_block_number: meta.block_number.as_u64(),
-                eth_tx_index: meta.transaction_index.as_u64(),
-            });
-        }
-        deposit_leaf_inserted_events.sort_by_key(|event| event.deposit_index);
-        Ok((deposit_leaf_inserted_events, final_to_block))
-    }
-
-    pub async fn get_blocks_posted_event(
-        &self,
-        from_block: u64,
-    ) -> Result<(Vec<BlockPosted>, u64), BlockchainError> {
-        log::info!("get_blocks_posted_event from_block={}", from_block);
-        let mut events = Vec::new();
-        let mut from_block = from_block;
-        let mut is_final = false;
-        let final_to_block = loop {
-            let mut to_block = from_block + EVENT_BLOCK_RANGE - 1;
-            let latest_block_number = get_latest_block_number(&self.rpc_url).await?;
-            if to_block > latest_block_number {
-                to_block = latest_block_number;
-                is_final = true;
-            }
-            if from_block > to_block {
-                break to_block;
-            }
-            let contract = self.get_contract().await?;
-            let new_events = with_retry(|| async {
-                contract
-                    .block_posted_filter()
-                    .address(self.address.into())
-                    .from_block(from_block)
-                    .to_block(to_block)
-                    .query_with_meta()
-                    .await
-            })
-            .await
-            .map_err(|_| {
-                BlockchainError::RPCError("failed to get blocks posted event".to_string())
-            })?;
-            log::info!(
-                "get_blocks_posted_event: from_block={}, to_block={}, new_events={}",
-                from_block,
-                to_block,
-                new_events.len()
-            );
-            events.extend(new_events);
-            if is_final {
-                break to_block;
-            }
-            from_block += EVENT_BLOCK_RANGE;
-        };
-        log::info!("num events: {}", events.len());
-        let mut blocks_posted_events = Vec::new();
-        for (event, meta) in events {
-            blocks_posted_events.push(BlockPosted {
-                prev_block_hash: Bytes32::from_bytes_be(&event.prev_block_hash).unwrap(),
-                block_builder: Address::from_bytes_be(event.block_builder.as_bytes()).unwrap(),
-                timestamp: event.timestamp,
-                block_number: event.block_number.as_u32(),
-                deposit_tree_root: Bytes32::from_bytes_be(&event.deposit_tree_root).unwrap(),
-                signature_hash: Bytes32::from_bytes_be(&event.signature_hash).unwrap(),
-                tx_hash: meta.transaction_hash,
-                eth_block_number: meta.block_number.as_u64(),
-                eth_tx_index: meta.transaction_index.as_u64(),
-            });
-        }
-        blocks_posted_events.sort_by_key(|event| event.block_number);
-        Ok((blocks_posted_events, final_to_block))
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn get_full_block_with_meta(
-        &self,
-        from_block: u64,
-    ) -> Result<(Vec<FullBlockWithMeta>, u64), BlockchainError> {
-        use crate::external_api::contract::{
-            data_decoder::decode_post_block_calldata, utils::get_batch_transaction,
-        };
-        use std::time::Instant;
-        let (blocks_posted_events, to_block) = self.get_blocks_posted_event(from_block).await?;
-        let tx_hashes = blocks_posted_events
-            .iter()
-            .map(|e| e.tx_hash)
-            .collect::<Vec<_>>();
-        let instance = Instant::now();
-        log::info!("start:get_batch_transaction");
-        let txs = get_batch_transaction(&self.rpc_url, &tx_hashes).await?;
-        log::info!("get_batch_transaction: {:?}", instance.elapsed());
-        let mut full_blocks = Vec::new();
-        for (tx, event) in txs.iter().zip(&blocks_posted_events) {
-            let contract = self.get_contract().await?;
-            let functions = contract.abi().functions();
-            let full_block = decode_post_block_calldata(
-                functions,
-                event.prev_block_hash,
-                event.deposit_tree_root,
-                event.timestamp,
-                event.block_number,
-                event.block_builder,
-                &tx.input,
-            )
-            .map_err(|e| {
-                BlockchainError::DecodeCallDataError(format!(
-                    "failed to decode post block calldata: {}",
-                    e
-                ))
-            })?;
-            full_blocks.push(FullBlockWithMeta {
-                full_block,
-                eth_block_number: event.eth_block_number,
-                eth_tx_index: event.eth_tx_index,
-            });
-        }
-
-        // Sort by block number
-        full_blocks.sort_by_key(|block| block.full_block.block.block_number);
-
-        Ok((full_blocks, to_block))
     }
 
     pub async fn initialize(
@@ -458,44 +281,29 @@ impl RollupContract {
 impl RollupContract {
     pub async fn get_blocks_posted_event(
         &self,
-        config: &EventConfig,
         from_eth_block: u64,
-        next_block_number: u32,
-    ) -> Result<(Vec<BlockPosted>, u64), BlockchainError> {
-        let mut events = Vec::new();
-        let mut from_eth_block = from_eth_block;
-        let final_to_block = loop {
-            let contract = self.get_contract().await?;
-            let new_events = with_retry(|| async {
-                contract
-                    .block_posted_filter()
-                    .address(self.address.into())
-                    .from_block(from_eth_block)
-                    .to_block(from_eth_block + EVENT_BLOCK_RANGE - 1)
-                    .query_with_meta()
-                    .await
-            })
-            .await
-            .map_err(|_| {
-                BlockchainError::RPCError("failed to get blocks posted event".to_string())
-            })?;
-
-            log::info!(
-                "get_blocks_posted_event: from_block={}, to_block={}, new_events={}",
-                from_block,
-                to_block,
-                new_events.len()
-            );
-            events.extend(new_events);
-            if is_final {
-                break to_block;
-            }
-            from_block += EVENT_BLOCK_RANGE;
-        };
-        log::info!("num events: {}", events.len());
-        let mut blocks_posted_events = Vec::new();
+        to_eth_block: u64,
+    ) -> Result<Vec<BlockPosted>, BlockchainError> {
+        log::info!(
+            "get_blocks_posted_event: from_block={}, to_block={}",
+            from_eth_block,
+            to_eth_block
+        );
+        let contract = self.get_contract().await?;
+        let events = with_retry(|| async {
+            contract
+                .block_posted_filter()
+                .address(self.address.into())
+                .from_block(from_eth_block)
+                .to_block(to_eth_block)
+                .query_with_meta()
+                .await
+        })
+        .await
+        .map_err(|_| BlockchainError::RPCError("failed to get blocks posted event".to_string()))?;
+        let mut block_posited_events = Vec::new();
         for (event, meta) in events {
-            blocks_posted_events.push(BlockPosted {
+            block_posited_events.push(BlockPosted {
                 prev_block_hash: Bytes32::from_bytes_be(&event.prev_block_hash).unwrap(),
                 block_builder: Address::from_bytes_be(event.block_builder.as_bytes()).unwrap(),
                 timestamp: event.timestamp,
@@ -507,8 +315,98 @@ impl RollupContract {
                 eth_tx_index: meta.transaction_index.as_u64(),
             });
         }
-        blocks_posted_events.sort_by_key(|event| event.block_number);
-        Ok((blocks_posted_events, final_to_block))
+        block_posited_events.sort_by_key(|event| event.block_number);
+        Ok(block_posited_events)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn get_full_block_with_meta(
+        &self,
+        block_posted_events: &[BlockPosted],
+    ) -> Result<Vec<FullBlockWithMeta>, BlockchainError> {
+        use crate::external_api::contract::{
+            data_decoder::decode_post_block_calldata, utils::get_batch_transaction,
+        };
+        use std::time::Instant;
+
+        let tx_hashes = block_posted_events
+            .iter()
+            .map(|e| e.tx_hash)
+            .collect::<Vec<_>>();
+        let instant = Instant::now();
+        let txs = get_batch_transaction(&self.rpc_url, &tx_hashes).await?;
+        log::info!(
+            "get_batch_transaction: {:?} for {} txs",
+            instant.elapsed(),
+            tx_hashes.len()
+        );
+        let mut full_blocks = Vec::new();
+        for (tx, event) in txs.iter().zip(block_posted_events) {
+            let contract = self.get_contract().await?;
+            let functions = contract.abi().functions();
+            let full_block = decode_post_block_calldata(
+                functions,
+                event.prev_block_hash,
+                event.deposit_tree_root,
+                event.timestamp,
+                event.block_number,
+                event.block_builder,
+                &tx.input,
+            )
+            .map_err(|e| {
+                BlockchainError::DecodeCallDataError(format!(
+                    "failed to decode post block calldata: {}",
+                    e
+                ))
+            })?;
+            full_blocks.push(FullBlockWithMeta {
+                full_block,
+                eth_block_number: event.eth_block_number,
+                eth_tx_index: event.eth_tx_index,
+            });
+        }
+
+        // Sort by block number
+        full_blocks.sort_by_key(|block| block.full_block.block.block_number);
+
+        Ok(full_blocks)
+    }
+
+    pub async fn get_deposit_leaf_inserted_events(
+        &self,
+        from_eth_block: u64,
+        to_eth_block_number: u64,
+    ) -> Result<Vec<DepositLeafInserted>, BlockchainError> {
+        log::info!(
+            "get_deposit_leaf_inserted_event: from_eth_block={}, to_eth_block_number={}",
+            from_eth_block,
+            to_eth_block_number
+        );
+        let contract = self.get_contract().await?;
+        let events = with_retry(|| async {
+            contract
+                .deposit_leaf_inserted_filter()
+                .address(self.address.into())
+                .from_block(from_eth_block)
+                .to_block(to_eth_block_number)
+                .query_with_meta()
+                .await
+        })
+        .await
+        .map_err(|e| {
+            BlockchainError::RPCError(format!("failed to get deposit leaf inserted event: {}", e))
+        })?;
+        let mut deposit_leaf_inserted_events = Vec::new();
+        for (event, meta) in events {
+            deposit_leaf_inserted_events.push(DepositLeafInserted {
+                deposit_index: event.deposit_index,
+                deposit_hash: Bytes32::from_bytes_be(&event.deposit_hash).unwrap(),
+                eth_block_number: meta.block_number.as_u64(),
+                eth_tx_index: meta.transaction_index.as_u64(),
+            });
+        }
+        deposit_leaf_inserted_events.sort_by_key(|event| event.deposit_index);
+        Ok(deposit_leaf_inserted_events)
     }
 }
 
@@ -539,7 +437,9 @@ mod tests {
     };
     use num_bigint::BigUint;
 
-    use crate::external_api::contract::rollup_contract::RollupContract;
+    use crate::external_api::contract::{
+        rollup_contract::RollupContract, utils::get_latest_block_number,
+    };
 
     #[tokio::test]
     async fn test_rollup_contract() -> anyhow::Result<()> {
@@ -596,9 +496,14 @@ mod tests {
             .await?;
 
         let from_block = 0;
-        let (full_blocks, _) = rollup_contract.get_full_block_with_meta(from_block).await?;
+        let to_block = get_latest_block_number(&rpc_url).await?;
+        let block_posted_events = rollup_contract
+            .get_blocks_posted_event(from_block, to_block)
+            .await?;
+        let full_blocks = rollup_contract
+            .get_full_block_with_meta(&block_posted_events)
+            .await?;
         assert_eq!(full_blocks.len(), 2);
-
         Ok(())
     }
 }

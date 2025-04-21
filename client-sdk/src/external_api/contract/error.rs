@@ -41,8 +41,3 @@ pub enum BlockchainError {
     #[error("Env error: {0}")]
     EnvError(String),
 }
-
-#[derive(Debug, thiserror::Error)]
-pub enum FetchEventError {
-    
-}

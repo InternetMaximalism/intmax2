@@ -16,7 +16,7 @@ use intmax2_zkp::ethereum_types::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::external_api::{contract::utils::get_latest_block_number, utils::retry::with_retry};
+use crate::external_api::utils::retry::with_retry;
 
 use super::{
     error::BlockchainError,
@@ -369,45 +369,27 @@ impl LiquidityContract {
 
     pub async fn get_deposited_events(
         &self,
-        from_block: u64,
-    ) -> Result<(Vec<Deposited>, u64), BlockchainError> {
-        log::info!("get_deposited_event: from_block={:?}", from_block);
-        let mut events = Vec::new();
-        let mut from_block = from_block;
-        let mut is_final = false;
-        let final_to_block = loop {
-            let mut to_block = from_block + EVENT_BLOCK_RANGE - 1;
-            let latest_block_number = get_latest_block_number(&self.rpc_url).await?;
-            if to_block > latest_block_number {
-                to_block = latest_block_number;
-                is_final = true;
-            }
-            if from_block > to_block {
-                break to_block;
-            }
-            log::info!(
-                "get_deposited_event: from_block={}, to_block={}",
-                from_block,
-                to_block
-            );
-            let contract = self.get_contract().await?;
-            let new_events = with_retry(|| async {
-                contract
-                    .deposited_filter()
-                    .address(self.address.into())
-                    .from_block(from_block)
-                    .to_block(to_block)
-                    .query_with_meta()
-                    .await
-            })
-            .await
-            .map_err(|_| BlockchainError::RPCError("failed to get deposited event".to_string()))?;
-            events.extend(new_events);
-            if is_final {
-                break to_block;
-            }
-            from_block += EVENT_BLOCK_RANGE;
-        };
+        from_eth_block: u64,
+        to_eth_block: u64,
+    ) -> Result<Vec<Deposited>, BlockchainError> {
+        log::info!(
+            "get_deposited_event: from_eth_block={}, to_eth_block={}",
+            from_eth_block,
+            to_eth_block
+        );
+        let contract = self.get_contract().await?;
+        let events = with_retry(|| async {
+            contract
+                .deposited_filter()
+                .address(self.address.into())
+                .from_block(from_eth_block)
+                .to_block(to_eth_block)
+                .query_with_meta()
+                .await
+        })
+        .await
+        .map_err(|e| BlockchainError::RPCError(format!("failed to get deposited event: {}", e)))?;
+
         let mut deposited_events = Vec::new();
         for (event, meta) in events {
             deposited_events.push(Deposited {
@@ -423,9 +405,11 @@ impl LiquidityContract {
                 is_eligible: event.is_eligible,
                 deposited_at: event.deposited_at.as_u64(),
                 tx_hash: Bytes32::from_bytes_be(&meta.transaction_hash.to_fixed_bytes()).unwrap(),
+                eth_block_number: meta.block_number.as_u64(),
+                eth_tx_index: meta.transaction_index.as_u64(),
             });
         }
         deposited_events.sort_by_key(|event| event.deposit_id);
-        Ok((deposited_events, final_to_block))
+        Ok(deposited_events)
     }
 }
