@@ -27,8 +27,9 @@ use intmax2_zkp::{
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _},
     utils::trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
 };
+use sqlx::Pool;
 
-use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
+use crate::{app::observer_sync::ObserverConfig, trees::merkle_tree::IncrementalMerkleTreeClient};
 
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
@@ -99,26 +100,36 @@ impl ValidityProver {
             &env.l2_rpc_url,
             env.l2_chain_id,
             env.rollup_contract_address,
-            env.rollup_contract_deployed_block_number,
         );
         let liquidity_contract = LiquidityContract::new(
             &env.l1_rpc_url,
             env.l1_chain_id,
             env.liquidity_contract_address,
-            env.liquidity_contract_deployed_block_number,
         );
 
+        let observer_pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: env.database_url.to_string(),
+        })
+        .await?;
+
+        let observer_config = ObserverConfig {
+            event_block_interval: 10000,
+            backward_sync_block_number: 1000,
+            max_tries: 5,
+            sleep_time: 10,
+        };
+
         let observer = Observer::new(
+            observer_config,
             rollup_contract,
             liquidity_contract,
-            &env.database_url,
-            env.database_max_connections,
-            env.database_timeout,
+            observer_pool,
         )
         .await?;
 
-        let pool = sqlx::Pool::connect(&env.database_url).await?;
-
+        let pool = Pool::connect(&env.database_url).await?;
         let account_tree =
             SqlIndexedMerkleTree::new(pool.clone(), ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
         account_tree.initialize().await?;

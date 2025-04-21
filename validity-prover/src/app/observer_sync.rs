@@ -1,4 +1,3 @@
-use bincode::config;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{FullBlockWithMeta, RollupContract},
@@ -12,10 +11,6 @@ use super::{
     check_point_store::{CheckPointStore, EventType},
     error::ObserverError,
 };
-
-const BACKWARD_SYNC_BLOCK_NUMBER: u64 = 1000;
-const MAX_TRIES: u32 = 3;
-const SLEEP_TIME: u64 = 10;
 
 #[derive(Debug, Clone)]
 pub struct ObserverConfig {
@@ -39,16 +34,8 @@ impl Observer {
         config: ObserverConfig,
         rollup_contract: RollupContract,
         liquidity_contract: LiquidityContract,
-        database_url: &str,
-        database_max_connections: u32,
-        database_timeout: u64,
+        pool: DbPool,
     ) -> Result<Self, ObserverError> {
-        let pool = DbPool::from_config(&DbPoolConfig {
-            max_connections: database_max_connections,
-            idle_timeout: database_timeout,
-            url: database_url.to_string(),
-        })
-        .await?;
         let check_point_store = CheckPointStore::new(pool.clone());
 
         // Initialize with genesis block if table is empty
@@ -140,7 +127,7 @@ impl Observer {
                 todo!()
             }
         };
-        Ok(last_eth_block_number as u64)
+        Ok(last_eth_block_number.map(|i| i as u64))
     }
 
     pub async fn get_onchain_next_event_id(
@@ -159,30 +146,6 @@ impl Observer {
         Ok(next_event_id)
     }
 
-    // pub async fn get_eth_block_number(
-    //     &self,
-    //     event_type: EventType,
-    //     event_id: u64,
-    // ) -> Result<u64, ObserverError> {
-    //     let eth_block_number = match event_type {
-    //         EventType::Deposited => {
-    //             let event = self.get_deposited_event(event_id).await?;
-    //             event.eth_block_number
-    //         }
-    //         EventType::DepositLeafInserted => {
-    //             self.rollup_contract
-    //                 .get_deposit_sync_eth_block_number()
-    //                 .await?
-    //         }
-    //         EventType::BlockPosted => {
-    //             self.rollup_contract
-    //                 .get_block_sync_eth_block_number()
-    //                 .await?
-    //         }
-    //     };
-    //     Ok(eth_block_number)
-    // }
-
     #[instrument(skip(self))]
     pub async fn single_sync_deposit_leaf_inserted(&self) -> Result<(), ObserverError> {
         let event_type = EventType::DepositLeafInserted;
@@ -196,11 +159,12 @@ impl Observer {
             return Ok(());
         }
 
-        // どこからblockを同期したらいいのか？-> まずはcheckpointを取得
+        // どこからblockを同期したらいいのか？-> まずはcheckpointとlocalの最新eth_block_numberを取得
         let checkpoint_eth_block_number =
             self.check_point_store.get_check_point(event_type).await?;
+        let local_last_eth_block_number = self.get_local_last_eth_block_number(event_type).await?;
 
-        // もしcheckpointがなければ、
+        let start_eth_block_number = checkpoint_eth_block_number.max(local_last_eth_block_number);
 
         todo!();
     }
