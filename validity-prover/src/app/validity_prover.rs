@@ -4,9 +4,6 @@ use std::{
     time::Duration,
 };
 
-use intmax2_client_sdk::external_api::contract::{
-    liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
-};
 use intmax2_interfaces::{
     api::validity_prover::interface::{
         AccountInfo, DepositInfo, TransitionProofTask, TransitionProofTaskResult,

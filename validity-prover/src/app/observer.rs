@@ -1,6 +1,6 @@
 use intmax2_client_sdk::external_api::contract::{
-    liquidity_contract::{Deposited, LiquidityContract},
-    rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
+    liquidity_contract::Deposited,
+    rollup_contract::{DepositLeafInserted, FullBlockWithMeta},
 };
 use intmax2_interfaces::api::validity_prover::interface::DepositInfo;
 use intmax2_zkp::{
@@ -10,10 +10,6 @@ use intmax2_zkp::{
 };
 
 use super::{error::ObserverError, observer_sync::Observer};
-
-const BACKWARD_SYNC_BLOCK_NUMBER: u64 = 1000;
-const MAX_TRIES: u32 = 3;
-const SLEEP_TIME: u64 = 10;
 
 impl Observer {
     pub async fn get_local_last_deposit_id(&self) -> Result<Option<u64>, ObserverError> {
@@ -76,7 +72,7 @@ impl Observer {
         pubkey_salt_hash: Bytes32,
     ) -> Result<Option<Deposited>, ObserverError> {
         let record = sqlx::query!(
-            "SELECT deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash
+            "SELECT deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash, eth_block_number, eth_tx_index
              FROM deposited_events 
              WHERE pubkey_salt_hash = $1",
             pubkey_salt_hash.to_hex()
@@ -98,8 +94,8 @@ impl Observer {
                     is_eligible: r.is_eligible,
                     deposited_at,
                     tx_hash,
-                    eth_block_number: todo!(),
-                    eth_tx_index: todo!(),
+                    eth_block_number: r.eth_block_number as u64,
+                    eth_tx_index: r.eth_tx_index as u64,
                 }))
             }
             None => Ok(None),
