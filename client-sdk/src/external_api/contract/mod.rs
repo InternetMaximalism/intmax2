@@ -12,4 +12,4 @@ pub mod rollup_contract;
 pub mod utils;
 pub mod withdrawal_contract;
 
-pub const EVENT_BLOCK_RANGE: u64 = 10000;
+pub mod config;

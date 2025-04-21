@@ -9,19 +9,14 @@ use ethers::{
     types::{Address as EthAddress, H256},
 };
 use intmax2_interfaces::{
-    api::{
-        validity_prover::interface::Deposited, withdrawal_server::interface::ContractWithdrawal,
-    },
-    data::deposit_data::TokenType,
+    api::withdrawal_server::interface::ContractWithdrawal, data::deposit_data::TokenType,
 };
 use intmax2_zkp::ethereum_types::{
     address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _,
 };
+use serde::{Deserialize, Serialize};
 
-use crate::external_api::{
-    contract::{utils::get_latest_block_number, EVENT_BLOCK_RANGE},
-    utils::retry::with_retry,
-};
+use crate::external_api::{contract::utils::get_latest_block_number, utils::retry::with_retry};
 
 use super::{
     error::BlockchainError,
@@ -29,6 +24,35 @@ use super::{
     proxy_contract::ProxyContract,
     utils::{get_client, get_client_with_signer},
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deposited {
+    pub deposit_id: u64,
+    pub depositor: Address,
+    pub pubkey_salt_hash: Bytes32,
+    pub token_index: u32,
+    pub amount: U256,
+    pub is_eligible: bool,
+    pub deposited_at: u64,
+
+    // meta data
+    pub tx_hash: Bytes32,
+    pub eth_block_number: u64,
+    pub eth_tx_index: u64,
+}
+
+impl Deposited {
+    pub fn to_deposit(&self) -> intmax2_zkp::common::deposit::Deposit {
+        intmax2_zkp::common::deposit::Deposit {
+            depositor: self.depositor,
+            pubkey_salt_hash: self.pubkey_salt_hash,
+            amount: self.amount,
+            token_index: self.token_index,
+            is_eligible: self.is_eligible,
+        }
+    }
+}
 
 abigen!(Liquidity, "abi/Liquidity.json",);
 

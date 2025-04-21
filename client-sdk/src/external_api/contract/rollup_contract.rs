@@ -19,12 +19,10 @@ use intmax2_zkp::{
     },
 };
 
-use crate::external_api::{
-    contract::{utils::get_latest_block_number, EVENT_BLOCK_RANGE},
-    utils::retry::with_retry,
-};
+use crate::external_api::{contract::utils::get_latest_block_number, utils::retry::with_retry};
 
 use super::{
+    config::EventConfig,
     error::BlockchainError,
     handlers::handle_contract_call,
     proxy_contract::ProxyContract,
@@ -453,6 +451,64 @@ impl RollupContract {
             U256::from_bytes_be(&buf).unwrap()
         };
         Ok(penalty)
+    }
+}
+
+// Event related methods
+impl RollupContract {
+    pub async fn get_blocks_posted_event(
+        &self,
+        config: &EventConfig,
+        from_eth_block: u64,
+        next_block_number: u32,
+    ) -> Result<(Vec<BlockPosted>, u64), BlockchainError> {
+        let mut events = Vec::new();
+        let mut from_eth_block = from_eth_block;
+        let final_to_block = loop {
+            let contract = self.get_contract().await?;
+            let new_events = with_retry(|| async {
+                contract
+                    .block_posted_filter()
+                    .address(self.address.into())
+                    .from_block(from_eth_block)
+                    .to_block(from_eth_block + EVENT_BLOCK_RANGE - 1)
+                    .query_with_meta()
+                    .await
+            })
+            .await
+            .map_err(|_| {
+                BlockchainError::RPCError("failed to get blocks posted event".to_string())
+            })?;
+
+            log::info!(
+                "get_blocks_posted_event: from_block={}, to_block={}, new_events={}",
+                from_block,
+                to_block,
+                new_events.len()
+            );
+            events.extend(new_events);
+            if is_final {
+                break to_block;
+            }
+            from_block += EVENT_BLOCK_RANGE;
+        };
+        log::info!("num events: {}", events.len());
+        let mut blocks_posted_events = Vec::new();
+        for (event, meta) in events {
+            blocks_posted_events.push(BlockPosted {
+                prev_block_hash: Bytes32::from_bytes_be(&event.prev_block_hash).unwrap(),
+                block_builder: Address::from_bytes_be(event.block_builder.as_bytes()).unwrap(),
+                timestamp: event.timestamp,
+                block_number: event.block_number.as_u32(),
+                deposit_tree_root: Bytes32::from_bytes_be(&event.deposit_tree_root).unwrap(),
+                signature_hash: Bytes32::from_bytes_be(&event.signature_hash).unwrap(),
+                tx_hash: meta.transaction_hash,
+                eth_block_number: meta.block_number.as_u64(),
+                eth_tx_index: meta.transaction_index.as_u64(),
+            });
+        }
+        blocks_posted_events.sort_by_key(|event| event.block_number);
+        Ok((blocks_posted_events, final_to_block))
     }
 }
 
