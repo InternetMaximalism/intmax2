@@ -205,13 +205,15 @@ impl ValidityProver {
         log::info!(
             "Start sync validity prover: current block number {}, observer block number {}, validity proof block number: {}",
             self.get_last_block_number().await?,
-            self.observer.get_next_block_number().await? - 1,
+            // self.observer.get_next_block_number().await? - 1,
+            todo!(),
             self.get_latest_validity_proof_block_number().await?,
         );
         self.sync_observer().await?;
 
         let last_block_number = self.get_last_block_number().await?;
-        let next_block_number = self.observer.get_next_block_number().await?;
+        // let next_block_number = self.observer.get_next_block_number().await?;
+        let next_block_number = todo!();
 
         let mut prev_validity_pis = if last_block_number == 0 {
             ValidityWitness::genesis().to_validity_pis().unwrap()
@@ -227,7 +229,12 @@ impl ValidityProver {
                 block_number
             );
 
-            let full_block = self.observer.get_full_block(block_number).await?;
+            let full_block_with_meta = self
+                .observer
+                .get_full_block_with_meta(block_number)
+                .await?
+                .unwrap();
+            let full_block = full_block_with_meta.full_block;
 
             let deposit_events = self
                 .observer
@@ -589,8 +596,8 @@ impl ValidityProver {
     }
 
     pub async fn get_next_deposit_index(&self) -> Result<u32, ValidityProverError> {
-        let deposit_index = self.observer.get_next_deposit_index().await?;
-        Ok(deposit_index)
+        // let deposit_index = self.observer.get_next_deposit_index().await?;
+        todo!()
     }
 
     pub async fn get_latest_included_deposit_index(

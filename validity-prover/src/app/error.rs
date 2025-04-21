@@ -5,6 +5,12 @@ use server_common::redis::task_manager::TaskManagerError;
 use crate::trees::merkle_tree::error::MerkleTreeError;
 
 #[derive(Debug, thiserror::Error)]
+pub enum CheckPointError {
+    #[error("Database error: {0}")]
+    DBError(#[from] sqlx::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum ObserverError {
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),
