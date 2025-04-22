@@ -49,7 +49,7 @@ type DescribeFuture<'e, DB> =
 impl<'c> Executor<'c> for &'c TracingPool {
     type Database = Postgres;
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn execute<'e, 'q: 'e, Q>(
         self,
         query: Q,
@@ -68,7 +68,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.execute(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn fetch_many<'e, 'q: 'e, E>(self, query: E) -> QueryStream<'e>
     where
         'c: 'e,
@@ -84,7 +84,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.fetch_many(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn fetch_optional<'e, 'q: 'e, E>(
         self,
         query: E,
@@ -103,7 +103,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.fetch_optional(query))
     }
 
-    #[instrument(name = "sql_prepare", skip(self, sql, parameters))]
+    #[instrument(level = "debug", name = "sql_prepare", skip(self, sql, parameters))]
     fn prepare_with<'e, 'q: 'e>(
         self,
         sql: &'q str,
@@ -115,7 +115,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.prepare_with(sql, parameters))
     }
 
-    #[instrument(name = "sql_describe", skip(self, sql))]
+    #[instrument(level = "debug", name = "sql_describe", skip(self, sql))]
     fn describe<'e, 'q: 'e>(self, sql: &'q str) -> DescribeFuture<'e, Self::Database>
     where
         'c: 'e,
@@ -127,7 +127,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
 impl<'c> Executor<'c> for TracingPool {
     type Database = Postgres;
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn execute<'e, 'q: 'e, Q>(
         self,
         query: Q,
@@ -146,7 +146,7 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.execute(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn fetch_many<'e, 'q: 'e, E>(self, query: E) -> QueryStream<'e>
     where
         'c: 'e,
@@ -162,7 +162,7 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.fetch_many(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()), skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()), skip(self, query))]
     fn fetch_optional<'e, 'q: 'e, E>(
         self,
         query: E,
@@ -181,7 +181,7 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.fetch_optional(query))
     }
 
-    #[instrument(name = "sql_prepare", skip(self, sql, parameters))]
+    #[instrument(level = "debug", name = "sql_prepare", skip(self, sql, parameters))]
     fn prepare_with<'e, 'q: 'e>(
         self,
         sql: &'q str,
@@ -193,7 +193,7 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.prepare_with(sql, parameters))
     }
 
-    #[instrument(name = "sql_describe", skip(self, sql))]
+    #[instrument(level = "debug", name = "sql_describe", skip(self, sql))]
     fn describe<'e, 'q: 'e>(self, sql: &'q str) -> DescribeFuture<'e, Self::Database>
     where
         'c: 'e,
