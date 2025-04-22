@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ethers::types::Address;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
@@ -22,8 +24,7 @@ use super::{
 pub struct ObserverConfig {
     pub event_block_interval: u64,
     pub backward_sync_block_number: u64,
-    pub max_tries: u32,
-    pub sleep_time: u64,
+    pub sync_interval: u64,
 
     // chain config
     pub l1_rpc_url: String,
@@ -91,10 +92,7 @@ impl Observer {
         })
     }
 
-    pub async fn get_local_next_event_id(
-        &self,
-        event_type: EventType,
-    ) -> Result<u64, ObserverError> {
+    async fn get_local_next_event_id(&self, event_type: EventType) -> Result<u64, ObserverError> {
         let latest_event_id = match event_type {
             EventType::Deposited => self.get_local_last_deposit_id().await?.map(|i| i as u64),
             EventType::DepositLeafInserted => {
@@ -105,7 +103,7 @@ impl Observer {
         Ok(latest_event_id.map_or(0, |i| i + 1))
     }
 
-    pub async fn get_local_last_eth_block_number(
+    async fn get_local_last_eth_block_number(
         &self,
         event_type: EventType,
     ) -> Result<Option<u64>, ObserverError> {
@@ -143,17 +141,11 @@ impl Observer {
                 .fetch_optional(&self.pool)
                 .await?
             }
-            _ => {
-                todo!()
-            }
         };
         Ok(last_eth_block_number.map(|i| i as u64))
     }
 
-    pub async fn get_onchain_next_event_id(
-        &self,
-        event_type: EventType,
-    ) -> Result<u64, ObserverError> {
+    async fn get_onchain_next_event_id(&self, event_type: EventType) -> Result<u64, ObserverError> {
         let next_event_id = match event_type {
             EventType::Deposited => self.liquidity_contract.get_last_deposit_id().await? + 1,
             EventType::DepositLeafInserted => {
@@ -166,14 +158,14 @@ impl Observer {
         Ok(next_event_id)
     }
 
-    pub fn default_eth_block_number(&self, event_type: EventType) -> u64 {
+    fn default_eth_block_number(&self, event_type: EventType) -> u64 {
         match event_type.to_chain_type() {
             ChainType::L1 => self.config.l1_chain_id,
             ChainType::L2 => self.config.l2_chain_id,
         }
     }
 
-    pub async fn get_current_eth_block_number(
+    async fn get_current_eth_block_number(
         &self,
         event_type: EventType,
     ) -> Result<u64, ObserverError> {
@@ -332,7 +324,7 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    pub async fn single_event_query(
+    async fn sync_and_save_checkpoint(
         &self,
         event_type: EventType,
         local_next_event_id: u64,
@@ -416,8 +408,7 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    pub async fn single_sync_deposit_leaf_inserted(&self) -> Result<(), ObserverError> {
-        let event_type = EventType::DepositLeafInserted;
+    async fn sync_events(&self, event_type: EventType) -> Result<(), ObserverError> {
         // syncするべきかどうかの判定をする
         let mut local_next_event_id = self.get_local_next_event_id(event_type).await?;
         let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
@@ -431,7 +422,7 @@ impl Observer {
         // localがonchainに追いつくまでsyncをつづける
         loop {
             local_next_event_id = self
-                .single_event_query(event_type, local_next_event_id)
+                .sync_and_save_checkpoint(event_type, local_next_event_id)
                 .await?;
             // もしlocalがonchainに追いついたらbreakする
             if local_next_event_id >= onchain_next_event_id {
@@ -445,13 +436,56 @@ impl Observer {
         Ok(())
     }
 
-    
+    #[instrument(skip(self))]
+    async fn sync_events_inner_loop(&self, event_type: EventType) -> Result<(), ObserverError> {
+        let mut interval =
+            tokio::time::interval(tokio::time::Duration::from_secs(self.config.sync_interval));
+        loop {
+            interval.tick().await;
+            self.sync_events(event_type).await?;
+        }
+    }
 
-    pub async fn sync(&self) -> Result<(), ObserverError> {
-        // self.sync_l1_deposited_events().await?;
-        // self.sync_blocks().await?;
-        // self.sync_deposits().await?;
-        log::info!("Observer synced");
-        Ok(())
+    #[instrument(skip(self))]
+    async fn sync_events_job(&self, event_type: EventType) {
+        let this = Arc::new(self.clone());
+        // auto restart loop
+        loop {
+            let this = this.clone();
+            let handler =
+                tokio::spawn(async move { this.sync_events_inner_loop(event_type).await });
+
+            match handler.await {
+                Ok(Ok(_)) => {
+                    tracing::error!("Sync events job should never return Ok");
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("Sync events {} job panic: {}", event_type, e);
+                }
+                Err(e) => {
+                    tracing::error!("Sync events {} job error: {}", event_type, e);
+                }
+            }
+            // wait for a while before restarting
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            log::info!("Restarting sync events job for {}", event_type);
+        }
+    }
+
+    #[instrument(skip(self))]
+    pub async fn start_all_jobs(&self) {
+        let event_types = vec![
+            EventType::Deposited,
+            EventType::DepositLeafInserted,
+            EventType::BlockPosted,
+        ];
+        let this = Arc::new(self.clone());
+        for event_type in event_types {
+            let this = this.clone();
+            tokio::spawn(async move {
+                this.sync_events_job(event_type).await;
+            });
+        }
+        log::info!("Observer started all jobs");
     }
 }
