@@ -19,7 +19,7 @@ serde = { workspace = true }
 thiserror = "2.0.12"
 actix-web = "4.10.2"
 hashbrown = "0.15.2"
-actix-cors = "0.7.0"
+actix-cors = "0.7.1"
 log = "0.4.26"
 rand = "0.8.5"
 envy = "0.4.2"
