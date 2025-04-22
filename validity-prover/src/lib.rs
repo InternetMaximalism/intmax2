@@ -8,7 +8,11 @@ pub mod trees;
 #[derive(Deserialize)]
 pub struct Env {
     pub port: u16,
+
+    // sync settings
     pub sync_interval: Option<u64>,
+
+    // onchain settings
     pub l1_rpc_url: String,
     pub l1_chain_id: u64,
     pub l2_rpc_url: String,
@@ -17,6 +21,8 @@ pub struct Env {
     pub rollup_contract_deployed_block_number: u64,
     pub liquidity_contract_address: Address,
     pub liquidity_contract_deployed_block_number: u64,
+
+    // db settings
     pub database_url: String,
     pub database_max_connections: u32,
     pub database_timeout: u64,

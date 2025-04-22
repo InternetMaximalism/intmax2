@@ -280,6 +280,7 @@ impl ValidityProver {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn reset_merkle_tree(&self, block_number: u32) -> Result<(), ValidityProverError> {
         tracing::warn!("Reset merkle tree from block number {}", block_number);
         self.account_tree.reset(block_number as u64).await?;
@@ -373,7 +374,6 @@ impl ValidityProver {
         Ok(())
     }
 
-    // This function is used to setup all tasks in the task manager
     #[instrument(skip(self))]
     async fn add_tasks(&self) -> Result<(), ValidityProverError> {
         let last_validity_prover_block_number =
@@ -476,7 +476,6 @@ impl ValidityProver {
         // run observer job
         self.observer.start_all_jobs();
 
-        // generate validity proof job
         let this = Arc::new(self.clone());
 
         // generate validity proof job

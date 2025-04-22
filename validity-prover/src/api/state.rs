@@ -22,7 +22,7 @@ use server_common::redis::cache::RedisCache;
 
 use crate::{app::validity_prover::ValidityProver, Env};
 
-pub struct Config {
+pub struct CacheConfig {
     pub dynamic_ttl: Duration,
     pub static_ttl: Duration,
 }
@@ -32,14 +32,14 @@ pub struct Config {
 pub struct State {
     pub validity_prover: ValidityProver,
     pub cache: RedisCache,
-    pub config: Config,
+    pub config: CacheConfig,
 }
 
 impl State {
     pub async fn new(env: &Env) -> anyhow::Result<Self> {
         let validity_prover = ValidityProver::new(env).await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
-        let config = Config {
+        let config = CacheConfig {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
             static_ttl: Duration::from_secs(env.static_cache_ttl),
         };
