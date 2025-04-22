@@ -704,7 +704,7 @@ impl Observer {
                     return Ok(());
                 }
                 Err(e) => {
-                    if matches!(e, ObserverError::FullBlockSyncError(_)) {
+                    if matches!(e, ObserverError::SyncL1DepositedEventsError(_)) {
                         log::error!("Observer l1 deposit sync error: {:?}", e);
                         // rollback to previous block number
                         let block_number = self
