@@ -48,7 +48,7 @@ sqlx = { version = "0.8.2", features = [
     "bigdecimal",
 ] }
 chrono = "0.4.40"
-log = "0.4.26"
+log = "0.4.27"
 uuid = { version = "1.12.1", features = ["v4", "v7"] }
 dotenv = "0.15.0"
 envy = "0.4.2"
