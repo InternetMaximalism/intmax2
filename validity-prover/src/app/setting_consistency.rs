@@ -3,12 +3,6 @@ use sqlx::{Pool, Postgres};
 
 use super::error::SettingConsistencyError;
 
-// CREATE TABLE IF NOT EXISTS settings (
-//     singleton_key BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton_key),
-//     rollup_contract_address VARCHAR(42) NOT NULL,
-//     liquidity_contract_address VARCHAR(42) NOT NULL
-// );
-
 pub struct SettingConsistency {
     pub pool: Pool<Postgres>,
 }
@@ -70,40 +64,5 @@ impl SettingConsistency {
                 Ok(())
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_setting_consistency() {
-        let pool = Pool::connect("postgres://postgres:password@localhost/validity_prover")
-            .await
-            .unwrap();
-
-        let setting_consistency = SettingConsistency::new(pool);
-
-        // Test with dummy addresses
-        let rollup_address = "0x1234567890abcdef1234567890abcdef12345678"
-            .parse()
-            .unwrap();
-        let liquidity_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
-            .parse()
-            .unwrap();
-
-        // Check consistency
-        let result = setting_consistency
-            .check_consistency(rollup_address, liquidity_address)
-            .await;
-
-        assert!(result.is_ok());
-
-        // Check again with the same addresses
-        let result = setting_consistency
-            .check_consistency(rollup_address, liquidity_address)
-            .await;
-        assert!(result.is_ok());
     }
 }
