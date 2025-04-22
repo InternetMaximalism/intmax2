@@ -79,7 +79,7 @@ pub struct CustomRootSpanBuilder;
 impl RootSpanBuilder for CustomRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> tracing::Span {
         request.extensions_mut().insert(Instant::now());
-        let span = tracing::debug_span!(
+        let span = tracing::info_span!(
             "http-request",
             "http.client_ip" = %request.connection_info().peer_addr().unwrap_or(""),
             "http.flavor" = ?request.version(),
@@ -107,7 +107,7 @@ impl RootSpanBuilder for CustomRootSpanBuilder {
                 if let Some(start_time) = resp.request().extensions().get::<Instant>() {
                     span.record("latency", format!("{:?}", start_time.elapsed()));
                 }
-                tracing::debug!("request-end");
+                tracing::info!("request-end");
             }
             Err(error) => {
                 span.record("error", error.to_string());
