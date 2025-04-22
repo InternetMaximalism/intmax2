@@ -10,9 +10,9 @@ pub struct EnvVar {
     pub port: u16,
 
     // sync settings
-    pub sync_mode: bool,
+    pub is_sync_mode: bool,
     pub witness_sync_interval: u64,
-    pub generate_validity_proof_interval: u64,
+    pub validity_proof_interval: u64,
     pub add_tasks_interval: u64,
     pub cleanup_inactive_tasks_interval: u64,
     pub validity_prover_restart_interval: u64,
@@ -39,12 +39,12 @@ pub struct EnvVar {
     pub database_max_connections: u32,
     pub database_timeout: u64,
 
-    // Prover coordinator
+    // prover coordinator
     pub redis_url: String,
     pub task_ttl: u64,
     pub heartbeat_interval: u64,
 
-    // Cache
+    // cache
     pub dynamic_cache_ttl: u64,
     pub static_cache_ttl: u64,
 }

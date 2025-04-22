@@ -48,9 +48,9 @@ const MAX_TASKS: u32 = 30;
 
 #[derive(Clone)]
 pub struct ValidityProverConfig {
-    pub sync_mode: bool,
+    pub is_sync_mode: bool,
     pub witness_sync_interval: u64,
-    pub generate_validity_proof_interval: u64,
+    pub validity_proof_interval: u64,
     pub add_tasks_interval: u64,
     pub cleanup_inactive_tasks_interval: u64,
     pub validity_prover_restart_interval: u64,
@@ -71,9 +71,9 @@ pub struct ValidityProver {
 impl ValidityProver {
     pub async fn new(env: &EnvVar) -> Result<Self, ValidityProverError> {
         let config = ValidityProverConfig {
-            sync_mode: env.sync_mode,
+            is_sync_mode: env.is_sync_mode,
             witness_sync_interval: env.witness_sync_interval,
-            generate_validity_proof_interval: env.generate_validity_proof_interval,
+            validity_proof_interval: env.validity_proof_interval,
             add_tasks_interval: env.add_tasks_interval,
             cleanup_inactive_tasks_interval: env.cleanup_inactive_tasks_interval,
             validity_prover_restart_interval: env.validity_prover_restart_interval,
@@ -407,9 +407,8 @@ impl ValidityProver {
     }
 
     async fn generate_validity_proof_loop(&self) -> Result<(), ValidityProverError> {
-        let mut interval = tokio::time::interval(Duration::from_secs(
-            self.config.generate_validity_proof_interval,
-        ));
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.config.validity_proof_interval));
         loop {
             interval.tick().await;
             self.generate_validity_proof().await?;
@@ -436,8 +435,8 @@ impl ValidityProver {
     }
 
     pub(crate) async fn job(&self) -> Result<(), ValidityProverError> {
-        if !self.config.sync_mode {
-            // If sync_mode is false, do not start the job
+        if !self.config.is_sync_mode {
+            // If is_sync_mode is false, do not start the job
             return Ok(());
         }
 
