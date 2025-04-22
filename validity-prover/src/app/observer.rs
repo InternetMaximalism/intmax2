@@ -5,11 +5,12 @@ use super::{
 use crate::EnvVar;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
-    rollup_contract::{FullBlockWithMeta, RollupContract},
+    rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
     utils::get_latest_block_number,
 };
 use intmax2_zkp::{
-    common::witness::full_block::FullBlock, ethereum_types::u32limb_trait::U32LimbTrait as _,
+    common::witness::full_block::FullBlock,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
     utils::leafable::Leafable as _,
 };
 use log::warn;
@@ -115,7 +116,7 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    pub async fn get_local_last_eth_block_number(
+    async fn get_local_last_eth_block_number(
         &self,
         event_type: EventType,
     ) -> Result<Option<u64>, ObserverError> {
@@ -176,7 +177,7 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    pub async fn is_synced(&self, event_type: EventType) -> Result<bool, ObserverError> {
+    async fn is_synced(&self, event_type: EventType) -> Result<bool, ObserverError> {
         let local_next_event_id = self.get_local_next_event_id(event_type).await?;
         let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
         Ok(local_next_event_id >= onchain_next_event_id)
@@ -198,6 +199,73 @@ impl Observer {
             ChainType::L2 => get_latest_block_number(&self.rollup_contract.rpc_url).await?,
         };
         Ok(current_eth_block_number)
+    }
+
+    // Util function to get deposit_leaf_inserted events between the specified block and the previous block
+    // This is used to generate validity witness for the block
+    #[instrument(skip(self))]
+    pub async fn get_deposits_between_blocks(
+        &self,
+        block_number: u32,
+    ) -> Result<Option<Vec<DepositLeafInserted>>, ObserverError> {
+        if block_number == 0 {
+            return Ok(Some(Vec::new()));
+        }
+        let prev_block_number = block_number - 1;
+        let local_last_block_number = self.get_local_last_block_number().await?;
+        if block_number > local_last_block_number {
+            // blocks are not ready
+            return Ok(None);
+        }
+        let current_block = self
+            .get_full_block_with_meta(block_number)
+            .await?
+            .ok_or(ObserverError::BlockNotFound(block_number))?;
+        let prev_block = self
+            .get_full_block_with_meta(prev_block_number)
+            .await?
+            .ok_or(ObserverError::BlockNotFound(prev_block_number))?;
+        let local_last_eth_block_number = self
+            .get_local_last_eth_block_number(EventType::DepositLeafInserted)
+            .await?;
+        if local_last_eth_block_number.is_none() {
+            let is_synced = self.is_synced(EventType::DepositLeafInserted).await?;
+            if !is_synced {
+                return Ok(None);
+            }
+        }
+        let local_last_eth_block_number = local_last_eth_block_number.unwrap();
+        if local_last_eth_block_number < current_block.eth_block_number {
+            let is_synced = self.is_synced(EventType::DepositLeafInserted).await?;
+            if !is_synced {
+                return Ok(None);
+            }
+        }
+        let deposits = sqlx::query!(
+            r#"
+            SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index
+            FROM deposit_leaf_events
+            WHERE (eth_block_number, eth_tx_index) > ($1, $2)
+            AND (eth_block_number, eth_tx_index) <= ($3, $4)
+            ORDER BY deposit_index
+            "#,
+            prev_block.eth_block_number as i64,
+            prev_block.eth_tx_index as i64,
+            current_block.eth_block_number as i64,
+            current_block.eth_tx_index as i64,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let events = deposits
+            .into_iter()
+            .map(|d| DepositLeafInserted {
+                deposit_index: d.deposit_index as u32,
+                deposit_hash: Bytes32::from_bytes_be(&d.deposit_hash).unwrap(),
+                eth_block_number: d.eth_block_number as u64,
+                eth_tx_index: d.eth_tx_index as u64,
+            })
+            .collect();
+        Ok(Some(events))
     }
 
     #[instrument(skip(self))]
