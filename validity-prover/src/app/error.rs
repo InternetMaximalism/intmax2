@@ -49,6 +49,15 @@ pub enum ObserverError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum SettingConsistencyError {
+    #[error("Database error: {0}")]
+    DBError(#[from] sqlx::Error),
+
+    #[error("Mismatched setting: {0}")]
+    MismatchedSetting(String),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum ValidityProverError {
     #[error("Observer error: {0}")]
     ObserverError(#[from] ObserverError),
@@ -61,6 +70,9 @@ pub enum ValidityProverError {
 
     #[error("Task manager error: {0}")]
     TaskManagerError(#[from] TaskManagerError),
+
+    #[error("Setting consistency error: {0}")]
+    SettingConsistencyError(#[from] SettingConsistencyError),
 
     #[error("Task error: {0}")]
     TaskError(String),

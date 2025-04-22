@@ -1,5 +1,6 @@
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
+    app::setting_consistency::SettingConsistency,
     trees::{
         deposit_hash::DepositHash,
         merkle_tree::{
@@ -86,6 +87,13 @@ impl ValidityProver {
         )?);
         let observer = Observer::new(env).await?;
         let pool = Pool::connect(&env.database_url).await?;
+        // check consistency
+        {
+            let setting_consistency = SettingConsistency::new(pool.clone());
+            setting_consistency
+                .check_consistency(env.rollup_contract_address, env.liquidity_contract_address)
+                .await?;
+        }
         let account_tree =
             SqlIndexedMerkleTree::new(pool.clone(), ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
         account_tree.initialize().await?;

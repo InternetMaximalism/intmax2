@@ -2,6 +2,12 @@
 DROP INDEX IF EXISTS idx_deposited_events_pubkey_salt_hash;
 DROP TABLE IF EXISTS deposited_events;
 
+CREATE TABLE IF NOT EXISTS settings (
+    singleton_key BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton_key),
+    rollup_contract_address VARCHAR(42) NOT NULL,
+    liquidity_contract_address VARCHAR(42) NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS deposited_events (
     deposit_id BIGINT PRIMARY KEY,
     depositor VARCHAR(42) NOT NULL,
