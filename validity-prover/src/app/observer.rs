@@ -94,7 +94,7 @@ impl Observer {
 
     async fn get_local_next_event_id(&self, event_type: EventType) -> Result<u64, ObserverError> {
         let latest_event_id = match event_type {
-            EventType::Deposited => self.get_local_last_deposit_id().await?.map(|i| i as u64),
+            EventType::Deposited => self.get_local_last_deposit_id().await?,
             EventType::DepositLeafInserted => {
                 self.get_local_last_deposit_index().await?.map(|i| i as u64)
             }

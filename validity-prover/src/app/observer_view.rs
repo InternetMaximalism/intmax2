@@ -16,7 +16,7 @@ impl Observer {
         let result = sqlx::query!("SELECT MAX(deposit_id) FROM deposited_events")
             .fetch_optional(&self.pool)
             .await?;
-        let last_deposit_id = result.map(|r| r.max).flatten().map(|i| i as u64);
+        let last_deposit_id = result.and_then(|r| r.max).map(|i| i as u64);
         Ok(last_deposit_id)
     }
 
@@ -24,7 +24,7 @@ impl Observer {
         let result = sqlx::query!("SELECT MAX(deposit_index) FROM deposit_leaf_events")
             .fetch_optional(&self.pool)
             .await?;
-        let last_deposit_index = result.map(|r| r.max).flatten().map(|i| i as u32);
+        let last_deposit_index = result.and_then(|r| r.max).map(|i| i as u32);
         Ok(last_deposit_index)
     }
 
@@ -32,7 +32,7 @@ impl Observer {
         let result = sqlx::query!("SELECT MAX(block_number) FROM full_blocks")
             .fetch_optional(&self.pool)
             .await?;
-        let last_block_number = result.map(|r| r.max).flatten().map(|i| i as u32);
+        let last_block_number = result.and_then(|r| r.max).map(|i| i as u32);
         Ok(last_block_number)
     }
 

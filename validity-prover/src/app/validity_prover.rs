@@ -525,38 +525,38 @@ impl ValidityProver {
         });
 
         // sync validity witness job
-        // let this_clone = this.clone();
-        // tokio::spawn(async move {
-        //     // restart loop
-        //     loop {
-        //         let this_clone = this_clone.clone();
-        //         let handler = tokio::spawn(async move {
-        //             this_clone.sync_validity_witness_loop(sync_interval).await
-        //         });
-        //         match handler.await {
-        //             Ok(Ok(_)) => {
-        //                 tracing::error!("sync_validity_witness_loop finished");
-        //             }
-        //             Ok(Err(e)) => {
-        //                 tracing::error!("sync_validity_witness_loop error: {:?}", e);
-        //             }
-        //             Err(e) => {
-        //                 tracing::error!("sync_validity_witness_loop panic: {:?}", e);
-        //             }
-        //         }
-        //     }
-        // });
+        let this_clone = this.clone();
+        tokio::spawn(async move {
+            // restart loop
+            loop {
+                let this_clone = this_clone.clone();
+                // using actix_web::rt::spawn because self is not `Send`
+                let handler = actix_web::rt::spawn(async move {
+                    this_clone.sync_validity_witness_loop(sync_interval).await
+                });
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("sync_validity_witness_loop finished");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("sync_validity_witness_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("sync_validity_witness_loop panic: {:?}", e);
+                    }
+                }
+            }
+        });
 
         // cleanup inactive tasks job
         let this_clone = this.clone();
         tokio::spawn(async move {
             // restart loop
             loop {
-               let this_clone = this_clone.clone();
-                let handler =
-                    tokio::spawn(
-                        async move { this_clone.cleanup_inactive_tasks_loop(sync_interval).await },
-                    );
+                let this_clone = this_clone.clone();
+                let handler = tokio::spawn(async move {
+                    this_clone.cleanup_inactive_tasks_loop(sync_interval).await
+                });
                 match handler.await {
                     Ok(Ok(_)) => {
                         tracing::error!("cleanup_inactive_tasks_loop finished");
