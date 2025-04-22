@@ -51,7 +51,7 @@ impl State {
     }
 
     pub async fn job(&self) {
-        self.validity_prover.clone().job().await.unwrap();
+        self.validity_prover.clone().start_all_jobs().await.unwrap();
     }
 
     pub async fn get_block_number(&self) -> anyhow::Result<u32> {

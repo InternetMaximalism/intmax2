@@ -7,12 +7,6 @@ use crate::trees::merkle_tree::error::MerkleTreeError;
 use super::check_point_store::EventType;
 
 #[derive(Debug, thiserror::Error)]
-pub enum CheckPointError {
-    #[error("Database error: {0}")]
-    DBError(#[from] sqlx::Error),
-}
-
-#[derive(Debug, thiserror::Error)]
 pub enum ObserverError {
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),

@@ -1,3 +1,8 @@
+use super::{
+    check_point_store::{ChainType, CheckPointStore, EventType},
+    error::ObserverError,
+};
+use crate::EnvVar;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{FullBlockWithMeta, RollupContract},
@@ -7,21 +12,12 @@ use intmax2_zkp::{
     common::witness::full_block::FullBlock, ethereum_types::u32limb_trait::U32LimbTrait as _,
     utils::leafable::Leafable as _,
 };
-use std::sync::Arc;
-
 use log::warn;
-use serde::Deserialize;
 use server_common::db::{DbPool, DbPoolConfig};
+use std::sync::Arc;
 use tracing::{info, instrument};
 
-use crate::EnvVar;
-
-use super::{
-    check_point_store::{ChainType, CheckPointStore, EventType},
-    error::ObserverError,
-};
-
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct ObserverConfig {
     pub observer_event_block_interval: u64,
     pub observer_backward_block_interval: u64,
@@ -31,8 +27,6 @@ pub struct ObserverConfig {
 
     pub rollup_contract_deployed_block_number: u64,
     pub liquidity_contract_deployed_block_number: u64,
-    pub l1_rpc_url: String,
-    pub l2_rpc_url: String,
 }
 
 #[derive(Clone)]
@@ -54,9 +48,8 @@ impl Observer {
             observer_restart_interval: env.observer_restart_interval,
             rollup_contract_deployed_block_number: env.rollup_contract_deployed_block_number,
             liquidity_contract_deployed_block_number: env.liquidity_contract_deployed_block_number,
-            l1_rpc_url: env.l1_rpc_url.clone(),
-            l2_rpc_url: env.l2_rpc_url.clone(),
         };
+        tracing::info!("Observer config: {:?}", config);
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
             idle_timeout: env.database_timeout,
@@ -194,8 +187,8 @@ impl Observer {
         event_type: EventType,
     ) -> Result<u64, ObserverError> {
         let current_eth_block_number = match event_type.to_chain_type() {
-            ChainType::L1 => get_latest_block_number(&self.config.l1_rpc_url).await?,
-            ChainType::L2 => get_latest_block_number(&self.config.l2_rpc_url).await?,
+            ChainType::L1 => get_latest_block_number(&self.liquidity_contract.rpc_url).await?,
+            ChainType::L2 => get_latest_block_number(&self.rollup_contract.rpc_url).await?,
         };
         Ok(current_eth_block_number)
     }

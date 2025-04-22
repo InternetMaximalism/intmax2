@@ -1,4 +1,16 @@
-use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
+use super::{error::ValidityProverError, observer::Observer};
+use crate::{
+    trees::{
+        deposit_hash::DepositHash,
+        merkle_tree::{
+            sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
+            sql_indexed_merkle_tree::SqlIndexedMerkleTree, IncrementalMerkleTreeClient,
+            IndexedMerkleTreeClient,
+        },
+        update::{to_block_witness, update_trees},
+    },
+    EnvVar,
+};
 use intmax2_interfaces::{
     api::validity_prover::interface::{TransitionProofTask, TransitionProofTaskResult},
     utils::circuit_verifiers::CircuitVerifiers,
@@ -24,19 +36,6 @@ use std::{
 };
 use tracing::instrument;
 
-use super::{error::ValidityProverError, observer::Observer};
-use crate::{
-    trees::{
-        deposit_hash::DepositHash,
-        merkle_tree::{
-            sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
-            sql_indexed_merkle_tree::SqlIndexedMerkleTree, IndexedMerkleTreeClient,
-        },
-        update::{to_block_witness, update_trees},
-    },
-    EnvVar,
-};
-
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
@@ -46,7 +45,7 @@ const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
 const MAX_TASKS: u32 = 30;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ValidityProverConfig {
     pub is_sync_mode: bool,
     pub witness_sync_interval: u64,
@@ -78,6 +77,7 @@ impl ValidityProver {
             cleanup_inactive_tasks_interval: env.cleanup_inactive_tasks_interval,
             validity_prover_restart_interval: env.validity_prover_restart_interval,
         };
+        tracing::info!("ValidityProverConfig: {:?}", config);
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
@@ -434,7 +434,7 @@ impl ValidityProver {
         }
     }
 
-    pub(crate) async fn job(&self) -> Result<(), ValidityProverError> {
+    pub async fn start_all_jobs(&self) -> Result<(), ValidityProverError> {
         if !self.config.is_sync_mode {
             // If is_sync_mode is false, do not start the job
             return Ok(());
