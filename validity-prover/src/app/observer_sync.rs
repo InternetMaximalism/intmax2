@@ -228,20 +228,11 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    pub async fn single_sync_deposit_leaf_inserted(&self) -> Result<(), ObserverError> {
-        let event_type = EventType::DepositLeafInserted;
-
-        // syncするべきかどうかの判定をする
-        let local_next_event_id = self.get_local_next_event_id(event_type).await?;
-        let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
-        if local_next_event_id >= onchain_next_event_id {
-            info!(
-                "No new events to sync. Local: {}, Onchain: {}",
-                local_next_event_id, onchain_next_event_id
-            );
-            return Ok(());
-        }
-
+    pub async fn single_event_query(
+        &self,
+        event_type: EventType,
+        local_next_event_id: u64,
+    ) -> Result<u64, ObserverError> {
         // どこからblockを同期したらいいのか？-> まずはcheckpointとlocalの最新eth_block_numberを取得
         let checkpoint_eth_block_number =
             self.check_point_store.get_check_point(event_type).await?;
@@ -277,9 +268,10 @@ impl Observer {
                     .set_check_point(event_type, to_eth_block_number)
                     .await?;
                 info!(
-                    "Sync success. Event type: {}, Local next event id: {}, Onchain next event id: {}, From eth block number: {}, To eth block number: {}",
-                    event_type, local_next_event_id, next_event_id, from_eth_block_number, to_eth_block_number
-                );
+         "Sync success. Event type: {}, Local next event id: {}, Onchain next event id: {}, From eth block number: {}, To eth block number: {}",
+         event_type, local_next_event_id, next_event_id, from_eth_block_number, to_eth_block_number
+     );
+                Ok(next_event_id)
             }
             Err(ObserverError::EventGapDetected {
                 event_type,
@@ -293,17 +285,47 @@ impl Observer {
                     .set_check_point(event_type, backward_eth_block_number)
                     .await?;
                 warn!(
-                    "Event gap detected. Event type: {}, Expected next event id: {}, Got event id: {}. Backward to {}",
-                    event_type, expected_next_event_id, got_event_id, backward_eth_block_number
-                );
+         "Event gap detected. Event type: {}, Expected next event id: {}, Got event id: {}. Backward to {}",
+         event_type, expected_next_event_id, got_event_id, backward_eth_block_number
+     );
+                //next_event_idは更新しない
+                Ok(local_next_event_id)
             }
             Err(e) => {
                 // それ以外のエラーはそのまま返す. 他のエラーと一緒に上位の関数で処理する
                 return Err(e);
             }
         }
+    }
 
-        todo!();
+    #[instrument(skip(self))]
+    pub async fn single_sync_deposit_leaf_inserted(&self) -> Result<(), ObserverError> {
+        let event_type = EventType::DepositLeafInserted;
+        // syncするべきかどうかの判定をする
+        let mut local_next_event_id = self.get_local_next_event_id(event_type).await?;
+        let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
+        if local_next_event_id >= onchain_next_event_id {
+            info!(
+                "No new events to sync. Local: {}, Onchain: {}",
+                local_next_event_id, onchain_next_event_id
+            );
+            return Ok(());
+        }
+        // localがonchainに追いつくまでsyncをつづける
+        loop {
+            local_next_event_id = self
+                .single_event_query(event_type, local_next_event_id)
+                .await?;
+            // もしlocalがonchainに追いついたらbreakする
+            if local_next_event_id >= onchain_next_event_id {
+                break;
+            }
+        }
+        info!(
+            "Synced: Local next event id: {}, Onchain next event id: {}",
+            local_next_event_id, onchain_next_event_id
+        );
+        Ok(())
     }
 
     // async fn try_sync_deposits(&self) -> Result<(Vec<DepositLeafInserted>, u64), ObserverError> {

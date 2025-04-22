@@ -61,7 +61,6 @@ pub struct LiquidityContract {
     pub rpc_url: String,
     pub chain_id: u64,
     pub address: EthAddress,
-    pub deployed_block_number: u64,
 }
 
 impl LiquidityContract {
@@ -69,13 +68,11 @@ impl LiquidityContract {
         rpc_url: &str,
         chain_id: u64,
         address: EthAddress,
-        deployed_block_number: u64,
     ) -> Self {
         Self {
             rpc_url: rpc_url.to_string(),
             chain_id,
             address,
-            deployed_block_number,
         }
     }
 
@@ -88,8 +85,7 @@ impl LiquidityContract {
         let proxy =
             ProxyContract::deploy(rpc_url, chain_id, private_key, impl_address, &[]).await?;
         let address = proxy.address();
-        let deployed_block_number = proxy.deployed_block_number();
-        Ok(Self::new(rpc_url, chain_id, address, deployed_block_number))
+        Ok(Self::new(rpc_url, chain_id, address))
     }
 
     pub fn address(&self) -> EthAddress {
