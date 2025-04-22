@@ -73,7 +73,7 @@ pub struct ValidityProver {
 impl ValidityProver {
     pub async fn new(env: &Env) -> Result<Self, ValidityProverError> {
         let config = ValidityProverConfig {
-            sync_interval: env.sync_interval,
+            sync_interval: Some(10),
             generate_validity_proof_interval: Some(2),
             add_tasks_interval: Some(2),
             restart_interval: Some(30),
@@ -93,7 +93,7 @@ impl ValidityProver {
         let observer_config = ObserverConfig {
             event_block_interval: 10000,
             backward_sync_block_number: 1000,
-            sync_interval: 2,
+            sync_interval: 10,
             l1_rpc_url: env.l1_rpc_url.clone(),
             l1_chain_id: env.l1_chain_id,
             l2_rpc_url: env.l2_rpc_url.clone(),
@@ -170,12 +170,11 @@ impl ValidityProver {
         tracing::info!(
             "Start sync_validity_witness: current block number {}, observer block number {}, validity proof block number: {}",
             self.get_last_block_number().await?,
-            observer_block_number
-            .unwrap_or_default(),
+            observer_block_number,
             self.get_latest_validity_proof_block_number().await?,
         );
         let last_block_number = self.get_last_block_number().await?;
-        let next_block_number = observer_block_number.map(|i| i + 1).unwrap_or(0);
+        let next_block_number = observer_block_number + 1;
         let mut prev_validity_pis = if last_block_number == 0 {
             ValidityWitness::genesis().to_validity_pis().unwrap()
         } else {
@@ -526,7 +525,7 @@ impl ValidityProver {
 
         // sync validity witness job
         let this_clone = this.clone();
-        tokio::spawn(async move {
+        actix_web::rt::spawn(async move {
             // restart loop
             loop {
                 let this_clone = this_clone.clone();

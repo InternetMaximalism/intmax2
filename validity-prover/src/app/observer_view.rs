@@ -12,12 +12,12 @@ use intmax2_zkp::{
 use super::{error::ObserverError, observer::Observer};
 
 impl Observer {
-    pub async fn get_local_last_deposit_id(&self) -> Result<Option<u64>, ObserverError> {
+    pub async fn get_local_last_deposit_id(&self) -> Result<u64, ObserverError> {
         let result = sqlx::query!("SELECT MAX(deposit_id) FROM deposited_events")
             .fetch_optional(&self.pool)
             .await?;
         let last_deposit_id = result.and_then(|r| r.max).map(|i| i as u64);
-        Ok(last_deposit_id)
+        Ok(last_deposit_id.unwrap_or(0))
     }
 
     pub async fn get_local_last_deposit_index(&self) -> Result<Option<u32>, ObserverError> {
@@ -28,12 +28,12 @@ impl Observer {
         Ok(last_deposit_index)
     }
 
-    pub async fn get_local_last_block_number(&self) -> Result<Option<u32>, ObserverError> {
+    pub async fn get_local_last_block_number(&self) -> Result<u32, ObserverError> {
         let result = sqlx::query!("SELECT MAX(block_number) FROM full_blocks")
             .fetch_optional(&self.pool)
             .await?;
         let last_block_number = result.and_then(|r| r.max).map(|i| i as u32);
-        Ok(last_block_number)
+        Ok(last_block_number.unwrap_or(0))
     }
 
     pub async fn get_full_block_with_meta(
@@ -139,11 +139,8 @@ impl Observer {
 
     /// get the latest value of the deposit index included in the block
     pub async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ObserverError> {
-        let next_block_number = self
-            .get_local_last_block_number()
-            .await?
-            .map(|i| i + 1)
-            .unwrap_or(0);
+        // todo: refactor
+        let next_block_number = self.get_local_last_block_number().await? + 1;
         if next_block_number < 2 {
             // no blocks or genesis block does not have any deposits
             return Ok(None);

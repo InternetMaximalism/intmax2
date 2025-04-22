@@ -93,14 +93,16 @@ impl Observer {
     }
 
     async fn get_local_next_event_id(&self, event_type: EventType) -> Result<u64, ObserverError> {
-        let latest_event_id = match event_type {
-            EventType::Deposited => self.get_local_last_deposit_id().await?,
-            EventType::DepositLeafInserted => {
-                self.get_local_last_deposit_index().await?.map(|i| i as u64)
-            }
-            EventType::BlockPosted => self.get_local_last_block_number().await?.map(|i| i as u64),
+        let next_event_id = match event_type {
+            EventType::Deposited => self.get_local_last_deposit_id().await? + 1,
+            EventType::DepositLeafInserted => self
+                .get_local_last_deposit_index()
+                .await?
+                .map(|i| i as u64 + 1)
+                .unwrap_or(0),
+            EventType::BlockPosted => self.get_local_last_block_number().await? as u64 + 1,
         };
-        Ok(latest_event_id.map_or(0, |i| i + 1))
+        Ok(next_event_id)
     }
 
     async fn get_local_last_eth_block_number(
@@ -142,6 +144,10 @@ impl Observer {
                 .await?
             }
         };
+        // This is a special case for genesis block
+        if last_eth_block_number == Some(0) {
+            return Ok(None);
+        }
         Ok(last_eth_block_number.map(|i| i as u64))
     }
 
@@ -155,13 +161,18 @@ impl Observer {
                 self.rollup_contract.get_latest_block_number().await? as u64 + 1
             }
         };
+        tracing::info!(
+            "Onchain next event id: {}, Event type: {:?}",
+            next_event_id,
+            event_type
+        );
         Ok(next_event_id)
     }
 
     fn default_eth_block_number(&self, event_type: EventType) -> u64 {
         match event_type.to_chain_type() {
-            ChainType::L1 => self.config.l1_chain_id,
-            ChainType::L2 => self.config.l2_chain_id,
+            ChainType::L1 => self.config.liquidity_contract_deployed_block_number,
+            ChainType::L2 => self.config.rollup_contract_deployed_block_number,
         }
     }
 
@@ -329,16 +340,18 @@ impl Observer {
         event_type: EventType,
         local_next_event_id: u64,
     ) -> Result<u64, ObserverError> {
-        // どこからblockを同期したらいいのか？-> まずはcheckpointとlocalの最新eth_block_numberを取得
         let checkpoint_eth_block_number =
             self.check_point_store.get_check_point(event_type).await?;
         let local_last_eth_block_number = self.get_local_last_eth_block_number(event_type).await?;
-        // 大きい方を取る。両方がNoneの場合はdefault_eth_block_numberを使う
         let from_eth_block_number = checkpoint_eth_block_number
             .max(local_last_eth_block_number)
             .unwrap_or(self.default_eth_block_number(event_type));
-
-        // どこまでblockを同期したらいいのか？-> onchainの最新eth_block_numberを取得
+        tracing::info!(
+            "checkpoint eth block number: {:?}, local last eth block number: {:?}, from eth block number: {:?}",
+            checkpoint_eth_block_number,
+            local_last_eth_block_number,
+            from_eth_block_number
+        );
         let to_eth_block_number = self
             .get_current_eth_block_number(event_type)
             .await?
@@ -377,9 +390,9 @@ impl Observer {
                     .set_check_point(event_type, to_eth_block_number)
                     .await?;
                 info!(
-         "Sync success. Event type: {}, Local next event id: {}, Onchain next event id: {}, From eth block number: {}, To eth block number: {}",
-         event_type, local_next_event_id, next_event_id, from_eth_block_number, to_eth_block_number
-     );
+                "Sync success. Local next event id: {}, synced next event id: {}, From eth block number: {}, To eth block number: {}",
+                local_next_event_id, next_event_id, from_eth_block_number, to_eth_block_number
+                );
                 Ok(next_event_id)
             }
             Err(ObserverError::EventGapDetected {
@@ -489,3 +502,6 @@ impl Observer {
         log::info!("Observer started all jobs");
     }
 }
+
+#[cfg(test)]
+mod tests {}
