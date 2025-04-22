@@ -15,7 +15,7 @@ use intmax2_zkp::{
 use log::warn;
 use server_common::db::{DbPool, DbPoolConfig};
 use std::sync::Arc;
-use tracing::{info, instrument};
+use tracing::{debug, info, instrument};
 
 #[derive(Debug, Clone)]
 pub struct ObserverConfig {
@@ -446,7 +446,7 @@ impl Observer {
         let mut local_next_event_id = self.get_local_next_event_id(event_type).await?;
         let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
         if local_next_event_id >= onchain_next_event_id {
-            info!(
+            debug!(
                 "No new events to sync. Local: {}, Onchain: {}",
                 local_next_event_id, onchain_next_event_id
             );
