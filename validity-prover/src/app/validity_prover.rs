@@ -1,8 +1,4 @@
-use std::{
-    sync::{Arc, OnceLock},
-    time::Duration,
-};
-
+use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
 use intmax2_interfaces::{
     api::validity_prover::interface::{TransitionProofTask, TransitionProofTaskResult},
     utils::circuit_verifiers::CircuitVerifiers,
@@ -13,20 +9,20 @@ use intmax2_zkp::{
     constants::{ACCOUNT_TREE_HEIGHT, BLOCK_HASH_TREE_HEIGHT, DEPOSIT_TREE_HEIGHT},
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
 };
-use sqlx::Pool;
-use tracing::instrument;
-
-use crate::{app::observer::ObserverConfig, trees::merkle_tree::IncrementalMerkleTreeClient};
-
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
-
 use server_common::{
     db::{DbPool, DbPoolConfig},
     redis::task_manager::TaskManager,
 };
+use sqlx::Pool;
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
+use tracing::instrument;
 
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
@@ -38,7 +34,7 @@ use crate::{
         },
         update::{to_block_witness, update_trees},
     },
-    Env,
+    EnvVar,
 };
 
 type F = GoldilocksField;
@@ -52,10 +48,12 @@ const MAX_TASKS: u32 = 30;
 
 #[derive(Clone)]
 pub struct ValidityProverConfig {
-    pub sync_interval: Option<u64>,
-    pub generate_validity_proof_interval: Option<u64>,
-    pub add_tasks_interval: Option<u64>,
-    pub restart_interval: Option<u64>,
+    pub sync_mode: bool,
+    pub witness_sync_interval: u64,
+    pub generate_validity_proof_interval: u64,
+    pub add_tasks_interval: u64,
+    pub cleanup_inactive_tasks_interval: u64,
+    pub restart_interval: u64,
 }
 
 #[derive(Clone)]
@@ -71,12 +69,14 @@ pub struct ValidityProver {
 }
 
 impl ValidityProver {
-    pub async fn new(env: &Env) -> Result<Self, ValidityProverError> {
+    pub async fn new(env: &EnvVar) -> Result<Self, ValidityProverError> {
         let config = ValidityProverConfig {
-            sync_interval: Some(10),
-            generate_validity_proof_interval: Some(2),
-            add_tasks_interval: Some(2),
-            restart_interval: Some(30),
+            sync_mode: env.sync_mode,
+            witness_sync_interval: env.witness_sync_interval,
+            generate_validity_proof_interval: env.generate_validity_proof_interval,
+            add_tasks_interval: env.add_tasks_interval,
+            cleanup_inactive_tasks_interval: env.cleanup_inactive_tasks_interval,
+            restart_interval: env.restart_interval,
         };
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
@@ -84,28 +84,7 @@ impl ValidityProver {
             env.task_ttl as usize,
             env.heartbeat_interval as usize,
         )?);
-        let observer_pool = DbPool::from_config(&DbPoolConfig {
-            max_connections: env.database_max_connections,
-            idle_timeout: env.database_timeout,
-            url: env.database_url.to_string(),
-        })
-        .await?;
-        let observer_config = ObserverConfig {
-            event_block_interval: 10000,
-            backward_sync_block_number: 1000,
-            max_query_times: 20,
-            sync_interval: 10,
-            l1_rpc_url: env.l1_rpc_url.clone(),
-            l1_chain_id: env.l1_chain_id,
-            l2_rpc_url: env.l2_rpc_url.clone(),
-            l2_chain_id: env.l2_chain_id,
-            rollup_contract_address: env.rollup_contract_address,
-            rollup_contract_deployed_block_number: env.rollup_contract_deployed_block_number,
-            liquidity_contract_address: env.liquidity_contract_address,
-            liquidity_contract_deployed_block_number: env.liquidity_contract_deployed_block_number,
-        };
-        let observer = Observer::new(observer_config, observer_pool).await?;
-
+        let observer = Observer::new(env).await?;
         let pool = Pool::connect(&env.database_url).await?;
         let account_tree =
             SqlIndexedMerkleTree::new(pool.clone(), ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
@@ -138,14 +117,12 @@ impl ValidityProver {
             "account tree len: {}",
             account_tree.len(last_timestamp).await?
         );
-
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
             idle_timeout: env.database_timeout,
             url: env.database_url.clone(),
         })
         .await?;
-
         Ok(Self {
             config,
             manager,
@@ -420,43 +397,38 @@ impl ValidityProver {
         Ok(())
     }
 
-    async fn sync_validity_witness_loop(
-        &self,
-        sync_interval: u64,
-    ) -> Result<(), ValidityProverError> {
-        let mut interval = tokio::time::interval(Duration::from_secs(sync_interval));
+    async fn sync_validity_witness_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.config.witness_sync_interval));
         loop {
             interval.tick().await;
             self.sync_validity_witness().await?;
         }
     }
 
-    async fn generate_validity_proof_loop(
-        &self,
-        generate_validity_proof_interval: u64,
-    ) -> Result<(), ValidityProverError> {
-        let mut interval =
-            tokio::time::interval(Duration::from_secs(generate_validity_proof_interval));
+    async fn generate_validity_proof_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval = tokio::time::interval(Duration::from_secs(
+            self.config.generate_validity_proof_interval,
+        ));
         loop {
             interval.tick().await;
             self.generate_validity_proof().await?;
         }
     }
 
-    async fn add_tasks_loop(&self, add_tasks_interval: u64) -> Result<(), ValidityProverError> {
-        let mut interval = tokio::time::interval(Duration::from_secs(add_tasks_interval));
+    async fn add_tasks_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.config.add_tasks_interval));
         loop {
             interval.tick().await;
             self.add_tasks().await?;
         }
     }
 
-    async fn cleanup_inactive_tasks_loop(
-        &self,
-        cleanup_inactive_tasks_interval: u64,
-    ) -> Result<(), ValidityProverError> {
-        let mut interval =
-            tokio::time::interval(Duration::from_secs(cleanup_inactive_tasks_interval));
+    async fn cleanup_inactive_tasks_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval = tokio::time::interval(Duration::from_secs(
+            self.config.cleanup_inactive_tasks_interval,
+        ));
         loop {
             interval.tick().await;
             self.manager.cleanup_inactive_tasks().await?;
@@ -464,11 +436,10 @@ impl ValidityProver {
     }
 
     pub(crate) async fn job(&self) -> Result<(), ValidityProverError> {
-        if self.config.sync_interval.is_none() {
-            // If sync_interval is not set, we don't run the sync task
+        if !self.config.sync_mode {
+            // If sync_mode is false, do not start the job
             return Ok(());
         }
-        let sync_interval = self.config.sync_interval.unwrap();
 
         // clear all tasks
         self.manager.clear_all().await?;
@@ -484,9 +455,8 @@ impl ValidityProver {
             // restart loop
             loop {
                 let this_clone = this_clone.clone();
-                let handler = tokio::spawn(async move {
-                    this_clone.generate_validity_proof_loop(sync_interval).await
-                });
+                let handler =
+                    tokio::spawn(async move { this_clone.generate_validity_proof_loop().await });
                 match handler.await {
                     Ok(Ok(_)) => {
                         tracing::error!("generate_validity_proof_loop finished");
@@ -507,8 +477,7 @@ impl ValidityProver {
             // restart loop
             loop {
                 let this_clone = this_clone.clone();
-                let handler =
-                    tokio::spawn(async move { this_clone.add_tasks_loop(sync_interval).await });
+                let handler = tokio::spawn(async move { this_clone.add_tasks_loop().await });
                 match handler.await {
                     Ok(Ok(_)) => {
                         tracing::error!("add_tasks_loop finished");
@@ -530,9 +499,10 @@ impl ValidityProver {
             loop {
                 let this_clone = this_clone.clone();
                 // using actix_web::rt::spawn because self is not `Send`
-                let handler = actix_web::rt::spawn(async move {
-                    this_clone.sync_validity_witness_loop(sync_interval).await
-                });
+                let handler =
+                    actix_web::rt::spawn(
+                        async move { this_clone.sync_validity_witness_loop().await },
+                    );
                 match handler.await {
                     Ok(Ok(_)) => {
                         tracing::error!("sync_validity_witness_loop finished");
@@ -553,9 +523,8 @@ impl ValidityProver {
             // restart loop
             loop {
                 let this_clone = this_clone.clone();
-                let handler = tokio::spawn(async move {
-                    this_clone.cleanup_inactive_tasks_loop(sync_interval).await
-                });
+                let handler =
+                    tokio::spawn(async move { this_clone.cleanup_inactive_tasks_loop().await });
                 match handler.await {
                     Ok(Ok(_)) => {
                         tracing::error!("cleanup_inactive_tasks_loop finished");

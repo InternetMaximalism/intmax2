@@ -9,7 +9,7 @@ use server_common::{
 use tracing_actix_web::TracingLogger;
 use validity_prover::{
     api::{state::State, validity_prover::validity_prover_scope},
-    Env,
+    EnvVar,
 };
 
 #[actix_web::main]
@@ -18,7 +18,7 @@ async fn main() -> std::io::Result<()> {
     logger::init_logger().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     dotenv::dotenv().ok();
-    let env: Env = envy::from_env().map_err(|e| {
+    let env: EnvVar = envy::from_env().map_err(|e| {
         io::Error::new(
             io::ErrorKind::Other,
             format!("Failed to parse environment variables: {}", e),

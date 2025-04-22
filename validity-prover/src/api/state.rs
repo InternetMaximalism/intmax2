@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use server_common::redis::cache::RedisCache;
 
-use crate::{app::validity_prover::ValidityProver, Env};
+use crate::{app::validity_prover::ValidityProver, EnvVar};
 
 pub struct CacheConfig {
     pub dynamic_ttl: Duration,
@@ -36,7 +36,7 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(env: &Env) -> anyhow::Result<Self> {
+    pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
         let validity_prover = ValidityProver::new(env).await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
         let config = CacheConfig {

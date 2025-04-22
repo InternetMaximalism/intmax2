@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use ethers::types::Address;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{FullBlockWithMeta, RollupContract},
@@ -10,32 +7,32 @@ use intmax2_zkp::{
     common::witness::full_block::FullBlock, ethereum_types::u32limb_trait::U32LimbTrait as _,
     utils::leafable::Leafable as _,
 };
+use std::sync::Arc;
 
 use log::warn;
-use server_common::db::DbPool;
+use serde::Deserialize;
+use server_common::db::{DbPool, DbPoolConfig};
 use tracing::{info, instrument};
+
+use crate::EnvVar;
 
 use super::{
     check_point_store::{ChainType, CheckPointStore, EventType},
     error::ObserverError,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct ObserverConfig {
-    pub event_block_interval: u64,
-    pub backward_sync_block_number: u64,
-    pub max_query_times: usize,
-    pub sync_interval: u64,
+    pub observer_event_block_interval: u64,
+    pub observer_backward_block_interval: u64,
+    pub observer_max_query_times: usize,
+    pub observer_sync_interval: u64,
+    pub observer_restart_interval: u64,
 
-    // chain config
-    pub l1_rpc_url: String,
-    pub l1_chain_id: u64,
-    pub l2_rpc_url: String,
-    pub l2_chain_id: u64,
-    pub rollup_contract_address: Address,
     pub rollup_contract_deployed_block_number: u64,
-    pub liquidity_contract_address: Address,
     pub liquidity_contract_deployed_block_number: u64,
+    pub l1_rpc_url: String,
+    pub l2_rpc_url: String,
 }
 
 #[derive(Clone)]
@@ -48,17 +45,34 @@ pub struct Observer {
 }
 
 impl Observer {
-    pub async fn new(config: ObserverConfig, pool: DbPool) -> Result<Self, ObserverError> {
+    pub async fn new(env: &EnvVar) -> Result<Self, ObserverError> {
+        let config = ObserverConfig {
+            observer_event_block_interval: env.observer_event_block_interval,
+            observer_backward_block_interval: env.observer_backward_block_interval,
+            observer_max_query_times: env.observer_max_query_times,
+            observer_sync_interval: env.observer_sync_interval,
+            observer_restart_interval: env.observer_restart_interval,
+            rollup_contract_deployed_block_number: env.rollup_contract_deployed_block_number,
+            liquidity_contract_deployed_block_number: env.liquidity_contract_deployed_block_number,
+            l1_rpc_url: env.l1_rpc_url.clone(),
+            l2_rpc_url: env.l2_rpc_url.clone(),
+        };
+        let pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: env.database_url.to_string(),
+        })
+        .await?;
         let check_point_store = CheckPointStore::new(pool.clone());
         let rollup_contract = RollupContract::new(
-            &config.l2_rpc_url,
-            config.l2_chain_id,
-            config.rollup_contract_address,
+            &env.l2_rpc_url,
+            env.l2_chain_id,
+            env.rollup_contract_address,
         );
         let liquidity_contract = LiquidityContract::new(
-            &config.l1_rpc_url,
-            config.l1_chain_id,
-            config.liquidity_contract_address,
+            &env.l1_rpc_url,
+            env.l1_chain_id,
+            env.liquidity_contract_address,
         );
         // Initialize with genesis block if table is empty
         let count = sqlx::query!("SELECT COUNT(*) as count FROM full_blocks")
@@ -354,7 +368,7 @@ impl Observer {
         let to_eth_block_number = self
             .get_current_eth_block_number(event_type)
             .await?
-            .min(from_eth_block_number + self.config.event_block_interval - 1);
+            .min(from_eth_block_number + self.config.observer_event_block_interval - 1);
         if from_eth_block_number > to_eth_block_number {
             // No new events to sync
             return Ok(local_next_event_id);
@@ -405,7 +419,7 @@ impl Observer {
                 let local_last_eth_block_number =
                     self.get_local_last_eth_block_number(event_type).await?;
                 let backward_eth_block_number = from_eth_block_number
-                    .saturating_sub(self.config.backward_sync_block_number)
+                    .saturating_sub(self.config.observer_backward_block_interval)
                     .max(
                         local_last_eth_block_number
                             .unwrap_or(self.default_eth_block_number(event_type)),
@@ -443,7 +457,7 @@ impl Observer {
             local_next_event_id, onchain_next_event_id
         );
         // continue to sync until local_next_event_id >= onchain_next_event_id with max_query_times
-        for _ in 0..self.config.max_query_times {
+        for _ in 0..self.config.observer_max_query_times {
             local_next_event_id = self
                 .sync_and_save_checkpoint(event_type, local_next_event_id)
                 .await?;
@@ -460,8 +474,9 @@ impl Observer {
 
     #[instrument(skip(self))]
     async fn sync_events_inner_loop(&self, event_type: EventType) -> Result<(), ObserverError> {
-        let mut interval =
-            tokio::time::interval(tokio::time::Duration::from_secs(self.config.sync_interval));
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
+            self.config.observer_sync_interval,
+        ));
         loop {
             interval.tick().await;
             self.sync_events(event_type).await?;
@@ -489,7 +504,10 @@ impl Observer {
                 }
             }
             // wait for a while before restarting
-            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                self.config.observer_restart_interval,
+            ))
+            .await;
             log::info!("Restarting sync events job for {}", event_type);
         }
     }

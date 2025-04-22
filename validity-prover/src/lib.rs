@@ -6,11 +6,23 @@ pub mod app;
 pub mod trees;
 
 #[derive(Deserialize)]
-pub struct Env {
+pub struct EnvVar {
     pub port: u16,
 
     // sync settings
-    pub sync_interval: Option<u64>,
+    pub sync_mode: bool,
+    pub witness_sync_interval: u64,
+    pub generate_validity_proof_interval: u64,
+    pub add_tasks_interval: u64,
+    pub cleanup_inactive_tasks_interval: u64,
+    pub restart_interval: u64,
+
+    // observer settings
+    pub observer_event_block_interval: u64,
+    pub observer_backward_block_interval: u64,
+    pub observer_max_query_times: usize,
+    pub observer_sync_interval: u64,
+    pub observer_restart_interval: u64,
 
     // onchain settings
     pub l1_rpc_url: String,
