@@ -205,7 +205,6 @@ impl ValidityProver {
             .await
             .map_err(|e| ValidityProverError::BlockWitnessGenerationError(e.to_string()))?;
             // Caution! This change the state of the account tree and block tree
-            // TODO: atomic update
             let validity_witness = match update_trees(
                 &block_witness,
                 block_number as u64,
@@ -439,6 +438,7 @@ impl ValidityProver {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn start_all_jobs(&self) -> Result<(), ValidityProverError> {
         if !self.config.is_sync_mode {
             // If is_sync_mode is false, do not start the job
