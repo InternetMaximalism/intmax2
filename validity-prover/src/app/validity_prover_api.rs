@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use intmax2_interfaces::api::validity_prover::interface::{AccountInfo, DepositInfo};
+use intmax2_interfaces::api::validity_prover::interface::AccountInfo;
 use intmax2_zkp::{
     common::{
         trees::{
@@ -158,18 +158,6 @@ impl ValidityProver {
         Ok(account_infos)
     }
 
-    pub async fn get_deposit_info(
-        &self,
-        pubkey_salt_hash: Bytes32,
-    ) -> Result<Option<DepositInfo>, ValidityProverError> {
-        let deposit_info = self
-            .observer
-            .get_deposit_info(pubkey_salt_hash)
-            .await
-            .map_err(ValidityProverError::ObserverError)?;
-        Ok(deposit_info)
-    }
-
     pub async fn get_block_number_by_tx_tree_root(
         &self,
         tx_tree_root: Bytes32,
@@ -316,18 +304,6 @@ impl ValidityProver {
         let last_block_number = record.and_then(|r| r.last_block_number).unwrap_or(0); // i32
 
         Ok(last_block_number as u32)
-    }
-
-    pub async fn get_next_deposit_index(&self) -> Result<u32, ValidityProverError> {
-        let last_deposit_index = self.observer.get_local_last_deposit_index().await?;
-        Ok(last_deposit_index.map(|i| i + 1).unwrap_or(0))
-    }
-
-    pub async fn get_latest_included_deposit_index(
-        &self,
-    ) -> Result<Option<u32>, ValidityProverError> {
-        let deposit_index = self.observer.get_latest_included_deposit_index().await?;
-        Ok(deposit_index)
     }
 
     pub async fn get_deposit_merkle_proof(

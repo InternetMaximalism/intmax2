@@ -91,7 +91,11 @@ impl State {
         if let Some(deposit_index) = self.cache.get::<V>(key).await? {
             Ok(deposit_index)
         } else {
-            let deposit_index = self.validity_prover.get_next_deposit_index().await?;
+            let deposit_index = self
+                .validity_prover
+                .observer
+                .get_next_deposit_index()
+                .await?;
             self.cache
                 .set_with_ttl::<V>(key, &deposit_index, self.config.dynamic_ttl)
                 .await?;
@@ -107,6 +111,7 @@ impl State {
         } else {
             let deposit_index = self
                 .validity_prover
+                .observer
                 .get_latest_included_deposit_index()
                 .await?;
             self.cache
@@ -198,6 +203,7 @@ impl State {
         } else {
             let deposit_info = self
                 .validity_prover
+                .observer
                 .get_deposit_info(request.pubkey_salt_hash)
                 .await?;
             // the result is mutable

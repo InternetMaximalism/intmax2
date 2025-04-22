@@ -35,6 +35,11 @@ impl Observer {
         Ok(last_block_number.unwrap_or(0))
     }
 
+    pub async fn get_next_deposit_index(&self) -> Result<u32, ObserverError> {
+        let last_deposit_index = self.get_local_last_deposit_index().await?;
+        Ok(last_deposit_index.map(|i| i + 1).unwrap_or(0))
+    }
+
     pub async fn get_full_block_with_meta(
         &self,
         block_number: u32,
