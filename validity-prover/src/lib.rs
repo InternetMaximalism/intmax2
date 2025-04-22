@@ -15,7 +15,7 @@ pub struct EnvVar {
     pub generate_validity_proof_interval: u64,
     pub add_tasks_interval: u64,
     pub cleanup_inactive_tasks_interval: u64,
-    pub restart_interval: u64,
+    pub validity_prover_restart_interval: u64,
 
     // observer settings
     pub observer_event_block_interval: u64,

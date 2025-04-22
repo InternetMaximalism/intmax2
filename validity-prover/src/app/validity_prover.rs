@@ -53,7 +53,7 @@ pub struct ValidityProverConfig {
     pub generate_validity_proof_interval: u64,
     pub add_tasks_interval: u64,
     pub cleanup_inactive_tasks_interval: u64,
-    pub restart_interval: u64,
+    pub validity_prover_restart_interval: u64,
 }
 
 #[derive(Clone)]
@@ -76,7 +76,7 @@ impl ValidityProver {
             generate_validity_proof_interval: env.generate_validity_proof_interval,
             add_tasks_interval: env.add_tasks_interval,
             cleanup_inactive_tasks_interval: env.cleanup_inactive_tasks_interval,
-            restart_interval: env.restart_interval,
+            validity_prover_restart_interval: env.validity_prover_restart_interval,
         };
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
@@ -449,6 +449,8 @@ impl ValidityProver {
 
         let this = Arc::new(self.clone());
 
+        let restart_duration = Duration::from_secs(self.config.validity_prover_restart_interval);
+
         // generate validity proof job
         let this_clone = this.clone();
         tokio::spawn(async move {
@@ -468,6 +470,7 @@ impl ValidityProver {
                         tracing::error!("generate_validity_proof_loop panic: {:?}", e);
                     }
                 }
+                tokio::time::sleep(restart_duration).await;
             }
         });
 
@@ -489,6 +492,7 @@ impl ValidityProver {
                         tracing::error!("add_tasks_loop panic: {:?}", e);
                     }
                 }
+                tokio::time::sleep(restart_duration).await;
             }
         });
 
@@ -514,6 +518,7 @@ impl ValidityProver {
                         tracing::error!("sync_validity_witness_loop panic: {:?}", e);
                     }
                 }
+                tokio::time::sleep(restart_duration).await;
             }
         });
 
@@ -536,6 +541,7 @@ impl ValidityProver {
                         tracing::error!("cleanup_inactive_tasks_loop panic: {:?}", e);
                     }
                 }
+                tokio::time::sleep(restart_duration).await;
             }
         });
 
