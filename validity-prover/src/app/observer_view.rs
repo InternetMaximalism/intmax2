@@ -102,41 +102,6 @@ impl Observer {
         }
     }
 
-    pub async fn get_deposit_leaf_inserted_event(
-        &self,
-        deposit_index: u32,
-    ) -> Result<Option<DepositLeafInserted>, ObserverError> {
-        let record = sqlx::query!(
-            "SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index 
-             FROM deposit_leaf_events 
-             WHERE deposit_index = $1",
-            deposit_index as i32
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        match record {
-            Some(r) => Ok(Some(DepositLeafInserted {
-                deposit_index: r.deposit_index as u32,
-                deposit_hash: Bytes32::from_bytes_be(&r.deposit_hash).unwrap(),
-                eth_block_number: r.eth_block_number as u64,
-                eth_tx_index: r.eth_tx_index as u64,
-            })),
-            None => Ok(None),
-        }
-    }
-
-    pub async fn get_deposited_event_batch(
-        &self,
-        pubkey_salt_hashes: Vec<Bytes32>,
-    ) -> Result<Vec<Option<Deposited>>, ObserverError> {
-        let mut result = Vec::new();
-        for pubkey_salt_hash in pubkey_salt_hashes {
-            let event = self.get_deposited_event(pubkey_salt_hash).await?;
-            result.push(event);
-        }
-        Ok(result)
-    }
-
     /// get the latest value of the deposit index included in the block
     pub async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ObserverError> {
         let block_number = self.get_local_last_block_number().await?;
@@ -228,15 +193,20 @@ impl Observer {
         }
     }
 
+    /// get the deposit leafs inserted between the specified block number and the previous block number
     pub async fn get_deposits_between_blocks(
         &self,
         block_number: u32,
     ) -> Result<Vec<DepositLeafInserted>, ObserverError> {
-        let current_block = self.get_full_block_with_meta(block_number).await?;
-        let prev_block = self
-            .get_full_block_with_meta(block_number.saturating_sub(1))
-            .await?;
+        if block_number == 0 {
+            return Ok(Vec::new());
+        }
+        let prev_block_number = block_number - 1;
 
+        let current_block = self.get_full_block_with_meta(block_number).await?;
+        let prev_block = self.get_full_block_with_meta(prev_block_number).await?;
+
+        // エラーを返すべき
         let (prev_block, current_block) = match (prev_block, current_block) {
             (Some(p), Some(c)) => (p, c),
             _ => return Ok(Vec::new()),
