@@ -319,8 +319,8 @@ impl ValidityProver {
     }
 
     pub async fn get_next_deposit_index(&self) -> Result<u32, ValidityProverError> {
-        // let deposit_index = self.observer.get_next_deposit_index().await?;
-        todo!()
+        let last_deposit_index = self.observer.get_local_last_deposit_index().await?;
+        Ok(last_deposit_index.map(|i| i + 1).unwrap_or(0))
     }
 
     pub async fn get_latest_included_deposit_index(

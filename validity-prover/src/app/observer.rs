@@ -93,6 +93,7 @@ impl Observer {
         })
     }
 
+    #[instrument(skip(self))]
     async fn get_local_next_event_id(&self, event_type: EventType) -> Result<u64, ObserverError> {
         let next_event_id = match event_type {
             EventType::Deposited => self.get_local_last_deposit_id().await? + 1,
@@ -106,6 +107,7 @@ impl Observer {
         Ok(next_event_id)
     }
 
+    #[instrument(skip(self))]
     async fn get_local_last_eth_block_number(
         &self,
         event_type: EventType,
@@ -152,6 +154,7 @@ impl Observer {
         Ok(last_eth_block_number.map(|i| i as u64))
     }
 
+    #[instrument(skip(self))]
     async fn get_onchain_next_event_id(&self, event_type: EventType) -> Result<u64, ObserverError> {
         let next_event_id = match event_type {
             EventType::Deposited => self.liquidity_contract.get_last_deposit_id().await? + 1,
@@ -162,11 +165,6 @@ impl Observer {
                 self.rollup_contract.get_latest_block_number().await? as u64 + 1
             }
         };
-        tracing::info!(
-            "Onchain next event id: {}, Event type: {:?}",
-            next_event_id,
-            event_type
-        );
         Ok(next_event_id)
     }
 

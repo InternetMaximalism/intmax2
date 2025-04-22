@@ -139,17 +139,16 @@ impl Observer {
 
     /// get the latest value of the deposit index included in the block
     pub async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ObserverError> {
-        // todo: refactor
-        let next_block_number = self.get_local_last_block_number().await? + 1;
-        if next_block_number < 2 {
-            // no blocks or genesis block does not have any deposits
+        let block_number = self.get_local_last_block_number().await?;
+        if block_number == 0 {
+            // genesis block does not have any deposits
             return Ok(None);
         }
 
         let latest_block = self
-            .get_full_block_with_meta(next_block_number - 1)
+            .get_full_block_with_meta(block_number)
             .await?
-            .ok_or(ObserverError::BlockNotFound(next_block_number - 1))?;
+            .ok_or(ObserverError::BlockNotFound(block_number))?;
         let deposit = sqlx::query!(
             r#"
             SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index
