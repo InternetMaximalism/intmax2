@@ -93,6 +93,7 @@ impl ValidityProver {
         let observer_config = ObserverConfig {
             event_block_interval: 10000,
             backward_sync_block_number: 1000,
+            max_query_times: 20,
             sync_interval: 10,
             l1_rpc_url: env.l1_rpc_url.clone(),
             l1_chain_id: env.l1_chain_id,

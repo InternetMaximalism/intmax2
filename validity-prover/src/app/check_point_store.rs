@@ -76,21 +76,90 @@ impl CheckPointStore {
     ) -> Result<(), sqlx::Error> {
         match event_type {
             EventType::Deposited => {
-                sqlx::query!("UPDATE observer_l1_deposit_sync_eth_block_num SET l1_deposit_sync_eth_block_num = $1 WHERE singleton_key = TRUE", eth_block_number as i64)
-                    .execute(&self.pool)
-                    .await?;
+                sqlx::query!(
+                    r#"
+                    INSERT INTO observer_l1_deposit_sync_eth_block_num (singleton_key, l1_deposit_sync_eth_block_num)
+                    VALUES (TRUE, $1)
+                    ON CONFLICT (singleton_key) 
+                    DO UPDATE SET l1_deposit_sync_eth_block_num = $1
+                    "#,
+                    eth_block_number as i64
+                )
+                .execute(&self.pool)
+                .await?;
             }
             EventType::DepositLeafInserted => {
-                sqlx::query!("UPDATE observer_deposit_sync_eth_block_num SET deposit_sync_eth_block_num = $1 WHERE singleton_key = TRUE", eth_block_number as i64)
-                    .execute(&self.pool)
-                    .await?;
+                sqlx::query!(
+                    r#"
+                    INSERT INTO observer_deposit_sync_eth_block_num (singleton_key, deposit_sync_eth_block_num)
+                    VALUES (TRUE, $1)
+                    ON CONFLICT (singleton_key) 
+                    DO UPDATE SET deposit_sync_eth_block_num = $1
+                    "#,
+                    eth_block_number as i64
+                )
+                .execute(&self.pool)
+                .await?;
             }
             EventType::BlockPosted => {
-                sqlx::query!("UPDATE observer_block_sync_eth_block_num SET block_sync_eth_block_num = $1 WHERE singleton_key = TRUE", eth_block_number as i64)
-                    .execute(&self.pool)
-                    .await?;
+                sqlx::query!(
+                    r#"
+                    INSERT INTO observer_block_sync_eth_block_num (singleton_key, block_sync_eth_block_num)
+                    VALUES (TRUE, $1)
+                    ON CONFLICT (singleton_key) 
+                    DO UPDATE SET block_sync_eth_block_num = $1
+                    "#,
+                    eth_block_number as i64
+                )
+                .execute(&self.pool)
+                .await?;
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use server_common::db::DbPoolConfig;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_check_point_store() {
+        let pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: 10,
+            idle_timeout: 10,
+            url: "postgres://postgres:password@localhost/validity_prover".to_string(),
+        })
+        .await
+        .unwrap();
+        let store = CheckPointStore::new(pool.clone());
+
+        // Test setting and getting check points
+        store
+            .set_check_point(EventType::Deposited, 100)
+            .await
+            .unwrap();
+        let checkpoint = store.get_check_point(EventType::Deposited).await.unwrap();
+        assert_eq!(checkpoint, Some(100));
+
+        store
+            .set_check_point(EventType::DepositLeafInserted, 200)
+            .await
+            .unwrap();
+        let checkpoint = store
+            .get_check_point(EventType::DepositLeafInserted)
+            .await
+            .unwrap();
+        assert_eq!(checkpoint, Some(200));
+
+        store
+            .set_check_point(EventType::BlockPosted, 300)
+            .await
+            .unwrap();
+        let checkpoint = store.get_check_point(EventType::BlockPosted).await.unwrap();
+        assert_eq!(checkpoint, Some(300));
     }
 }

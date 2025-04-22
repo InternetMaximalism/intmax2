@@ -24,6 +24,7 @@ use super::{
 pub struct ObserverConfig {
     pub event_block_interval: u64,
     pub backward_sync_block_number: u64,
+    pub max_query_times: usize,
     pub sync_interval: u64,
 
     // chain config
@@ -114,8 +115,8 @@ impl Observer {
                 sqlx::query_scalar!(
                     r#"
                     SELECT eth_block_number
-                    FROM deposit_leaf_events
-                    WHERE deposit_index = (SELECT MAX(deposit_index) FROM deposit_leaf_events)
+                    FROM deposited_events
+                    WHERE deposit_id = (SELECT MAX(deposit_id) FROM deposited_events)
                     "#
                 )
                 .fetch_optional(&self.pool)
@@ -356,7 +357,10 @@ impl Observer {
             .get_current_eth_block_number(event_type)
             .await?
             .min(from_eth_block_number + self.config.event_block_interval - 1);
-
+        if from_eth_block_number > to_eth_block_number {
+            // No new events to sync
+            return Ok(local_next_event_id);
+        }
         let next_event_id = match event_type {
             EventType::DepositLeafInserted => {
                 self.fetch_and_write_deposit_leaf_inserted_events(
@@ -385,7 +389,6 @@ impl Observer {
         };
         match next_event_id {
             Ok(next_event_id) => {
-                // checkpointを更新する
                 self.check_point_store
                     .set_check_point(event_type, to_eth_block_number)
                     .await?;
@@ -400,21 +403,26 @@ impl Observer {
                 expected_next_event_id,
                 got_event_id,
             }) => {
+                // If event gap detected, we need to backward the checkpoint
+                let local_last_eth_block_number =
+                    self.get_local_last_eth_block_number(event_type).await?;
                 let backward_eth_block_number = from_eth_block_number
                     .saturating_sub(self.config.backward_sync_block_number)
-                    .max(self.default_eth_block_number(event_type));
+                    .max(
+                        local_last_eth_block_number
+                            .unwrap_or(self.default_eth_block_number(event_type)),
+                    );
                 self.check_point_store
                     .set_check_point(event_type, backward_eth_block_number)
                     .await?;
                 warn!(
-         "Event gap detected. Event type: {}, Expected next event id: {}, Got event id: {}. Backward to {}",
-         event_type, expected_next_event_id, got_event_id, backward_eth_block_number
-     );
-                //next_event_idは更新しない
+                "Event gap detected. Event type: {}, Expected next event id: {}, Got event id: {}. Backward to {}",
+                event_type, expected_next_event_id, got_event_id, backward_eth_block_number
+                );
                 Ok(local_next_event_id)
             }
             Err(e) => {
-                // それ以外のエラーはそのまま返す. 他のエラーと一緒に上位の関数で処理する
+                // Return other errors as is. Handle them in the upper function with other errors
                 return Err(e);
             }
         }
@@ -422,7 +430,7 @@ impl Observer {
 
     #[instrument(skip(self))]
     async fn sync_events(&self, event_type: EventType) -> Result<(), ObserverError> {
-        // syncするべきかどうかの判定をする
+        // determine whether to sync or not
         let mut local_next_event_id = self.get_local_next_event_id(event_type).await?;
         let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
         if local_next_event_id >= onchain_next_event_id {
@@ -432,18 +440,21 @@ impl Observer {
             );
             return Ok(());
         }
-        // localがonchainに追いつくまでsyncをつづける
-        loop {
+        info!(
+            "Syncing events. Local next event id: {}, Onchain next event id: {}",
+            local_next_event_id, onchain_next_event_id
+        );
+        // continue to sync until local_next_event_id >= onchain_next_event_id with max_query_times
+        for _ in 0..self.config.max_query_times {
             local_next_event_id = self
                 .sync_and_save_checkpoint(event_type, local_next_event_id)
                 .await?;
-            // もしlocalがonchainに追いついたらbreakする
             if local_next_event_id >= onchain_next_event_id {
                 break;
             }
         }
         info!(
-            "Synced: Local next event id: {}, Onchain next event id: {}",
+            "Synced events. Local next event id: {}, Onchain next event id: {}",
             local_next_event_id, onchain_next_event_id
         );
         Ok(())
@@ -502,6 +513,3 @@ impl Observer {
         log::info!("Observer started all jobs");
     }
 }
-
-#[cfg(test)]
-mod tests {}
