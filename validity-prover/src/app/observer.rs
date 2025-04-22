@@ -31,10 +31,10 @@ pub struct ObserverConfig {
 
 #[derive(Clone)]
 pub struct Observer {
-    config: ObserverConfig,
-    rollup_contract: RollupContract,
-    liquidity_contract: LiquidityContract,
-    check_point_store: CheckPointStore,
+    pub(crate) config: ObserverConfig,
+    pub(crate) rollup_contract: RollupContract,
+    pub(crate) liquidity_contract: LiquidityContract,
+    pub(crate) check_point_store: CheckPointStore,
     pub(crate) pool: DbPool,
 }
 
@@ -115,7 +115,7 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    async fn get_local_last_eth_block_number(
+    pub async fn get_local_last_eth_block_number(
         &self,
         event_type: EventType,
     ) -> Result<Option<u64>, ObserverError> {
@@ -173,6 +173,13 @@ impl Observer {
             }
         };
         Ok(next_event_id)
+    }
+
+    #[instrument(skip(self))]
+    pub async fn is_synced(&self, event_type: EventType) -> Result<bool, ObserverError> {
+        let local_next_event_id = self.get_local_next_event_id(event_type).await?;
+        let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
+        Ok(local_next_event_id >= onchain_next_event_id)
     }
 
     fn default_eth_block_number(&self, event_type: EventType) -> u64 {

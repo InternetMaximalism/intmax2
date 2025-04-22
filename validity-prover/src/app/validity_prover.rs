@@ -176,6 +176,11 @@ impl ValidityProver {
                 .observer
                 .get_deposits_between_blocks(block_number)
                 .await?;
+            if deposit_events.is_none() {
+                // not ready yet
+                return Ok(());
+            }
+            let deposit_events = deposit_events.unwrap();
             // Caution! This change the state of the deposit hash tree
             for event in deposit_events {
                 self.deposit_hash_tree

@@ -9,7 +9,7 @@ use intmax2_zkp::{
     utils::leafable::Leafable as _,
 };
 
-use super::{error::ObserverError, observer::Observer};
+use super::{check_point_store::EventType, error::ObserverError, observer::Observer};
 
 impl Observer {
     pub async fn get_local_last_deposit_id(&self) -> Result<u64, ObserverError> {
@@ -193,25 +193,44 @@ impl Observer {
         }
     }
 
-    /// get the deposit leafs inserted between the specified block number and the previous block number
+    /// get the deposit leaves inserted between the specified block number and the previous block number
     pub async fn get_deposits_between_blocks(
         &self,
         block_number: u32,
-    ) -> Result<Vec<DepositLeafInserted>, ObserverError> {
+    ) -> Result<Option<Vec<DepositLeafInserted>>, ObserverError> {
         if block_number == 0 {
-            return Ok(Vec::new());
+            return Ok(Some(Vec::new()));
         }
         let prev_block_number = block_number - 1;
-
-        let current_block = self.get_full_block_with_meta(block_number).await?;
-        let prev_block = self.get_full_block_with_meta(prev_block_number).await?;
-
-        // エラーを返すべき
-        let (prev_block, current_block) = match (prev_block, current_block) {
-            (Some(p), Some(c)) => (p, c),
-            _ => return Ok(Vec::new()),
-        };
-
+        let local_last_block_number = self.get_local_last_block_number().await?;
+        if block_number > local_last_block_number {
+            // blocks are not ready
+            return Ok(None);
+        }
+        let current_block = self
+            .get_full_block_with_meta(block_number)
+            .await?
+            .ok_or(ObserverError::BlockNotFound(block_number))?;
+        let prev_block = self
+            .get_full_block_with_meta(prev_block_number)
+            .await?
+            .ok_or(ObserverError::BlockNotFound(prev_block_number))?;
+        let local_last_eth_block_number = self
+            .get_local_last_eth_block_number(EventType::DepositLeafInserted)
+            .await?;
+        if local_last_eth_block_number.is_none() {
+            let is_synced = self.is_synced(EventType::DepositLeafInserted).await?;
+            if !is_synced {
+                return Ok(None);
+            }
+        }
+        let local_last_eth_block_number = local_last_eth_block_number.unwrap();
+        if local_last_eth_block_number < current_block.eth_block_number {
+            let is_synced = self.is_synced(EventType::DepositLeafInserted).await?;
+            if !is_synced {
+                return Ok(None);
+            }
+        }
         let deposits = sqlx::query!(
             r#"
             SELECT deposit_index, deposit_hash, eth_block_number, eth_tx_index
@@ -227,8 +246,7 @@ impl Observer {
         )
         .fetch_all(&self.pool)
         .await?;
-
-        Ok(deposits
+        let events = deposits
             .into_iter()
             .map(|d| DepositLeafInserted {
                 deposit_index: d.deposit_index as u32,
@@ -236,6 +254,7 @@ impl Observer {
                 eth_block_number: d.eth_block_number as u64,
                 eth_tx_index: d.eth_tx_index as u64,
             })
-            .collect())
+            .collect();
+        Ok(Some(events))
     }
 }
