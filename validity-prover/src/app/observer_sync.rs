@@ -6,6 +6,7 @@ use intmax2_client_sdk::external_api::contract::{
 };
 use intmax2_zkp::{
     common::witness::full_block::FullBlock, ethereum_types::u32limb_trait::U32LimbTrait as _,
+    utils::leafable::Leafable as _,
 };
 
 use log::warn;
@@ -184,7 +185,7 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    pub async fn fetch_and_write_deposit_leaf_inserted_event(
+    async fn fetch_and_write_deposit_leaf_inserted_events(
         &self,
         expected_next_event_id: u64,
         from_eth_block_number: u64,
@@ -228,6 +229,109 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
+    async fn fetch_and_write_deposited_events(
+        &self,
+        expected_next_event_id: u64,
+        from_eth_block_number: u64,
+        to_eth_block_number: u64,
+    ) -> Result<u64, ObserverError> {
+        let events = self
+            .liquidity_contract
+            .get_deposited_events(from_eth_block_number, to_eth_block_number)
+            .await
+            .map_err(|e| ObserverError::EventFetchError(e.to_string()))?;
+        let events = events
+            .into_iter()
+            .skip_while(|e| e.deposit_id < expected_next_event_id)
+            .collect::<Vec<_>>();
+        if events.is_empty() {
+            return Ok(expected_next_event_id);
+        }
+        let first = events.first().unwrap();
+        if first.deposit_id != expected_next_event_id {
+            return Err(ObserverError::EventGapDetected {
+                event_type: EventType::DepositLeafInserted,
+                expected_next_event_id,
+                got_event_id: first.deposit_id as u64,
+            });
+        }
+        let mut tx = self.pool.begin().await?;
+        for event in &events {
+            let deposit_hash = event.to_deposit().hash();
+            sqlx::query!(
+                "INSERT INTO deposited_events (deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash, eth_block_number, eth_tx_index) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                event.deposit_id as i64,
+                event.depositor.to_hex(),
+                event.pubkey_salt_hash.to_hex(),
+                event.token_index as i64,
+                event.amount.to_hex(),
+                event.is_eligible,
+                event.deposited_at as i64,
+                deposit_hash.to_hex(),
+                event.tx_hash.to_hex(),
+                event.eth_block_number as i64,
+                event.eth_tx_index as i64
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        let next_event_id = events.last().unwrap().deposit_id + 1;
+        Ok(next_event_id)
+    }
+
+    #[instrument(skip(self))]
+    async fn fetch_and_write_block_posted_events(
+        &self,
+        expected_next_event_id: u64,
+        from_eth_block_number: u64,
+        to_eth_block_number: u64,
+    ) -> Result<u64, ObserverError> {
+        let events = self
+            .rollup_contract
+            .get_blocks_posted_event(from_eth_block_number, to_eth_block_number)
+            .await
+            .map_err(|e| ObserverError::EventFetchError(e.to_string()))?;
+        let events = events
+            .into_iter()
+            .skip_while(|b| b.block_number < expected_next_event_id as u32)
+            .collect::<Vec<_>>();
+        if events.is_empty() {
+            return Ok(expected_next_event_id);
+        }
+        let first = events.first().unwrap();
+        if first.block_number != expected_next_event_id as u32 {
+            return Err(ObserverError::EventGapDetected {
+                event_type: EventType::BlockPosted,
+                expected_next_event_id,
+                got_event_id: first.block_number as u64,
+            });
+        }
+        // fetch full block
+        let full_block_with_meta = self
+            .rollup_contract
+            .get_full_block_with_meta(&events)
+            .await?;
+        let mut tx = self.pool.begin().await?;
+        for event in &full_block_with_meta {
+            sqlx::query!(
+                "INSERT INTO full_blocks (block_number, eth_block_number, eth_tx_index, full_block) 
+                 VALUES ($1, $2, $3, $4)",
+                event.full_block.block.block_number as i32,
+                event.eth_block_number as i64,
+                event.eth_tx_index as i64,
+                bincode::serialize(&event.full_block).unwrap()
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        let next_event_id = events.last().unwrap().block_number + 1;
+        Ok(next_event_id as u64)
+    }
+
+    #[instrument(skip(self))]
     pub async fn single_event_query(
         &self,
         event_type: EventType,
@@ -250,15 +354,28 @@ impl Observer {
 
         let next_event_id = match event_type {
             EventType::DepositLeafInserted => {
-                self.fetch_and_write_deposit_leaf_inserted_event(
+                self.fetch_and_write_deposit_leaf_inserted_events(
                     local_next_event_id,
                     from_eth_block_number,
                     to_eth_block_number,
                 )
                 .await
             }
-            _ => {
-                todo!()
+            EventType::Deposited => {
+                self.fetch_and_write_deposited_events(
+                    local_next_event_id,
+                    from_eth_block_number,
+                    to_eth_block_number,
+                )
+                .await
+            }
+            EventType::BlockPosted => {
+                self.fetch_and_write_block_posted_events(
+                    local_next_event_id,
+                    from_eth_block_number,
+                    to_eth_block_number,
+                )
+                .await
             }
         };
         match next_event_id {
@@ -328,286 +445,7 @@ impl Observer {
         Ok(())
     }
 
-    // async fn try_sync_deposits(&self) -> Result<(Vec<DepositLeafInserted>, u64), ObserverError> {
-    //     let deposit_sync_eth_block_number = self.get_deposit_sync_eth_block_number().await?;
-    //     let (deposit_leaf_events, to_block) = self
-    //         .rollup_contract
-    //         .get_deposit_leaf_inserted_events(deposit_sync_eth_block_number)
-    //         .await
-    //         .map_err(|e| ObserverError::FullBlockSyncError(e.to_string()))?;
-    //     let next_deposit_index = self.get_next_deposit_index().await?;
-
-    //     // skip already synced events
-    //     let deposit_leaf_events = deposit_leaf_events
-    //         .into_iter()
-    //         .skip_while(|e| e.deposit_index < next_deposit_index)
-    //         .collect::<Vec<_>>();
-    //     if let Some(first) = deposit_leaf_events.first() {
-    //         if first.deposit_index != next_deposit_index {
-    //             return Err(ObserverError::FullBlockSyncError(format!(
-    //                 "First deposit index mismatch: {} != {}",
-    //                 first.deposit_index, next_deposit_index
-    //             )));
-    //         }
-    //     } else {
-    //         // no new deposits
-    //         let rollup_next_deposit_index = self.rollup_contract.get_next_deposit_index().await?;
-    //         if next_deposit_index < rollup_next_deposit_index {
-    //             return Err(ObserverError::FullBlockSyncError(format!(
-    //                 "next_deposit_index is less than rollup_next_deposit_index: {} < {}",
-    //                 next_deposit_index, rollup_next_deposit_index
-    //             )));
-    //         }
-    //     }
-    //     Ok((deposit_leaf_events, to_block))
-    // }
-
-    // async fn sync_deposits(&self) -> Result<(), ObserverError> {
-    //     let mut tries = 0;
-    //     loop {
-    //         if tries >= MAX_TRIES {
-    //             return Err(ObserverError::FullBlockSyncError(
-    //                 "Max tries exceeded".to_string(),
-    //             ));
-    //         }
-
-    //         match self.try_sync_deposits().await {
-    //             Ok((deposit_leaf_events, to_block)) => {
-    //                 let mut tx = self.pool.begin().await?;
-    //                 for event in &deposit_leaf_events {
-    //                     sqlx::query!(
-    //                         "INSERT INTO deposit_leaf_events (deposit_index, deposit_hash, eth_block_number, eth_tx_index)
-    //                          VALUES ($1, $2, $3, $4)",
-    //                         event.deposit_index as i32,
-    //                         event.deposit_hash.to_bytes_be(),
-    //                         event.eth_block_number as i64,
-    //                         event.eth_tx_index as i64
-    //                     )
-    //                     .execute(&mut *tx)
-    //                     .await?;
-    //                 }
-    //                 self.set_deposit_sync_eth_block_number(&mut tx, to_block + 1)
-    //                     .await?;
-    //                 tx.commit().await?;
-
-    //                 let next_deposit_index = self.get_next_deposit_index().await?;
-    //                 log::info!(
-    //                     "synced to deposit_index: {}, to_eth_block_number: {}",
-    //                     next_deposit_index.saturating_sub(1),
-    //                     to_block
-    //                 );
-    //                 return Ok(());
-    //             }
-    //             Err(e) => {
-    //                 if matches!(e, ObserverError::FullBlockSyncError(_)) {
-    //                     log::error!("Observer sync error: {:?}", e);
-    //                     // rollback to previous block number
-    //                     let block_number = self
-    //                         .get_deposit_sync_eth_block_number()
-    //                         .await?
-    //                         .saturating_sub(BACKWARD_SYNC_BLOCK_NUMBER);
-    //                     let mut tx = self.pool.begin().await?;
-    //                     self.set_deposit_sync_eth_block_number(&mut tx, block_number)
-    //                         .await?;
-    //                     tx.commit().await?;
-    //                     sleep_for(SLEEP_TIME).await;
-    //                     tries += 1;
-    //                 } else {
-    //                     return Err(e);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    // async fn try_sync_block(&self) -> Result<(Vec<FullBlockWithMeta>, u64), ObserverError> {
-    //     let block_sync_eth_block_number = self.get_block_sync_eth_block_number().await?;
-    //     let (full_blocks, to_block) = self
-    //         .rollup_contract
-    //         .get_full_block_with_meta(block_sync_eth_block_number)
-    //         .await
-    //         .map_err(|e| ObserverError::FullBlockSyncError(e.to_string()))?;
-    //     let next_block_number = self.get_next_block_number().await?;
-    //     // skip already synced events
-    //     let full_blocks = full_blocks
-    //         .into_iter()
-    //         .skip_while(|b| b.full_block.block.block_number < next_block_number)
-    //         .collect::<Vec<_>>();
-    //     if let Some(first) = full_blocks.first() {
-    //         if first.full_block.block.block_number != next_block_number {
-    //             return Err(ObserverError::FullBlockSyncError(format!(
-    //                 "First block mismatch: {} != {}",
-    //                 first.full_block.block.block_number, next_block_number
-    //             )));
-    //         }
-    //     } else {
-    //         // no new blocks
-    //         let rollup_block_number = self.rollup_contract.get_latest_block_number().await?;
-    //         if next_block_number <= rollup_block_number {
-    //             return Err(ObserverError::FullBlockSyncError(format!(
-    //                 "next_block_number is less than rollup_block_number: {} <= {}",
-    //                 next_block_number, rollup_block_number
-    //             )));
-    //         }
-    //     }
-    //     Ok((full_blocks, to_block))
-    // }
-
-    // async fn sync_blocks(&self) -> Result<(), ObserverError> {
-    //     let mut tries = 0;
-    //     loop {
-    //         if tries >= MAX_TRIES {
-    //             return Err(ObserverError::FullBlockSyncError(
-    //                 "Max tries exceeded".to_string(),
-    //             ));
-    //         }
-    //         match self.try_sync_block().await {
-    //             Ok((full_blocks, to_block)) => {
-    //                 let mut tx = self.pool.begin().await?;
-    //                 for block in &full_blocks {
-    //                     sqlx::query!(
-    //                         "INSERT INTO full_blocks (block_number, eth_block_number, eth_tx_index, full_block)
-    //                          VALUES ($1, $2, $3, $4)",
-    //                         block.full_block.block.block_number as i32,
-    //                         block.eth_block_number as i64,
-    //                         block.eth_tx_index as i64,
-    //                         bincode::serialize(&block.full_block).unwrap()
-    //                     )
-    //                     .execute(&mut *tx)
-    //                     .await?;
-    //                 }
-    //                 self.set_block_sync_eth_block_number(&mut tx, to_block + 1)
-    //                     .await?;
-    //                 tx.commit().await?;
-
-    //                 let next_block_number = self.get_next_block_number().await?;
-    //                 log::info!(
-    //                     "synced to block_number: {}, to_eth_block_number: {}",
-    //                     next_block_number.saturating_sub(1),
-    //                     to_block
-    //                 );
-    //                 return Ok(());
-    //             }
-    //             Err(e) => {
-    //                 if matches!(e, ObserverError::FullBlockSyncError(_)) {
-    //                     log::error!("Observer sync error: {:?}", e);
-
-    //                     // rollback to previous block number
-    //                     let block_number = self
-    //                         .get_block_sync_eth_block_number()
-    //                         .await?
-    //                         .saturating_sub(BACKWARD_SYNC_BLOCK_NUMBER);
-    //                     let mut tx = self.pool.begin().await?;
-    //                     self.set_block_sync_eth_block_number(&mut tx, block_number)
-    //                         .await?;
-    //                     tx.commit().await?;
-    //                     sleep_for(SLEEP_TIME).await;
-    //                     tries += 1;
-    //                 } else {
-    //                     return Err(e);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    // async fn try_sync_l1_deposited_events(&self) -> Result<(Vec<Deposited>, u64), ObserverError> {
-    //     let l1_deposit_sync_eth_block_number = self.get_l1_deposit_sync_eth_block_number().await?;
-    //     let (deposited_events, to_block) = self
-    //         .liquidity_contract
-    //         .get_deposited_events(l1_deposit_sync_eth_block_number)
-    //         .await
-    //         .map_err(|e| ObserverError::SyncL1DepositedEventsError(e.to_string()))?;
-    //     let next_deposit_id = self.get_next_deposit_id().await?;
-
-    //     // skip already synced events
-    //     let deposited_events = deposited_events
-    //         .into_iter()
-    //         .skip_while(|e| e.deposit_id < next_deposit_id)
-    //         .collect::<Vec<_>>();
-    //     if let Some(first) = deposited_events.first() {
-    //         if first.deposit_id != next_deposit_id {
-    //             return Err(ObserverError::SyncL1DepositedEventsError(format!(
-    //                 "First deposit id mismatch: {} != {}",
-    //                 first.deposit_id, next_deposit_id
-    //             )));
-    //         }
-    //     } else {
-    //         // no new deposits
-    //         let onchain_last_deposit_id = self.liquidity_contract.get_last_deposit_id().await?;
-    //         if next_deposit_id <= onchain_last_deposit_id {
-    //             return Err(ObserverError::SyncL1DepositedEventsError(format!(
-    //                 "next_deposit_id is less than onchain rollup_next_deposit_index: {} <= {}",
-    //                 next_deposit_id, onchain_last_deposit_id
-    //             )));
-    //         }
-    //     }
-    //     Ok((deposited_events, to_block))
-    // }
-
-    // async fn sync_l1_deposited_events(&self) -> Result<(), ObserverError> {
-    //     let mut tries = 0;
-    //     loop {
-    //         if tries >= MAX_TRIES {
-    //             return Err(ObserverError::FullBlockSyncError(
-    //                 "Max tries exceeded".to_string(),
-    //             ));
-    //         }
-
-    //         match self.try_sync_l1_deposited_events().await {
-    //             Ok((deposited_events, to_block)) => {
-    //                 let mut tx = self.pool.begin().await?;
-    //                 for event in &deposited_events {
-    //                     let deposit_hash = event.to_deposit().hash();
-    //                     sqlx::query!(
-    //                         "INSERT INTO deposited_events (deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash)
-    //                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-    //                         event.deposit_id as i64,
-    //                         event.depositor.to_hex(),
-    //                         event.pubkey_salt_hash.to_hex(),
-    //                         event.token_index as i64,
-    //                         event.amount.to_hex(),
-    //                         event.is_eligible,
-    //                         event.deposited_at as i64,
-    //                         deposit_hash.to_hex(),
-    //                         event.tx_hash.to_hex()
-    //                     )
-    //                     .execute(&mut *tx)
-    //                     .await?;
-    //                 }
-    //                 self.set_l1_deposit_sync_eth_block_number(&mut tx, to_block + 1)
-    //                     .await?;
-    //                 tx.commit().await?;
-
-    //                 let last_deposit_id = self.get_next_deposit_id().await?;
-    //                 log::info!(
-    //                     "synced to deposit_id: {}, to_eth_block_number: {}",
-    //                     last_deposit_id,
-    //                     to_block
-    //                 );
-    //                 return Ok(());
-    //             }
-    //             Err(e) => {
-    //                 if matches!(e, ObserverError::FullBlockSyncError(_)) {
-    //                     log::error!("Observer l1 deposit sync error: {:?}", e);
-    //                     // rollback to previous block number
-    //                     let block_number = self
-    //                         .get_l1_deposit_sync_eth_block_number()
-    //                         .await?
-    //                         .saturating_sub(BACKWARD_SYNC_BLOCK_NUMBER);
-    //                     let mut tx = self.pool.begin().await?;
-    //                     self.set_l1_deposit_sync_eth_block_number(&mut tx, block_number)
-    //                         .await?;
-    //                     tx.commit().await?;
-    //                     sleep_for(SLEEP_TIME).await;
-    //                     tries += 1;
-    //                 } else {
-    //                     return Err(e);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+    
 
     pub async fn sync(&self) -> Result<(), ObserverError> {
         // self.sync_l1_deposited_events().await?;
