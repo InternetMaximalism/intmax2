@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT COUNT(*) as count FROM deposited_events",
+  "query": "SELECT MAX(deposit_index) FROM deposit_leaf_events",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "count",
-        "type_info": "Int8"
+        "name": "max",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -16,5 +16,5 @@
       null
     ]
   },
-  "hash": "dc371e609f527cbe301922f6e97f4c21edf739c2d59b2709e49e3c19470d0263"
+  "hash": "19cb08b30dfddb272b2c5ee79d9bb82b7a6f913609bd6b6ac7433f6215235fbf"
 }

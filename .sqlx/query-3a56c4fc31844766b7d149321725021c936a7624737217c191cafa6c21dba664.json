@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash\n             FROM deposited_events \n             WHERE pubkey_salt_hash = $1",
+  "query": "SELECT deposit_id, depositor, pubkey_salt_hash, token_index, amount, is_eligible, deposited_at, deposit_hash, tx_hash, eth_block_number, eth_tx_index\n             FROM deposited_events \n             WHERE pubkey_salt_hash = $1",
   "describe": {
     "columns": [
       {
@@ -47,6 +47,16 @@
         "ordinal": 8,
         "name": "tx_hash",
         "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "eth_block_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "eth_tx_index",
+        "type_info": "Int8"
       }
     ],
     "parameters": {
@@ -63,8 +73,10 @@
       false,
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "9b0be709b4a41d15615a22f0d9fd73b3a432c0ef05b81224c3a79178369856d9"
+  "hash": "3a56c4fc31844766b7d149321725021c936a7624737217c191cafa6c21dba664"
 }

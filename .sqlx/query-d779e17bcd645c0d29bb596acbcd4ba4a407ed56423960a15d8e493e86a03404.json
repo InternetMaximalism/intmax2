@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT eth_block_number\n                    FROM deposited_events\n                    WHERE deposit_id = (SELECT MAX(deposit_id) FROM deposited_events)\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "eth_block_number",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d779e17bcd645c0d29bb596acbcd4ba4a407ed56423960a15d8e493e86a03404"
+}
