@@ -85,13 +85,11 @@ pub fn get_client() -> Result<Client, CliError> {
         &env.l1_rpc_url,
         env.l1_chain_id,
         env.liquidity_contract_address,
-        0,
     );
     let rollup_contract = RollupContract::new(
         &env.l2_rpc_url,
         env.l2_chain_id,
         env.rollup_contract_address,
-        0,
     );
     let withdrawal_contract = WithdrawalContract::new(
         &env.l2_rpc_url,

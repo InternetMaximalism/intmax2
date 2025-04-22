@@ -189,14 +189,12 @@ pub fn get_client(config: &Config) -> Client {
         &config.l1_rpc_url,
         config.l1_chain_id,
         config.liquidity_contract_address.parse().unwrap(),
-        0,
     );
 
     let rollup_contract = RollupContract::new(
         &config.l2_rpc_url,
         config.l2_chain_id,
         config.rollup_contract_address.parse().unwrap(),
-        0,
     );
     let withdrawal_contract = WithdrawalContract::new(
         &config.l2_rpc_url,

@@ -38,10 +38,6 @@ async fn deploy_contracts() -> anyhow::Result<()> {
         .await?;
 
     println!("Rollup contract address: {:?}", rollup_contract.address());
-    println!(
-        "Rollup contract deployed block number: {}",
-        rollup_contract.deployed_block_number
-    );
 
     let liquidity_contract = LiquidityContract::deploy(
         &config.rpc_url,
