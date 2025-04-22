@@ -50,17 +50,17 @@ const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
 const MAX_TASKS: u32 = 30;
 
-const ADD_TASKS_INTERVAL: u64 = 10;
-const GENERATE_VALIDITY_PROOF_INTERVAL: u64 = 2;
-
 #[derive(Clone)]
-pub struct Config {
+pub struct ValidityProverConfig {
     pub sync_interval: Option<u64>,
+    pub generate_validity_proof_interval: Option<u64>,
+    pub add_tasks_interval: Option<u64>,
+    pub restart_interval: Option<u64>,
 }
 
 #[derive(Clone)]
 pub struct ValidityProver {
-    pub config: Config,
+    pub config: ValidityProverConfig,
     pub manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
     pub validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
     pub observer: Observer,
@@ -72,8 +72,11 @@ pub struct ValidityProver {
 
 impl ValidityProver {
     pub async fn new(env: &Env) -> Result<Self, ValidityProverError> {
-        let config = Config {
+        let config = ValidityProverConfig {
             sync_interval: env.sync_interval,
+            generate_validity_proof_interval: Some(2),
+            add_tasks_interval: Some(2),
+            restart_interval: Some(30),
         };
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
@@ -125,12 +128,12 @@ impl ValidityProver {
             DEPOSIT_DB_TAG,
             DEPOSIT_TREE_HEIGHT,
         );
-        log::info!("block tree len: {}", block_tree.len(last_timestamp).await?);
-        log::info!(
+        tracing::info!("block tree len: {}", block_tree.len(last_timestamp).await?);
+        tracing::info!(
             "deposit tree len: {}",
             deposit_hash_tree.len(last_timestamp).await?
         );
-        log::info!(
+        tracing::info!(
             "account tree len: {}",
             account_tree.len(last_timestamp).await?
         );
@@ -162,10 +165,10 @@ impl ValidityProver {
     }
 
     #[instrument(skip(self))]
-    async fn sync(&self) -> Result<(), ValidityProverError> {
+    async fn sync_validity_witness(&self) -> Result<(), ValidityProverError> {
         let observer_block_number = self.observer.get_local_last_block_number().await?;
         tracing::info!(
-            "Start sync validity prover: current block number {}, observer block number {}, validity proof block number: {}",
+            "Start sync_validity_witness: current block number {}, observer block number {}, validity proof block number: {}",
             self.get_last_block_number().await?,
             observer_block_number
             .unwrap_or_default(),
@@ -183,7 +186,7 @@ impl ValidityProver {
         };
         for block_number in (last_block_number + 1)..next_block_number {
             tracing::info!(
-                "Sync validity prover: syncing block number {}",
+                "sync_validity_witness: syncing block number {}",
                 block_number
             );
             let full_block_with_meta = self
@@ -274,18 +277,18 @@ impl ValidityProver {
                 .await?;
             prev_validity_pis = validity_witness.to_validity_pis().unwrap();
         }
-        log::info!("End of sync validity prover");
         Ok(())
     }
 
     async fn reset_merkle_tree(&self, block_number: u32) -> Result<(), ValidityProverError> {
-        log::warn!("Reset merkle tree from block number {}", block_number);
+        tracing::warn!("Reset merkle tree from block number {}", block_number);
         self.account_tree.reset(block_number as u64).await?;
         self.block_tree.reset(block_number as u64).await?;
         self.deposit_hash_tree.reset(block_number as u64).await?;
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
         // Get the largest block_number and its proof from the validity_proofs table that already exists
         let record = sqlx::query!(
@@ -319,10 +322,10 @@ impl ValidityProver {
                 .get_result(last_validity_proof_block_number)
                 .await?;
             if result.is_none() {
-                log::info!("result not found for {}", last_validity_proof_block_number);
+                tracing::info!("result not found for {}", last_validity_proof_block_number);
                 break;
             }
-            log::info!("result found for {}", last_validity_proof_block_number);
+            tracing::info!("result found for {}", last_validity_proof_block_number);
 
             let result = result.unwrap();
             if let Some(error) = result.error {
@@ -342,7 +345,7 @@ impl ValidityProver {
                 .validity_circuit()
                 .prove(&transition_proof, &prev_proof)
                 .map_err(|e| ValidityProverError::FailedToGenerateValidityProof(e.to_string()))?;
-            log::info!(
+            tracing::info!(
                 "validity proof generated: {}",
                 last_validity_proof_block_number
             );
@@ -371,6 +374,7 @@ impl ValidityProver {
     }
 
     // This function is used to setup all tasks in the task manager
+    #[instrument(skip(self))]
     async fn add_tasks(&self) -> Result<(), ValidityProverError> {
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
@@ -403,7 +407,7 @@ impl ValidityProver {
             if block_number <= current_last_validity_prover_block_number {
                 break;
             }
-            log::info!(
+            tracing::info!(
                 "adding task for block number {} > validity block number {}",
                 block_number,
                 current_last_validity_prover_block_number
@@ -416,6 +420,49 @@ impl ValidityProver {
         Ok(())
     }
 
+    async fn sync_validity_witness_loop(
+        &self,
+        sync_interval: u64,
+    ) -> Result<(), ValidityProverError> {
+        let mut interval = tokio::time::interval(Duration::from_secs(sync_interval));
+        loop {
+            interval.tick().await;
+            self.sync_validity_witness().await?;
+        }
+    }
+
+    async fn generate_validity_proof_loop(
+        &self,
+        generate_validity_proof_interval: u64,
+    ) -> Result<(), ValidityProverError> {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(generate_validity_proof_interval));
+        loop {
+            interval.tick().await;
+            self.generate_validity_proof().await?;
+        }
+    }
+
+    async fn add_tasks_loop(&self, add_tasks_interval: u64) -> Result<(), ValidityProverError> {
+        let mut interval = tokio::time::interval(Duration::from_secs(add_tasks_interval));
+        loop {
+            interval.tick().await;
+            self.add_tasks().await?;
+        }
+    }
+
+    async fn cleanup_inactive_tasks_loop(
+        &self,
+        cleanup_inactive_tasks_interval: u64,
+    ) -> Result<(), ValidityProverError> {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(cleanup_inactive_tasks_interval));
+        loop {
+            interval.tick().await;
+            self.manager.cleanup_inactive_tasks().await?;
+        }
+    }
+
     pub(crate) async fn job(&self) -> Result<(), ValidityProverError> {
         if self.config.sync_interval.is_none() {
             // If sync_interval is not set, we don't run the sync task
@@ -426,66 +473,104 @@ impl ValidityProver {
         // clear all tasks
         self.manager.clear_all().await?;
 
+        // run observer job
+        self.observer.start_all_jobs();
+
         // generate validity proof job
-        let self_clone = self.clone();
-        actix_web::rt::spawn(async move {
+        let this = Arc::new(self.clone());
+
+        // generate validity proof job
+        let this_clone = this.clone();
+        tokio::spawn(async move {
+            // restart loop
             loop {
-                let self_clone = self_clone.clone();
-                let generate_validity_proof_result = actix_web::rt::spawn(async move {
-                    if let Err(e) = self_clone.generate_validity_proof().await {
-                        log::error!("Error in generate validity proof: {:?}", e);
+                let this_clone = this_clone.clone();
+                let handler = tokio::spawn(async move {
+                    this_clone.generate_validity_proof_loop(sync_interval).await
+                });
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("generate_validity_proof_loop finished");
                     }
-                })
-                .await;
-                if let Err(e) = generate_validity_proof_result {
-                    log::error!("Panic error in generate validity proof: {:?}", e);
+                    Ok(Err(e)) => {
+                        tracing::error!("generate_validity_proof_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("generate_validity_proof_loop panic: {:?}", e);
+                    }
                 }
-                tokio::time::sleep(Duration::from_secs(GENERATE_VALIDITY_PROOF_INTERVAL)).await;
             }
         });
 
         // add tasks job
-        let self_clone = self.clone();
-        actix_web::rt::spawn(async move {
-            loop {
-                let self_clone = self_clone.clone();
-                let add_task_result = actix_web::rt::spawn(async move {
-                    if let Err(e) = self_clone.add_tasks().await {
-                        log::error!("Error in add tasks: {:?}", e);
-                    }
-                })
-                .await;
-                if let Err(e) = add_task_result {
-                    log::error!("Panic error in add tasks: {:?}", e);
-                }
-                tokio::time::sleep(Duration::from_secs(ADD_TASKS_INTERVAL)).await;
-            }
-        });
-
-        let self_clone = self.clone();
-        actix_web::rt::spawn(async move {
-            loop {
-                let self_clone = self_clone.clone();
-                let sync_result = actix_web::rt::spawn(async move {
-                    if let Err(e) = self_clone.sync().await {
-                        log::error!("Error in sync: {:?}", e);
-                    }
-                })
-                .await;
-                if let Err(e) = sync_result {
-                    log::error!("Panic error in sync: {:?}", e);
-                }
-                tokio::time::sleep(Duration::from_secs(sync_interval)).await;
-            }
-        });
-
-        let manager = self.manager.clone();
+        let this_clone = this.clone();
         tokio::spawn(async move {
-            let manager = manager.clone();
-            if let Err(e) = manager.cleanup_inactive_tasks().await {
-                log::error!("Error in task manager: {:?}", e);
+            // restart loop
+            loop {
+                let this_clone = this_clone.clone();
+                let handler =
+                    tokio::spawn(async move { this_clone.add_tasks_loop(sync_interval).await });
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("add_tasks_loop finished");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("add_tasks_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("add_tasks_loop panic: {:?}", e);
+                    }
+                }
             }
         });
+
+        // sync validity witness job
+        // let this_clone = this.clone();
+        // tokio::spawn(async move {
+        //     // restart loop
+        //     loop {
+        //         let this_clone = this_clone.clone();
+        //         let handler = tokio::spawn(async move {
+        //             this_clone.sync_validity_witness_loop(sync_interval).await
+        //         });
+        //         match handler.await {
+        //             Ok(Ok(_)) => {
+        //                 tracing::error!("sync_validity_witness_loop finished");
+        //             }
+        //             Ok(Err(e)) => {
+        //                 tracing::error!("sync_validity_witness_loop error: {:?}", e);
+        //             }
+        //             Err(e) => {
+        //                 tracing::error!("sync_validity_witness_loop panic: {:?}", e);
+        //             }
+        //         }
+        //     }
+        // });
+
+        // cleanup inactive tasks job
+        let this_clone = this.clone();
+        tokio::spawn(async move {
+            // restart loop
+            loop {
+               let this_clone = this_clone.clone();
+                let handler =
+                    tokio::spawn(
+                        async move { this_clone.cleanup_inactive_tasks_loop(sync_interval).await },
+                    );
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("cleanup_inactive_tasks_loop finished");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("cleanup_inactive_tasks_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("cleanup_inactive_tasks_loop panic: {:?}", e);
+                    }
+                }
+            }
+        });
+
         Ok(())
     }
 }

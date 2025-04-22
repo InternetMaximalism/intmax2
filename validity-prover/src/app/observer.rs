@@ -473,7 +473,7 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
-    pub async fn start_all_jobs(&self) {
+    pub fn start_all_jobs(&self) {
         let event_types = vec![
             EventType::Deposited,
             EventType::DepositLeafInserted,
