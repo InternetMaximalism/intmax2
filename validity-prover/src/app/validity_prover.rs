@@ -58,14 +58,14 @@ pub struct ValidityProverConfig {
 
 #[derive(Clone)]
 pub struct ValidityProver {
-    pub config: ValidityProverConfig,
-    pub manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
-    pub validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
-    pub observer: Observer,
-    pub account_tree: SqlIndexedMerkleTree,
-    pub block_tree: SqlIncrementalMerkleTree<Bytes32>,
-    pub deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
-    pub pool: DbPool,
+    pub(crate) config: ValidityProverConfig,
+    pub(crate) manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
+    pub(crate) validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
+    pub(crate) observer: Observer,
+    pub(crate) account_tree: SqlIndexedMerkleTree,
+    pub(crate) block_tree: SqlIncrementalMerkleTree<Bytes32>,
+    pub(crate) deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
+    pub(crate) pool: DbPool,
 }
 
 impl ValidityProver {
@@ -152,6 +152,8 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn sync_validity_witness(&self) -> Result<(), ValidityProverError> {
+        self.observer.leader_check().await?;
+
         let observer_block_number = self.observer.get_local_last_block_number().await?;
         tracing::info!(
             "Start sync_validity_witness: current block number {}, observer block number {}, validity proof block number: {}",
@@ -280,6 +282,7 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
+        self.observer.leader_check().await?;
         // Get the largest block_number and its proof from the validity_proofs table that already exists
         let record = sqlx::query!(
             r#"
@@ -365,6 +368,7 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn add_tasks(&self) -> Result<(), ValidityProverError> {
+        self.observer.leader_check().await?;
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
@@ -452,6 +456,8 @@ impl ValidityProver {
             // If is_sync_mode is false, do not start the job
             return Ok(());
         }
+
+        self.observer.leader_check().await?;
 
         // clear all tasks
         self.manager.clear_all().await?;
