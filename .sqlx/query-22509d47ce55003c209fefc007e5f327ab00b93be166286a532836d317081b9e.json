@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT \n        uuid,\n        single_withdrawal_proof,\n        created_at\n    FROM withdrawals\n    WHERE single_withdrawal_proof IS NOT NULL\n    LIMIT 1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uuid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "single_withdrawal_proof",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "22509d47ce55003c209fefc007e5f327ab00b93be166286a532836d317081b9e"
+}

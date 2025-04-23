@@ -83,10 +83,15 @@ cd block-builder && cargo run -r
 ## CLI 
 Please refer to [the examples of cli ](cli/README.md#examples)
 
-# Reset DB
+## Reset DB
 
 ```bash
 (cd store-vault-server && sqlx database reset -y && sqlx database setup && cd ../validity-prover && sqlx database reset -y && sqlx database setup && cd ../withdrawal-server && sqlx database reset -y && sqlx database setup)
+```
+
+## When you update the sql queries
+```bash
+cargo sqlx prepare --workspace  -- --all-targets --all-features
 ```
 
 # Overview 
