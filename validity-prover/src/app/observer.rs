@@ -63,7 +63,7 @@ impl Observer {
         let leader_election = LeaderElection::new(
             &env.redis_url,
             "validity_prover:sync_leader",
-            std::time::Duration::from_millis(env.leader_lock_ttl),
+            std::time::Duration::from_secs(env.leader_lock_ttl),
         )?;
         let rollup_contract = RollupContract::new(
             &env.l2_rpc_url,
