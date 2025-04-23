@@ -3,7 +3,7 @@ use super::{
     error::ObserverError,
     leader_election::LeaderElection,
 };
-use crate::{app::error::LeaderError, EnvVar};
+use crate::EnvVar;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
@@ -107,17 +107,6 @@ impl Observer {
             leader_election,
             pool,
         })
-    }
-
-    #[instrument(skip(self))]
-    pub(crate) async fn leader_check(&self) -> Result<(), ObserverError> {
-        let result = self.leader_election.try_acquire_leadership().await?;
-        if !result {
-            return Err(ObserverError::LeaderError(
-                LeaderError::LockAcquisitionError,
-            ));
-        }
-        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -440,7 +429,7 @@ impl Observer {
         event_type: EventType,
         local_next_event_id: u64,
     ) -> Result<u64, ObserverError> {
-        self.leader_check().await?;
+        self.leader_election.wait_for_leadership().await?;
         let checkpoint_eth_block_number =
             self.check_point_store.get_check_point(event_type).await?;
         let local_last_eth_block_number = self.get_local_last_eth_block_number(event_type).await?;

@@ -29,7 +29,7 @@ impl LeaderElection {
         })
     }
 
-    pub async fn try_acquire_leadership(&self) -> Result<bool, LeaderError> {
+    async fn try_acquire_leadership(&self) -> Result<bool, LeaderError> {
         static ACQUIRE_OR_REFRESH: &str = r#"
             local val = redis.call('GET', KEYS[1])
             if not val then
@@ -56,16 +56,13 @@ impl LeaderElection {
 
     #[tracing::instrument(skip(self))]
     pub async fn wait_for_leadership(&self) -> Result<(), LeaderError> {
-        if self.try_acquire_leadership().await? {
-            return Ok(());
+        loop {
+            if self.try_acquire_leadership().await? {
+                return Ok(());
+            }
+            tracing::warn!("waiting for leadership...");
+            tokio::time::sleep(self.lock_ttl).await;
         }
-        tracing::warn!("Waiting for leadership...");
-        tokio::time::sleep(self.lock_ttl).await;
-        if self.try_acquire_leadership().await? {
-            tracing::info!("Acquired leadership");
-            return Ok(());
-        }
-        return Err(LeaderError::LockAcquisitionError);
     }
 
     async fn extend_leadership_loop(self: Arc<Self>) -> Result<(), LeaderError> {
@@ -79,6 +76,7 @@ impl LeaderElection {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn start_job(&self) {
         let self_clone = Arc::new(self.clone());
         tokio::spawn(async move {
