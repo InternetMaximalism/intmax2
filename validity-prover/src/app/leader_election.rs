@@ -70,8 +70,7 @@ impl LeaderElection {
         loop {
             interval.tick().await;
             if !self.try_acquire_leadership().await? {
-                tracing::warn!("Lost leadership, stopping extension loop");
-                return Err(LeaderError::LockExtensionError);
+                tracing::warn!("lost leadership");
             }
         }
     }
