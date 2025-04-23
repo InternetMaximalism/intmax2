@@ -2,7 +2,7 @@ use std::fmt;
 
 use server_common::db::DbPool;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
     Deposited,
     DepositLeafInserted,

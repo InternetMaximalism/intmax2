@@ -152,7 +152,7 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn sync_validity_witness(&self) -> Result<(), ValidityProverError> {
-        self.observer.leader_check().await?;
+        self.observer.leader_election.wait_for_leadership().await?;
 
         let observer_block_number = self.observer.get_local_last_block_number().await?;
         tracing::info!(
@@ -282,7 +282,7 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
-        self.observer.leader_check().await?;
+        self.observer.leader_election.wait_for_leadership().await?;
         // Get the largest block_number and its proof from the validity_proofs table that already exists
         let record = sqlx::query!(
             r#"
@@ -368,7 +368,7 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn add_tasks(&self) -> Result<(), ValidityProverError> {
-        self.observer.leader_check().await?;
+        self.observer.leader_election.wait_for_leadership().await?;
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
@@ -456,8 +456,6 @@ impl ValidityProver {
             // If is_sync_mode is false, do not start the job
             return Ok(());
         }
-
-        self.observer.leader_check().await?;
 
         // clear all tasks
         self.manager.clear_all().await?;
