@@ -457,7 +457,7 @@ impl ValidityProver {
             return Ok(());
         }
 
-        self.observer.leader_check().await?;
+        self.observer.leader_election.wait_for_leadership().await?;
 
         // clear all tasks
         self.manager.clear_all().await?;

@@ -54,6 +54,20 @@ impl LeaderElection {
         Ok(ok == 1)
     }
 
+    #[tracing::instrument(skip(self))]
+    pub async fn wait_for_leadership(&self) -> Result<(), LeaderError> {
+        if self.try_acquire_leadership().await? {
+            return Ok(());
+        }
+        tracing::warn!("Waiting for leadership...");
+        tokio::time::sleep(self.lock_ttl).await;
+        if self.try_acquire_leadership().await? {
+            tracing::info!("Acquired leadership");
+            return Ok(());
+        }
+        return Err(LeaderError::LockAcquisitionError);
+    }
+
     async fn extend_leadership_loop(self: Arc<Self>) -> Result<(), LeaderError> {
         let mut interval = tokio::time::interval(self.lock_ttl / 3);
         loop {
