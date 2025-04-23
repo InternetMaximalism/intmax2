@@ -38,7 +38,7 @@ Launch database
 ```bash
 docker compose up -d db
 ```
-
+ 
 Copy env file 
 
 You need to run `cp .env.example .env` in each directory.
