@@ -353,7 +353,7 @@ impl Observer {
         let first = events.first().unwrap();
         if first.deposit_id != expected_next_event_id {
             return Err(ObserverError::EventGapDetected {
-                event_type: EventType::DepositLeafInserted,
+                event_type: EventType::Deposited,
                 expected_next_event_id,
                 got_event_id: first.deposit_id,
             });
@@ -499,10 +499,11 @@ impl Observer {
                 Ok(next_event_id)
             }
             Err(ObserverError::EventGapDetected {
-                event_type,
+                event_type: _event_type,
                 expected_next_event_id,
                 got_event_id,
             }) => {
+                assert_eq!(event_type, _event_type, "Event type mismatch");
                 // If event gap detected, we need to backward the checkpoint
                 let local_last_eth_block_number =
                     self.get_local_last_eth_block_number(event_type).await?;
