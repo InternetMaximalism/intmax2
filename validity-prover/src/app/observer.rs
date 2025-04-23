@@ -1,6 +1,7 @@
 use super::{
     check_point_store::{ChainType, CheckPointStore, EventType},
     error::ObserverError,
+    leader_election::LeaderElection,
 };
 use crate::EnvVar;
 use intmax2_client_sdk::external_api::contract::{
@@ -36,6 +37,7 @@ pub struct Observer {
     pub(crate) rollup_contract: RollupContract,
     pub(crate) liquidity_contract: LiquidityContract,
     pub(crate) check_point_store: CheckPointStore,
+    pub(crate) leader_election: LeaderElection,
     pub(crate) pool: DbPool,
 }
 
@@ -58,6 +60,11 @@ impl Observer {
         })
         .await?;
         let check_point_store = CheckPointStore::new(pool.clone());
+        let leader_election = LeaderElection::new(
+            &env.redis_url,
+            "validity_prover:sync_leader",
+            std::time::Duration::from_millis(env.leader_lock_ttl),
+        )?;
         let rollup_contract = RollupContract::new(
             &env.l2_rpc_url,
             env.l2_chain_id,
@@ -97,6 +104,7 @@ impl Observer {
             rollup_contract,
             liquidity_contract,
             check_point_store,
+            leader_election,
             pool,
         })
     }
@@ -582,6 +590,8 @@ impl Observer {
 
     #[instrument(skip(self))]
     pub fn start_all_jobs(&self) {
+        self.leader_election.start_job();
+
         let event_types = vec![
             EventType::Deposited,
             EventType::DepositLeafInserted,

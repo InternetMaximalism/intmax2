@@ -11,6 +11,7 @@ pub struct EnvVar {
 
     // sync settings
     pub is_sync_mode: bool,
+    pub leader_lock_ttl: u64,
     pub witness_sync_interval: u64,
     pub validity_proof_interval: u64,
     pub add_tasks_interval: u64,

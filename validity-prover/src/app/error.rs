@@ -1,5 +1,6 @@
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, EthereumTypeError};
+use redis::RedisError;
 use server_common::redis::task_manager::TaskManagerError;
 
 use crate::trees::merkle_tree::error::MerkleTreeError;
@@ -10,6 +11,9 @@ use super::check_point_store::EventType;
 pub enum ObserverError {
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),
+
+    #[error("Leader election error: {0}")]
+    LeaderError(#[from] LeaderError),
 
     #[error("Database error: {0}")]
     DBError(#[from] sqlx::Error),
@@ -58,9 +62,22 @@ pub enum SettingConsistencyError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum LeaderError {
+    #[error("Redis error: {0}")]
+    RedisError(#[from] RedisError),
+    #[error("Failed to acquire leader lock")]
+    LockAcquisitionError,
+    #[error("Failed to extend leader lock")]
+    LockExtensionError,
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum ValidityProverError {
     #[error("Observer error: {0}")]
     ObserverError(#[from] ObserverError),
+
+    #[error("Leader election error: {0}")]
+    LeaderError(#[from] LeaderError),
 
     #[error("Block witness generation error: {0}")]
     BlockWitnessGenerationError(String),
