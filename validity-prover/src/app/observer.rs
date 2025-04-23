@@ -355,7 +355,7 @@ impl Observer {
             return Err(ObserverError::EventGapDetected {
                 event_type: EventType::DepositLeafInserted,
                 expected_next_event_id,
-                got_event_id: first.deposit_id as u64,
+                got_event_id: first.deposit_id,
             });
         }
         let mut tx = self.pool.begin().await?;
