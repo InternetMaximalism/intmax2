@@ -114,7 +114,6 @@ jobs:
           cp block-builder/.env.example block-builder/.env
           cp store-vault-server/.env.example store-vault-server/.env
           cp legacy-store-vault-server/.env.example legacy-store-vault-server/.env
-          sed -i 's/store_vault_server/legacy_store_vault_server/' legacy-store-vault-server/.env
           cp validity-prover/.env.example validity-prover/.env
           cp withdrawal-server/.env.example withdrawal-server/.env
           cp tests/.env.example tests/.env
