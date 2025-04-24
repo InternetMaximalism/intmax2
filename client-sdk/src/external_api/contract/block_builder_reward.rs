@@ -72,6 +72,16 @@ impl BlockBuilderRewardContract {
         Ok(contract)
     }
 
+    pub async fn get_current_period(&self) -> Result<u64, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let period = with_retry(|| async { contract.get_current_period().call().await })
+            .await
+            .map_err(|e| {
+                BlockchainError::RPCError(format!("Error getting current period: {}", e))
+            })?;
+        Ok(period.as_u64())
+    }
+
     pub async fn get_claimable_reward(
         &self,
         period_number: u64,
