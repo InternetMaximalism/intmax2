@@ -25,7 +25,7 @@ use super::{
 
 pub async fn deposit(
     key: KeySet,
-    eth_private_key: H256,
+    eth_private_key: Bytes32,
     token_type: TokenType,
     amount: U256,
     token_address: Address,
