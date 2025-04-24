@@ -61,7 +61,7 @@ cargo run -r -- --help
 ### Available Commands
 
 - `generate-key`: Generate a new key pair
-- `generate-from-eth-key`: Generate a key pair from an Ethereum private key
+- `public-key`: Get a public key from a private key
 - `transfer`: Send a single transfer transaction
 - `batch-transfer`: Process multiple transfers from a CSV file
 - `deposit`: Deposit assets into the rollup
@@ -87,9 +87,9 @@ Generate a new key pair:
 cargo run -r -- generate-key
 ```
 
-Generate from Ethereum private key:
+Get a public key from a private key:
 ```bash
-cargo run -r -- generate-from-eth-key --eth-private-key 0x...
+cargo run -r -- public-key --private-key 0x...
 ```
 
 #### Check Balance
