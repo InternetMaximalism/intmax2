@@ -1,6 +1,9 @@
-use ethers::types::{Address, H256};
 use intmax2_client_sdk::external_api::{
     contract::{
+        convert::{
+            convert_address_to_ethers, convert_bytes32_to_h256, convert_u256_to_ethers,
+            convert_u256_to_intmax,
+        },
         erc1155_contract::ERC1155Contract,
         erc20_contract::ERC20Contract,
         erc721_contract::ERC721Contract,
@@ -12,16 +15,12 @@ use intmax2_client_sdk::external_api::{
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 
 use crate::env_var::EnvVar;
 
-use super::{
-    client::get_client,
-    error::CliError,
-    utils::{convert_address, convert_u256, is_local},
-};
+use super::{client::get_client, error::CliError, utils::is_local};
 
 pub async fn deposit(
     key: KeySet,
@@ -151,22 +150,24 @@ pub async fn deposit(
 
 async fn balance_check_and_approve(
     liquidity_contract: &LiquidityContract,
-    eth_private_key: H256,
+    eth_private_key: Bytes32,
     amount: U256,
     token_type: TokenType,
     token_address: Address,
     token_id: U256,
 ) -> Result<(), CliError> {
-    let amount = convert_u256(amount);
-    let token_id = convert_u256(token_id);
-
     let chain_id = liquidity_contract.chain_id;
     let rpc_url = liquidity_contract.rpc_url.clone();
-    let address = get_address(chain_id, eth_private_key);
+    let sender_private_key = convert_bytes32_to_h256(eth_private_key);
+    let sender_address = get_address(chain_id, sender_private_key);
+
+    let amount = convert_u256_to_ethers(amount);
+    let token_address = convert_address_to_ethers(token_address);
+    let token_id = convert_u256_to_ethers(token_id);
 
     match token_type {
         TokenType::NATIVE => {
-            let balance = get_eth_balance(&rpc_url, address).await?;
+            let balance = get_eth_balance(&rpc_url, sender_address).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
                     "Insufficient eth balance".to_string(),
@@ -175,43 +176,41 @@ async fn balance_check_and_approve(
         }
         TokenType::ERC20 => {
             let contract = ERC20Contract::new(&rpc_url, chain_id, token_address);
-            let balance = contract.balance_of(address).await?;
+            let balance = contract.balance_of(sender_address).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
                     "Insufficient token balance".to_string(),
                 ));
             }
-
             // approve if necessary
             let allowance = contract
-                .allowance(address, liquidity_contract.address())
+                .allowance(sender_address, liquidity_contract.address())
                 .await?;
             if allowance < amount {
                 contract
-                    .approve(eth_private_key, liquidity_contract.address(), amount)
+                    .approve(sender_private_key, liquidity_contract.address(), amount)
                     .await?;
             }
         }
         TokenType::ERC721 => {
             let contract = ERC721Contract::new(&rpc_url, chain_id, token_address);
             let owner = contract.owner_of(token_id).await?;
-            if owner != address {
+            if owner != sender_address {
                 return Err(CliError::InsufficientBalance(
                     "You don't have the nft of given token id".to_string(),
                 ));
             }
-
             // approve if necessary
             let operator = contract.get_approved(token_id).await?;
             if operator != liquidity_contract.address() {
                 contract
-                    .approve(eth_private_key, liquidity_contract.address(), token_id)
+                    .approve(sender_private_key, liquidity_contract.address(), token_id)
                     .await?;
             }
         }
         TokenType::ERC1155 => {
             let contract = ERC1155Contract::new(&rpc_url, chain_id, token_address);
-            let balance = contract.balance_of(address, token_id).await?;
+            let balance = contract.balance_of(sender_address, token_id).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
                     "Insufficient token balance".to_string(),
