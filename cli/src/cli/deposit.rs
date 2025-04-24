@@ -60,9 +60,6 @@ pub async fn deposit(
             is_mining,
         )
         .await?;
-
-    dbg!(deposit_result.deposit_data.pubkey_salt_hash);
-
     let deposit_data = deposit_result.deposit_data;
 
     let aml_permission = fetch_predicate_permission(
@@ -244,18 +241,18 @@ async fn fetch_predicate_permission(
     token_address: Address,
     token_id: U256,
 ) -> Result<Vec<u8>, CliError> {
+    let client = get_client()?;
+    let aml_permitter_address = client.liquidity_contract.get_aml_permitter().await?;
     let env = envy::from_env::<EnvVar>()?;
-    if env.predicate_base_url.is_none() && env.aml_permitter_contract_address.is_none() {
+    if aml_permitter_address.is_zero() {
         log::info!("AML predicate is not set");
         return Ok(vec![]);
     }
-    if !(env.predicate_base_url.is_some() && env.aml_permitter_contract_address.is_some()) {
+    if env.predicate_base_url.is_none() {
         return Err(CliError::EnvError(
-            "Both predicate base url and aml permitter contract address must be set".to_string(),
+            "Predicate base url must be set".to_string(),
         ));
     }
-    let aml_permitter_contract_address = env.aml_permitter_contract_address.unwrap();
-
     let predicate_client = PredicateClient::new(env.predicate_base_url.unwrap());
     let recipient_salt_hash = convert_bytes32_to_h256(recipient_salt_hash);
     let token_address = convert_address_to_ethers(token_address);
@@ -290,9 +287,8 @@ async fn fetch_predicate_permission(
         },
     };
     let from = convert_address_to_ethers(from);
-    let to = convert_address_to_ethers(aml_permitter_contract_address);
     let permission = predicate_client
-        .get_deposit_permission(from, to, value, request)
+        .get_deposit_permission(from, aml_permitter_address, value, request)
         .await?;
     Ok(permission)
 }

@@ -138,6 +138,30 @@ impl LiquidityContract {
         Ok(contract)
     }
 
+    pub async fn get_aml_permitter(&self) -> Result<EthAddress, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let aml_permitter = with_retry(|| async { contract.aml_permitter().call().await })
+            .await
+            .map_err(|e| {
+                BlockchainError::RPCError(format!("Error getting AML permitter: {:?}", e))
+            })?;
+        Ok(aml_permitter)
+    }
+
+    pub async fn get_eligibility_permitter(&self) -> Result<EthAddress, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let eligibility_permitter =
+            with_retry(|| async { contract.eligibility_permitter().call().await })
+                .await
+                .map_err(|e| {
+                    BlockchainError::RPCError(format!(
+                        "Error getting eligibility permitter: {:?}",
+                        e
+                    ))
+                })?;
+        Ok(eligibility_permitter)
+    }
+
     pub async fn get_token_index(
         &self,
         token_type: TokenType,

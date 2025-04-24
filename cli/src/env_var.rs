@@ -32,7 +32,6 @@ pub struct EnvVar {
     pub l1_rpc_url: String,
     pub l1_chain_id: u64,
     pub liquidity_contract_address: Address,
-    pub aml_permitter_contract_address: Option<Address>,
     pub l2_rpc_url: String,
     pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
@@ -43,9 +42,6 @@ pub struct EnvVar {
 
     // optional block builder base url
     pub block_builder_base_url: Option<String>,
-
-    // optional token mapping base url
-    pub token_mapping_base_url: Option<String>,
 
     // optional private zkp server settings
     pub private_zkp_server_max_retires: Option<usize>,
