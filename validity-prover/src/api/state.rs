@@ -103,6 +103,24 @@ impl State {
         }
     }
 
+    pub async fn get_last_deposit_id(&self) -> anyhow::Result<u64> {
+        type V = u64;
+        let key = "last_deposit_id";
+        if let Some(deposit_id) = self.cache.get::<V>(key).await? {
+            Ok(deposit_id)
+        } else {
+            let deposit_id = self
+                .validity_prover
+                .observer
+                .get_local_last_deposit_id()
+                .await?;
+            self.cache
+                .set_with_ttl::<V>(key, &deposit_id, self.config.dynamic_ttl)
+                .await?;
+            Ok(deposit_id)
+        }
+    }
+
     pub async fn get_latest_included_deposit_index(&self) -> anyhow::Result<Option<u32>> {
         type V = Option<u32>;
         let key = "latest_included_deposit_index";
