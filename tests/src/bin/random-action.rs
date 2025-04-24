@@ -16,7 +16,7 @@ use intmax2_client_sdk::{
     },
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use rand::Rng;
@@ -337,7 +337,7 @@ impl TestSystem {
         }
 
         let transfer = Transfer {
-            recipient: GenericAddress::from_pubkey(recipient_key.pubkey),
+            recipient: GenericAddress::from(recipient_key.pubkey),
             amount: transfer_amount,
             token_index: ETH_TOKEN_INDEX,
             salt: generate_salt(),
@@ -529,7 +529,7 @@ async fn transfer_from(
     let transfers = intmax_recipients
         .iter()
         .map(|recipient| Transfer {
-            recipient: GenericAddress::from_pubkey(recipient.pubkey),
+            recipient: GenericAddress::from(recipient.pubkey),
             amount,
             token_index: ETH_TOKEN_INDEX,
             salt: generate_salt(),

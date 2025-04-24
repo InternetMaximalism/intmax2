@@ -25,7 +25,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        deposit::Deposit, generic_address::GenericAddress, signature::key_set::KeySet,
+        deposit::Deposit, generic_address::GenericAddress, signature_content::key_set::KeySet,
         transfer::Transfer,
     },
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
@@ -504,25 +504,6 @@ async fn wait_for_deposit_confirmation(
         tokio::time::sleep(Duration::from_secs(60)).await;
     }
 }
-
-// async fn transfer_from([2]
-//     sender: KeySet,
-//     intmax_recipients: &[KeySet],
-//     amount: U256,
-// ) -> Result<(), CliError> {
-//     wait_for_balance_synchronization(sender, Duration::from_secs(5)).await?;
-//     let transfers = intmax_recipients
-//         .iter()
-//         .map(|recipient| Transfer {
-//             recipient: GenericAddress::from_pubkey(recipient.pubkey),
-//             amount,
-//             token_index: ETH_TOKEN_INDEX,
-//             salt: generate_salt(),
-//         })
-//         .collect::<Vec<_>>();
-//     log::info!("Transfers: {:?}", transfers);
-//     send_transfers(sender, &transfers, vec![], ETH_TOKEN_INDEX, true).await
-// }
 
 #[derive(Debug)]
 struct RandomActionTask;

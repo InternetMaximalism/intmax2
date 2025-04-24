@@ -46,7 +46,7 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
     let transfers = intmax_recipients
         .iter()
         .map(|recipient| Transfer {
-            recipient: GenericAddress::from_pubkey(recipient.pubkey),
+            recipient: GenericAddress::from(recipient.pubkey),
             amount: U256::from(1000000000),
             token_index: ETH_TOKEN_INDEX,
             salt: generate_salt(),
@@ -123,7 +123,7 @@ async fn test_block_generation_included_many_senders() -> Result<(), Box<dyn std
 
     // multiple senders -> receiver (simultaneously)
     let transfer_input = Transfer {
-        recipient: GenericAddress::from_pubkey(intmax_recipient.pubkey),
+        recipient: GenericAddress::from(intmax_recipient.pubkey),
         amount: U256::from(10),
         token_index: ETH_TOKEN_INDEX,
         salt: generate_salt(),

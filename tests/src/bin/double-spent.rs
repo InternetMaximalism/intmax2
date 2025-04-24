@@ -1,7 +1,7 @@
 use intmax2_cli::cli::send::send_transfers;
 use intmax2_client_sdk::client::sync::utils::generate_salt;
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use num_bigint::BigUint;
@@ -100,14 +100,14 @@ async fn execute_double_spend_test(
     log::info!("Using salt: {:?}", salt);
 
     let transfer1 = Transfer {
-        recipient: GenericAddress::from_pubkey(recipient.pubkey),
+        recipient: GenericAddress::from(recipient.pubkey),
         amount,
         token_index: ETH_TOKEN_INDEX,
         salt, // Using the same salt
     };
 
     let transfer2 = Transfer {
-        recipient: GenericAddress::from_pubkey(recipient.pubkey),
+        recipient: GenericAddress::from(recipient.pubkey),
         amount,
         token_index: ETH_TOKEN_INDEX,
         salt, // Using the same salt

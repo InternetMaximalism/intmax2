@@ -17,7 +17,7 @@ use intmax2_client_sdk::{
     },
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature::key_set::KeySet, transfer::Transfer},
+    common::{generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::u256::U256,
 };
 use serde::Deserialize;
@@ -134,7 +134,7 @@ impl TestSystem {
         let transfers = intmax_recipients
             .iter()
             .map(|recipient| Transfer {
-                recipient: GenericAddress::from_pubkey(recipient.pubkey),
+                recipient: GenericAddress::from(recipient.pubkey),
                 amount, // 1000000000u128,
                 token_index: ETH_TOKEN_INDEX,
                 salt: generate_salt(),
@@ -332,7 +332,7 @@ impl TestSystem {
                 .enumerate()
                 .map(|(i, sender)| async move {
                     let transfers = [Transfer {
-                        recipient: GenericAddress::from_pubkey(trash_account.intmax_key.pubkey),
+                        recipient: GenericAddress::from(trash_account.intmax_key.pubkey),
                         amount: U256::from(10),
                         token_index: ETH_TOKEN_INDEX,
                         salt: generate_salt(),
