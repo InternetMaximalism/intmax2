@@ -17,12 +17,11 @@ use intmax2_zkp::{
 use log::warn;
 use server_common::db::{DbPool, DbPoolConfig};
 use std::sync::Arc;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
 #[derive(Debug, Clone)]
 pub struct ObserverConfig {
     pub observer_event_block_interval: u64,
-    pub observer_backward_block_interval: u64,
     pub observer_max_query_times: usize,
     pub observer_sync_interval: u64,
     pub observer_restart_interval: u64,
@@ -45,7 +44,6 @@ impl Observer {
     pub async fn new(env: &EnvVar) -> Result<Self, ObserverError> {
         let config = ObserverConfig {
             observer_event_block_interval: env.observer_event_block_interval,
-            observer_backward_block_interval: env.observer_backward_block_interval,
             observer_max_query_times: env.observer_max_query_times,
             observer_sync_interval: env.observer_sync_interval,
             observer_restart_interval: env.observer_restart_interval,
@@ -424,6 +422,25 @@ impl Observer {
     }
 
     #[instrument(skip(self))]
+    async fn reset_check_point(
+        &self,
+        event_type: EventType,
+        local_last_eth_block_number: Option<u64>,
+        reason: &str,
+    ) -> Result<(), ObserverError> {
+        let reset_eth_block_number =
+            local_last_eth_block_number.unwrap_or(self.default_eth_block_number(event_type));
+        warn!(
+            "Reset checkpoint. Event type: {}, Local last eth block number: {:?}, Reset eth block number: {}, Reason: {}",
+            event_type, local_last_eth_block_number, reset_eth_block_number, reason
+        );
+        self.check_point_store
+            .set_check_point(event_type, reset_eth_block_number)
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
     async fn sync_and_save_checkpoint(
         &self,
         event_type: EventType,
@@ -446,19 +463,11 @@ impl Observer {
         let current_eth_block_number = self.get_current_eth_block_number(event_type).await?;
         if from_eth_block_number > current_eth_block_number {
             // This should never happen unless checkpoint is corrupted, so we need to reset the checkpoint
-            let reset_eth_block_number =
-                local_last_eth_block_number.unwrap_or(self.default_eth_block_number(event_type));
-            error!(
-                "Reset checkpoint. Event type: {}, Checkpoint eth block number: {:?}, Local last eth block number: {:?}, From eth block number: {}, Current eth block number: {}, Reset eth block number: {}",
-                event_type,
-                checkpoint_eth_block_number,
-                local_last_eth_block_number,
-                from_eth_block_number,
-                current_eth_block_number,
-                reset_eth_block_number
+            let reason = format!(
+                "from_eth_block_number : {} > current_eth_block_number: {}",
+                from_eth_block_number, current_eth_block_number
             );
-            self.check_point_store
-                .set_check_point(event_type, reset_eth_block_number)
+            self.reset_check_point(event_type, local_last_eth_block_number, &reason)
                 .await?;
             return Ok(local_next_event_id);
         }
@@ -502,20 +511,14 @@ impl Observer {
                     && onchain_next_event_id > local_next_event_id
                 {
                     // This means we have synced all events but the onchain event is not synced yet
-                    let reset_eth_block_number = local_last_eth_block_number
-                        .unwrap_or(self.default_eth_block_number(event_type));
-                    warn!(
-                        "Sync all events but onchain event is not synced yet. Event type: {}, Local next event id: {}, Onchain next event id: {}, Last local eth block number: {:?}, Reset eth block number: {}, From eth block number: {}, To eth block number: {}",
-                        event_type,
+                    let reason = format!(
+                        "Sync all events but onchain event is not synced yet. Local next event id: {}, Onchain next event id: {}, From eth block number: {}, To eth block number: {}",
                         local_next_event_id,
                         onchain_next_event_id,
-                        local_last_eth_block_number,
-                        reset_eth_block_number,
                         from_eth_block_number,
                         to_eth_block_number
                     );
-                    self.check_point_store
-                        .set_check_point(event_type, reset_eth_block_number)
+                    self.reset_check_point(event_type, local_last_eth_block_number, &reason)
                         .await?;
                     return Ok(next_event_id);
                 }
@@ -536,37 +539,26 @@ impl Observer {
                 assert_eq!(event_type, _event_type, "Event type mismatch");
                 if checkpoint_eth_block_number.is_none() {
                     // This never happens except for RPC issues
-                    error!(
-                        "Checkpoint eth block number is None But event gap detected. Event type: {}, Expected next event id: {}, Got event id: {}, From eth block number: {}, To eth block number: {}",
-                        event_type,
+                    let reason = format!(
+                        "Checkpoint eth block number is None But event gap detected. Expected next event id: {}, Got event id: {}, From eth block number: {}, To eth block number: {}",
                         expected_next_event_id,
                         got_event_id,
                         from_eth_block_number,
                         to_eth_block_number
                     );
+                    self.reset_check_point(event_type, local_last_eth_block_number, &reason)
+                        .await?;
                     return Ok(local_next_event_id);
                 }
-                // If event gap detected, we need to backward the checkpoint
-                let checkpoint_eth_block_number = checkpoint_eth_block_number.unwrap();
-                let local_last_eth_block_number =
-                    self.get_local_last_eth_block_number(event_type).await?;
-                let backward_eth_block_number = checkpoint_eth_block_number
-                    .saturating_sub(self.config.observer_backward_block_interval)
-                    .max(
-                        local_last_eth_block_number
-                            .unwrap_or(self.default_eth_block_number(event_type)),
-                    );
-                warn!(
-                    "Event gap detected. Event type: {}, Expected next event id: {}, Got event id: {}. Checkpoint eth block number: {}, local last eth block number: {:?}, backward eth block number: {}",
-                    event_type,
+                // If event gap detected, we need to reset the checkpoint
+                let reason = format!(
+                    "Event gap detected. Expected next event id: {}, Got event id: {}, From eth block number: {}, To eth block number: {}",
                     expected_next_event_id,
                     got_event_id,
-                    checkpoint_eth_block_number,
-                    local_last_eth_block_number,
-                    backward_eth_block_number
+                    from_eth_block_number,
+                    to_eth_block_number
                 );
-                self.check_point_store
-                    .set_check_point(event_type, backward_eth_block_number)
+                self.reset_check_point(event_type, local_last_eth_block_number, &reason)
                     .await?;
                 Ok(local_next_event_id)
             }
