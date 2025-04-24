@@ -1,12 +1,13 @@
-use ethers::types::H256;
+use intmax2_client_sdk::external_api::contract::convert::convert_bytes32_to_h256;
 use intmax2_interfaces::api::withdrawal_server::interface::WithdrawalStatus;
-use intmax2_zkp::common::signature_content::key_set::KeySet;
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 
 use crate::cli::client::get_client;
 
 use super::error::CliError;
 
-pub async fn claim_withdrawals(key: KeySet, eth_private_key: H256) -> Result<(), CliError> {
+pub async fn claim_withdrawals(key: KeySet, eth_private_key: Bytes32) -> Result<(), CliError> {
+    let signer_private_key = convert_bytes32_to_h256(eth_private_key);
     let client = get_client()?;
     let withdrawal_info = client.get_withdrawal_info(key).await?;
     let mut claim_withdrawals = Vec::new();
@@ -37,7 +38,7 @@ pub async fn claim_withdrawals(key: KeySet, eth_private_key: H256) -> Result<(),
     }
     let liquidity_contract = client.liquidity_contract.clone();
     liquidity_contract
-        .claim_withdrawals(eth_private_key, &claim_withdrawals)
+        .claim_withdrawals(signer_private_key, &claim_withdrawals)
         .await?;
     Ok(())
 }

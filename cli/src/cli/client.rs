@@ -6,8 +6,8 @@ use intmax2_client_sdk::{
         balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
         contract::{
-            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
-            withdrawal_contract::WithdrawalContract,
+            convert::convert_address_to_ethers, liquidity_contract::LiquidityContract,
+            rollup_contract::RollupContract, withdrawal_contract::WithdrawalContract,
         },
         local_backup_store_vault::{
             local_store_vault::LocalStoreVaultClient, LocalBackupStoreVaultClient,
@@ -84,17 +84,17 @@ pub fn get_client() -> Result<Client, CliError> {
     let liquidity_contract = LiquidityContract::new(
         &env.l1_rpc_url,
         env.l1_chain_id,
-        env.liquidity_contract_address,
+        convert_address_to_ethers(env.liquidity_contract_address),
     );
     let rollup_contract = RollupContract::new(
         &env.l2_rpc_url,
         env.l2_chain_id,
-        env.rollup_contract_address,
+        convert_address_to_ethers(env.rollup_contract_address),
     );
     let withdrawal_contract = WithdrawalContract::new(
         &env.l2_rpc_url,
         env.l2_chain_id,
-        env.withdrawal_contract_address,
+        convert_address_to_ethers(env.withdrawal_contract_address),
     );
 
     let config = ClientConfig {

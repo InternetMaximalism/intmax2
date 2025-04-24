@@ -134,8 +134,8 @@ pub enum Commands {
         path: PathBuf,
     },
     GenerateKey,
-    GenerateFromEthKey {
+    PublicKey {
         #[clap(long)]
-        eth_private_key: Bytes32,
+        private_key: Bytes32,
     },
 }

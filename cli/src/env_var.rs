@@ -1,5 +1,5 @@
-use ethers::types::Address;
 use intmax2_interfaces::api::store_vault_server::types::StoreVaultType;
+use intmax2_zkp::ethereum_types::address::Address;
 use serde::Deserialize;
 
 use common::env::EnvType;
