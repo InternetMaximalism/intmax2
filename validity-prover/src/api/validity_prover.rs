@@ -13,9 +13,9 @@ use intmax2_interfaces::api::validity_prover::{
         GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
         GetBlockNumberResponse, GetDepositInfoBatchRequest, GetDepositInfoBatchResponse,
         GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
-        GetDepositMerkleProofResponse, GetLatestIncludedDepositIndexResponse,
-        GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-        GetValidityWitnessQuery, GetValidityWitnessResponse,
+        GetDepositMerkleProofResponse, GetLastDepositIdResponse,
+        GetLatestIncludedDepositIndexResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
+        GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
     },
 };
 use intmax2_zkp::circuits::validity::validity_pis::ValidityPublicInputs;
@@ -50,6 +50,17 @@ pub async fn get_next_deposit_index(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetNextDepositIndexResponse { deposit_index }))
+}
+
+#[get("/last-deposit-id")]
+pub async fn get_last_deposit_id(
+    state: Data<State>,
+) -> Result<Json<GetLastDepositIdResponse>, Error> {
+    let deposit_id = state
+        .get_last_deposit_id()
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(GetLastDepositIdResponse { deposit_id }))
 }
 
 #[get("/latest-included-deposit-index")]
@@ -222,6 +233,7 @@ pub fn validity_prover_scope() -> actix_web::Scope {
         .service(get_block_number)
         .service(get_validity_proof_block_number)
         .service(get_next_deposit_index)
+        .service(get_last_deposit_id)
         .service(get_latest_included_deposit_index)
         .service(get_account_info)
         .service(get_account_info_batch)
