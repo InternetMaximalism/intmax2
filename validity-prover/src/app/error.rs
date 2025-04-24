@@ -1,11 +1,9 @@
+use super::check_point_store::EventType;
+use crate::trees::merkle_tree::error::MerkleTreeError;
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, EthereumTypeError};
 use redis::RedisError;
 use server_common::redis::task_manager::TaskManagerError;
-
-use crate::trees::merkle_tree::error::MerkleTreeError;
-
-use super::check_point_store::EventType;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ObserverError {
@@ -36,15 +34,6 @@ pub enum ObserverError {
     #[error("Ethereum type error: {0}")]
     EthereumTypeError(#[from] EthereumTypeError),
 
-    #[error("Full block sync error: {0}")]
-    FullBlockSyncError(String),
-
-    #[error("Deposit sync error: {0}")]
-    DepositSyncError(String),
-
-    #[error("Sync L1 deposits error: {0}")]
-    SyncL1DepositedEventsError(String),
-
     #[error("Block not found: {0}")]
     BlockNotFound(u32),
 
@@ -65,8 +54,10 @@ pub enum SettingConsistencyError {
 pub enum LeaderError {
     #[error("Redis error: {0}")]
     RedisError(#[from] RedisError),
+
     #[error("Failed to acquire leader lock")]
     LockAcquisitionError,
+
     #[error("Failed to extend leader lock")]
     LockExtensionError,
 }
