@@ -108,3 +108,46 @@ pub async fn fetch_user_data(
         .unwrap_or(UserData::new(key.pubkey));
     Ok(user_data)
 }
+
+pub async fn fetch_single_data<T: BlsEncryption + Validation>(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    key: KeySet,
+    data_type: DataType,
+    digest: Bytes32,
+) -> Result<(MetaData, T), StrategyError> {
+    let data_with_meta = store_vault_server
+        .get_data_batch(key, &data_type.to_topic(), &[digest])
+        .await?;
+    if data_with_meta.len() != 1 {
+        return Err(StrategyError::UnexpectedError(format!(
+            "expected 1 data with digest {}, got {}",
+            digest,
+            data_with_meta.len()
+        )));
+    }
+    let DataWithMetaData { meta, data } = data_with_meta.into_iter().next().unwrap();
+    let enc_sender = match data_type.rw_rights().write_rights {
+        WriteRights::SingleAuthWrite => Some(key.pubkey),
+        WriteRights::AuthWrite => Some(key.pubkey),
+        WriteRights::SingleOpenWrite => None,
+        WriteRights::OpenWrite => None,
+    };
+    let (meta, data) = match T::decrypt(key, enc_sender, &data) {
+        Ok(data) => match data.validate(key.pubkey) {
+            Ok(_) => (meta, data),
+            Err(e) => {
+                return Err(StrategyError::ValidationError(format!(
+                    "failed to validate {}: {}",
+                    data_type, e
+                )));
+            }
+        },
+        Err(e) => {
+            return Err(StrategyError::ValidationError(format!(
+                "failed to decrypt {}: {}",
+                data_type, e
+            )));
+        }
+    };
+    Ok((meta, data))
+}

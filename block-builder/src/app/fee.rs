@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
-use ethers::core::rand;
 use intmax2_client_sdk::client::strategy::common::fetch_sender_proof_set;
 use intmax2_interfaces::{
     api::{
@@ -12,6 +11,7 @@ use intmax2_interfaces::{
         data_type::DataType, encryption::BlsEncryption, sender_proof_set::SenderProofSet,
         transfer_data::TransferData, validation::Validation,
     },
+    utils::random::default_rng,
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
@@ -372,7 +372,7 @@ pub async fn collect_fee(
         };
         entries.push(entry);
     }
-    let dummy_key = KeySet::rand(&mut rand::thread_rng());
+    let dummy_key = KeySet::rand(&mut default_rng());
     let _digests = store_vault_server_client
         .save_data_batch(dummy_key, &entries)
         .await?;

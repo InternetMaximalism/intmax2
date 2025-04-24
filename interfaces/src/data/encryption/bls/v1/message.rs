@@ -100,10 +100,14 @@ impl<'a> EncryptedMessage<'a> {
 
     /// Use the given secret and this encrypted message to derive the shared secret, and use the
     /// shared secret to derive the mac and encryption keys.
-    pub fn derive_keys(&self, secret_key: &Fr) -> RLPxSymmetricKeys {
+    pub fn derive_keys(&self, secret_key: &U256) -> RLPxSymmetricKeys {
         // perform ECDH to get the shared secret, using the remote public key from the message and
         // the given secret key
         let x = ecdh_x(&self.public_key, secret_key);
+        self.derive_keys_with_ecdh(x)
+    }
+
+    pub fn derive_keys_with_ecdh(&self, ecdh_x: U256) -> RLPxSymmetricKeys {
         let mut key = [0u8; 32];
 
         // The RLPx spec describes the key derivation process as:
@@ -114,7 +118,7 @@ impl<'a> EncryptedMessage<'a> {
         //
         // NOTE: The RLPx spec does not define an `OtherInfo` parameter, and this is unused in
         // other implementations, so we use an empty slice.
-        kdf(x, &[], &mut key);
+        kdf(ecdh_x, &[], &mut key);
 
         let enc_key = B128::from_slice(&key[..16]);
 
@@ -209,5 +213,9 @@ impl<'a> EncryptedMessage<'a> {
 
         // self.check_integrity(&keys)?;
         Ok(result)
+    }
+
+    pub fn get_public_key(&self) -> U256 {
+        self.public_key
     }
 }

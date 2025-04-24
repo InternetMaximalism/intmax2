@@ -1,55 +1,41 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, OnceLock},
-    time::Duration,
-};
-
-use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
-use intmax2_interfaces::{
-    api::validity_prover::interface::{
-        AccountInfo, DepositInfo, TransitionProofTask, TransitionProofTaskResult,
-    },
-    utils::circuit_verifiers::CircuitVerifiers,
-};
-use intmax2_zkp::{
-    circuits::validity::validity_circuit::ValidityCircuit,
-    common::{
-        block::Block,
-        trees::{
-            account_tree::AccountMembershipProof, block_hash_tree::BlockHashMerkleProof,
-            deposit_tree::DepositMerkleProof,
-        },
-        witness::{update_witness::UpdateWitness, validity_witness::ValidityWitness},
-    },
-    constants::{ACCOUNT_TREE_HEIGHT, BLOCK_HASH_TREE_HEIGHT, DEPOSIT_TREE_HEIGHT},
-    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _},
-    utils::trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
-};
-
-use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
-
-use plonky2::{
-    field::goldilocks_field::GoldilocksField,
-    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
-};
-
-use server_common::{
-    db::{DbPool, DbPoolConfig},
-    redis::task_manager::TaskManager,
-};
-
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
+    app::setting_consistency::SettingConsistency,
     trees::{
         deposit_hash::DepositHash,
         merkle_tree::{
             sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
-            sql_indexed_merkle_tree::SqlIndexedMerkleTree, IndexedMerkleTreeClient,
+            sql_indexed_merkle_tree::SqlIndexedMerkleTree, IncrementalMerkleTreeClient,
+            IndexedMerkleTreeClient,
         },
         update::{to_block_witness, update_trees},
     },
-    Env,
+    EnvVar,
 };
+use intmax2_interfaces::{
+    api::validity_prover::interface::{TransitionProofTask, TransitionProofTaskResult},
+    utils::circuit_verifiers::CircuitVerifiers,
+};
+use intmax2_zkp::{
+    circuits::validity::validity_circuit::ValidityCircuit,
+    common::{block::Block, witness::validity_witness::ValidityWitness},
+    constants::{ACCOUNT_TREE_HEIGHT, BLOCK_HASH_TREE_HEIGHT, DEPOSIT_TREE_HEIGHT},
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
+};
+use plonky2::{
+    field::goldilocks_field::GoldilocksField,
+    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
+};
+use server_common::{
+    db::{DbPool, DbPoolConfig},
+    redis::task_manager::TaskManager,
+};
+use sqlx::Pool;
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
+use tracing::instrument;
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -60,55 +46,54 @@ const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
 const MAX_TASKS: u32 = 30;
 
-const ADD_TASKS_INTERVAL: u64 = 10;
-const GENERATE_VALIDITY_PROOF_INTERVAL: u64 = 2;
-
-#[derive(Clone)]
-pub struct Config {
-    pub sync_interval: Option<u64>,
+#[derive(Clone, Debug)]
+pub struct ValidityProverConfig {
+    pub is_sync_mode: bool,
+    pub witness_sync_interval: u64,
+    pub validity_proof_interval: u64,
+    pub add_tasks_interval: u64,
+    pub cleanup_inactive_tasks_interval: u64,
+    pub validity_prover_restart_interval: u64,
 }
 
 #[derive(Clone)]
 pub struct ValidityProver {
-    config: Config,
-    manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
-    validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
-    observer: Observer,
-    account_tree: SqlIndexedMerkleTree,
-    block_tree: SqlIncrementalMerkleTree<Bytes32>,
-    deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
-    pool: DbPool,
+    pub(crate) config: ValidityProverConfig,
+    pub(crate) manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
+    pub(crate) validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
+    pub(crate) observer: Observer,
+    pub(crate) account_tree: SqlIndexedMerkleTree,
+    pub(crate) block_tree: SqlIncrementalMerkleTree<Bytes32>,
+    pub(crate) deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
+    pub(crate) pool: DbPool,
 }
 
 impl ValidityProver {
-    pub async fn new(env: &Env) -> Result<Self, ValidityProverError> {
-        let config = Config {
-            sync_interval: env.sync_interval,
+    pub async fn new(env: &EnvVar) -> Result<Self, ValidityProverError> {
+        let config = ValidityProverConfig {
+            is_sync_mode: env.is_sync_mode,
+            witness_sync_interval: env.witness_sync_interval,
+            validity_proof_interval: env.validity_proof_interval,
+            add_tasks_interval: env.add_tasks_interval,
+            cleanup_inactive_tasks_interval: env.cleanup_inactive_tasks_interval,
+            validity_prover_restart_interval: env.validity_prover_restart_interval,
         };
-
+        tracing::info!("ValidityProverConfig: {:?}", config);
         let manager = Arc::new(TaskManager::new(
             &env.redis_url,
             "validity_prover",
             env.task_ttl as usize,
             env.heartbeat_interval as usize,
         )?);
-
-        let rollup_contract = RollupContract::new(
-            &env.l2_rpc_url,
-            env.l2_chain_id,
-            env.rollup_contract_address,
-            env.rollup_contract_deployed_block_number,
-        );
-        let observer = Observer::new(
-            rollup_contract,
-            &env.database_url,
-            env.database_max_connections,
-            env.database_timeout,
-        )
-        .await?;
-
-        let pool = sqlx::Pool::connect(&env.database_url).await?;
-
+        let observer = Observer::new(env).await?;
+        let pool = Pool::connect(&env.database_url).await?;
+        // check consistency
+        {
+            let setting_consistency = SettingConsistency::new(pool.clone());
+            setting_consistency
+                .check_consistency(env.rollup_contract_address, env.liquidity_contract_address)
+                .await?;
+        }
         let account_tree =
             SqlIndexedMerkleTree::new(pool.clone(), ACCOUNT_DB_TAG, ACCOUNT_TREE_HEIGHT);
         account_tree.initialize().await?;
@@ -131,23 +116,21 @@ impl ValidityProver {
             DEPOSIT_DB_TAG,
             DEPOSIT_TREE_HEIGHT,
         );
-        log::info!("block tree len: {}", block_tree.len(last_timestamp).await?);
-        log::info!(
+        tracing::info!("block tree len: {}", block_tree.len(last_timestamp).await?);
+        tracing::info!(
             "deposit tree len: {}",
             deposit_hash_tree.len(last_timestamp).await?
         );
-        log::info!(
+        tracing::info!(
             "account tree len: {}",
             account_tree.len(last_timestamp).await?
         );
-
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
             idle_timeout: env.database_timeout,
             url: env.database_url.clone(),
         })
         .await?;
-
         Ok(Self {
             config,
             manager,
@@ -167,42 +150,19 @@ impl ValidityProver {
         })
     }
 
-    pub async fn sync_observer(&self) -> Result<(), ValidityProverError> {
-        self.observer.sync().await?;
-        Ok(())
-    }
+    #[instrument(skip(self))]
+    async fn sync_validity_witness(&self) -> Result<(), ValidityProverError> {
+        self.observer.leader_election.wait_for_leadership().await?;
 
-    pub async fn get_validity_proof(
-        &self,
-        block_number: u32,
-    ) -> Result<Option<ProofWithPublicInputs<F, C, D>>, ValidityProverError> {
-        let record = sqlx::query!(
-            "SELECT proof FROM validity_proofs WHERE block_number = $1",
-            block_number as i32
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        match record {
-            Some(r) => {
-                let proof: ProofWithPublicInputs<F, C, D> = bincode::deserialize(&r.proof)?;
-                Ok(Some(proof))
-            }
-            None => Ok(None),
-        }
-    }
-
-    pub async fn sync(&self) -> Result<(), ValidityProverError> {
-        log::info!(
-            "Start sync validity prover: current block number {}, observer block number {}, validity proof block number: {}",
+        let observer_block_number = self.observer.get_local_last_block_number().await?;
+        tracing::info!(
+            "Start sync_validity_witness: current block number {}, observer block number {}, validity proof block number: {}",
             self.get_last_block_number().await?,
-            self.observer.get_next_block_number().await? - 1,
+            observer_block_number,
             self.get_latest_validity_proof_block_number().await?,
         );
-        self.sync_observer().await?;
-
         let last_block_number = self.get_last_block_number().await?;
-        let next_block_number = self.observer.get_next_block_number().await?;
-
+        let next_block_number = observer_block_number + 1;
         let mut prev_validity_pis = if last_block_number == 0 {
             ValidityWitness::genesis().to_validity_pis().unwrap()
         } else {
@@ -212,17 +172,25 @@ impl ValidityProver {
                 .unwrap()
         };
         for block_number in (last_block_number + 1)..next_block_number {
-            log::info!(
-                "Sync validity prover: syncing block number {}",
+            tracing::info!(
+                "sync_validity_witness: syncing block number {}",
                 block_number
             );
-
-            let full_block = self.observer.get_full_block(block_number).await?;
-
+            let full_block_with_meta = self
+                .observer
+                .get_full_block_with_meta(block_number)
+                .await?
+                .unwrap();
+            let full_block = full_block_with_meta.full_block;
             let deposit_events = self
                 .observer
                 .get_deposits_between_blocks(block_number)
                 .await?;
+            if deposit_events.is_none() {
+                // not ready yet
+                return Ok(());
+            }
+            let deposit_events = deposit_events.unwrap();
             // Caution! This change the state of the deposit hash tree
             for event in deposit_events {
                 self.deposit_hash_tree
@@ -238,7 +206,6 @@ impl ValidityProver {
                     deposit_tree_root,
                 ));
             }
-
             let block_witness = to_block_witness(
                 &full_block,
                 block_number as u64,
@@ -247,9 +214,7 @@ impl ValidityProver {
             )
             .await
             .map_err(|e| ValidityProverError::BlockWitnessGenerationError(e.to_string()))?;
-
             // Caution! This change the state of the account tree and block tree
-            // TODO: atomic update
             let validity_witness = match update_trees(
                 &block_witness,
                 block_number as u64,
@@ -303,316 +268,21 @@ impl ValidityProver {
                 .await?;
             prev_validity_pis = validity_witness.to_validity_pis().unwrap();
         }
-        log::info!("End of sync validity prover");
         Ok(())
     }
 
-    pub async fn get_update_witness(
-        &self,
-        pubkey: U256,
-        root_block_number: u32,
-        leaf_block_number: u32,
-        is_prev_account_tree: bool,
-    ) -> Result<UpdateWitness<F, C, D>, ValidityProverError> {
-        let validity_proof = self.get_validity_proof(root_block_number).await?.ok_or(
-            ValidityProverError::ValidityProofNotFound(root_block_number),
-        )?;
-
-        let block_merkle_proof = self
-            .get_block_merkle_proof(root_block_number, leaf_block_number)
-            .await?;
-
-        let account_tree_block_number = if is_prev_account_tree {
-            root_block_number - 1
-        } else {
-            root_block_number
-        };
-
-        let account_membership_proof = self
-            .get_account_membership_proof(account_tree_block_number, pubkey)
-            .await?;
-
-        Ok(UpdateWitness {
-            is_prev_account_tree,
-            validity_proof,
-            block_merkle_proof,
-            account_membership_proof,
-        })
-    }
-
-    pub async fn get_account_info(&self, pubkey: U256) -> Result<AccountInfo, ValidityProverError> {
-        let block_number = self.get_last_block_number().await?;
-        let account_id = self.account_tree.index(block_number as u64, pubkey).await?;
-        let last_block_number = if let Some(index) = account_id {
-            let account_leaf = self
-                .account_tree
-                .get_leaf(block_number as u64, index)
-                .await?;
-            account_leaf.value as u32
-        } else {
-            0
-        };
-        Ok(AccountInfo {
-            block_number,
-            account_id,
-            last_block_number,
-        })
-    }
-
-    pub async fn get_account_info_batch(
-        &self,
-        pubkeys: &[U256],
-    ) -> Result<Vec<AccountInfo>, ValidityProverError> {
-        // early return for empty input
-        if pubkeys.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Get the current block number once for all queries
-        let block_number = self.get_last_block_number().await?;
-
-        // Process all pubkeys in a single batch operation
-        let mut account_infos = Vec::with_capacity(pubkeys.len());
-
-        // Get all account indices in a single batch operation if possible
-        // For now, we'll process them individually but in parallel
-        let mut futures = Vec::with_capacity(pubkeys.len());
-        for pubkey in pubkeys {
-            let account_tree = self.account_tree.clone();
-            let pubkey = *pubkey;
-            let block_number_u64 = block_number as u64;
-
-            // Create a future for each pubkey lookup
-            let future = async move {
-                let account_id = account_tree.index(block_number_u64, pubkey).await?;
-                let last_block_number = if let Some(index) = account_id {
-                    let account_leaf = account_tree.get_leaf(block_number_u64, index).await?;
-                    account_leaf.value as u32
-                } else {
-                    0
-                };
-
-                Ok::<(Option<u64>, u32), ValidityProverError>((account_id, last_block_number))
-            };
-
-            futures.push(future);
-        }
-
-        // Execute all futures concurrently
-        let results = futures::future::join_all(futures).await;
-
-        // Process results
-        for result in results {
-            match result {
-                Ok((account_id, last_block_number)) => {
-                    account_infos.push(AccountInfo {
-                        block_number,
-                        account_id,
-                        last_block_number,
-                    });
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok(account_infos)
-    }
-
-    pub async fn get_deposit_info(
-        &self,
-        deposit_hash: Bytes32,
-    ) -> Result<Option<DepositInfo>, ValidityProverError> {
-        let deposit_info = self
-            .observer
-            .get_deposit_info(deposit_hash)
-            .await
-            .map_err(ValidityProverError::ObserverError)?;
-        Ok(deposit_info)
-    }
-
-    pub async fn get_block_number_by_tx_tree_root(
-        &self,
-        tx_tree_root: Bytes32,
-    ) -> Result<Option<u32>, ValidityProverError> {
-        let record = sqlx::query!(
-            "SELECT block_number FROM tx_tree_roots WHERE tx_tree_root = $1",
-            tx_tree_root.to_bytes_be()
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(record.map(|r| r.block_number as u32))
-    }
-
-    pub async fn get_block_number_by_tx_tree_root_batch(
-        &self,
-        tx_tree_roots: &[Bytes32],
-    ) -> Result<Vec<Option<u32>>, ValidityProverError> {
-        // early return
-        if tx_tree_roots.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Create a mapping to preserve the original order
-        let mut result_map: HashMap<Vec<u8>, Option<u32>> = tx_tree_roots
-            .iter()
-            .map(|root| (root.to_bytes_be(), None))
-            .collect();
-
-        // Prepare the values for the SQL query
-        let values_params: Vec<String> = tx_tree_roots
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("(${})", i + 1))
-            .collect();
-
-        // Build the query with a VALUES clause
-        let query = format!(
-            r#"
-            WITH input_roots(tx_tree_root) AS (
-                VALUES {}
-            )
-            SELECT i.tx_tree_root, t.block_number
-            FROM input_roots i
-            LEFT JOIN tx_tree_roots t ON i.tx_tree_root = t.tx_tree_root
-            "#,
-            values_params.join(",")
-        );
-
-        // Prepare the query arguments
-        let mut query_builder = sqlx::query_as::<_, (Vec<u8>, Option<i32>)>(&query);
-        for root in tx_tree_roots {
-            query_builder = query_builder.bind(root.to_bytes_be());
-        }
-
-        // Execute the query
-        let records = query_builder.fetch_all(&self.pool).await?;
-
-        // Update the result map with the query results
-        for (root, block_number) in records {
-            if let Some(bn) = block_number {
-                result_map.insert(root, Some(bn as u32));
-            }
-        }
-
-        // Return results in the same order as the input
-        Ok(tx_tree_roots
-            .iter()
-            .map(|root| result_map[&root.to_bytes_be()])
-            .collect())
-    }
-
-    pub async fn get_validity_witness(
-        &self,
-        block_number: u32,
-    ) -> Result<ValidityWitness, ValidityProverError> {
-        if block_number == 0 {
-            return Ok(ValidityWitness::genesis());
-        }
-        let record = sqlx::query!(
-            r#"
-            SELECT validity_witness
-            FROM validity_state
-            WHERE block_number = $1
-            "#,
-            block_number as i32,
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(ValidityProverError::ValidityWitnessNotFound(block_number))?;
-        let validity_witness: ValidityWitness = bincode::deserialize(&record.validity_witness)?;
-        Ok(validity_witness)
-    }
-
-    pub async fn get_block_merkle_proof(
-        &self,
-        root_block_number: u32,
-        leaf_block_number: u32,
-    ) -> Result<BlockHashMerkleProof, ValidityProverError> {
-        if leaf_block_number > root_block_number {
-            return Err(ValidityProverError::InputError(
-                "leaf_block_number should be smaller than root_block_number".to_string(),
-            ));
-        }
-        let proof = self
-            .block_tree
-            .prove(root_block_number as u64, leaf_block_number as u64)
-            .await?;
-        Ok(proof)
-    }
-
-    async fn get_account_membership_proof(
-        &self,
-        block_number: u32,
-        pubkey: U256,
-    ) -> Result<AccountMembershipProof, ValidityProverError> {
-        let proof = self
-            .account_tree
-            .prove_membership(block_number as u64, pubkey)
-            .await?;
-        Ok(proof)
-    }
-
-    pub async fn get_latest_validity_proof_block_number(&self) -> Result<u32, ValidityProverError> {
-        let record = sqlx::query!(
-            r#"
-            SELECT block_number
-            FROM validity_proofs
-            ORDER BY block_number DESC
-            LIMIT 1
-            "#,
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        let block_number = record.map(|r| r.block_number as u32).unwrap_or(0);
-        Ok(block_number)
-    }
-
-    pub async fn get_last_block_number(&self) -> Result<u32, ValidityProverError> {
-        let record =
-            sqlx::query!("SELECT MAX(block_number) as last_block_number FROM validity_state")
-                .fetch_optional(&self.pool)
-                .await?;
-        let last_block_number = record.and_then(|r| r.last_block_number).unwrap_or(0); // i32
-
-        Ok(last_block_number as u32)
-    }
-
-    pub async fn get_next_deposit_index(&self) -> Result<u32, ValidityProverError> {
-        let deposit_index = self.observer.get_next_deposit_index().await?;
-        Ok(deposit_index)
-    }
-
-    pub async fn get_latest_included_deposit_index(
-        &self,
-    ) -> Result<Option<u32>, ValidityProverError> {
-        let deposit_index = self.observer.get_latest_included_deposit_index().await?;
-        Ok(deposit_index)
-    }
-
-    pub async fn get_deposit_merkle_proof(
-        &self,
-        block_number: u32,
-        deposit_index: u32,
-    ) -> Result<DepositMerkleProof, ValidityProverError> {
-        let proof = self
-            .deposit_hash_tree
-            .prove(block_number as u64, deposit_index as u64)
-            .await?;
-        Ok(IncrementalMerkleProof(MerkleProof {
-            siblings: proof.0.siblings,
-        }))
-    }
-
+    #[instrument(skip(self))]
     async fn reset_merkle_tree(&self, block_number: u32) -> Result<(), ValidityProverError> {
-        log::warn!("Reset merkle tree from block number {}", block_number);
+        tracing::warn!("Reset merkle tree from block number {}", block_number);
         self.account_tree.reset(block_number as u64).await?;
         self.block_tree.reset(block_number as u64).await?;
         self.deposit_hash_tree.reset(block_number as u64).await?;
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
+        self.observer.leader_election.wait_for_leadership().await?;
         // Get the largest block_number and its proof from the validity_proofs table that already exists
         let record = sqlx::query!(
             r#"
@@ -645,10 +315,10 @@ impl ValidityProver {
                 .get_result(last_validity_proof_block_number)
                 .await?;
             if result.is_none() {
-                log::info!("result not found for {}", last_validity_proof_block_number);
+                tracing::info!("result not found for {}", last_validity_proof_block_number);
                 break;
             }
-            log::info!("result found for {}", last_validity_proof_block_number);
+            tracing::info!("result found for {}", last_validity_proof_block_number);
 
             let result = result.unwrap();
             if let Some(error) = result.error {
@@ -668,7 +338,7 @@ impl ValidityProver {
                 .validity_circuit()
                 .prove(&transition_proof, &prev_proof)
                 .map_err(|e| ValidityProverError::FailedToGenerateValidityProof(e.to_string()))?;
-            log::info!(
+            tracing::info!(
                 "validity proof generated: {}",
                 last_validity_proof_block_number
             );
@@ -696,8 +366,9 @@ impl ValidityProver {
         Ok(())
     }
 
-    // This function is used to setup all tasks in the task manager
+    #[instrument(skip(self))]
     async fn add_tasks(&self) -> Result<(), ValidityProverError> {
+        self.observer.leader_election.wait_for_leadership().await?;
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
@@ -729,7 +400,7 @@ impl ValidityProver {
             if block_number <= current_last_validity_prover_block_number {
                 break;
             }
-            log::info!(
+            tracing::info!(
                 "adding task for block number {} > validity block number {}",
                 block_number,
                 current_last_validity_prover_block_number
@@ -742,74 +413,151 @@ impl ValidityProver {
         Ok(())
     }
 
-    pub(crate) async fn job(&self) -> Result<(), ValidityProverError> {
-        if self.config.sync_interval.is_none() {
-            // If sync_interval is not set, we don't run the sync task
+    async fn sync_validity_witness_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.config.witness_sync_interval));
+        loop {
+            interval.tick().await;
+            self.sync_validity_witness().await?;
+        }
+    }
+
+    async fn generate_validity_proof_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.config.validity_proof_interval));
+        loop {
+            interval.tick().await;
+            self.generate_validity_proof().await?;
+        }
+    }
+
+    async fn add_tasks_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.config.add_tasks_interval));
+        loop {
+            interval.tick().await;
+            self.add_tasks().await?;
+        }
+    }
+
+    async fn cleanup_inactive_tasks_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval = tokio::time::interval(Duration::from_secs(
+            self.config.cleanup_inactive_tasks_interval,
+        ));
+        loop {
+            interval.tick().await;
+            self.manager.cleanup_inactive_tasks().await?;
+        }
+    }
+
+    #[instrument(skip(self))]
+    pub async fn start_all_jobs(&self) -> Result<(), ValidityProverError> {
+        if !self.config.is_sync_mode {
+            // If is_sync_mode is false, do not start the job
             return Ok(());
         }
-        let sync_interval = self.config.sync_interval.unwrap();
 
         // clear all tasks
         self.manager.clear_all().await?;
 
+        // run observer job
+        self.observer.start_all_jobs();
+
+        let this = Arc::new(self.clone());
+
+        let restart_duration = Duration::from_secs(self.config.validity_prover_restart_interval);
+
         // generate validity proof job
-        let self_clone = self.clone();
-        actix_web::rt::spawn(async move {
+        let this_clone = this.clone();
+        tokio::spawn(async move {
+            // restart loop
             loop {
-                let self_clone = self_clone.clone();
-                let generate_validity_proof_result = actix_web::rt::spawn(async move {
-                    if let Err(e) = self_clone.generate_validity_proof().await {
-                        log::error!("Error in generate validity proof: {:?}", e);
+                let this_clone = this_clone.clone();
+                let handler =
+                    tokio::spawn(async move { this_clone.generate_validity_proof_loop().await });
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("generate_validity_proof_loop finished");
                     }
-                })
-                .await;
-                if let Err(e) = generate_validity_proof_result {
-                    log::error!("Panic error in generate validity proof: {:?}", e);
+                    Ok(Err(e)) => {
+                        tracing::error!("generate_validity_proof_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("generate_validity_proof_loop panic: {:?}", e);
+                    }
                 }
-                tokio::time::sleep(Duration::from_secs(GENERATE_VALIDITY_PROOF_INTERVAL)).await;
+                tokio::time::sleep(restart_duration).await;
             }
         });
 
         // add tasks job
-        let self_clone = self.clone();
-        actix_web::rt::spawn(async move {
-            loop {
-                let self_clone = self_clone.clone();
-                let add_task_result = actix_web::rt::spawn(async move {
-                    if let Err(e) = self_clone.add_tasks().await {
-                        log::error!("Error in add tasks: {:?}", e);
-                    }
-                })
-                .await;
-                if let Err(e) = add_task_result {
-                    log::error!("Panic error in add tasks: {:?}", e);
-                }
-                tokio::time::sleep(Duration::from_secs(ADD_TASKS_INTERVAL)).await;
-            }
-        });
-
-        let self_clone = self.clone();
-        actix_web::rt::spawn(async move {
-            loop {
-                let self_clone = self_clone.clone();
-                let sync_result = actix_web::rt::spawn(async move {
-                    if let Err(e) = self_clone.sync().await {
-                        log::error!("Error in sync: {:?}", e);
-                    }
-                })
-                .await;
-                if let Err(e) = sync_result {
-                    log::error!("Panic error in sync: {:?}", e);
-                }
-                tokio::time::sleep(Duration::from_secs(sync_interval)).await;
-            }
-        });
-
-        let manager = self.manager.clone();
+        let this_clone = this.clone();
         tokio::spawn(async move {
-            let manager = manager.clone();
-            if let Err(e) = manager.cleanup_inactive_tasks().await {
-                log::error!("Error in task manager: {:?}", e);
+            // restart loop
+            loop {
+                let this_clone = this_clone.clone();
+                let handler = tokio::spawn(async move { this_clone.add_tasks_loop().await });
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("add_tasks_loop finished");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("add_tasks_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("add_tasks_loop panic: {:?}", e);
+                    }
+                }
+                tokio::time::sleep(restart_duration).await;
+            }
+        });
+
+        // sync validity witness job
+        let this_clone = this.clone();
+        actix_web::rt::spawn(async move {
+            // restart loop
+            loop {
+                let this_clone = this_clone.clone();
+                // using actix_web::rt::spawn because self is not `Send`
+                let handler =
+                    actix_web::rt::spawn(
+                        async move { this_clone.sync_validity_witness_loop().await },
+                    );
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("sync_validity_witness_loop finished");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("sync_validity_witness_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("sync_validity_witness_loop panic: {:?}", e);
+                    }
+                }
+                tokio::time::sleep(restart_duration).await;
+            }
+        });
+
+        // cleanup inactive tasks job
+        let this_clone = this.clone();
+        tokio::spawn(async move {
+            // restart loop
+            loop {
+                let this_clone = this_clone.clone();
+                let handler =
+                    tokio::spawn(async move { this_clone.cleanup_inactive_tasks_loop().await });
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        tracing::error!("cleanup_inactive_tasks_loop finished");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("cleanup_inactive_tasks_loop error: {:?}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("cleanup_inactive_tasks_loop panic: {:?}", e);
+                    }
+                }
+                tokio::time::sleep(restart_duration).await;
             }
         });
 

@@ -52,22 +52,34 @@ pub async fn receive_deposit(
     let receive_block_number = prev_balance_pis.public_state.block_number;
     // Generate witness
     let deposit_info = validity_prover
-        .get_deposit_info(deposit_data.deposit_hash().unwrap())
+        .get_deposit_info(deposit_data.pubkey_salt_hash)
         .await?
         .ok_or(SyncError::DepositInfoNotFound(
             deposit_data.deposit_hash().unwrap(),
         ))?;
-    if receive_block_number < deposit_info.block_number {
+    let settled_block_number = deposit_info
+        .block_number
+        .ok_or(SyncError::DepositIsNotSettled(
+            deposit_data.deposit_hash().unwrap(),
+        ))?;
+    let deposit_index = deposit_info
+        .deposit_index
+        .ok_or(SyncError::DepositIsNotSettled(
+            deposit_data.deposit_hash().unwrap(),
+        ))?;
+
+    if receive_block_number < settled_block_number {
         return Err(SyncError::InternalError(
             "Deposit block number is greater than receive block number".to_string(),
         ));
     }
+
     let deposit_merkle_proof = validity_prover
-        .get_deposit_merkle_proof(receive_block_number, deposit_info.deposit_index)
+        .get_deposit_merkle_proof(receive_block_number, deposit_index)
         .await?;
     let deposit_witness = DepositWitness {
         deposit_salt: deposit_data.deposit_salt,
-        deposit_index: deposit_info.deposit_index,
+        deposit_index,
         deposit: deposit_data.deposit().unwrap(),
         deposit_merkle_proof,
     };

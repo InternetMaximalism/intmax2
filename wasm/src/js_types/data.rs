@@ -87,6 +87,7 @@ impl From<TxData> for JsTxData {
 pub struct JsDepositResult {
     pub deposit_data: JsDepositData,
     pub deposit_digest: String,
+    pub backup_csv: String,
 }
 
 impl From<DepositResult> for JsDepositResult {
@@ -94,6 +95,7 @@ impl From<DepositResult> for JsDepositResult {
         Self {
             deposit_data: deposit_result.deposit_data.into(),
             deposit_digest: deposit_result.deposit_digest.to_string(),
+            backup_csv: deposit_result.backup_csv,
         }
     }
 }
@@ -106,6 +108,7 @@ pub struct JsTxResult {
     pub withdrawal_digests: Vec<String>,
     pub transfer_data_vec: Vec<JsTransferData>,
     pub withdrawal_data_vec: Vec<JsTransferData>,
+    pub backup_csv: String,
 }
 
 impl From<TxResult> for JsTxResult {
@@ -132,6 +135,7 @@ impl From<TxResult> for JsTxResult {
                 .into_iter()
                 .map(JsTransferData::from)
                 .collect(),
+            backup_csv: tx_result.backup_csv,
         }
     }
 }

@@ -5,3 +5,6 @@ logs
 # For testing purposes
 transfers.csv
 private_keys.txt
+
+# Backup files
+data/

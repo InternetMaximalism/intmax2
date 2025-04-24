@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use super::{
-    error::StoreVaultError,
-    s3::{S3Client, S3Config},
-};
+use super::{error::StoreVaultError, s3::S3Config};
 use crate::EnvVar;
 use intmax2_interfaces::{
     api::{
@@ -17,6 +14,11 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait};
 use server_common::db::{DbPool, DbPoolConfig};
+
+#[cfg(test)]
+use crate::app::s3::MockS3Client as S3Client;
+#[cfg(not(test))]
+use crate::app::s3::S3Client;
 
 // get path for s3 object
 pub fn get_path(topic: &str, pubkey: U256, digest: Bytes32) -> String {
@@ -163,7 +165,7 @@ impl S3StoreVault {
         let timestamps = vec![chrono::Utc::now().timestamp(); entries.len()];
         let upload_finished = vec![false; entries.len()];
 
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
             INSERT INTO s3_historical_data (digest, pubkey, topic, timestamp, upload_finished)
             SELECT
@@ -172,7 +174,6 @@ impl S3StoreVault {
                 UNNEST($3::text[]),
                 UNNEST($4::bigint[]),
                 UNNEST($5::bool[])
-            ON CONFLICT (digest) DO NOTHING
             "#,
             &digests_hex,
             &pubkeys,
@@ -181,7 +182,19 @@ impl S3StoreVault {
             &upload_finished
         )
         .execute(&self.pool)
-        .await?;
+        .await;
+
+        match result {
+            Ok(_) => {}
+            Err(sqlx::Error::Database(error))
+                if error.constraint() == Some("s3_historical_data_pkey") =>
+            {
+                return Err(StoreVaultError::SaveHistoryError(
+                    "data with the specified digest already in history".to_owned(),
+                ))
+            }
+            Err(err) => return Err(err.into()),
+        }
 
         // generate presigned urls
         let mut presigned_urls = Vec::with_capacity(entries.len());
@@ -380,10 +393,8 @@ impl S3StoreVault {
                     r#"
                     UPDATE s3_historical_data
                     SET upload_finished = true
-                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
+                    WHERE digest = $1
                     "#,
-                    record.topic,
-                    record.pubkey,
                     record.digest
                 )
                 .execute(&self.pool)
@@ -392,10 +403,8 @@ impl S3StoreVault {
                 sqlx::query!(
                     r#"
                     DELETE FROM s3_historical_data
-                    WHERE topic = $1 AND pubkey = $2 AND digest = $3
+                    WHERE digest = $1
                     "#,
-                    record.topic,
-                    record.pubkey,
                     record.digest
                 )
                 .execute(&self.pool)
@@ -422,11 +431,13 @@ impl S3StoreVault {
 
 #[cfg(test)]
 mod tests {
-
     use intmax2_interfaces::utils::digest::get_digest;
     use intmax2_zkp::ethereum_types::u256::U256;
+    use mockall::predicate::eq;
+    use sqlx::{Executor, PgPool, Postgres};
+    use tokio::time::sleep;
 
-    use super::S3StoreVault;
+    use super::*;
 
     #[tokio::test]
     #[ignore]
@@ -499,5 +510,567 @@ mod tests {
             .unwrap();
         let response = reqwest::Client::new().get(&get_url).send().await.unwrap();
         assert_eq!(response.bytes().await.unwrap().as_ref(), data);
+    }
+
+    /// test case 1: It is expected to get an error while preservation a snapshot for the absent previous digest.
+    #[sqlx::test]
+    async fn save_snapshot_with_invalid_prev_digest_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let vault = create_vault(
+            pool,
+            Config {
+                s3_upload_timeout: 0,
+                s3_download_timeout: 0,
+            },
+        );
+
+        let result = vault
+            .save_snapshot(
+                "topic",
+                U256::from(1),
+                Some(get_digest(b"test data 1")),
+                get_digest(b"test data 2"),
+            )
+            .await;
+
+        // test case 1
+        assert!(matches!(result, Err(StoreVaultError::LockError(_))))
+    }
+
+    /// test case 1: It is expected to remove the existing object in the S3 while preservation a new object with the same public key and topic.
+    ///
+    /// test case 2: it is expected to update the timestep and digest while preservation a new object with the same public key and topic.
+    #[sqlx::test]
+    async fn save_snapshot_with_existed_digest_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let mut vault = create_vault(
+            pool,
+            Config {
+                s3_upload_timeout: 0,
+                s3_download_timeout: 0,
+            },
+        );
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let digest_1 = get_digest(b"test data 1");
+        let digest_2 = get_digest(b"test data 2");
+        let digest_path_1 = get_path(topic, pubkey, digest_1);
+
+        vault
+            .s3_client
+            .expect_delete_object()
+            // it is expected to get only digest_path_1
+            .with(eq(digest_path_1))
+            .returning(|_| Ok(()));
+
+        vault
+            .save_snapshot(topic, pubkey, None, digest_1)
+            .await
+            .unwrap();
+        let (_, timestamp_stage_1) = select_snapshot(pubkey, topic, &vault.pool).await;
+
+        vault
+            .save_snapshot(topic, pubkey, Some(digest_1), digest_2)
+            .await
+            .unwrap();
+        let (digest_stage_2, timestamp_stage_2) = select_snapshot(pubkey, topic, &vault.pool).await;
+
+        // test case 1
+        assert_eq!(Bytes32::from_hex(&digest_stage_2).unwrap(), digest_2);
+        // test case 2
+        assert!(timestamp_stage_2 >= timestamp_stage_1);
+    }
+
+    /// test case 1: It is expected to receive None if there is no data on the given topic and public key in the database.
+    ///
+    /// test case 2: It is expected to get the correct URL if the database has data on a given topic and public key.
+    #[sqlx::test]
+    async fn get_snapshot_url_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let mut vault = create_vault(
+            pool,
+            Config {
+                s3_upload_timeout: 0,
+                s3_download_timeout: 0,
+            },
+        );
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let digest = get_digest(b"test data");
+        let digest_path = get_path(topic, pubkey, digest);
+
+        let url = vault.get_snapshot_url(topic, pubkey).await.unwrap();
+        // test case 1
+        assert_eq!(url, None);
+
+        insert_snapshot(topic, pubkey, digest, &vault.pool).await;
+        // Returns the URL equal to the transferred path
+        vault
+            .s3_client
+            .expect_generate_download_url()
+            .returning(|path, _| Ok(path.to_owned()));
+
+        let url = vault.get_snapshot_url(topic, pubkey).await.unwrap();
+        // test case 2
+        assert_eq!(url, Some(digest_path));
+    }
+
+    /// test case 1: It is expected to get a correct URLS list while preservation a butch data into history.
+    ///
+    /// test case 2: It is expected to get an error while preservation an existing digest in history.
+    ///
+    /// test case 2: It is expected that the upload_finished flag will not be set for just saved data.
+    #[sqlx::test]
+    async fn batch_save_data_url_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let mut vault = create_vault(
+            pool,
+            Config {
+                s3_upload_timeout: 0,
+                s3_download_timeout: 0,
+            },
+        );
+
+        let entry_1 = S3SaveDataEntry {
+            topic: "topic_1".to_owned(),
+            pubkey: U256::from(1),
+            digest: get_digest(b"test data 1"),
+        };
+        let entry_1_digest_path = get_path(&entry_1.topic, entry_1.pubkey, entry_1.digest);
+
+        // Returns the URL equal to the transferred path
+        vault
+            .s3_client
+            .expect_generate_upload_url()
+            .returning(|path, _, _| Ok(path.to_owned()));
+
+        let urls = vault.batch_save_data_url(&[entry_1.clone()]).await.unwrap();
+        // test case 1
+        assert_eq!(urls, vec![entry_1_digest_path]);
+
+        let result = vault.batch_save_data_url(&[entry_1]).await;
+        // test case 2
+        assert!(matches!(result, Err(StoreVaultError::SaveHistoryError(_))));
+
+        let data = select_s3_historical_data(&vault.pool).await;
+        // test case 3
+        assert!(data.iter().all(|(_, uf)| !uf));
+    }
+
+    /// test case 1: It is expected to get an empty urls list when requesting a history with existing topic and pubkey, but absent digests.
+    ///
+    /// test case 2: It is expected to get an empty urls list when requesting a history with existing digests, but absent topic and pubkey.
+    ///
+    /// test case 3: It is expected to get a correct urls list when requesting a history with existing topic, pubkey and digests.
+    #[sqlx::test]
+    async fn get_data_batch_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let mut vault = create_vault(
+            pool,
+            Config {
+                s3_upload_timeout: 0,
+                s3_download_timeout: 0,
+            },
+        );
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let digest = get_digest(b"test data");
+        let digest_path = get_path(topic, pubkey, digest);
+
+        // save test data
+        vault
+            .s3_client
+            .expect_generate_upload_url()
+            .returning(|_, _, _| Ok(String::new()));
+        vault
+            .batch_save_data_url(&[S3SaveDataEntry {
+                topic: topic.to_owned(),
+                pubkey,
+                digest,
+            }])
+            .await
+            .unwrap();
+
+        // Returns the URL equal to the transferred path
+        vault
+            .s3_client
+            .expect_generate_download_url()
+            .returning(|path, _| Ok(path.to_owned()));
+
+        let urls = vault
+            .get_data_batch(topic, pubkey, &[get_digest(b"non existent data")])
+            .await
+            .unwrap();
+        // test case 1
+        assert!(urls.is_empty());
+
+        let urls = vault
+            .get_data_batch("non existent topic", U256::from(u32::MAX), &[digest])
+            .await
+            .unwrap();
+        // test case 2
+        assert!(urls.is_empty());
+
+        let urls = vault
+            .get_data_batch(topic, pubkey, &[digest])
+            .await
+            .unwrap();
+        // test case 3
+        assert_eq!(
+            urls.iter()
+                .map(|u| u.presigned_url.clone())
+                .collect::<Vec<_>>(),
+            vec![digest_path]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![digest]
+        );
+    }
+
+    /// test case 1: It is expected to get an empty urls and metadatas list when requesting a history with absent topic and pubkey.
+    ///
+    /// test case 2: Correct behavior of data requests sorted by increasing is expected:
+    /// at the first request, the metadata contains a cursor that can be used in the second request,
+    /// the second request that receives all the remaining data (exclude cursor).
+    ///
+    /// test case 3: Similarly, test case 2, but the sorting of decrease is used.
+    #[sqlx::test]
+    async fn get_data_sequence_url_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let mut vault = create_vault(
+            pool,
+            Config {
+                s3_upload_timeout: 0,
+                s3_download_timeout: 0,
+            },
+        );
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let entry_1 = S3SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            digest: get_digest(b"test data 1"),
+        };
+        let entry_2 = S3SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            digest: get_digest(b"test data 2"),
+        };
+        let entry_3 = S3SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            digest: get_digest(b"test data 3"),
+        };
+        let entry_1_digest_path = get_path(&entry_1.topic, entry_1.pubkey, entry_1.digest);
+        let entry_2_digest_path = get_path(&entry_2.topic, entry_2.pubkey, entry_2.digest);
+        let entry_3_digest_path = get_path(&entry_3.topic, entry_3.pubkey, entry_3.digest);
+
+        // save test data
+        vault
+            .s3_client
+            .expect_generate_upload_url()
+            .returning(|_, _, _| Ok(String::new()));
+        vault.batch_save_data_url(&[entry_1.clone()]).await.unwrap();
+        sleep(Duration::from_secs(1)).await;
+        vault.batch_save_data_url(&[entry_2.clone()]).await.unwrap();
+        sleep(Duration::from_secs(1)).await;
+        vault.batch_save_data_url(&[entry_3.clone()]).await.unwrap();
+
+        // Returns the URL equal to the transferred path
+        vault
+            .s3_client
+            .expect_generate_download_url()
+            .returning(|path, _| Ok(path.to_owned()));
+
+        let (urls, metadata) = vault
+            .get_data_sequence_url(
+                "non existent topic",
+                U256::from(u32::MAX),
+                &MetaDataCursor::default(),
+            )
+            .await
+            .unwrap();
+        // test case 1
+        assert!(urls.is_empty());
+        assert!(metadata.next_cursor.is_none());
+        assert!(!metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence_url(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: None,
+                    order: CursorOrder::Asc,
+                    limit: Some(2),
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 2
+        assert_eq!(
+            urls.iter()
+                .map(|u| u.presigned_url.clone())
+                .collect::<Vec<_>>(),
+            vec![entry_1_digest_path.clone(), entry_2_digest_path.clone()]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_1.digest, entry_2.digest]
+        );
+        assert_eq!(next_cursor.digest, entry_2.digest);
+        assert!(metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence_url(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: Some(next_cursor),
+                    order: CursorOrder::Asc,
+                    limit: None,
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 2
+        assert_eq!(
+            urls.iter()
+                .map(|u| u.presigned_url.clone())
+                .collect::<Vec<_>>(),
+            vec![entry_3_digest_path.clone()]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_3.digest]
+        );
+        assert_eq!(next_cursor.digest, entry_3.digest);
+        assert!(!metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence_url(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: None,
+                    order: CursorOrder::Desc,
+                    limit: Some(2),
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 3
+        assert_eq!(
+            urls.iter()
+                .map(|u| u.presigned_url.clone())
+                .collect::<Vec<_>>(),
+            vec![entry_3_digest_path, entry_2_digest_path]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_3.digest, entry_2.digest]
+        );
+        assert_eq!(next_cursor.digest, entry_2.digest);
+        assert!(metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+
+        let (urls, metadata) = vault
+            .get_data_sequence_url(
+                topic,
+                pubkey,
+                &MetaDataCursor {
+                    cursor: Some(next_cursor),
+                    order: CursorOrder::Desc,
+                    limit: None,
+                },
+            )
+            .await
+            .unwrap();
+        let next_cursor = metadata.next_cursor.unwrap();
+        // test case 3
+        assert_eq!(
+            urls.iter()
+                .map(|u| u.presigned_url.clone())
+                .collect::<Vec<_>>(),
+            vec![entry_1_digest_path]
+        );
+        assert_eq!(
+            urls.iter().map(|u| u.meta.digest).collect::<Vec<_>>(),
+            vec![entry_1.digest]
+        );
+        assert_eq!(next_cursor.digest, entry_1.digest);
+        assert!(!metadata.has_more);
+        assert_eq!(metadata.total_count, 3);
+    }
+
+    /// test case 1: It is expected that the upload_finished flag will be installed only for the data that is exist in S3.
+    ///
+    /// test case 2: It is expected that the data that are not found in the S3 will not be affected if upload timeout has not yet expired.
+    ///
+    /// test case 3: It is expected that the data that are not found in the S3 will be deleted if the upload timeout is expired.
+    #[sqlx::test]
+    async fn cleanup_data_test(pool: PgPool) {
+        let _ = env_logger::builder().is_test(true).try_init();
+        const S3_UPLOAD_TIMEOUT: u64 = 3;
+        let mut vault = create_vault(
+            pool,
+            Config {
+                s3_upload_timeout: S3_UPLOAD_TIMEOUT,
+                s3_download_timeout: 0,
+            },
+        );
+
+        let topic = "topic";
+        let pubkey = U256::from(1);
+        let entry_1 = S3SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            digest: get_digest(b"test data 1"),
+        };
+        let entry_2 = S3SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            digest: get_digest(b"test data 2"),
+        };
+        let entry_3 = S3SaveDataEntry {
+            topic: topic.to_owned(),
+            pubkey,
+            digest: get_digest(b"test data 3"),
+        };
+        let entry_1_digest_path = get_path(&entry_1.topic, entry_1.pubkey, entry_1.digest);
+        let entry_2_digest_path = get_path(&entry_2.topic, entry_2.pubkey, entry_2.digest);
+        let entry_3_digest_path = get_path(&entry_3.topic, entry_3.pubkey, entry_3.digest);
+
+        // save test data
+        vault
+            .s3_client
+            .expect_generate_upload_url()
+            .returning(|_, _, _| Ok(String::new()));
+        vault.batch_save_data_url(&[entry_1.clone()]).await.unwrap();
+        vault.batch_save_data_url(&[entry_2.clone()]).await.unwrap();
+        sleep(Duration::from_secs(S3_UPLOAD_TIMEOUT)).await;
+        vault.batch_save_data_url(&[entry_3.clone()]).await.unwrap();
+
+        // Returns the existence of an object for each path
+        {
+            let entry_1_digest_path = entry_1_digest_path.clone();
+            let entry_2_digest_path = entry_2_digest_path.clone();
+            let entry_3_digest_path = entry_3_digest_path.clone();
+            vault
+                .s3_client
+                .expect_check_object_exists()
+                .returning(move |path| {
+                    let is_exist = match path {
+                        p if p == entry_1_digest_path => true,
+                        p if p == entry_2_digest_path => false,
+                        p if p == entry_3_digest_path => false,
+                        _ => panic!("testing data initialization error"),
+                    };
+                    Ok(is_exist)
+                });
+        }
+
+        vault.cleanup_data().await.unwrap();
+        let remaining_data = select_s3_historical_data(&vault.pool).await;
+        // test case 1
+        assert!(remaining_data
+            .iter()
+            .filter(|(p, _)| *p == entry_1_digest_path)
+            .all(|(_, uf)| *uf));
+        // test case 2
+        assert!(remaining_data
+            .iter()
+            .filter(|(p, _)| *p == entry_3_digest_path)
+            .all(|(_, uf)| !*uf));
+        // test case 3
+        assert_eq!(
+            remaining_data
+                .iter()
+                .filter(|(p, _)| *p == entry_2_digest_path)
+                .count(),
+            0
+        );
+    }
+
+    fn create_vault(pool: PgPool, config: Config) -> S3StoreVault {
+        let pool = DbPool::new(pool);
+        let s3_client = S3Client::default();
+
+        S3StoreVault {
+            config,
+            pool,
+            s3_client,
+        }
+    }
+
+    async fn select_snapshot(
+        pubkey: U256,
+        topic: &str,
+        executor: impl Executor<'_, Database = Postgres>,
+    ) -> (String, i64) {
+        let record = sqlx::query!(
+            r#"
+            SELECT digest, timestamp FROM s3_snapshot_data
+            WHERE pubkey = $1 AND topic = $2
+            "#,
+            pubkey.to_hex(),
+            topic,
+        )
+        .fetch_one(executor)
+        .await
+        .unwrap();
+
+        (record.digest, record.timestamp)
+    }
+
+    async fn insert_snapshot(
+        topic: &str,
+        pubkey: U256,
+        digest: Bytes32,
+        executor: impl Executor<'_, Database = Postgres>,
+    ) {
+        sqlx::query!(
+            r#"
+            INSERT INTO s3_snapshot_data (pubkey, topic, digest, timestamp)
+            VALUES ($1, $2, $3, $4)
+            "#,
+            pubkey.to_hex(),
+            topic,
+            digest.to_hex(),
+            chrono::Utc::now().timestamp() as i64
+        )
+        .execute(executor)
+        .await
+        .unwrap();
+    }
+
+    async fn select_s3_historical_data(
+        executor: impl Executor<'_, Database = Postgres>,
+    ) -> Vec<(String, bool)> {
+        let records = sqlx::query!(
+            r#"
+            SELECT digest, upload_finished
+            FROM s3_historical_data
+            "#,
+        )
+        .fetch_all(executor)
+        .await
+        .unwrap();
+
+        records
+            .into_iter()
+            .map(|r| (r.digest, r.upload_finished))
+            .collect()
     }
 }

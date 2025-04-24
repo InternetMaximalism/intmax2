@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT rollup_contract_address, liquidity_contract_address \n            FROM settings \n            WHERE singleton_key = true\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rollup_contract_address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "liquidity_contract_address",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b658a691db6892f2e351e1f52dc138863f3691af0561bdff70ba364a331adbd0"
+}

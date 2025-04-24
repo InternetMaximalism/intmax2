@@ -38,7 +38,6 @@ export const env = cleanEnv(process.env, {
     L2_RPC_URL: url(),
     L2_CHAIN_ID: num(),
     ROLLUP_CONTRACT_ADDRESS: str(),
-    ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER: num(),
     WITHDRAWAL_CONTRACT_ADDRESS: str(),
 
     // Private ZKP server configurations
@@ -65,7 +64,6 @@ export const config = new Config(
     env.L2_RPC_URL,
     BigInt(env.L2_CHAIN_ID),
     env.ROLLUP_CONTRACT_ADDRESS,
-    BigInt(env.ROLLUP_CONTRACT_DEPLOYED_BLOCK_NUMBER),
     env.WITHDRAWAL_CONTRACT_ADDRESS,
     env.USE_PRIVATE_ZKP_SERVER,
     env.USE_S3,

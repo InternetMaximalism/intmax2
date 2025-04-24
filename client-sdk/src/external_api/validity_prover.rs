@@ -108,9 +108,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
 
     async fn get_deposit_info(
         &self,
-        deposit_hash: Bytes32,
+        pubkey_salt_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ServerError> {
-        let query = GetDepositInfoQuery { deposit_hash };
+        let query = GetDepositInfoQuery { pubkey_salt_hash };
         let response: GetDepositInfoResponse = get_request(
             &self.base_url,
             "/validity-prover/get-deposit-info",
@@ -122,13 +122,13 @@ impl ValidityProverClientInterface for ValidityProverClient {
 
     async fn get_deposit_info_batch(
         &self,
-        deposit_hashes: &[Bytes32],
+        pubkey_salt_hashes: &[Bytes32],
     ) -> Result<Vec<Option<DepositInfo>>, ServerError> {
-        let mut all_deposit_info = Vec::with_capacity(deposit_hashes.len());
+        let mut all_deposit_info = Vec::with_capacity(pubkey_salt_hashes.len());
 
-        for chunk in deposit_hashes.chunks(MAX_BATCH_SIZE) {
+        for chunk in pubkey_salt_hashes.chunks(MAX_BATCH_SIZE) {
             let request = GetDepositInfoBatchRequest {
-                deposit_hashes: chunk.to_vec(),
+                pubkey_salt_hashes: chunk.to_vec(),
             };
 
             let response: GetDepositInfoBatchResponse = post_request(

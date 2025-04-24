@@ -6,6 +6,7 @@ pub mod erc721_contract;
 pub mod error;
 pub mod handlers;
 pub mod liquidity_contract;
+
 pub mod proxy_contract;
 pub mod rollup_contract;
 pub mod utils;

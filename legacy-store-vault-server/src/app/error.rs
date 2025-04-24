@@ -8,4 +8,7 @@ pub enum StoreVaultError {
 
     #[error("Deserialization error: {0}")]
     DeserializationError(#[from] bincode::Error),
+
+    #[error("Save history error: {0}")]
+    SaveHistoryError(String),
 }

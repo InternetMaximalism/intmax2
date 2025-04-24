@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    INSERT INTO settings \n                    (rollup_contract_address, liquidity_contract_address) \n                    VALUES ($1, $2)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9e391da128924f112a11eee2720ae6b421d3ac0060e7f4f53a5478ce0706fecb"
+}

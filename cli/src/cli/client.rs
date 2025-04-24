@@ -1,3 +1,5 @@
+use std::{path::PathBuf, sync::Arc};
+
 use intmax2_client_sdk::{
     client::{client::Client, config::ClientConfig},
     external_api::{
@@ -6,6 +8,9 @@ use intmax2_client_sdk::{
         contract::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
+        },
+        local_backup_store_vault::{
+            local_store_vault::LocalStoreVaultClient, LocalBackupStoreVaultClient,
         },
         private_zkp_server::{PrivateZKPServerClient, PrivateZKPServerConfig},
         s3_store_vault::S3StoreVaultClient,
@@ -16,7 +21,7 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::api::{
     balance_prover::interface::BalanceProverClientInterface,
-    store_vault_server::interface::StoreVaultClientInterface,
+    store_vault_server::{interface::StoreVaultClientInterface, types::StoreVaultType},
 };
 
 use crate::env_var::EnvVar;
@@ -27,15 +32,39 @@ pub fn get_client() -> Result<Client, CliError> {
     let env = envy::from_env::<EnvVar>()?;
     let block_builder = Box::new(BlockBuilderClient::new());
 
-    let use_s3 = env.use_s3.unwrap_or(true);
-    let store_vault_server: Box<dyn StoreVaultClientInterface> = if use_s3 {
-        Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
-    } else {
-        Box::new(StoreVaultServerClient::new(
-            &env.store_vault_server_base_url,
-        ))
+    let root_path = get_backup_root_path(&env)?;
+    if env.store_vault_type != StoreVaultType::Local && env.store_vault_server_base_url.is_none() {
+        return Err(CliError::EnvError(
+            "store_vault_server_base_url is required".to_string(),
+        ));
+    }
+    let store_vault_server: Box<dyn StoreVaultClientInterface> = match env.store_vault_type {
+        StoreVaultType::Local => Box::new(LocalStoreVaultClient::new(root_path)),
+        StoreVaultType::LegacyRemote => Box::new(StoreVaultServerClient::new(
+            &env.store_vault_server_base_url.unwrap(),
+        )),
+        StoreVaultType::Remote => Box::new(S3StoreVaultClient::new(
+            &env.store_vault_server_base_url.unwrap(),
+        )),
+        StoreVaultType::RemoteWithBackup => {
+            let inner_store_vault_server: Box<dyn StoreVaultClientInterface> = Box::new(
+                S3StoreVaultClient::new(&env.store_vault_server_base_url.unwrap()),
+            );
+            Box::new(LocalBackupStoreVaultClient::new(
+                Arc::new(inner_store_vault_server),
+                root_path,
+            ))
+        }
+        StoreVaultType::LegacyRemoteWithBackup => {
+            let inner_store_vault_server: Box<dyn StoreVaultClientInterface> = Box::new(
+                StoreVaultServerClient::new(&env.store_vault_server_base_url.unwrap()),
+            );
+            Box::new(LocalBackupStoreVaultClient::new(
+                Arc::new(inner_store_vault_server),
+                root_path,
+            ))
+        }
     };
-
     let validity_prover = Box::new(ValidityProverClient::new(&env.validity_prover_base_url));
     let balance_prover: Box<dyn BalanceProverClientInterface> =
         if env.use_private_zkp_server.unwrap_or(true) {
@@ -61,7 +90,6 @@ pub fn get_client() -> Result<Client, CliError> {
         &env.l2_rpc_url,
         env.l2_chain_id,
         env.rollup_contract_address,
-        env.rollup_contract_deployed_block_number,
     );
     let withdrawal_contract = WithdrawalContract::new(
         &env.l2_rpc_url,
@@ -93,4 +121,16 @@ pub fn get_client() -> Result<Client, CliError> {
     };
 
     Ok(client)
+}
+
+pub fn get_backup_root_path(env: &EnvVar) -> Result<PathBuf, CliError> {
+    let root_path = env.local_backup_path.clone().map_or_else(
+        || {
+            let mut path = dirs::home_dir().unwrap();
+            path.push(".intmax2/backup");
+            path
+        },
+        PathBuf::from,
+    );
+    Ok(root_path)
 }

@@ -49,7 +49,7 @@ type DescribeFuture<'e, DB> =
 impl<'c> Executor<'c> for &'c TracingPool {
     type Database = Postgres;
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn execute<'e, 'q: 'e, Q>(
         self,
         query: Q,
@@ -59,7 +59,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Q: Send + 'q + sqlx::Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -68,14 +68,14 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.execute(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn fetch_many<'e, 'q: 'e, E>(self, query: E) -> QueryStream<'e>
     where
         'c: 'e,
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -84,7 +84,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.fetch_many(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn fetch_optional<'e, 'q: 'e, E>(
         self,
         query: E,
@@ -94,7 +94,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -103,7 +103,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.fetch_optional(query))
     }
 
-    #[instrument(name = "sql_prepare", skip(self, sql, parameters))]
+    #[instrument(level = "debug", name = "sql_prepare", skip(self, sql, parameters))]
     fn prepare_with<'e, 'q: 'e>(
         self,
         sql: &'q str,
@@ -115,7 +115,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
         Box::pin(self.pool.prepare_with(sql, parameters))
     }
 
-    #[instrument(name = "sql_describe", skip(self, sql))]
+    #[instrument(level = "debug", name = "sql_describe", skip(self, sql))]
     fn describe<'e, 'q: 'e>(self, sql: &'q str) -> DescribeFuture<'e, Self::Database>
     where
         'c: 'e,
@@ -127,7 +127,7 @@ impl<'c> Executor<'c> for &'c TracingPool {
 impl<'c> Executor<'c> for TracingPool {
     type Database = Postgres;
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn execute<'e, 'q: 'e, Q>(
         self,
         query: Q,
@@ -137,7 +137,7 @@ impl<'c> Executor<'c> for TracingPool {
         Q: Send + 'q + sqlx::Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -146,14 +146,14 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.execute(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()),, skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()),, skip(self, query))]
     fn fetch_many<'e, 'q: 'e, E>(self, query: E) -> QueryStream<'e>
     where
         'c: 'e,
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -162,7 +162,7 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.fetch_many(query))
     }
 
-    #[instrument(name = "sql", fields(query = %query.sql()), skip(self, query))]
+    #[instrument(level = "debug", name = "sql", fields(query = %query.sql()), skip(self, query))]
     fn fetch_optional<'e, 'q: 'e, E>(
         self,
         query: E,
@@ -172,7 +172,7 @@ impl<'c> Executor<'c> for TracingPool {
         E: 'q + Send + Execute<'q, Self::Database>,
     {
         let operation = sql_summary(&query);
-        let _span = tracing::info_span!(
+        let _span = tracing::debug_span!(
             "db",
             "operation" = operation,
             "otel.name" = %format!("DB: {}", operation),
@@ -181,7 +181,7 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.fetch_optional(query))
     }
 
-    #[instrument(name = "sql_prepare", skip(self, sql, parameters))]
+    #[instrument(level = "debug", name = "sql_prepare", skip(self, sql, parameters))]
     fn prepare_with<'e, 'q: 'e>(
         self,
         sql: &'q str,
@@ -193,7 +193,7 @@ impl<'c> Executor<'c> for TracingPool {
         Box::pin(self.pool.prepare_with(sql, parameters))
     }
 
-    #[instrument(name = "sql_describe", skip(self, sql))]
+    #[instrument(level = "debug", name = "sql_describe", skip(self, sql))]
     fn describe<'e, 'q: 'e>(self, sql: &'q str) -> DescribeFuture<'e, Self::Database>
     where
         'c: 'e,

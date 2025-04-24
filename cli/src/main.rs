@@ -3,6 +3,7 @@ use colored::Colorize as _;
 use intmax2_cli::{
     args::{Args, Commands},
     cli::{
+        backup::{incorporate_backup, make_history_backup},
         claim::claim_withdrawals,
         deposit::deposit,
         error::CliError,
@@ -15,6 +16,7 @@ use intmax2_cli::{
     format::{format_token_info, parse_generic_address, privkey_to_keyset},
 };
 use intmax2_client_sdk::client::sync::utils::generate_salt;
+use intmax2_interfaces::utils::random::default_rng;
 use intmax2_zkp::{
     common::{signature_content::key_set::KeySet, transfer::Transfer},
     ethereum_types::{u256::U256 as IU256, u32limb_trait::U32LimbTrait},
@@ -136,12 +138,11 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             token_type,
             token_address,
             token_id,
-            is_mining,
+            mining,
         } => {
             let key = privkey_to_keyset(private_key);
             let (amount, token_address, token_id) =
                 format_token_info(token_type, amount, token_address, token_id)?;
-            let is_mining = is_mining.unwrap_or(false);
             deposit(
                 key,
                 eth_private_key,
@@ -149,7 +150,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
                 amount,
                 token_address,
                 token_id,
-                is_mining,
+                mining,
             )
             .await?;
         }
@@ -205,8 +206,21 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let key = privkey_to_keyset(private_key);
             resync(key, deep).await?;
         }
+        Commands::MakeBackup {
+            private_key,
+            dir,
+            from,
+        } => {
+            let key = privkey_to_keyset(private_key);
+            let from = from.unwrap_or_default();
+            let dir = dir.unwrap_or_default();
+            make_history_backup(key, &dir, from).await?;
+        }
+        Commands::IncorporateBackup { path } => {
+            incorporate_backup(&path)?;
+        }
         Commands::GenerateKey => {
-            let mut rng = rand::thread_rng();
+            let mut rng = default_rng();
             let key = KeySet::rand(&mut rng);
             let private_key = BigUint::from(key.privkey);
             let private_key: IU256 = private_key.try_into().unwrap();

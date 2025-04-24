@@ -6,7 +6,7 @@ use intmax2_client_sdk::{
     client::key_from_eth::generate_intmax_account_from_eth_key,
     external_api::contract::utils::get_address,
 };
-use intmax2_zkp::common::signature::key_set::KeySet;
+use intmax2_zkp::common::signature_content::key_set::KeySet;
 use tiny_hderive::bip32::ExtendedPrivKey;
 
 #[derive(Debug, Clone, Copy)]

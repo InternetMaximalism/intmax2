@@ -27,6 +27,12 @@ pub struct GetNextDepositIndexResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GetLastDepositIdResponse {
+    pub deposit_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetLatestIncludedDepositIndexResponse {
     pub deposit_index: Option<u32>,
 }
@@ -49,7 +55,7 @@ pub struct GetUpdateWitnessResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDepositInfoQuery {
-    pub deposit_hash: Bytes32,
+    pub pubkey_salt_hash: Bytes32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,7 +67,7 @@ pub struct GetDepositInfoResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDepositInfoBatchRequest {
-    pub deposit_hashes: Vec<Bytes32>,
+    pub pubkey_salt_hashes: Vec<Bytes32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

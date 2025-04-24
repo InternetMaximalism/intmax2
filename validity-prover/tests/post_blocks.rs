@@ -5,7 +5,7 @@ use intmax2_client_sdk::external_api::contract::{
 };
 use intmax2_zkp::common::signature_content::SignatureContent;
 use server_common::logger::init_logger;
-use validity_prover::Env;
+use validity_prover::EnvVar;
 
 #[tokio::test]
 async fn post_blocks() -> anyhow::Result<()> {
@@ -13,18 +13,17 @@ async fn post_blocks() -> anyhow::Result<()> {
 
     let anvil = Anvil::new().spawn();
     dotenv::dotenv().ok();
-    let env = envy::from_env::<Env>().unwrap();
+    let env = envy::from_env::<EnvVar>().unwrap();
 
     // magic-number index=1 is key for block builder
     let block_builder_private_key: [u8; 32] = anvil.keys()[1].to_bytes().into();
     let block_builder_private_key = H256::from_slice(&block_builder_private_key);
 
-    let mut rng = rand::thread_rng();
+    let mut rng = intmax2_interfaces::utils::random::default_rng();
     let rollup_contract = RollupContract::new(
         &env.l2_rpc_url,
         env.l2_chain_id,
         env.rollup_contract_address,
-        env.rollup_contract_deployed_block_number,
     );
 
     let block_number = get_latest_block_number(&env.l2_rpc_url).await?;

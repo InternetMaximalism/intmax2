@@ -20,9 +20,9 @@ use std::time::Duration;
 
 use server_common::redis::cache::RedisCache;
 
-use crate::{app::validity_prover::ValidityProver, Env};
+use crate::{app::validity_prover::ValidityProver, EnvVar};
 
-pub struct Config {
+pub struct CacheConfig {
     pub dynamic_ttl: Duration,
     pub static_ttl: Duration,
 }
@@ -32,14 +32,14 @@ pub struct Config {
 pub struct State {
     pub validity_prover: ValidityProver,
     pub cache: RedisCache,
-    pub config: Config,
+    pub config: CacheConfig,
 }
 
 impl State {
-    pub async fn new(env: &Env) -> anyhow::Result<Self> {
+    pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
         let validity_prover = ValidityProver::new(env).await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
-        let config = Config {
+        let config = CacheConfig {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
             static_ttl: Duration::from_secs(env.static_cache_ttl),
         };
@@ -51,7 +51,7 @@ impl State {
     }
 
     pub async fn job(&self) {
-        self.validity_prover.clone().job().await.unwrap();
+        self.validity_prover.clone().start_all_jobs().await.unwrap();
     }
 
     pub async fn get_block_number(&self) -> anyhow::Result<u32> {
@@ -91,11 +91,33 @@ impl State {
         if let Some(deposit_index) = self.cache.get::<V>(key).await? {
             Ok(deposit_index)
         } else {
-            let deposit_index = self.validity_prover.get_next_deposit_index().await?;
+            let deposit_index = self
+                .validity_prover
+                .observer
+                .get_next_deposit_index()
+                .await?;
             self.cache
                 .set_with_ttl::<V>(key, &deposit_index, self.config.dynamic_ttl)
                 .await?;
             Ok(deposit_index)
+        }
+    }
+
+    pub async fn get_last_deposit_id(&self) -> anyhow::Result<u64> {
+        type V = u64;
+        let key = "last_deposit_id";
+        if let Some(deposit_id) = self.cache.get::<V>(key).await? {
+            Ok(deposit_id)
+        } else {
+            let deposit_id = self
+                .validity_prover
+                .observer
+                .get_local_last_deposit_id()
+                .await?;
+            self.cache
+                .set_with_ttl::<V>(key, &deposit_id, self.config.dynamic_ttl)
+                .await?;
+            Ok(deposit_id)
         }
     }
 
@@ -107,6 +129,7 @@ impl State {
         } else {
             let deposit_index = self
                 .validity_prover
+                .observer
                 .get_latest_included_deposit_index()
                 .await?;
             self.cache
@@ -198,7 +221,8 @@ impl State {
         } else {
             let deposit_info = self
                 .validity_prover
-                .get_deposit_info(request.deposit_hash)
+                .observer
+                .get_deposit_info(request.pubkey_salt_hash)
                 .await?;
             // the result is mutable
             self.cache
@@ -213,9 +237,9 @@ impl State {
         request: &GetDepositInfoBatchRequest,
     ) -> anyhow::Result<GetDepositInfoBatchResponse> {
         // should use batch query instead
-        let mut futures = Vec::with_capacity(request.deposit_hashes.len());
-        for &deposit_hash in &request.deposit_hashes {
-            let query = GetDepositInfoQuery { deposit_hash };
+        let mut futures = Vec::with_capacity(request.pubkey_salt_hashes.len());
+        for &pubkey_salt_hash in &request.pubkey_salt_hashes {
+            let query = GetDepositInfoQuery { pubkey_salt_hash };
             let future = async move { self.get_deposit_info(query).await };
             futures.push(future);
         }

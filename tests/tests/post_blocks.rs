@@ -29,7 +29,7 @@ pub struct EnvVar {
 #[tokio::test]
 #[ignore]
 async fn post_blocks() -> anyhow::Result<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = intmax2_interfaces::utils::random::default_rng();
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
@@ -40,7 +40,6 @@ async fn post_blocks() -> anyhow::Result<()> {
         &env.l2_rpc_url,
         env.l2_chain_id,
         env.rollup_contract_address,
-        env.rollup_contract_deployed_block_number,
     );
     let block_builder_address = ethereum_types::address::Address::from_bytes_be(
         get_address(env.l2_chain_id, env.deployer_private_key).as_bytes(),

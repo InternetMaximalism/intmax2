@@ -1,4 +1,6 @@
-use intmax2_interfaces::{api::block_builder::interface::Fee, data::user_data::UserData};
+use intmax2_interfaces::{
+    api::block_builder::interface::Fee, data::user_data::UserData, utils::random::default_rng,
+};
 use intmax2_zkp::{
     common::{
         private_state::FullPrivateState, salt::Salt, transfer::Transfer,
@@ -18,8 +20,7 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 pub fn generate_salt() -> Salt {
-    let mut rng = rand::thread_rng();
-    Salt::rand(&mut rng)
+    Salt::rand(&mut default_rng())
 }
 
 pub fn quote_withdrawal_claim_fee(

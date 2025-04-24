@@ -136,3 +136,31 @@ impl S3Client {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mockall::mock! {
+    pub S3Client {
+        pub fn new(aws_config: SdkConfig, config: S3Config) -> Self;
+
+        pub async fn generate_upload_url(
+            &self,
+            key: &str,
+            content_type: &str,
+            expiration: Duration,
+        ) -> Result<String>;
+
+        pub fn generate_download_url(
+            &self,
+            resource_path: &str,
+            expiration: Duration,
+        ) -> Result<String>;
+
+        pub async fn check_object_exists(&self, key: &str) -> Result<bool>;
+
+        pub async fn delete_object(&self, key: &str) -> Result<()>;
+    }
+
+    impl Clone for S3Client {
+        fn clone(&self) -> Self;
+    }
+}

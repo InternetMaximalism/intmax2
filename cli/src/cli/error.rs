@@ -1,7 +1,9 @@
 use envy::Error as EnvyError;
 use intmax2_client_sdk::{
     client::{error::ClientError, sync::error::SyncError},
-    external_api::contract::error::BlockchainError,
+    external_api::{
+        contract::error::BlockchainError, local_backup_store_vault::error::LocalStoreVaultError,
+    },
 };
 use intmax2_interfaces::api::error::ServerError;
 
@@ -21,8 +23,14 @@ pub enum CliError {
     #[error("Client error: {0}")]
     ClientError(#[from] ClientError),
 
+    #[error("Local store vault error: {0}")]
+    LocalStoreVaultError(#[from] LocalStoreVaultError),
+
     #[error("CSV deserialize error: {0}")]
     CSVDeserializeError(#[from] csv::Error),
+
+    #[error("Backup error: {0}")]
+    BackupError(String),
 
     #[error("Too many transfer: {0}")]
     TooManyTransfer(usize),

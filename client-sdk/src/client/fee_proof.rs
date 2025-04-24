@@ -8,6 +8,7 @@ use intmax2_interfaces::{
         data_type::DataType, encryption::BlsEncryption, proof_compression::CompressedSpentProof,
         sender_proof_set::SenderProofSet, transfer_data::TransferData, user_data::UserData,
     },
+    utils::random::default_rng,
 };
 use intmax2_zkp::{
     common::{
@@ -70,7 +71,7 @@ pub async fn generate_fee_proof(
                 spent_proof: compressed_spent_proof,
                 prev_balance_proof: user_data.balance_proof.clone().unwrap(), // unwrap is safe
             };
-            let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
+            let ephemeral_key = KeySet::rand(&mut default_rng());
             store_vault_server
                 .save_snapshot(
                     ephemeral_key,

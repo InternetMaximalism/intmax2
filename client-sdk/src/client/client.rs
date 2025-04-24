@@ -22,6 +22,7 @@ use intmax2_interfaces::{
         tx_data::TxData,
         user_data::{Balances, ProcessStatus},
     },
+    utils::random::default_rng,
 };
 use intmax2_zkp::{
     common::{
@@ -38,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
-        fee_payment::generate_withdrawal_transfers,
+        fee_payment::generate_withdrawal_transfers, receipt::generate_transfer_receipt,
         strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt,
     },
     external_api::{
@@ -46,17 +47,20 @@ use crate::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
             withdrawal_contract::WithdrawalContract,
         },
+        local_backup_store_vault::diff_data_client::make_backup_csv_from_entries,
         utils::time::sleep_for,
     },
 };
 
 use super::{
+    backup::make_history_backup,
     config::ClientConfig,
     error::ClientError,
     fee_payment::{quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers},
     fee_proof::{generate_fee_proof, quote_transfer_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
     misc::payment_memo::PaymentMemo,
+    receipt::validate_transfer_receipt,
     strategy::{
         mining::{fetch_mining_info, Mining},
         tx_status::{get_tx_status, TxStatus},
@@ -103,6 +107,7 @@ pub struct TxRequestMemo {
 pub struct DepositResult {
     pub deposit_data: DepositData,
     pub deposit_digest: Bytes32,
+    pub backup_csv: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -121,6 +126,7 @@ pub struct TxResult {
     pub withdrawal_digests: Vec<Bytes32>,
     pub transfer_data_vec: Vec<TransferData>,
     pub withdrawal_data_vec: Vec<TransferData>,
+    pub backup_csv: String,
 }
 
 impl Client {
@@ -169,19 +175,21 @@ impl Client {
             pubkey,
             data: deposit_data.encrypt(pubkey, None)?,
         };
-        let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
+        let ephemeral_key = KeySet::rand(&mut default_rng());
         let digests = self
             .store_vault_server
-            .save_data_batch(ephemeral_key, &[save_entry])
+            .save_data_batch(ephemeral_key, &[save_entry.clone()])
             .await?;
         let deposit_digest = *digests.first().ok_or(ClientError::UnexpectedError(
             "deposit_digest not found".to_string(),
         ))?;
+        let backup_csv = make_backup_csv_from_entries(&[save_entry])
+            .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {}", e)))?;
         let result = DepositResult {
             deposit_data,
             deposit_digest,
+            backup_csv,
         };
-
         Ok(result)
     }
 
@@ -325,7 +333,7 @@ impl Client {
             spent_proof,
             prev_balance_proof,
         };
-        let ephemeral_key = KeySet::rand(&mut rand::thread_rng());
+        let ephemeral_key = KeySet::rand(&mut default_rng());
         self.store_vault_server
             .save_snapshot(
                 ephemeral_key,
@@ -625,7 +633,6 @@ impl Client {
 
         // Save payment memo after posting signature because it's not critical data,
         // and we should reduce the time before posting the signature.
-
         let mut misc_entries = Vec::new();
         for memo_entry in memo.payment_memos.iter() {
             let (position, transfer_data) = transfer_data_vec
@@ -657,12 +664,20 @@ impl Client {
             .save_data_batch(key, &misc_entries)
             .await?;
 
+        let all_entries = entries
+            .into_iter()
+            .chain(misc_entries.into_iter())
+            .collect::<Vec<_>>();
+        let backup_csv = make_backup_csv_from_entries(&all_entries)
+            .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {}", e)))?;
+
         let result = TxResult {
             tx_tree_root: proposal.block_sign_payload.tx_tree_root,
             transfer_digests,
             withdrawal_digests,
             transfer_data_vec,
             withdrawal_data_vec,
+            backup_csv,
         };
 
         Ok(result)
@@ -831,6 +846,33 @@ impl Client {
         )
         .await?;
         Ok(withdrawal_transfers)
+    }
+
+    pub async fn make_history_backup(
+        &self,
+        key: KeySet,
+        from: u64,
+        chunk_size: usize,
+    ) -> Result<Vec<String>, ClientError> {
+        let csvs = make_history_backup(self, key, from, chunk_size).await?;
+        Ok(csvs)
+    }
+
+    pub async fn generate_transfer_receipt(
+        &self,
+        key: KeySet,
+        transfer_digest: Bytes32,
+        receiver: U256,
+    ) -> Result<String, ClientError> {
+        generate_transfer_receipt(self, key, transfer_digest, receiver).await
+    }
+
+    pub async fn validate_transfer_receipt(
+        &self,
+        key: KeySet,
+        transfer_receipt: &str,
+    ) -> Result<TransferData, ClientError> {
+        validate_transfer_receipt(self, key, transfer_receipt).await
     }
 }
 

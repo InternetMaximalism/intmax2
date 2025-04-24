@@ -62,6 +62,8 @@ pub async fn deposit(
         )
         .await?;
 
+    dbg!(deposit_result.deposit_data.pubkey_salt_hash);
+
     let deposit_data = deposit_result.deposit_data;
 
     let aml_permission = fetch_predicate_permission(

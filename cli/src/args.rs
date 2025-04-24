@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 use ethers::types::{Address as EthAddress, H256};
 use intmax2_interfaces::{
@@ -68,8 +70,8 @@ pub enum Commands {
         token_address: Option<EthAddress>,
         #[clap(long)]
         token_id: Option<U256>,
-        #[clap(long)]
-        is_mining: Option<bool>,
+        #[clap(long, default_value = "false")]
+        mining: bool,
     },
     SyncWithdrawals {
         #[clap(long)]
@@ -120,6 +122,18 @@ pub enum Commands {
         private_key: H256,
         #[clap(long, default_value = "false")]
         deep: bool,
+    },
+    MakeBackup {
+        #[clap(long)]
+        private_key: H256,
+        #[clap(long)]
+        dir: Option<PathBuf>,
+        #[clap(long)]
+        from: Option<u64>,
+    },
+    IncorporateBackup {
+        #[clap(long)]
+        path: PathBuf,
     },
     GenerateKey,
     GenerateFromEthKey {

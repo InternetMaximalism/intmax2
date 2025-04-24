@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO s3_historical_data (digest, pubkey, topic, timestamp, upload_finished)\n            SELECT\n                UNNEST($1::text[]),\n                UNNEST($2::text[]),\n                UNNEST($3::text[]),\n                UNNEST($4::bigint[]),\n                UNNEST($5::bool[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "Int8Array",
+        "BoolArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "18927a81b675d9537792dc3c1091ba2a08943a544d9c42da647bdabb0c00be60"
+}

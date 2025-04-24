@@ -79,6 +79,7 @@ pub trait IndexedMerkleTreeClient: std::fmt::Debug {
 
 #[cfg(test)]
 mod tests {
+    use intmax2_interfaces::utils::random::default_rng;
     use intmax2_zkp::ethereum_types::u256::U256;
     use rand::Rng;
 
@@ -98,7 +99,7 @@ mod tests {
     async fn test_speed_incremental_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
         let n = 1 << 8;
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -126,7 +127,7 @@ mod tests {
     async fn test_speed_incremental_merkle_tree_with_select() -> anyhow::Result<()> {
         let height = 32;
         let n = 1000;
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -180,7 +181,7 @@ mod tests {
     async fn test_speed_incremental_merkle_tree_prove() -> anyhow::Result<()> {
         let height = 32;
         let n = 5000;
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -208,7 +209,7 @@ mod tests {
     async fn test_speed_incremental_merkle_tree_reset() -> anyhow::Result<()> {
         let height = 32;
         let n = 1000;
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -243,7 +244,7 @@ mod tests {
     async fn test_speed_indexed_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
         let n = 1 << 10;
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -262,7 +263,7 @@ mod tests {
 
         async fn print_time(tree: &SqlIndexedMerkleTree, timestamp: u64) -> anyhow::Result<()> {
             let now = std::time::Instant::now();
-            let mut rng = rand::thread_rng();
+            let mut rng = default_rng();
             let _ = tree
                 .prove_and_insert(timestamp, U256::rand(&mut rng), 0)
                 .await?;
@@ -279,7 +280,7 @@ mod tests {
     async fn test_speed_prove_and_update() -> anyhow::Result<()> {
         let height = 32;
         let n = 1000;
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;

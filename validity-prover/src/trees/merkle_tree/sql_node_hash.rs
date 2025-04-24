@@ -220,6 +220,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
 
 #[cfg(test)]
 mod tests {
+    use intmax2_interfaces::utils::random::default_rng;
     use rand::Rng;
     use sqlx::postgres::PgPoolOptions;
 
@@ -253,7 +254,7 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
         let tag = rng.gen();
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -300,7 +301,7 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
         let tag = rng.gen();
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -362,7 +363,7 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
         let tag = rng.gen();
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -404,7 +405,7 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
         let tag = rng.gen();
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -447,7 +448,7 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
         let tag = rng.gen();
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -489,7 +490,7 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
         let tag = rng.gen();
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -533,7 +534,7 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = default_rng();
         let tag = rng.gen();
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
