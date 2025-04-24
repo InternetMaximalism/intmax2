@@ -47,21 +47,25 @@ pub async fn claim_withdrawals(key: KeySet, eth_private_key: Bytes32) -> Result<
     Ok(())
 }
 
-pub async fn claim_block_builder_reward(eth_private_key: Bytes32) -> Result<(), CliError> {
+pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliError> {
     let env = envy::from_env::<EnvVar>()?;
     let signer_private_key = convert_bytes32_to_h256(eth_private_key);
     let user_address = get_address(env.l2_chain_id, signer_private_key);
+    log::info!(
+        "Claiming block builder reward for user address: {}",
+        user_address
+    );
 
-    if env.block_builder_reward_contract_address.is_none() {
+    if env.reward_contract_address.is_none() {
         return Err(CliError::EnvError(
-            "block_builder_reward_contract_address is not set".to_string(),
+            "REWARD_CONTRACT_ADDRESS is not set".to_string(),
         ));
     }
-    let reward_contract_address =
-        convert_address_to_ethers(env.block_builder_reward_contract_address.unwrap());
+    let reward_contract_address = convert_address_to_ethers(env.reward_contract_address.unwrap());
     let reward_contract =
         BlockBuilderRewardContract::new(&env.l2_rpc_url, env.l2_chain_id, reward_contract_address);
     let current_period = reward_contract.get_current_period().await?;
+    log::info!("Current period: {}", current_period);
 
     let mut claimable_periods = Vec::new();
     for period_number in 0..current_period {

@@ -4,7 +4,7 @@ use intmax2_cli::{
     args::{Args, Commands},
     cli::{
         backup::{incorporate_backup, make_history_backup},
-        claim::claim_withdrawals,
+        claim::{claim_builder_reward, claim_withdrawals},
         deposit::deposit,
         error::CliError,
         get::{balance, claim_status, mining_list, withdrawal_status},
@@ -167,6 +167,9 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         } => {
             let key = privkey_to_keyset(private_key);
             sync_claims(key, recipient, fee_token_index).await?;
+        }
+        Commands::ClaimBuilderReward { eth_private_key } => {
+            claim_builder_reward(eth_private_key).await?;
         }
         Commands::Balance { private_key } => {
             let key = privkey_to_keyset(private_key);

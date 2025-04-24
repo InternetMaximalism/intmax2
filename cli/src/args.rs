@@ -115,6 +115,10 @@ pub enum Commands {
         #[clap(long)]
         eth_private_key: Bytes32,
     },
+    ClaimBuilderReward {
+        #[clap(long)]
+        eth_private_key: Bytes32,
+    },
     Resync {
         #[clap(long)]
         private_key: Bytes32,

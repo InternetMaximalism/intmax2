@@ -36,7 +36,6 @@ pub struct EnvVar {
     pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
     pub withdrawal_contract_address: Address,
-    pub claim_contract_address: Address,
 
     // mining settings
     pub is_faster_mining: bool,
@@ -45,7 +44,7 @@ pub struct EnvVar {
     pub block_builder_base_url: Option<String>,
 
     // optional block builder reward contract address
-    pub block_builder_reward_contract_address: Option<Address>,
+    pub reward_contract_address: Option<Address>,
 
     // optional private zkp server settings
     pub private_zkp_server_max_retires: Option<usize>,
