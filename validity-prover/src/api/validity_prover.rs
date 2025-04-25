@@ -25,7 +25,10 @@ use plonky2::{
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::{sync::OnceLock, time::Duration};
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use super::{error::ValidityProverError, observer::Observer};
 use crate::{
@@ -54,12 +57,14 @@ const ACCOUNT_DB_TAG: u32 = 1;
 const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
 
+#[derive(Clone)]
 pub struct ValidityProver {
-    validity_processor: OnceLock<ValidityProcessor<F, C, D>>,
-    observer: Observer,
+    validity_processor: Arc<OnceLock<ValidityProcessor<F, C, D>>>,
+    observer: Arc<Observer>,
     account_tree: HistoricalAccountTree<ADB>,
     block_tree: HistoricalBlockHashTree<BDB>,
     deposit_hash_tree: HistoricalDepositHashTree<DDB>,
+    sync_interval: Duration,
     pool: PgPool,
 }
 
@@ -136,12 +141,13 @@ impl ValidityProver {
         }
 
         Ok(Self {
-            validity_processor,
-            observer,
+            validity_processor: Arc::new(validity_processor),
+            observer: Arc::new(observer),
             pool,
             account_tree,
             block_tree,
             deposit_hash_tree,
+            sync_interval: Duration::from_secs(env.sync_interval),
         })
     }
 
@@ -286,6 +292,39 @@ impl ValidityProver {
 
         log::info!("End of sync validity prover");
         Ok(())
+    }
+
+    async fn sync_loop(&self) -> Result<(), ValidityProverError> {
+        let mut interval = tokio::time::interval(self.sync_interval);
+        loop {
+            interval.tick().await;
+            self.sync().await?;
+        }
+    }
+
+    pub fn start_sync(&self) {
+        let sync_interval = self.sync_interval;
+        let self_clone = self.clone();
+        actix_web::rt::spawn(async move {
+            // auto restart
+            loop {
+                let self_clone = self_clone.clone();
+                let handler = actix_web::rt::spawn(async move { self_clone.sync_loop().await });
+                match handler.await {
+                    Ok(Ok(_)) => {
+                        log::error!("Validity prover sync finished");
+                    }
+                    Ok(Err(e)) => {
+                        log::error!("Validity prover sync error: {:?}", e);
+                    }
+                    Err(e) => {
+                        log::error!("Validity prover sync panic: {:?}", e);
+                    }
+                }
+                tokio::time::sleep(sync_interval).await;
+            }
+        });
+        log::info!("validity prover sync loop started");
     }
 
     pub async fn get_update_witness(

@@ -15,9 +15,4 @@ impl State {
             validity_prover: Arc::new(validity_prover),
         }
     }
-
-    pub async fn sync_task(&self) -> anyhow::Result<()> {
-        self.validity_prover.sync().await?;
-        Ok(())
-    }
 }
