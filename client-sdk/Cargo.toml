@@ -11,6 +11,7 @@ plonky2_bn254 = { workspace = true }
 plonky2_keccak = { workspace = true }
 intmax2-zkp = { workspace = true }
 intmax2-interfaces = { path = "../interfaces" }
+common = {path = "../common" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 ethers = { workspace = true }

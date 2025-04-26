@@ -1,5 +1,9 @@
-use std::collections::HashMap;
-
+use super::error::BlockchainError;
+use crate::external_api::{
+    contract::utils::get_base_fee,
+    utils::{retry::with_retry, time::sleep_for},
+};
+use common::env::{get_env_type, EnvType};
 use ethers::{
     abi::Detokenize,
     core::k256::ecdsa::SigningKey,
@@ -8,13 +12,7 @@ use ethers::{
     signers::Wallet,
     types::{Transaction, H256, U256},
 };
-
-use crate::external_api::{
-    contract::utils::get_base_fee,
-    utils::{retry::with_retry, time::sleep_for},
-};
-
-use super::error::BlockchainError;
+use std::collections::HashMap;
 
 const MAX_GAS_BUMP_ATTEMPTS: u32 = 3;
 const WAIT_TIME: u64 = 20;
@@ -41,6 +39,10 @@ pub async fn handle_contract_call<S: ToString, O: Detokenize>(
             let pending_tx = tx;
             let tx_hash = pending_tx.tx_hash();
             log::info!("{} tx hash: {:?}", tx_name.to_string(), tx_hash);
+            if get_env_type() == EnvType::Local {
+                // early return if it is a local environment
+                return Ok(tx_hash);
+            }
             let tx: Transaction = with_retry(|| async {
                 client
                     .get_transaction(tx_hash)
