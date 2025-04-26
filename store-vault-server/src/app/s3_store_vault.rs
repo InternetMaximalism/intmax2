@@ -117,6 +117,14 @@ impl S3StoreVault {
             )));
         }
 
+        let new_path = get_path(topic, pubkey, digest);
+        if !self.s3_client.check_object_exists(&new_path).await? {
+            return Err(StoreVaultError::ObjectError(format!(
+                "object {} does'nt exist",
+                new_path
+            )));
+        }
+
         // insert new digest
         sqlx::query!(
             r#"
@@ -135,8 +143,8 @@ impl S3StoreVault {
 
         // delete old data if it exists
         if let Some(prev_digest) = prev_digest {
-            let path = get_path(topic, pubkey, prev_digest);
-            self.s3_client.delete_object(&path).await?;
+            let prev_path = get_path(topic, pubkey, prev_digest);
+            self.s3_client.delete_object(&prev_path).await?;
         }
 
         Ok(())
@@ -417,13 +425,14 @@ impl S3StoreVault {
 
     pub fn run(&self) {
         let self_clone = self.clone();
-        let interval = self.config.s3_upload_timeout;
+        let period = Duration::from_secs(self.config.s3_upload_timeout) / 4;
         actix_web::rt::spawn(async move {
+            let mut interval = tokio::time::interval(period);
             loop {
+                interval.tick().await;
                 if let Err(e) = self_clone.cleanup_data().await {
                     log::error!("Error in cleanup_data: {:?}", e);
                 }
-                tokio::time::sleep(Duration::from_secs(interval)).await;
             }
         });
     }
