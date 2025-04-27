@@ -1,6 +1,9 @@
 use intmax2_client_sdk::client::client::{DepositResult, TxResult};
 use intmax2_interfaces::data::{
-    deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData, user_data::UserData,
+    deposit_data::DepositData,
+    transfer_data::TransferData,
+    tx_data::TxData,
+    user_data::{Balances, UserData},
 };
 use intmax2_zkp::{common::transfer::Transfer, ethereum_types::u32limb_trait::U32LimbTrait as _};
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -193,24 +196,9 @@ pub struct TokenBalance {
 
 impl From<UserData> for JsUserData {
     fn from(user_data: UserData) -> Self {
-        let balances = user_data
-            .balances()
-            .0
-            .iter()
-            .map(|(token_index, leaf)| {
-                let amount = leaf.amount.to_string();
-                let is_insufficient = leaf.is_insufficient;
-                TokenBalance {
-                    token_index: *token_index,
-                    amount,
-                    is_insufficient,
-                }
-            })
-            .collect();
-
         Self {
             pubkey: user_data.pubkey.to_hex(),
-            balances,
+            balances: balances_to_token_balances(&user_data.balances()),
             private_commitment: user_data
                 .full_private_state
                 .to_private_state()
@@ -266,4 +254,20 @@ impl From<UserData> for JsUserData {
                 .collect(),
         }
     }
+}
+
+pub fn balances_to_token_balances(balances: &Balances) -> Vec<TokenBalance> {
+    balances
+        .0
+        .iter()
+        .map(|(token_index, leaf)| {
+            let amount = leaf.amount.to_string();
+            let is_insufficient = leaf.is_insufficient;
+            TokenBalance {
+                token_index: *token_index,
+                amount,
+                is_insufficient,
+            }
+        })
+        .collect()
 }

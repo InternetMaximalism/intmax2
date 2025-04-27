@@ -5,12 +5,16 @@ use crate::cli::{client::get_client, history::format_timestamp};
 
 use super::error::CliError;
 
-pub async fn balance(key: KeySet) -> Result<(), CliError> {
+pub async fn balance(key: KeySet, sync: bool) -> Result<(), CliError> {
     let client = get_client()?;
-    client.sync(key).await?;
-
-    let user_data = client.get_user_data(key).await?;
-    let mut balances: Vec<(u32, AssetLeaf)> = user_data.balances().0.into_iter().collect();
+    let balances = if sync {
+        client.sync(key).await?;
+        let user_data = client.get_user_data(key).await?;
+        user_data.balances()
+    } else {
+        client.get_balances_without_sync(key).await?
+    };
+    let mut balances: Vec<(u32, AssetLeaf)> = balances.0.into_iter().collect();
     balances.sort_by_key(|(i, _leaf)| *i);
 
     println!("Balances:");

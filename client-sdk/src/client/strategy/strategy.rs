@@ -80,7 +80,7 @@ pub async fn determine_sequence(
     key: KeySet,
     deposit_timeout: u64,
     tx_timeout: u64,
-) -> Result<(Vec<Action>, PendingInfo), StrategyError> {
+) -> Result<(Vec<Action>, Balances, PendingInfo), StrategyError> {
     log::info!("determine_sequence");
 
     // Wait until the validity prover catches up with the onchain block number
@@ -209,6 +209,9 @@ pub async fn determine_sequence(
 
     // Finally, take all deposits and transfers
     let receives = collect_receives(&None, &mut deposits, &mut transfers).await?;
+    for receive in &receives {
+        receive.apply_to_balances(&mut balances);
+    }
     sequence.push(Action::Receive(receives));
 
     let pending_deposit_digests = deposit_info
@@ -224,6 +227,7 @@ pub async fn determine_sequence(
 
     Ok((
         sequence,
+        balances,
         PendingInfo {
             pending_deposit_digests,
             pending_transfer_digests,

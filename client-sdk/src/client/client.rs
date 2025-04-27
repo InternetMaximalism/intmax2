@@ -63,6 +63,7 @@ use super::{
     receipt::validate_transfer_receipt,
     strategy::{
         mining::{fetch_mining_info, Mining},
+        strategy::determine_sequence,
         tx_status::{get_tx_status, TxStatus},
     },
     sync::utils::{generate_spent_witness, get_balance_proof},
@@ -789,6 +790,20 @@ impl Client {
         transfer_receipt: &str,
     ) -> Result<TransferData, ClientError> {
         validate_transfer_receipt(self, key, transfer_receipt).await
+    }
+
+    pub async fn get_balances_without_sync(&self, key: KeySet) -> Result<Balances, ClientError> {
+        let (_, balances, _) = determine_sequence(
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
+            &self.rollup_contract,
+            &self.liquidity_contract,
+            key,
+            self.config.deposit_timeout,
+            self.config.tx_timeout,
+        )
+        .await?;
+        Ok(balances)
     }
 }
 

@@ -171,9 +171,12 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         Commands::ClaimBuilderReward { eth_private_key } => {
             claim_builder_reward(eth_private_key).await?;
         }
-        Commands::Balance { private_key } => {
+        Commands::Balance {
+            private_key,
+            without_sync,
+        } => {
             let key = privkey_to_keyset(private_key);
-            balance(key).await?;
+            balance(key, !without_sync).await?;
         }
         Commands::History {
             private_key,

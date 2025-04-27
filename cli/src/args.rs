@@ -88,6 +88,8 @@ pub enum Commands {
     Balance {
         #[clap(long)]
         private_key: Bytes32,
+        #[clap(long, default_value = "false")]
+        without_sync: bool,
     },
     History {
         #[clap(long)]

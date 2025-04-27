@@ -71,7 +71,7 @@ impl Client {
 
     /// Sync the client's balance proof with the latest block
     pub async fn sync(&self, key: KeySet) -> Result<(), SyncError> {
-        let (sequence, pending_info) = determine_sequence(
+        let (sequence, _, pending_info) = determine_sequence(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             &self.rollup_contract,
