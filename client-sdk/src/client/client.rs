@@ -31,7 +31,7 @@ use intmax2_zkp::{
         tx::Tx, witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
-    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 
 use num_bigint::BigUint;
@@ -207,7 +207,7 @@ impl Client {
     ) -> Result<TxRequestMemo, ClientError> {
         log::info!(
             "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {:?}, fee {:?}, collateral_fee {:?}",
-            key.pubkey,
+            key.pubkey.to_hex(),
             transfers.len(),
             fee_beneficiary,
             fee,
