@@ -648,18 +648,26 @@ mod tests {
         let digest_2 = get_digest(b"test data 2");
         let digest_path_1 = get_path(topic, pubkey, digest_1);
 
+        // Set up check_object_exists to return true for both paths
+        let _digest_path_2 = get_path(topic, pubkey, digest_2);
         vault
             .s3_client
-            .expect_delete_object()
-            // it is expected to get only digest_path_1
-            .with(eq(digest_path_1))
-            .returning(|_| Ok(()));
+            .expect_check_object_exists()
+            .returning(|_| Ok(true));
 
         vault
             .save_snapshot(topic, pubkey, None, digest_1)
             .await
             .unwrap();
         let (_, timestamp_stage_1) = select_snapshot(pubkey, topic, &vault.pool).await;
+
+        // Set up delete_object expectation before the second save_snapshot call
+        vault
+            .s3_client
+            .expect_delete_object()
+            // it is expected to get only digest_path_1
+            .with(eq(digest_path_1))
+            .returning(|_| Ok(()));
 
         vault
             .save_snapshot(topic, pubkey, Some(digest_1), digest_2)
