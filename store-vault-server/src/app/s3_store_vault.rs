@@ -669,28 +669,68 @@ mod tests {
         let pubkey = U256::from(1);
         let digest_1 = get_digest(b"test data 1");
         let digest_2 = get_digest(b"test data 2");
-        let digest_path_1 = get_path(topic, pubkey, digest_1);
+        let path_1 = get_path(topic, pubkey, digest_1);
+        let path_2 = get_path(topic, pubkey, digest_2);
 
+        // Set up expectations for the first pre_save_snapshot call
+        vault
+            .s3_client
+            .expect_generate_upload_url()
+            .with(
+                eq(path_1.clone()),
+                eq("application/octet-stream"),
+                eq(Duration::from_secs(0)),
+            )
+            .returning(|_, _, _| Ok("presigned_url_1".to_string()));
+
+        // First, set up pre_save_snapshot and save_snapshot for digest_1
         vault
             .pre_save_snapshot(topic, pubkey, digest_1)
             .await
             .unwrap();
+
+        // Set up check_object_exists expectation for the first save_snapshot call
         vault
             .s3_client
             .expect_check_object_exists()
+            .with(eq(path_1.clone()))
             .returning(|_| Ok(true));
+
         vault
             .save_snapshot(topic, pubkey, None, digest_1)
             .await
             .unwrap();
         let (_, timestamp_stage_1) = select_snapshot(pubkey, topic, &vault.pool).await;
 
-        // Set up delete_object expectation before the second save_snapshot call
+        // Set up expectations for the second pre_save_snapshot call
+        vault
+            .s3_client
+            .expect_generate_upload_url()
+            .with(
+                eq(path_2.clone()),
+                eq("application/octet-stream"),
+                eq(Duration::from_secs(0)),
+            )
+            .returning(|_, _, _| Ok("presigned_url_2".to_string()));
+
+        // Set up pre_save_snapshot for digest_2
+        vault
+            .pre_save_snapshot(topic, pubkey, digest_2)
+            .await
+            .unwrap();
+
+        // Set up check_object_exists expectation for the second save_snapshot call
+        vault
+            .s3_client
+            .expect_check_object_exists()
+            .with(eq(path_2.clone()))
+            .returning(|_| Ok(true));
+
+        // Set up delete_object expectation for the second save_snapshot call
         vault
             .s3_client
             .expect_delete_object()
-            // it is expected to get only digest_path_1
-            .with(eq(digest_path_1))
+            .with(eq(path_1.clone()))
             .returning(|_| Ok(()));
 
         vault
