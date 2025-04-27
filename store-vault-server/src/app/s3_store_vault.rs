@@ -31,6 +31,7 @@ type Result<T> = std::result::Result<T, StoreVaultError>;
 pub struct Config {
     pub s3_upload_timeout: u64,
     pub s3_download_timeout: u64,
+    pub cleanup_interval: u64,
 }
 
 #[derive(Clone)]
@@ -60,6 +61,7 @@ impl S3StoreVault {
         let config = Config {
             s3_upload_timeout: env.s3_upload_timeout,
             s3_download_timeout: env.s3_download_timeout,
+            cleanup_interval: env.cleanup_interval,
         };
 
         Ok(Self {
@@ -98,6 +100,21 @@ impl S3StoreVault {
                 Duration::from_secs(self.config.s3_upload_timeout),
             )
             .await?;
+
+        // save pending upload to db
+        sqlx::query!(
+            r#"
+            INSERT INTO s3_snapshot_pending_uploads (digest, pubkey, topic, timestamp)
+            VALUES ($1, $2, $3, $4)
+            "#,
+            digest.to_hex(),
+            pubkey.to_hex(),
+            topic,
+            chrono::Utc::now().timestamp() as i64
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(presigned_url)
     }
 
@@ -125,6 +142,7 @@ impl S3StoreVault {
             )));
         }
 
+        let mut tx = self.pool.begin().await?;
         // insert new digest
         sqlx::query!(
             r#"
@@ -138,8 +156,21 @@ impl S3StoreVault {
             digest.to_hex(),
             chrono::Utc::now().timestamp() as i64
         )
-        .execute(&self.pool)
+        .execute(tx.as_mut())
         .await?;
+
+        // delete pending upload
+        sqlx::query!(
+            r#"
+            DELETE FROM s3_snapshot_pending_uploads WHERE pubkey = $1 AND topic = $2 AND digest = $3
+            "#,
+            pubkey.to_hex(),
+            topic,
+            digest.to_hex()
+        )
+        .execute(tx.as_mut())
+        .await?;
+        tx.commit().await?;
 
         // delete old data if it exists
         if let Some(prev_digest) = prev_digest {
@@ -377,7 +408,7 @@ impl S3StoreVault {
 
     // Fetch unfinished data and check if they exist in s3.
     // If they exist, set upload_finished to true. If they are timed out, delete them.
-    async fn cleanup_data(&self) -> Result<()> {
+    async fn cleanup_historical_data(&self) -> Result<()> {
         let records = sqlx::query!(
             r#"
             SELECT topic, pubkey, digest, timestamp
@@ -423,15 +454,64 @@ impl S3StoreVault {
         Ok(())
     }
 
+    // s3_snapshot_pending_uploads is deleted when saved in save_snapshot.
+    // If s3_snapshot_pending_uploads remains, it is saved in s3, but not saved in DB, and is dangling.
+    // This function cleans up such data.
+    async fn cleanup_snapshot_data(&self) -> Result<()> {
+        // get all pending uploads
+        let records = sqlx::query!(
+            r#"
+            SELECT topic, pubkey, digest, timestamp
+            FROM s3_snapshot_pending_uploads
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        for record in records {
+            let path = get_path(
+                &record.topic,
+                U256::from_hex(&record.pubkey).unwrap(),
+                Bytes32::from_hex(&record.digest).unwrap(),
+            );
+            if self.config.s3_upload_timeout + (record.timestamp as u64) < current_time {
+                self.s3_client.delete_object(&path).await?;
+                sqlx::query!(
+                    r#"
+                    DELETE FROM s3_snapshot_pending_uploads
+                    WHERE digest = $1
+                    "#,
+                    record.digest
+                )
+                .execute(&self.pool)
+                .await?;
+                log::warn!("Pending upload not found in s3. Deleted: path={}", path);
+            }
+        }
+        Ok(())
+    }
+
     pub fn run(&self) {
+        let period = Duration::from_secs(self.config.cleanup_interval);
         let self_clone = self.clone();
-        let period = Duration::from_secs(self.config.s3_upload_timeout) / 4;
         actix_web::rt::spawn(async move {
             let mut interval = tokio::time::interval(period);
             loop {
                 interval.tick().await;
-                if let Err(e) = self_clone.cleanup_data().await {
-                    log::error!("Error in cleanup_data: {:?}", e);
+                if let Err(e) = self_clone.cleanup_historical_data().await {
+                    log::error!("Error in cleanup_historical_data: {:?}", e);
+                }
+            }
+        });
+
+        let self_clone = self.clone();
+        actix_web::rt::spawn(async move {
+            let mut interval = tokio::time::interval(period);
+            loop {
+                interval.tick().await;
+                if let Err(e) = self_clone.cleanup_snapshot_data().await {
+                    log::error!("Error in cleanup_snapshot_data: {:?}", e);
                 }
             }
         });
@@ -530,6 +610,7 @@ mod tests {
             Config {
                 s3_upload_timeout: 0,
                 s3_download_timeout: 0,
+                cleanup_interval: 0,
             },
         );
 
@@ -557,6 +638,7 @@ mod tests {
             Config {
                 s3_upload_timeout: 0,
                 s3_download_timeout: 0,
+                cleanup_interval: 0,
             },
         );
 
@@ -602,6 +684,7 @@ mod tests {
             Config {
                 s3_upload_timeout: 0,
                 s3_download_timeout: 0,
+                cleanup_interval: 0,
             },
         );
 
@@ -639,6 +722,7 @@ mod tests {
             Config {
                 s3_upload_timeout: 0,
                 s3_download_timeout: 0,
+                cleanup_interval: 0,
             },
         );
 
@@ -681,6 +765,7 @@ mod tests {
             Config {
                 s3_upload_timeout: 0,
                 s3_download_timeout: 0,
+                cleanup_interval: 0,
             },
         );
 
@@ -755,6 +840,7 @@ mod tests {
             Config {
                 s3_upload_timeout: 0,
                 s3_download_timeout: 0,
+                cleanup_interval: 0,
             },
         );
 
@@ -937,6 +1023,7 @@ mod tests {
             Config {
                 s3_upload_timeout: S3_UPLOAD_TIMEOUT,
                 s3_download_timeout: 0,
+                cleanup_interval: 0,
             },
         );
 
@@ -990,7 +1077,7 @@ mod tests {
                 });
         }
 
-        vault.cleanup_data().await.unwrap();
+        vault.cleanup_historical_data().await.unwrap();
         let remaining_data = select_s3_historical_data(&vault.pool).await;
         // test case 1
         assert!(remaining_data
