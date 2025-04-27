@@ -134,6 +134,29 @@ impl S3StoreVault {
             )));
         }
 
+        // check timestamp
+        let record = sqlx::query!(
+            r#"
+            SELECT timestamp FROM s3_snapshot_pending_uploads WHERE digest = $1
+            "#,
+            digest.to_hex(),
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        if let Some(record) = record {
+            if record.timestamp as u64 + 2 * self.config.s3_upload_timeout
+                < chrono::Utc::now().timestamp() as u64
+            {
+                return Err(StoreVaultError::ValidationError(
+                    "it took too much time after pre_save_snapshot".to_string(),
+                ));
+            }
+        } else {
+            return Err(StoreVaultError::ValidationError(
+                "pre_save_snapshot should be called before".to_string(),
+            ));
+        }
+
         let new_path = get_path(topic, pubkey, digest);
         if !self.s3_client.check_object_exists(&new_path).await? {
             return Err(StoreVaultError::ObjectError(format!(
@@ -475,7 +498,7 @@ impl S3StoreVault {
                 U256::from_hex(&record.pubkey).unwrap(),
                 Bytes32::from_hex(&record.digest).unwrap(),
             );
-            if self.config.s3_upload_timeout + (record.timestamp as u64) < current_time {
+            if self.config.s3_upload_timeout * 2 + (record.timestamp as u64) < current_time {
                 self.s3_client.delete_object(&path).await?;
                 sqlx::query!(
                     r#"
@@ -648,13 +671,14 @@ mod tests {
         let digest_2 = get_digest(b"test data 2");
         let digest_path_1 = get_path(topic, pubkey, digest_1);
 
-        // Set up check_object_exists to return true for both paths
-        let _digest_path_2 = get_path(topic, pubkey, digest_2);
+        vault
+            .pre_save_snapshot(topic, pubkey, digest_1)
+            .await
+            .unwrap();
         vault
             .s3_client
             .expect_check_object_exists()
             .returning(|_| Ok(true));
-
         vault
             .save_snapshot(topic, pubkey, None, digest_1)
             .await
