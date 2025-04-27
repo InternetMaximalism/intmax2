@@ -498,7 +498,7 @@ impl S3StoreVault {
                 U256::from_hex(&record.pubkey).unwrap(),
                 Bytes32::from_hex(&record.digest).unwrap(),
             );
-            if self.config.s3_upload_timeout * 2 + (record.timestamp as u64) < current_time {
+            if self.config.s3_upload_timeout * 4 + (record.timestamp as u64) < current_time {
                 self.s3_client.delete_object(&path).await?;
                 sqlx::query!(
                     r#"
