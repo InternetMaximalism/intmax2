@@ -656,14 +656,12 @@ mod tests {
     #[sqlx::test]
     async fn save_snapshot_with_existed_digest_test(pool: PgPool) {
         let _ = env_logger::builder().is_test(true).try_init();
-        let mut vault = create_vault(
-            pool,
-            Config {
-                s3_upload_timeout: 0,
-                s3_download_timeout: 0,
-                cleanup_interval: 0,
-            },
-        );
+        let config = Config {
+            s3_upload_timeout: 10,
+            s3_download_timeout: 0,
+            cleanup_interval: 0,
+        };
+        let mut vault = create_vault(pool, config.clone());
 
         let topic = "topic";
         let pubkey = U256::from(1);
@@ -679,7 +677,7 @@ mod tests {
             .with(
                 eq(path_1.clone()),
                 eq("application/octet-stream"),
-                eq(Duration::from_secs(0)),
+                eq(Duration::from_secs(config.s3_upload_timeout)),
             )
             .returning(|_, _, _| Ok("presigned_url_1".to_string()));
 
@@ -709,7 +707,7 @@ mod tests {
             .with(
                 eq(path_2.clone()),
                 eq("application/octet-stream"),
-                eq(Duration::from_secs(0)),
+                eq(Duration::from_secs(config.s3_upload_timeout)),
             )
             .returning(|_, _, _| Ok("presigned_url_2".to_string()));
 
