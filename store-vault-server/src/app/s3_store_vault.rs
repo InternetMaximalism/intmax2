@@ -160,7 +160,7 @@ impl S3StoreVault {
         let new_path = get_path(topic, pubkey, digest);
         if !self.s3_client.check_object_exists(&new_path).await? {
             return Err(StoreVaultError::ObjectError(format!(
-                "object {} does'nt exist",
+                "object {} doesn't exist",
                 new_path
             )));
         }
