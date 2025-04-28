@@ -104,7 +104,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             .await?;
         }
         Commands::SyncWithdrawals { private_key } => {
-            let key = privkey_to_keyset(private_key);
+            let key = generate_key(private_key);
             sync_withdrawals(key).await?;
         }
         Commands::PostEmptyBlock => {

@@ -45,7 +45,7 @@ pub enum Commands {
     PostEmptyBlock,
     SyncWithdrawals {
         #[clap(long)]
-        private_key: H256,
+        private_key: Option<H256>,
     },
     Balance {
         #[clap(long)]
