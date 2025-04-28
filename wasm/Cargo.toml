@@ -14,7 +14,7 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 log = { workspace = true }
 bincode = { workspace = true }
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 num-bigint = "0.4.6"
 rand = "0.8.5"
 getrandom = { version = "0.2", features = ["js"] }
