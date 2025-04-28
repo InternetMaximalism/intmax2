@@ -16,6 +16,7 @@ struct EnvVar {
 }
 
 #[tokio::test]
+#[ignore]
 async fn deploy_contracts() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let config = envy::from_env::<EnvVar>().unwrap();
