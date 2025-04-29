@@ -47,6 +47,7 @@ pub struct Config {
     pub block_builder_url: String,
     pub block_builder_private_key: H256,
     pub block_builder_address: Address,
+    pub gas_limit_for_block_post: Option<u64>,
     pub eth_allowance_for_block: U256,
 
     pub initial_heart_beat_delay: u64,
@@ -164,6 +165,10 @@ impl BlockBuilder {
         .unwrap();
 
         // log configuration
+        log::info!(
+            "gas limit for block post: {:?}",
+            env.gas_limit_for_block_post.clone()
+        );
         log::info!("eth_allowance_for_block: {}", eth_allowance_for_block);
         log::info!("use_fee: {}", use_fee);
         log::info!("use_collateral_fee: {}", use_collateral_fee);
@@ -175,6 +180,7 @@ impl BlockBuilder {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
             block_builder_address,
+            gas_limit_for_block_post: env.gas_limit_for_block_post,
             eth_allowance_for_block,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
