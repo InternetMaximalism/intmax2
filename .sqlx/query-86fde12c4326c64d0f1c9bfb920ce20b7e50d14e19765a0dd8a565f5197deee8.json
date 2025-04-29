@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COUNT(*) as count\n            FROM used_payments\n            WHERE nullifier = ANY($1)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "BpcharArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "86fde12c4326c64d0f1c9bfb920ce20b7e50d14e19765a0dd8a565f5197deee8"
+}

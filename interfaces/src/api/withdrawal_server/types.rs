@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::signature::Signable;
 
-use super::interface::{ClaimInfo, WithdrawalInfo};
+use super::interface::{ClaimInfo, FeeResult, WithdrawalInfo};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -45,6 +45,12 @@ impl Signable for RequestWithdrawalRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RequestWithdrawalResponse {
+    pub fee_result: FeeResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestClaimRequest {
     pub single_claim_proof: ProofWithPublicInputs<F, C, D>,
     pub fee_token_index: Option<u32>,
@@ -64,6 +70,12 @@ impl Signable for RequestClaimRequest {
         ]
         .concat()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestClaimResponse {
+    pub fee_result: FeeResult,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,7 +3,10 @@ use crate::{
     Env,
 };
 use intmax2_interfaces::{
-    api::store_vault_server::interface::StoreVaultClientInterface,
+    api::{
+        store_vault_server::interface::StoreVaultClientInterface,
+        withdrawal_server::interface::FeeResult,
+    },
     data::{
         data_type::DataType,
         encryption::{errors::BlsEncryptionError, BlsEncryption},
@@ -15,7 +18,8 @@ use super::{error::WithdrawalServerError, fee::parse_fee_str};
 use ethers::types::H256;
 use intmax2_client_sdk::{
     client::{
-        fee_payment::FeeType, receive_validation::validate_receive,
+        fee_payment::FeeType,
+        receive_validation::{validate_receive, ReceiveValidationError},
         sync::utils::quote_withdrawal_claim_fee,
     },
     external_api::{
@@ -161,7 +165,7 @@ impl WithdrawalServer {
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
-    ) -> Result<(), WithdrawalServerError> {
+    ) -> Result<FeeResult, WithdrawalServerError> {
         // Verify the single withdrawal proof
         let single_withdrawal_vd = CircuitVerifiers::load().get_single_withdrawal_vd();
         single_withdrawal_vd
@@ -184,10 +188,14 @@ impl WithdrawalServer {
         };
         let fee = quote_withdrawal_claim_fee(fee_token_index, fees)
             .map_err(|e| WithdrawalServerError::InvalidFee(e.to_string()))?;
+
         if let Some(fee) = fee {
-            let transfers = self
+            let (transfers, fee_result) = self
                 .fee_validation(FeeType::Withdrawal, &fee, fee_transfer_digests)
                 .await?;
+            if fee_result != FeeResult::Success {
+                return Ok(fee_result);
+            }
             self.add_spent_transfers(&transfers).await?;
         }
 
@@ -213,7 +221,7 @@ impl WithdrawalServer {
         .await?;
         let count = existing_request.count.unwrap_or(0);
         if count > 0 {
-            return Ok(());
+            return Ok(FeeResult::Success);
         }
 
         // Serialize the proof and public inputs
@@ -250,7 +258,7 @@ impl WithdrawalServer {
         .execute(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(FeeResult::Success)
     }
 
     pub async fn request_claim(
@@ -259,7 +267,7 @@ impl WithdrawalServer {
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
-    ) -> Result<(), WithdrawalServerError> {
+    ) -> Result<FeeResult, WithdrawalServerError> {
         let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec())
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
         let nullifier = claim.nullifier;
@@ -269,9 +277,12 @@ impl WithdrawalServer {
         let fee = quote_withdrawal_claim_fee(fee_token_index, self.config.claim_fee.clone())
             .map_err(|e| WithdrawalServerError::InvalidFee(e.to_string()))?;
         if let Some(fee) = fee {
-            let transfers = self
+            let (transfers, fee_result) = self
                 .fee_validation(FeeType::Claim, &fee, fee_transfer_digests)
                 .await?;
+            if fee_result != FeeResult::Success {
+                return Ok(fee_result);
+            }
             self.add_spent_transfers(&transfers).await?;
         }
 
@@ -288,7 +299,7 @@ impl WithdrawalServer {
         .await?;
         let count = existing_request.count.unwrap_or(0);
         if count > 0 {
-            return Ok(());
+            return Ok(FeeResult::Success);
         }
 
         // Serialize the proof and public inputs
@@ -325,7 +336,7 @@ impl WithdrawalServer {
         .execute(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(FeeResult::Success)
     }
 
     pub async fn get_withdrawal_info(
@@ -425,7 +436,9 @@ impl WithdrawalServer {
         fee_type: FeeType,
         fee: &Fee,
         fee_transfer_digests: &[Bytes32],
-    ) -> Result<Vec<Transfer>, WithdrawalServerError> {
+    ) -> Result<(Vec<Transfer>, FeeResult), WithdrawalServerError> {
+        // check duplicated nullifiers
+
         let key = match fee_type {
             FeeType::Withdrawal => self.config.withdrawal_beneficiary_key.unwrap(),
             FeeType::Claim => self.config.claim_beneficiary_key.unwrap(),
@@ -449,35 +462,70 @@ impl WithdrawalServer {
                 let transfer_data = TransferData::decrypt(key, None, &data.data)?;
                 Ok((data.meta.clone(), transfer_data))
             })
-            .collect::<Result<Vec<_>, BlsEncryptionError>>()?;
+            .collect::<Result<Vec<_>, BlsEncryptionError>>();
+        let transfer_data_with_meta = match transfer_data_with_meta {
+            Ok(data) => data,
+            Err(e) => {
+                log::warn!("Failed to decrypt transfer data: {}", e);
+                return Ok((Vec::new(), FeeResult::DecryptionError));
+            }
+        };
 
         let mut collected_fee = U256::zero();
         let mut transfers = Vec::new();
         for (meta, transfer_data) in transfer_data_with_meta {
-            let transfer = validate_receive(
+            let transfer = match validate_receive(
                 self.store_vault_server.as_ref(),
                 &self.validity_prover,
                 key.pubkey,
                 &meta,
                 &transfer_data,
             )
-            .await?;
+            .await
+            {
+                Ok(transfer) => transfer,
+                Err(e) => {
+                    if matches!(e, ReceiveValidationError::ValidationError(_)) {
+                        return Ok((Vec::new(), FeeResult::ValidationError));
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            };
             if fee.token_index != transfer.token_index {
-                return Err(WithdrawalServerError::InvalidFee(format!(
-                    "Invalid fee token index: expected {}, got {}",
-                    fee.token_index, transfer.token_index
-                )));
+                return Ok((Vec::new(), FeeResult::TokenIndexMismatch));
             }
             collected_fee += transfer.amount;
             transfers.push(transfer);
         }
         if collected_fee < fee.amount {
-            return Err(WithdrawalServerError::InvalidFee(format!(
-                "Insufficient fee: expected {}, got {}",
-                fee.amount, collected_fee
-            )));
+            return Ok((Vec::new(), FeeResult::Insufficient));
         }
-        Ok(transfers)
+        if !self.check_no_duplicated_nullifiers(&transfers).await? {
+            return Ok((Vec::new(), FeeResult::AlreadyUsed));
+        }
+        Ok((transfers, FeeResult::Success))
+    }
+
+    async fn check_no_duplicated_nullifiers(
+        &self,
+        transfers: &[Transfer],
+    ) -> Result<bool, WithdrawalServerError> {
+        let nullifiers: Vec<String> = transfers
+            .iter()
+            .map(|t| t.nullifier().to_hex())
+            .collect::<Vec<_>>();
+        let result = sqlx::query!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM used_payments
+            WHERE nullifier = ANY($1)
+            "#,
+            &nullifiers
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(result.count.unwrap_or(0) == 0)
     }
 
     async fn add_spent_transfers(
