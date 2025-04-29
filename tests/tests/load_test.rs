@@ -1,7 +1,9 @@
 use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
     contract::{
-        convert::convert_address_to_ethers, rollup_contract::RollupContract, utils::get_address,
+        convert::{convert_address_to_ethers, convert_address_to_intmax},
+        rollup_contract::RollupContract,
+        utils::get_address,
     },
     utils::time::sleep_for,
 };
@@ -14,7 +16,6 @@ use intmax2_zkp::{
     },
     constants::NUM_SENDERS_IN_BLOCK,
     ethereum_types::{
-        self,
         account_id::{AccountId, AccountIdPacked},
         address::Address,
         bytes32::Bytes32,
@@ -29,11 +30,11 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub struct EnvVar {
     // client settings
-    pub deployer_private_key: H256,
+    pub private_keys: String,
     pub l2_rpc_url: String,
     pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
-    pub num_parallel_process: usize,
+    pub sleep_time: u64,
 }
 
 #[tokio::test]
@@ -50,18 +51,22 @@ async fn load_test() -> anyhow::Result<()> {
         env.l2_chain_id,
         convert_address_to_ethers(env.rollup_contract_address),
     );
-    let block_builder_address = ethereum_types::address::Address::from_bytes_be(
-        get_address(env.l2_chain_id, env.deployer_private_key).as_bytes(),
-    )
-    .unwrap();
 
+    let private_keys = env
+        .private_keys
+        .split(',')
+        .map(|key| key.parse().unwrap())
+        .collect::<Vec<H256>>();
+
+    log::info!("num private keys: {}", private_keys.len());
     let mut total_posted_blocks = 0;
 
     loop {
         let mut futures: Vec<tokio::task::JoinHandle<anyhow::Result<(), anyhow::Error>>> =
             Vec::new();
-        for _ in 0..env.num_parallel_process {
-            let signer_private_key = env.deployer_private_key;
+        for &private_key in &private_keys {
+            let block_builder_address =
+                convert_address_to_intmax(get_address(env.l2_chain_id, private_key));
             let rollup_contract = rollup_contract.clone();
             futures.push(tokio::spawn(async move {
                 let mut rng = intmax2_interfaces::utils::random::default_rng();
@@ -69,7 +74,7 @@ async fn load_test() -> anyhow::Result<()> {
                 if is_registration_block {
                     post_registration_block(
                         &mut rng,
-                        signer_private_key,
+                        private_key,
                         &rollup_contract,
                         block_builder_address,
                     )
@@ -78,7 +83,7 @@ async fn load_test() -> anyhow::Result<()> {
                 } else {
                     post_non_registration_block(
                         &mut rng,
-                        signer_private_key,
+                        private_key,
                         &rollup_contract,
                         block_builder_address,
                     )
@@ -91,13 +96,13 @@ async fn load_test() -> anyhow::Result<()> {
         // await all
         let results = futures::future::join_all(futures).await;
         for result in results {
-            if let Err(e) = result {
+            if let Err(e) = result? {
                 log::error!("Error posting block: {:?}", e);
             }
         }
-        total_posted_blocks += env.num_parallel_process;
+        total_posted_blocks += private_keys.len();
         log::info!("Posted {} blocks", total_posted_blocks);
-        sleep_for(10).await;
+        sleep_for(env.sleep_time).await;
     }
 }
 
@@ -137,10 +142,16 @@ async fn post_registration_block<R: Rng>(
         },
     );
     let signature = construct_signature(&payload, pubkey_hash, Bytes32::default(), &signatures);
+
+    let pubkeys_trimmed = pubkeys
+        .into_iter()
+        .filter(|pubkey| *pubkey != U256::dummy_pubkey())
+        .collect::<Vec<_>>();
     rollup_contract
         .post_registration_block(
             signer_private_key,
-            BigUint::from(10u32).pow(17).try_into().unwrap(),
+            Some(400000),
+            BigUint::from(10u32).pow(16).try_into().unwrap(),
             signature.block_sign_payload.tx_tree_root,
             signature.block_sign_payload.expiry.into(),
             0,
@@ -148,7 +159,7 @@ async fn post_registration_block<R: Rng>(
             signature.agg_pubkey,
             signature.agg_signature,
             signature.message_point,
-            pubkeys,
+            pubkeys_trimmed,
         )
         .await?;
     Ok(())
@@ -202,7 +213,8 @@ async fn post_non_registration_block<R: Rng>(
     rollup_contract
         .post_non_registration_block(
             signer_private_key,
-            BigUint::from(10u32).pow(17).try_into().unwrap(),
+            Some(400000),
+            BigUint::from(10u32).pow(16).try_into().unwrap(),
             signature.block_sign_payload.tx_tree_root,
             signature.block_sign_payload.expiry.into(),
             0,

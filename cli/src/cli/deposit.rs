@@ -78,6 +78,7 @@ pub async fn deposit(
             liquidity_contract
                 .deposit_native(
                     signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.amount,
                     &aml_permission,
@@ -89,6 +90,7 @@ pub async fn deposit(
             liquidity_contract
                 .deposit_erc20(
                     signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.amount,
                     deposit_data.token_address,
@@ -101,6 +103,7 @@ pub async fn deposit(
             liquidity_contract
                 .deposit_erc721(
                     signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.token_address,
                     deposit_data.token_id,
@@ -113,6 +116,7 @@ pub async fn deposit(
             liquidity_contract
                 .deposit_erc1155(
                     signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.token_address,
                     deposit_data.token_id,
@@ -140,6 +144,7 @@ pub async fn deposit(
             .rollup_contract
             .process_deposits(
                 signer_private_key,
+                None,
                 0,
                 &[deposit_data.deposit_hash().unwrap()],
             )
@@ -189,7 +194,12 @@ async fn balance_check_and_approve(
                 .await?;
             if allowance < amount {
                 contract
-                    .approve(sender_private_key, liquidity_contract.address(), amount)
+                    .approve(
+                        sender_private_key,
+                        None,
+                        liquidity_contract.address(),
+                        amount,
+                    )
                     .await?;
             }
         }
@@ -205,7 +215,12 @@ async fn balance_check_and_approve(
             let operator = contract.get_approved(token_id).await?;
             if operator != liquidity_contract.address() {
                 contract
-                    .approve(sender_private_key, liquidity_contract.address(), token_id)
+                    .approve(
+                        sender_private_key,
+                        None,
+                        liquidity_contract.address(),
+                        token_id,
+                    )
                     .await?;
             }
         }
@@ -224,7 +239,12 @@ async fn balance_check_and_approve(
 
             if !is_approved {
                 contract
-                    .set_approval_for_all(sender_private_key, liquidity_contract.address(), true)
+                    .set_approval_for_all(
+                        sender_private_key,
+                        None,
+                        liquidity_contract.address(),
+                        true,
+                    )
                     .await?;
             }
         }

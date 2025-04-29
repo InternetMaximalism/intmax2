@@ -102,19 +102,21 @@ impl BlockBuilderRewardContract {
     pub async fn claim_reward(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         period_number: u64,
     ) -> Result<(), BlockchainError> {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let mut tx = contract.claim_reward(period_number.into());
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "claim_reward").await?;
+        handle_contract_call(&client, &mut tx, "claim_reward", gas_limit).await?;
         Ok(())
     }
 
     pub async fn batch_claim_reward(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         period_numbers: &[u64],
     ) -> Result<(), BlockchainError> {
         let period_numbers = period_numbers
@@ -125,7 +127,7 @@ impl BlockBuilderRewardContract {
         let mut tx = contract.batch_claim_reward(period_numbers);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "batch_claim_reward").await?;
+        handle_contract_call(&client, &mut tx, "batch_claim_reward", gas_limit).await?;
         Ok(())
     }
 }

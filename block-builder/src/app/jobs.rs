@@ -12,6 +12,7 @@ impl BlockBuilder {
         self.registry_contract
             .emit_heart_beat(
                 self.config.block_builder_private_key,
+                None,
                 &self.config.block_builder_url,
             )
             .await?;

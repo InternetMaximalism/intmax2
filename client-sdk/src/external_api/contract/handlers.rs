@@ -26,13 +26,14 @@ pub async fn handle_contract_call<S: ToString, O: Detokenize>(
         O,
     >,
     tx_name: S,
+    gas_limit: Option<u64>,
 ) -> Result<H256, BlockchainError> {
     let chain_id = client
         .get_chainid()
         .await
         .map_err(|e| BlockchainError::RPCError(e.to_string()))?
         .as_u64();
-    set_gas_price(chain_id, client.provider().url().as_str(), tx).await?;
+    set_tx_params(chain_id, client.provider().url().as_str(), tx, gas_limit).await?;
     let result = tx.send().await;
     match result {
         Ok(tx) => {
@@ -157,13 +158,14 @@ async fn check_if_tx_succeeded(
     }
 }
 
-async fn set_gas_price<O>(
+async fn set_tx_params<O>(
     chain_id: u64,
     rpc_url: &str,
     tx: &mut ethers::contract::builders::ContractCall<
         SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
         O,
     >,
+    gas_limit: Option<u64>,
 ) -> Result<(), BlockchainError> {
     let base_fee = get_base_fee(rpc_url).await?;
     let max_priority_fee_per_gas: U256 = parse_initial_max_priority_fee_per_gas_env()?
@@ -182,6 +184,9 @@ async fn set_gas_price<O>(
         .clone()
         .max_priority_fee_per_gas(max_priority_fee_per_gas)
         .max_fee_per_gas(max_fee_per_gas);
+    if let Some(gas_limit) = gas_limit {
+        *inner_tx = inner_tx.clone().gas(gas_limit);
+    }
     Ok(())
 }
 

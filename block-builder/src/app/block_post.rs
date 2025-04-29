@@ -208,6 +208,7 @@ pub(crate) async fn post_block(
         rollup_contract
             .post_registration_block(
                 block_builder_private_key,
+                Some(400000),
                 eth_allowance_for_block,
                 block_post.block_sign_payload.tx_tree_root,
                 block_post.block_sign_payload.expiry.into(),
@@ -223,6 +224,7 @@ pub(crate) async fn post_block(
         rollup_contract
             .post_non_registration_block(
                 block_builder_private_key,
+                Some(400000),
                 eth_allowance_for_block,
                 block_post.block_sign_payload.tx_tree_root,
                 block_post.block_sign_payload.expiry.into(),

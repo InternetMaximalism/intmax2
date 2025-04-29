@@ -42,7 +42,7 @@ pub async fn claim_withdrawals(key: KeySet, eth_private_key: Bytes32) -> Result<
     }
     let liquidity_contract = client.liquidity_contract.clone();
     liquidity_contract
-        .claim_withdrawals(signer_private_key, &claim_withdrawals)
+        .claim_withdrawals(signer_private_key, None, &claim_withdrawals)
         .await?;
     Ok(())
 }
@@ -90,7 +90,7 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
         claimable_periods
     );
     reward_contract
-        .batch_claim_reward(signer_private_key, &claimable_periods)
+        .batch_claim_reward(signer_private_key, None, &claimable_periods)
         .await?;
     Ok(())
 }

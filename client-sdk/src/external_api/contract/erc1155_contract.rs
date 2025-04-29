@@ -48,7 +48,7 @@ impl ERC1155Contract {
         let address = get_address(self.chain_id, private_key);
         let mut tx = contract.mint(address, 0.into(), 100.into(), Bytes::default());
         let client = get_client_with_signer(&self.rpc_url, self.chain_id, private_key).await?;
-        handle_contract_call(&client, &mut tx, "mint").await?;
+        handle_contract_call(&client, &mut tx, "mint", None).await?;
         Ok(())
     }
 
@@ -87,6 +87,7 @@ impl ERC1155Contract {
     pub async fn transfer_from(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         from: Address,
         to: Address,
         token_id: U256,
@@ -96,13 +97,14 @@ impl ERC1155Contract {
         let mut tx = contract.safe_transfer_from(from, to, token_id, amount, Bytes::default());
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "transfer_from").await?;
+        handle_contract_call(&client, &mut tx, "transfer_from", gas_limit).await?;
         Ok(())
     }
 
     pub async fn set_approval_for_all(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         operator: Address,
         approved: bool,
     ) -> Result<(), BlockchainError> {
@@ -110,7 +112,7 @@ impl ERC1155Contract {
         let mut tx = contract.set_approval_for_all(operator, approved);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "set_approval_for_all").await?;
+        handle_contract_call(&client, &mut tx, "set_approval_for_all", gas_limit).await?;
         Ok(())
     }
 

@@ -71,6 +71,7 @@ async fn post_blocks() -> anyhow::Result<()> {
         rollup_contract
             .post_registration_block(
                 env.deployer_private_key,
+                None,
                 BigUint::from(10u32).pow(17).try_into().unwrap(),
                 signature.block_sign_payload.tx_tree_root,
                 signature.block_sign_payload.expiry.into(),

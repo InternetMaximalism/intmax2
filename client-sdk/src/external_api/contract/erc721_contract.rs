@@ -80,6 +80,7 @@ impl ERC721Contract {
     pub async fn transfer_from(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         from: Address,
         to: Address,
         token_id: U256,
@@ -88,13 +89,14 @@ impl ERC721Contract {
         let mut tx = contract.transfer_from(from, to, token_id);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "transfer_from").await?;
+        handle_contract_call(&client, &mut tx, "transfer_from", gas_limit).await?;
         Ok(())
     }
 
     pub async fn approve(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         to: Address,
         token_id: U256,
     ) -> Result<(), BlockchainError> {
@@ -102,7 +104,7 @@ impl ERC721Contract {
         let mut tx = contract.approve(to, token_id);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "approve").await?;
+        handle_contract_call(&client, &mut tx, "approve", gas_limit).await?;
         Ok(())
     }
 

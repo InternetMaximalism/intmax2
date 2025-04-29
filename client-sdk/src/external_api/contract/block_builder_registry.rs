@@ -73,13 +73,14 @@ impl BlockBuilderRegistryContract {
     pub async fn emit_heart_beat(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         url: &str,
     ) -> Result<(), BlockchainError> {
         let contract = self.get_contract_with_signer(signer_private_key).await?;
         let mut tx = contract.emit_heartbeat(url.to_string());
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "emit_heart_beat").await?;
+        handle_contract_call(&client, &mut tx, "emit_heart_beat", gas_limit).await?;
         Ok(())
     }
 }

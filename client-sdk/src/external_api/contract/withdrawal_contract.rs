@@ -100,7 +100,7 @@ impl WithdrawalContract {
         );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        let tx_hash = handle_contract_call(&client, &mut tx, "initialize").await?;
+        let tx_hash = handle_contract_call(&client, &mut tx, "initialize", None).await?;
         Ok(tx_hash)
     }
 
