@@ -5,13 +5,13 @@ use intmax2_interfaces::{
         error::ServerError,
         withdrawal_server::{
             interface::{
-                ClaimFeeInfo, ClaimInfo, WithdrawalFeeInfo, WithdrawalInfo,
+                ClaimFeeInfo, ClaimInfo, FeeResult, WithdrawalFeeInfo, WithdrawalInfo,
                 WithdrawalServerClientInterface,
             },
             types::{
                 GetClaimInfoRequest, GetClaimInfoResponse, GetWithdrawalInfoByRecipientQuery,
                 GetWithdrawalInfoRequest, GetWithdrawalInfoResponse, RequestClaimRequest,
-                RequestWithdrawalRequest,
+                RequestClaimResponse, RequestWithdrawalRequest, RequestWithdrawalResponse,
             },
         },
     },
@@ -65,19 +65,20 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
-    ) -> Result<(), ServerError> {
+    ) -> Result<FeeResult, ServerError> {
         let request = RequestWithdrawalRequest {
             single_withdrawal_proof: single_withdrawal_proof.clone(),
             fee_token_index,
             fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        post_request::<_, ()>(
+        let result: RequestWithdrawalResponse = post_request(
             &self.base_url,
             "/withdrawal-server/request-withdrawal",
             Some(&request_with_auth),
         )
-        .await
+        .await?;
+        Ok(result.fee_result)
     }
 
     async fn request_claim(
@@ -86,19 +87,20 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
-    ) -> Result<(), ServerError> {
+    ) -> Result<FeeResult, ServerError> {
         let request = RequestClaimRequest {
             single_claim_proof: single_claim_proof.clone(),
             fee_token_index,
             fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
         let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
-        post_request::<_, ()>(
+        let result: RequestClaimResponse = post_request(
             &self.base_url,
             "/withdrawal-server/request-claim",
             Some(&request_with_auth),
         )
-        .await
+        .await?;
+        Ok(result.fee_result)
     }
 
     async fn get_withdrawal_info(&self, key: KeySet) -> Result<Vec<WithdrawalInfo>, ServerError> {

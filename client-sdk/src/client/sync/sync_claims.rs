@@ -1,4 +1,4 @@
-use intmax2_interfaces::api::withdrawal_server::interface::ClaimFeeInfo;
+use intmax2_interfaces::api::withdrawal_server::interface::{ClaimFeeInfo, FeeResult};
 use intmax2_zkp::{
     common::{
         signature_content::key_set::KeySet,
@@ -149,7 +149,8 @@ impl Client {
                 .collect::<Vec<_>>();
 
             // send claim request
-            self.withdrawal_server
+            let fee_result = self
+                .withdrawal_server
                 .request_claim(
                     key,
                     &single_claim_proof,
@@ -158,9 +159,33 @@ impl Client {
                 )
                 .await?;
 
+            match fee_result {
+                FeeResult::Success => {}
+                FeeResult::Insufficient => {
+                    return Err(SyncError::FeeError(
+                        "insufficient fee at the request".to_string(),
+                    ))
+                }
+                FeeResult::TokenIndexMismatch => {
+                    return Err(SyncError::FeeError(
+                        "token index mismatch at the request".to_string(),
+                    ))
+                }
+                _ => {
+                    let reason = format!("fee error at the request: {:?}", fee_result);
+                    for used_fee in &collected_fees {
+                        consume_payment(self.store_vault_server.as_ref(), key, used_fee, &reason)
+                            .await?;
+                    }
+                    return Err(SyncError::FeeError(format!(
+                        "invalid fee at the request: {:?}",
+                        fee_result
+                    )));
+                }
+            }
+
             // consume fees
             for used_fee in &collected_fees {
-                // todo: batch consume
                 consume_payment(
                     self.store_vault_server.as_ref(),
                     key,

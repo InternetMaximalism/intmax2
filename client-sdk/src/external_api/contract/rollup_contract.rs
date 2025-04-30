@@ -261,6 +261,15 @@ impl RollupContract {
         Ok(next_deposit_index)
     }
 
+    pub async fn get_block_hash(&self, block_number: u32) -> Result<Bytes32, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let block_hash: [u8; 32] =
+            with_retry(|| async { contract.get_block_hash(block_number).call().await })
+                .await
+                .map_err(|_| BlockchainError::RPCError("failed to get block hash".to_string()))?;
+        Ok(Bytes32::from_bytes_be(&block_hash).unwrap())
+    }
+
     pub async fn get_penalty(&self) -> Result<U256, BlockchainError> {
         let contract = self.get_contract().await?;
         let penalty: EthU256 = with_retry(|| async { contract.get_penalty().call().await })
