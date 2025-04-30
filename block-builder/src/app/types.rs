@@ -65,11 +65,13 @@ impl ProposalMemo {
         tx_requests: &[TxRequest],
         tx_timeout: u64,
     ) -> Self {
-        assert!(tx_requests.len() <= NUM_SENDERS_IN_BLOCK,
+        assert!(
+            tx_requests.len() <= NUM_SENDERS_IN_BLOCK,
             "tx_requests.len() = {}, which exceeds NUM_SENDERS_IN_BLOCK = {}",
             tx_requests.len(),
-            NUM_SENDERS_IN_BLOCK);
-        
+            NUM_SENDERS_IN_BLOCK
+        );
+
         let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
         let mut sorted_and_padded_txs = tx_requests.to_vec();
         sorted_and_padded_txs.sort_by(|a, b| b.pubkey.cmp(&a.pubkey));
@@ -166,10 +168,10 @@ impl ProposalMemo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use intmax2_zkp::constants::NUM_SENDERS_IN_BLOCK;
-    use intmax2_zkp::ethereum_types::u256::U256;
-    use intmax2_zkp::common::tx::Tx;
-    
+    use intmax2_zkp::{
+        common::tx::Tx, constants::NUM_SENDERS_IN_BLOCK, ethereum_types::u256::U256,
+    };
+
     use num_bigint::BigUint;
 
     #[test]
@@ -182,13 +184,7 @@ mod tests {
             ..Default::default()
         }];
 
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
         assert_eq!(memo.tx_requests.len(), 1);
         assert_eq!(memo.pubkeys.len(), NUM_SENDERS_IN_BLOCK);
@@ -199,19 +195,22 @@ mod tests {
     #[test]
     fn test_pubkey_sorting() {
         let tx_requests = vec![
-            TxRequest { pubkey: U256::from(5), ..Default::default() },
-            TxRequest { pubkey: U256::from(10), ..Default::default() },
-            TxRequest { pubkey: U256::from(1), ..Default::default() },
+            TxRequest {
+                pubkey: U256::from(5),
+                ..Default::default()
+            },
+            TxRequest {
+                pubkey: U256::from(10),
+                ..Default::default()
+            },
+            TxRequest {
+                pubkey: U256::from(1),
+                ..Default::default()
+            },
         ];
-    
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
-    
+
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
+
         let expected = vec![U256::from(10), U256::from(5), U256::from(1)];
         for (i, pk) in expected.iter().enumerate() {
             assert_eq!(memo.pubkeys[i], *pk);
@@ -220,17 +219,12 @@ mod tests {
 
     #[test]
     fn test_padding_to_num_senders() {
-        let tx_requests = vec![
-            TxRequest { pubkey: U256::from(2), ..Default::default() },
-        ];
+        let tx_requests = vec![TxRequest {
+            pubkey: U256::from(2),
+            ..Default::default()
+        }];
 
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
         assert_eq!(memo.pubkeys.len(), NUM_SENDERS_IN_BLOCK);
         assert_eq!(memo.pubkeys[0], U256::from(2));
@@ -242,17 +236,17 @@ mod tests {
     #[test]
     fn test_tx_index_proposal() {
         let tx_requests = vec![
-            TxRequest { pubkey: U256::from(3), ..Default::default() },
-            TxRequest { pubkey: U256::from(5), ..Default::default() },
+            TxRequest {
+                pubkey: U256::from(3),
+                ..Default::default()
+            },
+            TxRequest {
+                pubkey: U256::from(5),
+                ..Default::default()
+            },
         ];
 
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
         let proposal = &memo.proposals[0];
         assert_eq!(proposal.tx_index, 1);
@@ -261,13 +255,7 @@ mod tests {
     #[test]
     fn test_registration_block_skips_account_ids() {
         let tx_requests = vec![TxRequest::default()];
-        let memo = ProposalMemo::from_tx_requests(
-            true,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(true, Address::default(), 0, &tx_requests, 1000);
 
         assert_eq!(memo.get_account_ids(), None);
     }
@@ -282,13 +270,7 @@ mod tests {
             ..Default::default()
         }];
 
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
         let proposal = memo.get_proposal(pubkey, tx);
         assert!(proposal.is_some());
@@ -297,13 +279,7 @@ mod tests {
 
     #[test]
     fn test_empty_tx_requests() {
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &[],
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &[], 1000);
 
         assert_eq!(memo.tx_requests.len(), 0);
         assert_eq!(memo.proposals.len(), 0);
@@ -318,17 +294,19 @@ mod tests {
         let tx2 = Tx::default();
 
         let tx_requests = vec![
-            TxRequest { pubkey, tx: tx1, ..Default::default() },
-            TxRequest { pubkey, tx: tx2, ..Default::default() },
+            TxRequest {
+                pubkey,
+                tx: tx1,
+                ..Default::default()
+            },
+            TxRequest {
+                pubkey,
+                tx: tx2,
+                ..Default::default()
+            },
         ];
 
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
         assert_eq!(memo.tx_requests.len(), 2);
         assert_eq!(memo.proposals.len(), 2);
@@ -348,13 +326,7 @@ mod tests {
             })
             .collect();
 
-        let memo = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
         // Proposals should be only for the original tx_requests
         assert_eq!(memo.proposals.len(), NUM_SENDERS_IN_BLOCK);
@@ -378,12 +350,6 @@ mod tests {
             })
             .collect();
 
-        let _ = ProposalMemo::from_tx_requests(
-            false,
-            Address::default(),
-            0,
-            &tx_requests,
-            1000,
-        );
+        let _ = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
     }
 }

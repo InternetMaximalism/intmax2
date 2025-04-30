@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    app::{block_builder::{BlockBuilder, RealEthBalanceProvider}, error::BlockBuilderError},
+    app::{
+        block_builder::{BlockBuilder, RealEthBalanceProvider},
+        error::BlockBuilderError,
+    },
     EnvVar,
 };
 
@@ -25,8 +28,10 @@ impl State {
 mod tests {
     use super::*;
     use ethers::types::Address;
-    
-    use crate::app::storage::redis_storage::test_helper::{run_redis_docker, stop_redis_docker, find_free_port};
+
+    use crate::app::storage::redis_storage::test_helper::{
+        find_free_port, run_redis_docker, stop_redis_docker,
+    };
 
     // Tries to create new State using locally initialized EnvVar
     #[tokio::test]
@@ -47,7 +52,10 @@ mod tests {
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
-            block_builder_private_key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d".parse().unwrap(),   // anvil key
+            block_builder_private_key:
+                "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+                    .parse()
+                    .unwrap(), // anvil key
             eth_allowance_for_block: "0.3".to_string(),
             tx_timeout: 80,
             accepting_tx_interval: 40,
@@ -66,18 +74,31 @@ mod tests {
         // Run docker image
         stop_redis_docker(cont_name);
         let output = run_redis_docker(port, cont_name);
-        assert!(output.status.success(), "Couldn't start {}: {}", cont_name, String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create new State
         let state = State::new(&env).await;
         if !state.is_ok() {
             stop_redis_docker(cont_name);
-            assert!(state.is_ok(), "Couldn't create new State using locally initialized EnvVar");
+            assert!(
+                state.is_ok(),
+                "Couldn't create new State using locally initialized EnvVar"
+            );
         }
-        
+
         // Stop docker image
         let output = stop_redis_docker(cont_name);
-        assert!(output.status.success(), "Couldn't stop {}: {}", cont_name, String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "Couldn't stop {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     // Tries to create new State using locally initialized EnvVar
@@ -96,7 +117,10 @@ mod tests {
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
-            block_builder_private_key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d".parse().unwrap(),   // anvil key
+            block_builder_private_key:
+                "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+                    .parse()
+                    .unwrap(), // anvil key
             eth_allowance_for_block: "0.3".to_string(),
             tx_timeout: 80,
             accepting_tx_interval: 40,
@@ -114,6 +138,9 @@ mod tests {
 
         // Create new State
         let state = State::new(&env).await;
-        assert!(state.is_ok(), "Couldn't create new State with an empty Redis url");
+        assert!(
+            state.is_ok(),
+            "Couldn't create new State with an empty Redis url"
+        );
     }
 }

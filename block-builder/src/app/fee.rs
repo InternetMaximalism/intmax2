@@ -393,22 +393,22 @@ pub fn convert_fee_vec(fee: &Option<HashMap<u32, U256>>) -> Option<Vec<Fee>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use intmax2_zkp::ethereum_types::u256::U256;
     use num_bigint::BigUint;
     use num_traits::One;
-    use intmax2_zkp::ethereum_types::u256::U256;
+    use std::collections::HashMap;
 
     #[test]
     fn test_fee_amount_zero() {
         let fee_str = "0:0";
         let result = parse_fee_str(fee_str).unwrap();
-    
+
         let mut expected = HashMap::new();
         expected.insert(0, U256::default());
-    
+
         assert_eq!(result, expected);
     }
-    
+
     #[test]
     fn test_few_fees() {
         let fee_str = "0:100,1:200";
@@ -462,8 +462,7 @@ mod tests {
         let result = parse_fee_str(fee_str);
 
         assert!(result.is_err());
-        assert!(format!("{}", result.err().unwrap())
-            .contains("Failed to parse token index"));
+        assert!(format!("{}", result.err().unwrap()).contains("Failed to parse token index"));
     }
 
     #[test]
@@ -472,8 +471,7 @@ mod tests {
         let result = parse_fee_str(fee_str);
 
         assert!(result.is_err());
-        assert!(format!("{}", result.err().unwrap())
-            .contains("Failed to parse fee amount"));
+        assert!(format!("{}", result.err().unwrap()).contains("Failed to parse fee amount"));
     }
 
     #[test]
@@ -484,7 +482,11 @@ mod tests {
         let mut expected = HashMap::new();
         expected.insert(
             1u32,
-            U256::try_from(BigUint::parse_bytes("1000000000000000000000000000000000000".as_bytes(), 10).unwrap()).unwrap()
+            U256::try_from(
+                BigUint::parse_bytes("1000000000000000000000000000000000000".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .unwrap(),
         );
 
         assert_eq!(result, expected);
@@ -509,15 +511,15 @@ mod tests {
         // 2^256 — overflow for U256
         let overflow = BigUint::one() << 256;
         let fee_str = format!("0:{}", overflow);
-    
+
         let result = parse_fee_str(&fee_str);
-    
+
         assert!(matches!(
             result,
             Err(FeeError::ParseError(msg)) if msg.contains("Failed to convert fee amount")
         ));
     }
-    
+
     #[test]
     fn test_negative_fee_amount() {
         let fee_str = "0:-100";
@@ -529,7 +531,6 @@ mod tests {
         ));
     }
 
-    
     #[test]
     fn test_maximum_token_index() {
         let fee_str = format!("{}:42", u32::MAX);

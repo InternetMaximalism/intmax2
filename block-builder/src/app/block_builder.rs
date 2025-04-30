@@ -66,14 +66,22 @@ pub struct Config {
 
 #[async_trait::async_trait]
 pub trait EthBalanceProvider: Send + Sync {
-    async fn get_eth_balance(&self, rpc_url: &str, address: ethers::types::Address) -> Result<ethers::types::U256, BlockchainError>;
+    async fn get_eth_balance(
+        &self,
+        rpc_url: &str,
+        address: ethers::types::Address,
+    ) -> Result<ethers::types::U256, BlockchainError>;
 }
 
 pub struct RealEthBalanceProvider;
 
 #[async_trait::async_trait]
 impl EthBalanceProvider for RealEthBalanceProvider {
-    async fn get_eth_balance(&self, rpc_url: &str, address: ethers::types::Address) -> Result<ethers::types::U256, BlockchainError> {
+    async fn get_eth_balance(
+        &self,
+        rpc_url: &str,
+        address: ethers::types::Address,
+    ) -> Result<ethers::types::U256, BlockchainError> {
         get_eth_balance(rpc_url, address).await
     }
 }
@@ -92,7 +100,10 @@ pub struct BlockBuilder {
 
 impl BlockBuilder {
     /// Create a new BlockBuilder instance
-    pub async fn new(env: &EnvVar, balance_provider: Arc<dyn EthBalanceProvider>) -> Result<Self, BlockBuilderError> {
+    pub async fn new(
+        env: &EnvVar,
+        balance_provider: Arc<dyn EthBalanceProvider>,
+    ) -> Result<Self, BlockBuilderError> {
         // Initialize clients
         let store_vault_server_client: Arc<Box<dyn StoreVaultClientInterface>> =
             if env.use_s3.unwrap_or(true) {
@@ -394,7 +405,9 @@ fn convert_u256_from_ether_to_intmax(
 
 #[cfg(test)]
 mod tests {
-    use crate::app::storage::redis_storage::test_helper::{find_free_port, run_redis_docker, stop_redis_docker};
+    use crate::app::storage::redis_storage::test_helper::{
+        find_free_port, run_redis_docker, stop_redis_docker,
+    };
 
     use super::*;
     use ethers::types::{Address, U256};
@@ -404,14 +417,18 @@ mod tests {
     struct MockBalanceProvider {
         value: U256,
     }
-    
+
     #[async_trait::async_trait]
     impl EthBalanceProvider for MockBalanceProvider {
-        async fn get_eth_balance(&self, _rpc_url: &str, _address: Address) -> Result<U256, BlockchainError> {
+        async fn get_eth_balance(
+            &self,
+            _rpc_url: &str,
+            _address: Address,
+        ) -> Result<U256, BlockchainError> {
             Ok(self.value)
         }
     }
-    
+
     #[tokio::test]
     async fn test_get_fee_info() {
         // Initialize our own EnvVar
@@ -427,7 +444,10 @@ mod tests {
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
-            block_builder_private_key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d".parse().unwrap(),   // anvil key
+            block_builder_private_key:
+                "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+                    .parse()
+                    .unwrap(), // anvil key
             eth_allowance_for_block: "0.3".to_string(),
             tx_timeout: 80,
             accepting_tx_interval: 40,
@@ -443,13 +463,29 @@ mod tests {
             non_registration_collateral_fee: None,
         };
 
-        let block_builder = BlockBuilder::new(&env, Arc::new(MockBalanceProvider{value: U256::from(42u64)})).await.unwrap();
+        let block_builder = BlockBuilder::new(
+            &env,
+            Arc::new(MockBalanceProvider {
+                value: U256::from(42u64),
+            }),
+        )
+        .await
+        .unwrap();
         let info = block_builder.get_fee_info();
 
-        assert_eq!(info.block_builder_address, block_builder.config.block_builder_address);
+        assert_eq!(
+            info.block_builder_address,
+            block_builder.config.block_builder_address
+        );
         assert_eq!(info.beneficiary, block_builder.config.beneficiary_pubkey);
-        assert_eq!(info.registration_fee, convert_fee_vec(&block_builder.config.registration_fee));
-        assert_eq!(info.non_registration_fee, convert_fee_vec(&block_builder.config.non_registration_fee));
+        assert_eq!(
+            info.registration_fee,
+            convert_fee_vec(&block_builder.config.registration_fee)
+        );
+        assert_eq!(
+            info.non_registration_fee,
+            convert_fee_vec(&block_builder.config.non_registration_fee)
+        );
     }
 
     #[tokio::test]
@@ -467,8 +503,11 @@ mod tests {
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
-            block_builder_private_key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d".parse().unwrap(),   // anvil key
-            eth_allowance_for_block: "0.001".to_string(),  // this value is important in this test
+            block_builder_private_key:
+                "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+                    .parse()
+                    .unwrap(), // anvil key
+            eth_allowance_for_block: "0.001".to_string(), // this value is important in this test
             tx_timeout: 80,
             accepting_tx_interval: 40,
             proposing_block_interval: 10,
@@ -483,10 +522,20 @@ mod tests {
             non_registration_collateral_fee: None,
         };
 
-        let block_builder = BlockBuilder::new(&env, Arc::new(MockBalanceProvider{value: U256::from(42u64)})).await.unwrap();
+        let block_builder = BlockBuilder::new(
+            &env,
+            Arc::new(MockBalanceProvider {
+                value: U256::from(42u64),
+            }),
+        )
+        .await
+        .unwrap();
         let result = block_builder.blockchain_health_check().await;
 
-        assert!(matches!(result, Err(BlockBuilderError::BlockChainHealthError(_))));
+        assert!(matches!(
+            result,
+            Err(BlockBuilderError::BlockChainHealthError(_))
+        ));
     }
 
     #[tokio::test]
@@ -504,8 +553,11 @@ mod tests {
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
-            block_builder_private_key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d".parse().unwrap(),   // anvil key
-            eth_allowance_for_block: "1000000000".to_string(),  // this value is important in this test
+            block_builder_private_key:
+                "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+                    .parse()
+                    .unwrap(), // anvil key
+            eth_allowance_for_block: "1000000000".to_string(), // this value is important in this test
             tx_timeout: 80,
             accepting_tx_interval: 40,
             proposing_block_interval: 10,
@@ -520,17 +572,27 @@ mod tests {
             non_registration_collateral_fee: None,
         };
 
-        let block_builder = BlockBuilder::new(&env, Arc::new(MockBalanceProvider{value: U256::from(42u64)})).await.unwrap();
+        let block_builder = BlockBuilder::new(
+            &env,
+            Arc::new(MockBalanceProvider {
+                value: U256::from(42u64),
+            }),
+        )
+        .await
+        .unwrap();
         let result = block_builder.blockchain_health_check().await;
 
-        assert!(matches!(result, Err(BlockBuilderError::BlockChainHealthError(_))));
+        assert!(matches!(
+            result,
+            Err(BlockBuilderError::BlockChainHealthError(_))
+        ));
     }
 
     #[tokio::test]
     async fn test_creating_with_redis() {
         let port = find_free_port();
         let cont_name = "block-builder-test-creating-with-redis";
-        
+
         // Initialize our own EnvVar
         let env = EnvVar {
             port: 9004,
@@ -544,7 +606,10 @@ mod tests {
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
-            block_builder_private_key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d".parse().unwrap(),   // anvil key
+            block_builder_private_key:
+                "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+                    .parse()
+                    .unwrap(), // anvil key
             eth_allowance_for_block: "0.3".to_string(),
             tx_timeout: 80,
             accepting_tx_interval: 40,
@@ -563,12 +628,29 @@ mod tests {
         // Run docker image
         stop_redis_docker(cont_name);
         let output = run_redis_docker(port, cont_name);
-        assert!(output.status.success(), "Couldn't start {}: {}", cont_name, String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        let _ = BlockBuilder::new(&env, Arc::new(MockBalanceProvider{value: U256::from(42u64)})).await.unwrap();
+        let _ = BlockBuilder::new(
+            &env,
+            Arc::new(MockBalanceProvider {
+                value: U256::from(42u64),
+            }),
+        )
+        .await
+        .unwrap();
 
         // Stop docker image
         let output = stop_redis_docker(cont_name);
-        assert!(output.status.success(), "Couldn't stop {}: {}", cont_name, String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "Couldn't stop {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

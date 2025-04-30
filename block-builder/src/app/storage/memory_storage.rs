@@ -392,5 +392,4 @@ mod tests {
         assert_eq!(queue.len(), 1);
         assert_eq!(queue.front().unwrap().request_id, tx.request_id);
     }
-
 }
