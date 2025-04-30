@@ -4,34 +4,38 @@ version.workspace = true
 edition = "2021"
 
 [dependencies]
+actix-web = { workspace = true }
+actix-cors = { workspace = true }
 anyhow = { workspace = true }
-plonky2 = { workspace = true }
-plonky2_bn254 = { workspace = true }
-intmax2-zkp = { workspace = true }
-intmax2-client-sdk = { path = "../client-sdk" }
-intmax2-interfaces = { path = "../interfaces" }
-server-common = { path = "../server-common" }
-tokio = { workspace = true }
-reqwest = { workspace = true }
-ethers = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true }
+bincode = { workspace = true }
 chrono = { workspace = true }
-log = { workspace = true }
-uuid = { workspace = true }
 dotenv = { workspace = true }
 envy = { workspace = true }
 env_logger = { workspace = true }
-bincode = { workspace = true }
-thiserror = { workspace = true }
-actix-web = { workspace = true }
-actix-cors = { workspace = true }
-tracing-actix-web = { workspace = true }
+ethers = { workspace = true }
+intmax2-zkp = { workspace = true }
+intmax2-client-sdk = { path = "../client-sdk" }
+intmax2-interfaces = { path = "../interfaces" }
+log = { workspace = true }
+plonky2 = { workspace = true }
+plonky2_bn254 = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 serde_qs = { workspace = true }
+server-common = { path = "../server-common" }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing-actix-web = { workspace = true }
+uuid = { workspace = true }
+async-trait = "0.1.88"
+actix-rt = "2.10.0"
+mockall = "0.13.1"
 num-bigint = "0.4.6"
+num-traits = "0.2.19"
 redis = { version = "0.29.1", features = [
     "aio",
     "connection-manager",
     "tokio-native-tls-comp",
 ] }
-async-trait = "0.1.88"
+url = "2.5.4"

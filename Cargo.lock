@@ -139,6 +139,7 @@ version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24eda4e2a6e042aa4e55ac438a2ae052d3b5da0ecf83d7411e1a368946925208"
 dependencies = [
+ "actix-macros",
  "futures-core",
  "tokio",
 ]
@@ -1399,6 +1400,7 @@ name = "block-builder"
 version = "0.1.21"
 dependencies = [
  "actix-cors",
+ "actix-rt",
  "actix-web",
  "anyhow",
  "async-trait",
@@ -1412,7 +1414,9 @@ dependencies = [
  "intmax2-interfaces",
  "intmax2-zkp",
  "log",
+ "mockall",
  "num-bigint 0.4.6",
+ "num-traits",
  "plonky2",
  "plonky2_bn254",
  "redis 0.29.1",
@@ -1424,6 +1428,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tracing-actix-web",
+ "url",
  "uuid 1.16.0",
 ]
 
