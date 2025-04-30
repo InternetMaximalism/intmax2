@@ -842,6 +842,10 @@ impl Client {
         let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
         wait_till_validity_prover_synced(self.validity_prover.as_ref(), true, onchain_block_number)
             .await?;
+        log::info!(
+            "validity prover is synced for onchain block {}",
+            onchain_block_number
+        );
         let validity_proof = self
             .validity_prover
             .get_validity_proof(onchain_block_number)
@@ -850,14 +854,24 @@ impl Client {
         verifier.verify(validity_proof.clone()).map_err(|e| {
             ClientError::ValidityProverError(format!("Failed to verify validity proof: {}", e))
         })?;
-        let _validity_pis =
+        let validity_pis =
             ValidityPublicInputs::from_pis(&validity_proof.public_inputs).map_err(|e| {
                 ClientError::ValidityProverError(format!(
                     "Failed to parse validity proof pis: {}",
                     e
                 ))
             })?;
-        // todo: check validity pis
+        let onchain_block_hash = self
+            .rollup_contract
+            .get_block_hash(onchain_block_number)
+            .await?;
+        if validity_pis.public_state.block_hash != onchain_block_hash {
+            return Err(ClientError::ValidityProverError(format!(
+                "Invalid block hash: validity prover {} != onchain {}",
+                validity_pis.public_state.block_hash, onchain_block_hash
+            )));
+        }
+        log::info!("validity proof is valid");
         Ok(())
     }
 }

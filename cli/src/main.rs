@@ -7,7 +7,7 @@ use intmax2_cli::{
         claim::{claim_builder_reward, claim_withdrawals},
         deposit::deposit,
         error::CliError,
-        get::{balance, claim_status, mining_list, withdrawal_status},
+        get::{balance, check_validity_prover, claim_status, mining_list, withdrawal_status},
         history::history,
         send::send_transfers,
         sync::{resync, sync_claims, sync_withdrawals},
@@ -222,6 +222,9 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         }
         Commands::IncorporateBackup { path } => {
             incorporate_backup(&path)?;
+        }
+        Commands::CheckValidityProver => {
+            check_validity_prover().await?;
         }
         Commands::GenerateKey => {
             let mut rng = default_rng();

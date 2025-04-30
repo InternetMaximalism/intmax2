@@ -139,6 +139,7 @@ pub enum Commands {
         #[clap(long)]
         path: PathBuf,
     },
+    CheckValidityProver,
     GenerateKey,
     PublicKey {
         #[clap(long)]

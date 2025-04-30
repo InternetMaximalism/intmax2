@@ -91,3 +91,9 @@ pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
     }
     Ok(())
 }
+
+pub async fn check_validity_prover() -> Result<(), CliError> {
+    let client = get_client()?;
+    client.check_validity_prover().await?;
+    Ok(())
+}

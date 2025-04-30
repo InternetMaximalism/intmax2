@@ -413,6 +413,14 @@ pub async fn get_balances_without_sync(
     Ok(balances_to_token_balances(&balances))
 }
 
+#[wasm_bindgen]
+pub async fn check_validity_prover(config: &Config) -> Result<(), JsError> {
+    init_logger();
+    let client = get_client(config);
+    client.check_validity_prover().await?;
+    Ok(())
+}
+
 fn init_logger() {
     console_error_panic_hook::set_once();
     // wasm_logger::init(wasm_logger::Config::default());
