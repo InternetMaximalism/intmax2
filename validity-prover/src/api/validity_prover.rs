@@ -15,7 +15,8 @@ use intmax2_interfaces::api::validity_prover::{
         GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
         GetDepositMerkleProofResponse, GetLastDepositIdResponse,
         GetLatestIncludedDepositIndexResponse, GetNextDepositIndexResponse, GetUpdateWitnessQuery,
-        GetUpdateWitnessResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
+        GetUpdateWitnessResponse, GetValidityProofQuery, GetValidityProofResponse,
+        GetValidityWitnessQuery, GetValidityWitnessResponse,
     },
 };
 use intmax2_zkp::circuits::validity::validity_pis::ValidityPublicInputs;
@@ -131,6 +132,19 @@ pub async fn get_validity_witness(
     Ok(Json(response))
 }
 
+#[get("/get-validity-proof")]
+pub async fn get_validity_proof(
+    state: Data<State>,
+    query: QsQuery<GetValidityProofQuery>,
+) -> Result<Json<GetValidityProofResponse>, Error> {
+    let query = query.into_inner();
+    let response = state
+        .get_validity_proof(query)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    Ok(Json(response))
+}
+
 #[get("/get-validity-pis")]
 pub async fn get_validity_pis(
     state: Data<State>,
@@ -239,6 +253,7 @@ pub fn validity_prover_scope() -> actix_web::Scope {
         .service(get_account_info_batch)
         .service(get_update_witness)
         .service(get_validity_witness)
+        .service(get_validity_proof)
         .service(get_validity_pis)
         .service(get_deposit_info)
         .service(get_deposit_info_batch)

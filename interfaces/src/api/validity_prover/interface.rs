@@ -97,6 +97,11 @@ pub trait ValidityProverClientInterface: Sync + Send {
     async fn get_validity_witness(&self, block_number: u32)
         -> Result<ValidityWitness, ServerError>;
 
+    async fn get_validity_proof(
+        &self,
+        block_number: u32,
+    ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError>;
+
     async fn get_block_merkle_proof(
         &self,
         root_block_number: u32,
