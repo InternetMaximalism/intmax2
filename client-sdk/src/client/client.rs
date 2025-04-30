@@ -22,9 +22,10 @@ use intmax2_interfaces::{
         tx_data::TxData,
         user_data::{Balances, ProcessStatus, UserData},
     },
-    utils::random::default_rng,
+    utils::{circuit_verifiers::CircuitVerifiers, random::default_rng},
 };
 use intmax2_zkp::{
+    circuits::validity::validity_pis::ValidityPublicInputs,
     common::{
         block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
         signature_content::key_set::KeySet, transfer::Transfer, trees::transfer_tree::TransferTree,
@@ -835,6 +836,29 @@ impl Client {
         )
         .await?;
         Ok(balances)
+    }
+
+    pub async fn ensure_validity_prover_synced(&self) -> Result<(), ClientError> {
+        let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
+        wait_till_validity_prover_synced(self.validity_prover.as_ref(), true, onchain_block_number)
+            .await?;
+        let validity_proof = self
+            .validity_prover
+            .get_validity_proof(onchain_block_number)
+            .await?;
+        let verifier = CircuitVerifiers::load().get_validity_vd();
+        verifier.verify(validity_proof.clone()).map_err(|e| {
+            ClientError::ValidityProverError(format!("Failed to verify validity proof: {}", e))
+        })?;
+        let _validity_pis =
+            ValidityPublicInputs::from_pis(&validity_proof.public_inputs).map_err(|e| {
+                ClientError::ValidityProverError(format!(
+                    "Failed to parse validity proof pis: {}",
+                    e
+                ))
+            })?;
+        // todo: check validity pis
+        Ok(())
     }
 }
 
