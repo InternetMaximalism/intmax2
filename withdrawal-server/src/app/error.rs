@@ -21,6 +21,9 @@ pub enum WithdrawalServerError {
     #[error("Blockchain error {0}")]
     BlockchainError(#[from] BlockchainError),
 
+    #[error("Invalid block hash: {0}")]
+    InvalidBlockHash(String),
+
     #[error("Single withdrawal proof verification error")]
     SingleWithdrawalVerificationError,
 

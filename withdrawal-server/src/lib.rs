@@ -17,6 +17,7 @@ pub struct Env {
 
     pub l2_rpc_url: String,
     pub l2_chain_id: u64,
+    pub rollup_contract_address: Address,
     pub withdrawal_contract_address: Address,
 
     pub is_faster_mining: bool,

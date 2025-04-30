@@ -23,8 +23,10 @@ use intmax2_client_sdk::{
         sync::utils::quote_withdrawal_claim_fee,
     },
     external_api::{
-        contract::withdrawal_contract::WithdrawalContract, s3_store_vault::S3StoreVaultClient,
-        store_vault_server::StoreVaultServerClient, validity_prover::ValidityProverClient,
+        contract::{rollup_contract::RollupContract, withdrawal_contract::WithdrawalContract},
+        s3_store_vault::S3StoreVaultClient,
+        store_vault_server::StoreVaultServerClient,
+        validity_prover::ValidityProverClient,
     },
 };
 use intmax2_interfaces::{
@@ -71,6 +73,7 @@ pub struct WithdrawalServer {
     pub pool: DbPool,
     pub store_vault_server: Box<dyn StoreVaultClientInterface>,
     pub validity_prover: ValidityProverClient,
+    pub rollup_contract: RollupContract,
     pub withdrawal_contract: WithdrawalContract,
 }
 
@@ -131,6 +134,11 @@ impl WithdrawalServer {
             ))
         };
         let validity_prover = ValidityProverClient::new(&env.validity_prover_base_url);
+        let rollup_contract = RollupContract::new(
+            &env.l2_rpc_url,
+            env.l2_chain_id,
+            env.rollup_contract_address,
+        );
         let withdrawal_contract = WithdrawalContract::new(
             &env.l2_rpc_url,
             env.l2_chain_id,
@@ -142,6 +150,7 @@ impl WithdrawalServer {
             pool,
             store_vault_server,
             validity_prover,
+            rollup_contract,
             withdrawal_contract,
         })
     }
@@ -177,6 +186,20 @@ impl WithdrawalServer {
         let withdrawal =
             Withdrawal::from_u64_slice(&single_withdrawal_proof.public_inputs.to_u64_vec())
                 .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+
+        // validate block hash existence
+        let onchain_block_hash = self
+            .rollup_contract
+            .get_block_hash(withdrawal.block_number)
+            .await?;
+        if onchain_block_hash != withdrawal.block_hash {
+            return Err(WithdrawalServerError::InvalidBlockHash(format!(
+                "Invalid block hash: expected {}, got {} at block number {}",
+                withdrawal.block_hash.to_hex(),
+                onchain_block_hash.to_hex(),
+                withdrawal.block_number
+            )));
+        }
 
         // validate fee
         let direct_withdrawal_tokens = self
@@ -276,6 +299,21 @@ impl WithdrawalServer {
             .map_err(|_| WithdrawalServerError::SingleClaimVerificationError)?;
         let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec())
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+
+        // validate block hash existence
+        let onchain_block_hash = self
+            .rollup_contract
+            .get_block_hash(claim.block_number)
+            .await?;
+        if onchain_block_hash != claim.block_hash {
+            return Err(WithdrawalServerError::InvalidBlockHash(format!(
+                "Invalid block hash: expected {}, got {} at block number {}",
+                claim.block_hash.to_hex(),
+                onchain_block_hash.to_hex(),
+                claim.block_number
+            )));
+        }
+
         let nullifier = claim.nullifier;
         let nullifier_str = nullifier.to_hex();
 
