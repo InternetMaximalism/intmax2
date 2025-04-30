@@ -137,6 +137,13 @@ impl CircuitVerifiers {
         self.single_withdrawal_vd.clone()
     }
 
+    pub fn get_claim_vd(&self, is_faster_mining: bool) -> VerifierCircuitData<F, C, D> {
+        if is_faster_mining {
+            self.faster_single_claim_vd.clone()
+        } else {
+            self.single_claim_vd.clone()
+        }
+    }
     pub fn get_spent_vd(&self) -> VerifierCircuitData<F, C, D> {
         self.spent_vd.clone()
     }

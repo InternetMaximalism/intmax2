@@ -178,7 +178,6 @@ impl Client {
 
         // consume fees
         for used_fee in &collected_fees {
-            // todo: batch consume
             consume_payment(
                 self.store_vault_server.as_ref(),
                 key,

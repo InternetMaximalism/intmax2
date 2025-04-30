@@ -58,6 +58,7 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 struct Config {
+    is_faster_mining: bool,
     withdrawal_beneficiary_key: Option<KeySet>,
     claim_beneficiary_key: Option<KeySet>,
     direct_withdrawal_fee: Option<Vec<Fee>>,
@@ -113,6 +114,7 @@ impl WithdrawalServer {
             return Err(anyhow::anyhow!("claim fee beneficiary is needed"));
         }
         let config = Config {
+            is_faster_mining: env.is_faster_mining,
             withdrawal_beneficiary_key,
             claim_beneficiary_key,
             direct_withdrawal_fee,
@@ -268,6 +270,10 @@ impl WithdrawalServer {
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
     ) -> Result<FeeResult, WithdrawalServerError> {
+        let claim_verifier = CircuitVerifiers::load().get_claim_vd(self.config.is_faster_mining);
+        claim_verifier
+            .verify(single_claim_proof.clone())
+            .map_err(|_| WithdrawalServerError::SingleClaimVerificationError)?;
         let claim = Claim::from_u64_slice(&single_claim_proof.public_inputs.to_u64_vec())
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
         let nullifier = claim.nullifier;
