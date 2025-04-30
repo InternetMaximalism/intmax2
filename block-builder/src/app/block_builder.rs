@@ -265,7 +265,7 @@ impl BlockBuilder {
         let rpc_url = self.registry_contract.rpc_url.clone();
         let block_builder_address =
             ethers::types::Address::from_slice(&self.config.block_builder_address.to_bytes_be());
-        let balance = get_eth_balance(&rpc_url, block_builder_address)
+        let balance = self.balance_provider.get_eth_balance(&rpc_url, block_builder_address)
             .await
             .map_err(|e| {
                 BlockBuilderError::BlockChainHealthError(format!(
