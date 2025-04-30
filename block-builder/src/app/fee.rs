@@ -150,7 +150,6 @@ async fn validate_fee_single(
     sender_proof_set: &SenderProofSet,
     transfer_witness: &TransferWitness,
 ) -> Result<(), FeeError> {
-    // todo: validate spent proof inside `validate` method
     sender_proof_set
         .validate(U256::dummy_pubkey())
         .map_err(|e| {
