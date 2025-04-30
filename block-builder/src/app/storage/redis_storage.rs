@@ -1084,9 +1084,7 @@ mod tests {
             block_builder_id: Uuid::new_v4().to_string(),
         };
 
-        let storage = RedisStorage::new(&config).await;
-
-        storage
+        RedisStorage::new(&config).await
     }
 
     #[tokio::test]
@@ -1109,24 +1107,21 @@ mod tests {
         let redis2 = setup_test_storage("redis-test", "redis://localhost:6381").await;
 
         let acquired1 = redis1.acquire_lock("test_lock").await.unwrap();
-        if !acquired1 {
-            stop_redis_docker(cont_name);
-            assert!(acquired1, "Couldn't acquire lock for redis1");
-        }
+        assert_and_stop(cont_name, || {
+            assert!(acquired1, "Couldn't acquire lock for redis1")
+        });
 
         let acquired2 = redis2.acquire_lock("test_lock").await.unwrap();
-        if acquired2 {
-            stop_redis_docker(cont_name);
-            assert!(!acquired2, "Could acquire lock for redis2");
-        }
+        assert_and_stop(cont_name, || {
+            assert!(!acquired2, "Could acquire lock for redis2")
+        });
 
         redis1.release_lock("test_lock").await.unwrap();
 
         let acquired2_after = redis2.acquire_lock("test_lock").await.unwrap();
-        if !acquired2_after {
-            stop_redis_docker(cont_name);
-            assert!(acquired2_after, "Couldn't acquire lock for redis-test-2");
-        }
+        assert_and_stop(cont_name, || {
+            assert!(acquired2_after, "Couldn't acquire lock for redis-test-2")
+        });
 
         // Stop docker image
         let output = stop_redis_docker(cont_name);
@@ -1157,10 +1152,7 @@ mod tests {
         let redis_storage =
             setup_test_storage("redis-test", &format!("redis://localhost:{}", port)).await;
         let res = redis_storage.process_requests(true).await;
-        if !res.is_ok() {
-            stop_redis_docker(cont_name);
-            assert!(res.is_ok());
-        }
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
 
         // Stop docker image
         let output = stop_redis_docker(cont_name);
@@ -1204,10 +1196,7 @@ mod tests {
 
         let block_proposal = res.unwrap().unwrap();
         assert_and_stop(cont_name, || {
-            assert_eq!(
-                block_proposal.block_sign_payload.is_registration_block,
-                true
-            )
+            assert!(block_proposal.block_sign_payload.is_registration_block)
         });
         assert_and_stop(cont_name, || {
             assert_eq!(block_proposal.pubkeys.len(), NUM_SENDERS_IN_BLOCK)
@@ -1256,13 +1245,10 @@ mod tests {
 
         let block_post_task = res.unwrap().unwrap();
 
-        assert_and_stop(cont_name, || assert_eq!(block_post_task.force_post, true));
+        assert_and_stop(cont_name, || assert!(block_post_task.force_post));
 
         assert_and_stop(cont_name, || {
-            assert_eq!(
-                block_post_task.block_sign_payload.is_registration_block,
-                false
-            )
+            assert!(!block_post_task.block_sign_payload.is_registration_block)
         });
         assert_and_stop(cont_name, || {
             assert_eq!(

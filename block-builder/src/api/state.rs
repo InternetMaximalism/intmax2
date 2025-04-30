@@ -26,11 +26,13 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use std::panic::AssertUnwindSafe;
+
     use super::*;
     use ethers::types::Address;
 
     use crate::app::storage::redis_storage::test_helper::{
-        find_free_port, run_redis_docker, stop_redis_docker,
+        assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker,
     };
 
     // Tries to create new State using locally initialized EnvVar
@@ -83,13 +85,15 @@ mod tests {
 
         // Create new State
         let state = State::new(&env).await;
-        if !state.is_ok() {
-            stop_redis_docker(cont_name);
-            assert!(
-                state.is_ok(),
-                "Couldn't create new State using locally initialized EnvVar"
-            );
-        }
+        assert_and_stop(
+            cont_name,
+            AssertUnwindSafe(|| {
+                assert!(
+                    state.is_ok(),
+                    "Couldn't create new State using locally initialized EnvVar"
+                )
+            }),
+        );
 
         // Stop docker image
         let output = stop_redis_docker(cont_name);

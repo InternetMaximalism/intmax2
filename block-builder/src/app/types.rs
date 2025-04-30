@@ -211,7 +211,7 @@ mod tests {
 
         let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
-        let expected = vec![U256::from(10), U256::from(5), U256::from(1)];
+        let expected = [U256::from(10), U256::from(5), U256::from(1)];
         for (i, pk) in expected.iter().enumerate() {
             assert_eq!(memo.pubkeys[i], *pk);
         }
