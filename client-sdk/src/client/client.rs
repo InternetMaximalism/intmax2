@@ -20,7 +20,7 @@ use intmax2_interfaces::{
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
         tx_data::TxData,
-        user_data::{Balances, ProcessStatus},
+        user_data::{Balances, ProcessStatus, UserData},
     },
     utils::random::default_rng,
 };
@@ -68,6 +68,7 @@ use super::{
     strategy::{
         mining::{fetch_mining_info, Mining},
         strategy::determine_sequence,
+        tx::fetch_all_unprocessed_tx_info,
         tx_status::{get_tx_status, TxStatus},
     },
     sync::utils::{generate_spent_witness, get_balance_proof},
@@ -198,6 +199,35 @@ impl Client {
         Ok(result)
     }
 
+    async fn ensure_tx_sendable(&self, key: KeySet) -> Result<UserData, ClientError> {
+        // wait for sync
+        let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
+        wait_till_validity_prover_synced(
+            self.validity_prover.as_ref(),
+            false,
+            onchain_block_number,
+        )
+        .await?;
+        let mut user_data = self.get_user_data(key).await?;
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        let tx_info = fetch_all_unprocessed_tx_info(
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
+            key,
+            current_time,
+            &user_data.tx_status,
+            self.config.tx_timeout,
+        )
+        .await?;
+        if !tx_info.settled.is_empty() || !tx_info.pending.is_empty() {
+            log::warn!("There are unprocessed tx info, start to sync");
+            self.sync(key).await?;
+            user_data = self.get_user_data(key).await?;
+            log::info!("Sync finished");
+        }
+        Ok(user_data)
+    }
+
     /// Send a transaction request to the block builder
     #[allow(clippy::too_many_arguments)]
     pub async fn send_tx_request(
@@ -243,14 +273,7 @@ impl Client {
             }
         }
 
-        // wait for sync
-        let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
-        wait_till_validity_prover_synced(
-            self.validity_prover.as_ref(),
-            false,
-            onchain_block_number,
-        )
-        .await?;
+        let user_data = self.ensure_tx_sendable(key).await?;
 
         // get fee info
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
@@ -286,11 +309,6 @@ impl Client {
         } else {
             None
         };
-
-        // sync balance proof
-        self.sync(key).await?;
-
-        let user_data = self.get_user_data(key).await?;
 
         let balance_proof =
             get_balance_proof(&user_data)?.ok_or(ClientError::CannotSendTxByZeroBalanceAccount)?;
