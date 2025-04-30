@@ -39,8 +39,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
-        fee_payment::generate_withdrawal_transfers, receipt::generate_transfer_receipt,
-        strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt,
+        fee_payment::generate_withdrawal_transfers,
+        receipt::generate_transfer_receipt,
+        strategy::{
+            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
+        },
+        sync::utils::generate_salt,
     },
     external_api::{
         contract::{
@@ -238,6 +242,15 @@ impl Client {
                 ));
             }
         }
+
+        // wait for sync
+        let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
+        wait_till_validity_prover_synced(
+            self.validity_prover.as_ref(),
+            false,
+            onchain_block_number,
+        )
+        .await?;
 
         // get fee info
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
