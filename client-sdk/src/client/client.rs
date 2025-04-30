@@ -838,7 +838,7 @@ impl Client {
         Ok(balances)
     }
 
-    pub async fn ensure_validity_prover_synced(&self) -> Result<(), ClientError> {
+    pub async fn check_validity_prover(&self) -> Result<(), ClientError> {
         let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
         wait_till_validity_prover_synced(self.validity_prover.as_ref(), true, onchain_block_number)
             .await?;
