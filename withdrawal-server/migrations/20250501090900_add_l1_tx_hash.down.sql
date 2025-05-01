@@ -1,0 +1,5 @@
+ALTER TABLE withdrawals
+DROP COLUMN IF EXISTS l1_tx_hash;
+
+ALTER TABLE claims
+DROP COLUMN IF EXISTS l1_tx_hash;
