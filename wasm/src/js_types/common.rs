@@ -268,6 +268,7 @@ impl TryFrom<JsMetaData> for MetaData {
 pub struct JsWithdrawalInfo {
     pub status: String,
     pub contract_withdrawal: JsContractWithdrawal,
+    pub l1_tx_hash: Option<String>,
 }
 
 impl From<WithdrawalInfo> for JsWithdrawalInfo {
@@ -275,6 +276,7 @@ impl From<WithdrawalInfo> for JsWithdrawalInfo {
         Self {
             status: withdrawal_info.status.to_string(),
             contract_withdrawal: withdrawal_info.contract_withdrawal.into(),
+            l1_tx_hash: withdrawal_info.l1_tx_hash.map(|hash| hash.to_hex()),
         }
     }
 }
@@ -284,6 +286,7 @@ impl From<WithdrawalInfo> for JsWithdrawalInfo {
 pub struct JsClaimInfo {
     pub status: String,
     pub claim: JsClaim,
+    pub l1_tx_hash: Option<String>,
 }
 
 impl From<ClaimInfo> for JsClaimInfo {
@@ -291,6 +294,7 @@ impl From<ClaimInfo> for JsClaimInfo {
         Self {
             status: claim_info.status.to_string(),
             claim: claim_info.claim.into(),
+            l1_tx_hash: claim_info.l1_tx_hash.map(|hash| hash.to_hex()),
         }
     }
 }
