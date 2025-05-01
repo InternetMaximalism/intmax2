@@ -38,6 +38,7 @@ pub struct ClaimFeeInfo {
 pub struct WithdrawalInfo {
     pub status: WithdrawalStatus,
     pub contract_withdrawal: ContractWithdrawal,
+    pub l1_tx_hash: Option<Bytes32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +46,7 @@ pub struct WithdrawalInfo {
 pub struct ClaimInfo {
     pub status: ClaimStatus,
     pub claim: Claim,
+    pub l1_tx_hash: Option<Bytes32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

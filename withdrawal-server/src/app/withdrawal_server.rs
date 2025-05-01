@@ -392,7 +392,8 @@ impl WithdrawalServer {
             r#"
             SELECT 
                 status as "status: SqlWithdrawalStatus",
-                contract_withdrawal
+                contract_withdrawal,
+                l1_tx_hash
             FROM withdrawals
             WHERE pubkey = $1
             "#,
@@ -409,6 +410,7 @@ impl WithdrawalServer {
             withdrawal_infos.push(WithdrawalInfo {
                 status: record.status.into(),
                 contract_withdrawal,
+                l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
             });
         }
         Ok(withdrawal_infos)
@@ -423,7 +425,8 @@ impl WithdrawalServer {
             r#"
             SELECT 
                 status as "status: SqlClaimStatus",
-                claim
+                claim,
+                l1_tx_hash
             FROM claims
             WHERE pubkey = $1
             "#,
@@ -439,6 +442,7 @@ impl WithdrawalServer {
             claim_infos.push(ClaimInfo {
                 status: record.status.into(),
                 claim,
+                l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
             });
         }
         Ok(claim_infos)
@@ -453,7 +457,8 @@ impl WithdrawalServer {
             r#"
             SELECT 
                 status as "status: SqlWithdrawalStatus",
-                contract_withdrawal
+                contract_withdrawal,
+                l1_tx_hash
             FROM withdrawals
             WHERE recipient = $1
             "#,
@@ -470,6 +475,7 @@ impl WithdrawalServer {
             withdrawal_infos.push(WithdrawalInfo {
                 status: record.status.into(),
                 contract_withdrawal,
+                l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
             });
         }
         Ok(withdrawal_infos)
