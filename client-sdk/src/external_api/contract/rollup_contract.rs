@@ -1,6 +1,10 @@
-use std::{convert, time::Instant};
-
+use crate::external_api::contract::{
+    convert::{convert_address_to_intmax, convert_bytes32_to_tx_hash, convert_tx_hash_to_bytes32},
+    data_decoder::decode_post_block_calldata,
+    utils::get_batch_transaction,
+};
 use alloy::{
+    consensus::Transaction,
     network::TransactionBuilder,
     primitives::{Address, Bytes, B256, U256},
     sol,
@@ -14,11 +18,7 @@ use intmax2_zkp::{
         address::Address as ZkpAddress, bytes16::Bytes16, bytes32::Bytes32, u256::U256 as ZkpU256,
     },
 };
-
-use crate::external_api::contract::{
-    convert::{convert_address_to_intmax, convert_bytes32_to_tx_hash, convert_tx_hash_to_bytes32},
-    utils::get_batch_transaction,
-};
+use std::time::Instant;
 
 use super::{
     convert::{
@@ -335,25 +335,23 @@ impl RollupContract {
         );
         let mut full_blocks = Vec::new();
         for (tx, event) in txs.iter().zip(block_posted_events) {
-            // let contract = self.get_contract().await?;
-            // let functions = contract.abi().functions();
-            // let full_block = decode_post_block_calldata(
-            //     functions,
-            //     event.prev_block_hash,
-            //     event.deposit_tree_root,
-            //     event.timestamp,
-            //     event.block_number,
-            //     event.block_builder,
-            //     &tx.input,
-            // )
-            // .map_err(|e| {
-            //     BlockchainError::DecodeCallDataError(format!(
-            //         "failed to decode post block calldata: {}",
-            //         e
-            //     ))
-            // })?;
+            let input = tx.input();
+            let full_block = decode_post_block_calldata(
+                event.prev_block_hash,
+                event.deposit_tree_root,
+                event.timestamp,
+                event.block_number,
+                event.block_builder,
+                input,
+            )
+            .map_err(|e| {
+                BlockchainError::DecodeCallDataError(format!(
+                    "failed to decode post block calldata: {}",
+                    e
+                ))
+            })?;
             full_blocks.push(FullBlockWithMeta {
-                full_block: todo!(),
+                full_block,
                 eth_block_number: event.eth_block_number,
                 eth_tx_index: event.eth_tx_index,
             });
@@ -394,25 +392,5 @@ impl RollupContract {
         }
         deposit_leaf_inserted_events.sort_by_key(|event| event.deposit_index);
         Ok(deposit_leaf_inserted_events)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use alloy::primitives::B256;
-    use intmax2_zkp::{
-        common::signature_content::SignatureContent,
-        ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
-    };
-    use num_bigint::BigUint;
-
-    use crate::external_api::contract::{rollup_contract::RollupContract, utils::get_provider};
-
-    #[tokio::test]
-    async fn test_rollup_contract() -> anyhow::Result<()> {
-        // This test needs to be updated for alloy-rs
-        // The original test used Anvil from ethers, which might not be directly compatible with alloy
-        // For now, we'll leave this as a placeholder
-        Ok(())
     }
 }
