@@ -407,7 +407,7 @@ fn convert_u256_from_ether_to_intmax(
 
 #[cfg(test)]
 mod tests {
-    use crate::app::storage::redis_storage::test_helper::{
+    use crate::app::storage::redis_storage::test_redis_helper::{
         find_free_port, run_redis_docker, stop_redis_docker,
     };
 

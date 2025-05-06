@@ -999,7 +999,7 @@ impl Storage for RedisStorage {
 }
 
 #[cfg(test)]
-pub mod test_helper {
+pub mod test_redis_helper {
     use std::panic;
     // For redis
     use std::{
@@ -1067,7 +1067,7 @@ mod tests {
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait};
     use uuid::Uuid;
 
-    use test_helper::{assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker};
+    use test_redis_helper::{assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker};
 
     async fn setup_test_storage(instance_id: &str, redis_port: &str) -> RedisStorage {
         let config = StorageConfig {

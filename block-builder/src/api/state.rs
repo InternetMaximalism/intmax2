@@ -31,7 +31,7 @@ mod tests {
     use super::*;
     use ethers::types::Address;
 
-    use crate::app::storage::redis_storage::test_helper::{
+    use crate::app::storage::redis_storage::test_redis_helper::{
         assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker,
     };
 
