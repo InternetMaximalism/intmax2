@@ -15,9 +15,11 @@ common = {path = "../common" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 ethers = { workspace = true }
+alloy = {workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true}
+tower = "0.5.2"
 num-bigint = "0.4.6"
 config = "0.15"
 aes-gcm = "0.10"

@@ -1,15 +1,20 @@
+use alloy::transports::{RpcError, TransportErrorKind};
 use ethers::types::H256;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BlockchainError {
+    #[error("Contract error: {0}")]
+    ContractError(#[from] alloy::contract::Error),
+
     #[error("Insufficient funds: {0}")]
     InsufficientFunds(String),
 
     #[error("Transaction failed: {0}")]
     TransactionFailed(String),
 
+    // RPCError(String),
     #[error("RPC error: {0}")]
-    RPCError(String),
+    RPCError(#[from] RpcError<TransportErrorKind>),
 
     #[error("Join error: {0}")]
     JoinError(String),

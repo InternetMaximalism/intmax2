@@ -10,10 +10,7 @@ use ethers::{
 };
 
 use super::{
-    error::BlockchainError,
-    handlers::handle_contract_call,
-    proxy_contract::ProxyContract,
-    utils::{get_client, get_client_with_signer},
+    error::BlockchainError, handlers::handle_contract_call, proxy_contract::ProxyContract,
 };
 
 abigen!(BlockBuilderRegistry, "abi/BlockBuilderRegistry.json",);
