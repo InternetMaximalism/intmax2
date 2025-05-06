@@ -1,38 +1,40 @@
-use std::sync::Arc;
-
-use ethers::{
-    contract::abigen,
-    core::k256::ecdsa::SigningKey,
-    middleware::SignerMiddleware,
-    providers::{Http, Provider},
-    signers::Wallet,
-    types::{Address as EthAddress, H256},
+use super::{
+    convert::{
+        convert_address_to_alloy, convert_address_to_intmax, convert_bytes32_to_b256,
+        convert_u256_to_alloy, convert_u256_to_intmax,
+    },
+    error::BlockchainError,
+    handlers::send_transaction_with_gas_bump,
+    proxy_contract::ProxyContract,
+    utils::{get_provider, get_provider_with_signer, NormalProvider},
+};
+use alloy::{
+    network::TransactionBuilder,
+    primitives::{Address, Bytes, B256, U256},
+    sol,
 };
 use intmax2_interfaces::{
     api::withdrawal_server::interface::ContractWithdrawal, data::deposit_data::TokenType,
 };
 use intmax2_zkp::ethereum_types::{
-    address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _,
+    address::Address as ZkpAddress, bytes32::Bytes32, u256::U256 as ZkpU256,
+    u32limb_trait::U32LimbTrait as _,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::external_api::utils::retry::with_retry;
-
-use super::{
-    error::BlockchainError,
-    handlers::handle_contract_call,
-    proxy_contract::ProxyContract,
-    utils::{get_client, get_client_with_signer},
+use crate::external_api::{
+    contract::convert::{convert_b256_to_bytes32, convert_tx_hash_to_bytes32},
+    utils::retry::with_retry,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Deposited {
     pub deposit_id: u64,
-    pub depositor: Address,
+    pub depositor: ZkpAddress,
     pub pubkey_salt_hash: Bytes32,
     pub token_index: u32,
-    pub amount: U256,
+    pub amount: ZkpU256,
     pub is_eligible: bool,
     pub deposited_at: u64,
 
@@ -54,103 +56,78 @@ impl Deposited {
     }
 }
 
-abigen!(Liquidity, "abi/Liquidity.json",);
+sol!(
+    #[sol(rpc)]
+    Liquidity,
+    "abi/Liquidity.json",
+);
 
 #[derive(Debug, Clone)]
 pub struct LiquidityContract {
-    pub rpc_url: String,
-    pub chain_id: u64,
-    pub address: EthAddress,
+    pub provider: NormalProvider,
+    pub address: Address,
 }
 
 impl LiquidityContract {
-    pub fn new(rpc_url: &str, chain_id: u64, address: EthAddress) -> Self {
-        Self {
-            rpc_url: rpc_url.to_string(),
-            chain_id,
-            address,
-        }
+    pub fn new(rpc_urls: &[String], address: Address) -> Result<Self, BlockchainError> {
+        let provider = get_provider(rpc_urls)?;
+        Ok(Self { provider, address })
     }
 
-    pub async fn deploy(rpc_url: &str, chain_id: u64, private_key: H256) -> anyhow::Result<Self> {
-        let client = get_client_with_signer(rpc_url, chain_id, private_key).await?;
-        let impl_contract = Liquidity::deploy::<()>(Arc::new(client), ())?
-            .send()
-            .await?;
-        let impl_address = impl_contract.address();
-        let proxy =
-            ProxyContract::deploy(rpc_url, chain_id, private_key, impl_address, &[]).await?;
-        let address = proxy.address();
-        Ok(Self::new(rpc_url, chain_id, address))
-    }
-
-    pub fn address(&self) -> EthAddress {
-        self.address
+    pub async fn deploy(rpc_urls: &[String], private_key: B256) -> anyhow::Result<Self> {
+        let provider = get_provider(rpc_urls)?;
+        let signer = get_provider_with_signer(&provider, private_key);
+        let contract = Liquidity::deploy(signer).await?;
+        let impl_address = *contract.address();
+        let proxy = ProxyContract::deploy(provider.clone(), private_key, impl_address, &[]).await?;
+        let address = proxy.address;
+        Ok(Self { provider, address })
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn initialize(
         &self,
-        signer_private_key: H256,
-        admin: EthAddress,
-        l_1_scroll_messenger: EthAddress,
-        rollup: EthAddress,
-        withdrawal: EthAddress,
-        claim: EthAddress,
-        analyzer: EthAddress,
-        contribution: EthAddress,
-        initial_erc20_tokens: Vec<EthAddress>,
-    ) -> Result<H256, BlockchainError> {
-        let contract = self.get_contract_with_signer(signer_private_key).await?;
-        let mut tx = contract.initialize(
-            admin,
-            l_1_scroll_messenger,
-            rollup,
-            withdrawal,
-            claim,
-            analyzer,
-            contribution,
-            initial_erc20_tokens,
-        );
-        let client =
-            get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        let tx_hash = handle_contract_call(&client, &mut tx, "initialize", None).await?;
+        signer_private_key: B256,
+        admin: Address,
+        l_1_scroll_messenger: Address,
+        rollup: Address,
+        withdrawal: Address,
+        claim: Address,
+        analyzer: Address,
+        contribution: Address,
+        initial_erc20_tokens: Vec<Address>,
+    ) -> Result<B256, BlockchainError> {
+        let signer = get_provider_with_signer(&self.provider, signer_private_key);
+        let contract = Liquidity::new(self.address, signer.clone());
+        let tx_request = contract
+            .initialize(
+                admin,
+                l_1_scroll_messenger,
+                rollup,
+                withdrawal,
+                claim,
+                analyzer,
+                contribution,
+                initial_erc20_tokens,
+            )
+            .into_transaction_request();
+        let tx_hash = send_transaction_with_gas_bump(signer, tx_request, "initialize").await?;
         Ok(tx_hash)
     }
 
-    pub async fn get_contract(
-        &self,
-    ) -> Result<liquidity::Liquidity<Provider<Http>>, BlockchainError> {
-        let client = get_client(&self.rpc_url).await?;
-        let contract = Liquidity::new(self.address, client);
-        Ok(contract)
-    }
-
-    async fn get_contract_with_signer(
-        &self,
-        private_key: H256,
-    ) -> Result<
-        liquidity::Liquidity<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>,
-        BlockchainError,
-    > {
-        let client = get_client_with_signer(&self.rpc_url, self.chain_id, private_key).await?;
-        let contract = Liquidity::new(self.address, Arc::new(client));
-        Ok(contract)
-    }
-
-    pub async fn get_aml_permitter(&self) -> Result<EthAddress, BlockchainError> {
-        let contract = self.get_contract().await?;
-        let aml_permitter = contract.aml_permitter().call().await?;
+    pub async fn get_aml_permitter(&self) -> Result<Address, BlockchainError> {
+        let contract = Liquidity::new(self.address, self.provider.clone());
+        let aml_permitter = contract.amlPermitter().call().await?;
         Ok(aml_permitter)
     }
 
-    pub async fn get_eligibility_permitter(&self) -> Result<EthAddress, BlockchainError> {
-        let contract = self.get_contract().await?;
+    pub async fn get_eligibility_permitter(&self) -> Result<Address, BlockchainError> {
+        let contract = Liquidity::new(self.address, self.provider.clone());
         let eligibility_permitter =
-            with_retry(|| async { contract.eligibility_permitter().call().await })
+            with_retry(|| async { contract.eligibilityPermitter().call().await })
                 .await
                 .map_err(|e| {
-                    BlockchainError::RPCError(format!(
+                    BlockchainError::TransactionError(format!(
                         "Error getting eligibility permitter: {:?}",
                         e
                     ))
@@ -161,24 +138,22 @@ impl LiquidityContract {
     pub async fn get_token_index(
         &self,
         token_type: TokenType,
-        token_address: Address,
-        token_id: U256,
+        token_address: ZkpAddress,
+        token_id: ZkpU256,
     ) -> Result<Option<u32>, BlockchainError> {
-        if token_type != TokenType::NATIVE && token_address == Address::zero() {
+        if token_type != TokenType::NATIVE && token_address == ZkpAddress::zero() {
             // The contract will revert in this invalid case so we just return None before calling the contract
             return Ok(None);
         }
-        let contract = self.get_contract().await?;
-        let token_id = ethers::types::U256::from_big_endian(&token_id.to_bytes_be());
-        let token_address = EthAddress::from_slice(&token_address.to_bytes_be());
-        let (is_found, token_index) = with_retry(|| async {
-            contract
-                .get_token_index(token_type as u8, token_address, token_id)
-                .call()
-                .await
-        })
-        .await
-        .map_err(|e| BlockchainError::RPCError(format!("Error getting token index: {:?}", e)))?;
+        let contract = Liquidity::new(self.address, self.provider.clone());
+        let token_id = convert_u256_to_alloy(token_id);
+        let token_address = convert_address_to_alloy(token_address);
+        let result = contract
+            .getTokenIndex(token_type as u8, token_address, token_id)
+            .call()
+            .await?;
+        let is_found = result._0;
+        let token_index = result._1;
         if !is_found {
             Ok(None)
         } else {
@@ -189,44 +164,29 @@ impl LiquidityContract {
     pub async fn get_token_info(
         &self,
         token_index: u32,
-    ) -> Result<(TokenType, Address, U256), BlockchainError> {
-        let contract = self.get_contract().await?;
-        let token_info = with_retry(|| async { contract.get_token_info(token_index).call().await })
-            .await
-            .map_err(|e| BlockchainError::RPCError(format!("Error getting token info: {:?}", e)))?;
+    ) -> Result<(TokenType, ZkpAddress, ZkpU256), BlockchainError> {
+        let contract = Liquidity::new(self.address, self.provider.clone());
+        let token_info = contract.getTokenInfo(token_index).call().await?;
 
-        let token_type: u8 = token_info.token_type;
+        let token_type: u8 = token_info.tokenType;
         let token_type = TokenType::try_from(token_type)
             .map_err(|e| BlockchainError::ParseError(format!("Invalid token type: {:?}", e)))?;
-        let token_address = Address::from_bytes_be(token_info.token_address.as_bytes()).unwrap();
-        let token_id = {
-            let mut buf = [0u8; 32];
-            token_info.token_id.to_big_endian(&mut buf);
-            U256::from_bytes_be(&buf).unwrap()
-        };
+        let token_address = convert_address_to_intmax(token_info.tokenAddress);
+        let token_id = convert_u256_to_intmax(token_info.tokenId);
         Ok((token_type, token_address, token_id))
     }
 
     pub async fn get_last_deposit_id(&self) -> Result<u64, BlockchainError> {
-        let contract = self.get_contract().await?;
-        let deposit_id = with_retry(|| async { contract.get_last_deposit_id().call().await })
-            .await
-            .map_err(|e| {
-                BlockchainError::RPCError(format!("Error getting last deposit id: {:?}", e))
-            })?;
-        Ok(deposit_id.as_u64())
+        let contract = Liquidity::new(self.address, self.provider.clone());
+        let deposit_id = contract.getLastDepositId().call().await?;
+        Ok(deposit_id.to::<u64>())
     }
 
     pub async fn check_if_deposit_exists(&self, deposit_id: u64) -> Result<bool, BlockchainError> {
-        let contract = self.get_contract().await?;
-        let deposit_id = ethers::types::U256::from(deposit_id);
-        let deposit_data: DepositData =
-            with_retry(|| async { contract.get_deposit_data(deposit_id).call().await })
-                .await
-                .map_err(|e| {
-                    BlockchainError::RPCError(format!("Error while getting deposit data: {:?}", e))
-                })?;
-        let exists = deposit_data.sender != EthAddress::zero();
+        let contract = Liquidity::new(self.address, self.provider.clone());
+        let deposit_id = U256::from(deposit_id);
+        let deposit_data = contract.getDepositData(deposit_id).call().await?;
+        let exists = deposit_data.sender != Address::ZERO;
         Ok(exists)
     }
 
@@ -234,155 +194,166 @@ impl LiquidityContract {
         &self,
         withdrawal_hash: Bytes32,
     ) -> Result<bool, BlockchainError> {
-        let contract: Liquidity<Provider<Http>> = self.get_contract().await?;
-        let withdrawal_hash: [u8; 32] = withdrawal_hash.to_bytes_be().try_into().unwrap();
-        let block_number: ethers::types::U256 =
-            with_retry(|| async { contract.claimable_withdrawals(withdrawal_hash).call().await })
-                .await
-                .map_err(|e| {
-                    BlockchainError::RPCError(format!("Error checking if claimed: {:?}", e))
-                })?;
-        Ok(block_number != ethers::types::U256::zero())
+        let contract = Liquidity::new(self.address, self.provider.clone());
+        let withdrawal_hash_bytes = convert_bytes32_to_b256(withdrawal_hash);
+        let block_number = contract
+            .claimableWithdrawals(withdrawal_hash_bytes)
+            .call()
+            .await?;
+        Ok(block_number != U256::ZERO)
     }
 
     pub async fn deposit_native(
         &self,
-        signer_private_key: H256,
+        signer_private_key: B256,
         gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
-        amount: U256,
+        amount: ZkpU256,
         aml_permission: &[u8],
         eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
-        let contract = self.get_contract_with_signer(signer_private_key).await?;
-        let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
-        let amount = ethers::types::U256::from_big_endian(&amount.to_bytes_be());
-        let mut tx = contract
-            .deposit_native_token(
+        let signer = get_provider_with_signer(&self.provider, signer_private_key);
+        let contract = Liquidity::new(self.address, signer.clone());
+        let recipient_salt_hash = convert_bytes32_to_b256(pubkey_salt_hash);
+        let amount = convert_u256_to_alloy(amount);
+        let mut tx_request = contract
+            .depositNativeToken(
                 recipient_salt_hash,
-                aml_permission.to_vec().into(),
-                eligibility_permission.to_vec().into(),
+                Bytes::copy_from_slice(aml_permission),
+                Bytes::copy_from_slice(eligibility_permission),
             )
-            .value(amount);
-        let client =
-            get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_native_token", gas_limit).await?;
+            .into_transaction_request();
+        tx_request.set_value(amount);
+        if let Some(gas_limit) = gas_limit {
+            tx_request.set_gas_limit(gas_limit);
+        }
+        send_transaction_with_gas_bump(signer, tx_request, "deposit_native_token").await?;
         Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn deposit_erc20(
         &self,
-        signer_private_key: H256,
+        signer_private_key: B256,
         gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
-        amount: U256,
-        token_address: Address,
+        amount: ZkpU256,
+        token_address: ZkpAddress,
         aml_permission: &[u8],
         eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
-        let contract = self.get_contract_with_signer(signer_private_key).await?;
-        let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
-        let amount = ethers::types::U256::from_big_endian(&amount.to_bytes_be());
-        let token_address = EthAddress::from_slice(&token_address.to_bytes_be());
-        let mut tx = contract.deposit_erc20(
-            token_address,
-            recipient_salt_hash,
-            amount,
-            aml_permission.to_vec().into(),
-            eligibility_permission.to_vec().into(),
-        );
-        let client =
-            get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_erc20_token", gas_limit).await?;
+        let signer = get_provider_with_signer(&self.provider, signer_private_key);
+        let contract = Liquidity::new(self.address, signer.clone());
+        let recipient_salt_hash = convert_bytes32_to_b256(pubkey_salt_hash);
+        let amount = convert_u256_to_alloy(amount);
+        let token_address = convert_address_to_alloy(token_address);
+        let mut tx_request = contract
+            .depositERC20(
+                token_address,
+                recipient_salt_hash,
+                amount,
+                Bytes::copy_from_slice(aml_permission),
+                Bytes::copy_from_slice(eligibility_permission),
+            )
+            .into_transaction_request();
+        if let Some(gas_limit) = gas_limit {
+            tx_request.set_gas_limit(gas_limit);
+        }
+        send_transaction_with_gas_bump(signer, tx_request, "deposit_erc20_token").await?;
         Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn deposit_erc721(
         &self,
-        signer_private_key: H256,
+        signer_private_key: B256,
         gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
-        token_address: Address,
-        token_id: U256,
+        token_address: ZkpAddress,
+        token_id: ZkpU256,
         aml_permission: &[u8],
         eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
-        let contract = self.get_contract_with_signer(signer_private_key).await?;
-        let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
-        let token_id = ethers::types::U256::from_big_endian(&token_id.to_bytes_be());
-        let token_address = EthAddress::from_slice(&token_address.to_bytes_be());
-        let mut tx = contract.deposit_erc721(
-            token_address,
-            recipient_salt_hash,
-            token_id,
-            aml_permission.to_vec().into(),
-            eligibility_permission.to_vec().into(),
-        );
-        let client =
-            get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_erc721_token", gas_limit).await?;
+        let signer = get_provider_with_signer(&self.provider, signer_private_key);
+        let contract = Liquidity::new(self.address, signer.clone());
+        let recipient_salt_hash = convert_bytes32_to_b256(pubkey_salt_hash);
+        let token_id = convert_u256_to_alloy(token_id);
+        let token_address = convert_address_to_alloy(token_address);
+        let mut tx_request = contract
+            .depositERC721(
+                token_address,
+                recipient_salt_hash,
+                token_id,
+                Bytes::copy_from_slice(aml_permission),
+                Bytes::copy_from_slice(eligibility_permission),
+            )
+            .into_transaction_request();
+        if let Some(gas_limit) = gas_limit {
+            tx_request.set_gas_limit(gas_limit);
+        }
+        send_transaction_with_gas_bump(signer, tx_request, "deposit_erc721_token").await?;
         Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn deposit_erc1155(
         &self,
-        signer_private_key: H256,
+        signer_private_key: B256,
         gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
-        token_address: Address,
-        token_id: U256,
-        amount: U256,
+        token_address: ZkpAddress,
+        token_id: ZkpU256,
+        amount: ZkpU256,
         aml_permission: &[u8],
         eligibility_permission: &[u8],
     ) -> Result<(), BlockchainError> {
-        let contract = self.get_contract_with_signer(signer_private_key).await?;
-        let recipient_salt_hash: [u8; 32] = pubkey_salt_hash.to_bytes_be().try_into().unwrap();
-        let amount = ethers::types::U256::from_big_endian(&amount.to_bytes_be());
-        let token_id = ethers::types::U256::from_big_endian(&token_id.to_bytes_be());
-        let token_address = EthAddress::from_slice(&token_address.to_bytes_be());
-        let mut tx = contract.deposit_erc1155(
-            token_address,
-            recipient_salt_hash,
-            token_id,
-            amount,
-            aml_permission.to_vec().into(),
-            eligibility_permission.to_vec().into(),
-        );
-        let client =
-            get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_erc1155_token", gas_limit).await?;
+        let signer = get_provider_with_signer(&self.provider, signer_private_key);
+        let contract = Liquidity::new(self.address, signer.clone());
+        let recipient_salt_hash = convert_bytes32_to_b256(pubkey_salt_hash);
+        let token_id = convert_u256_to_alloy(token_id);
+        let token_address = convert_address_to_alloy(token_address);
+        let amount = convert_u256_to_alloy(amount);
+        let mut tx_request = contract
+            .depositERC1155(
+                token_address,
+                recipient_salt_hash,
+                token_id,
+                amount,
+                Bytes::copy_from_slice(aml_permission),
+                Bytes::copy_from_slice(eligibility_permission),
+            )
+            .into_transaction_request();
+        if let Some(gas_limit) = gas_limit {
+            tx_request.set_gas_limit(gas_limit);
+        }
+        send_transaction_with_gas_bump(signer, tx_request, "deposit_erc1155_token").await?;
         Ok(())
     }
 
     pub async fn claim_withdrawals(
         &self,
-        signer_private_key: H256,
+        signer_private_key: B256,
         gas_limit: Option<u64>,
         withdrawals: &[ContractWithdrawal],
     ) -> Result<(), BlockchainError> {
         let withdrawals = withdrawals
             .iter()
-            .map(|w| {
-                let recipient = EthAddress::from_slice(&w.recipient.to_bytes_be());
-                let token_index = w.token_index;
-                let amount = ethers::types::U256::from_big_endian(&w.amount.to_bytes_be());
-                let nullifier: [u8; 32] = w.nullifier.to_bytes_be().try_into().unwrap();
-                Withdrawal {
-                    recipient,
-                    token_index,
-                    amount,
-                    nullifier,
-                }
+            .map(|w| WithdrawalLib::Withdrawal {
+                recipient: convert_address_to_alloy(w.recipient),
+                tokenIndex: w.token_index,
+                amount: convert_u256_to_alloy(w.amount),
+                nullifier: convert_bytes32_to_b256(w.nullifier),
             })
             .collect::<Vec<_>>();
-        let contract = self.get_contract_with_signer(signer_private_key).await?;
-        let mut tx = contract.claim_withdrawals(withdrawals);
-        let client =
-            get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "claim_withdrawals", gas_limit).await?;
+        let signer = get_provider_with_signer(&self.provider, signer_private_key);
+        let contract = Liquidity::new(self.address, signer.clone());
+        let mut tx_request = contract
+            .claimWithdrawals(withdrawals)
+            .into_transaction_request();
+        if let Some(gas_limit) = gas_limit {
+            tx_request.set_gas_limit(gas_limit);
+        }
+        send_transaction_with_gas_bump(signer, tx_request, "claim_withdrawals").await?;
         Ok(())
     }
 
@@ -396,39 +367,44 @@ impl LiquidityContract {
             from_eth_block,
             to_eth_block
         );
-        let contract = self.get_contract().await?;
-        let events = with_retry(|| async {
-            contract
-                .deposited_filter()
-                .address(self.address.into())
-                .from_block(from_eth_block)
-                .to_block(to_eth_block)
-                .query_with_meta()
-                .await
-        })
-        .await
-        .map_err(|e| BlockchainError::RPCError(format!("failed to get deposited event: {}", e)))?;
-
+        let contract = Liquidity::new(self.address, self.provider.clone());
+        let events = contract
+            .event_filter::<Liquidity::Deposited>()
+            .address(self.address)
+            .from_block(from_eth_block)
+            .to_block(to_eth_block)
+            .query()
+            .await?;
         let mut deposited_events = Vec::new();
         for (event, meta) in events {
             deposited_events.push(Deposited {
-                deposit_id: event.deposit_id.as_u64(),
-                depositor: Address::from_bytes_be(&event.sender.to_fixed_bytes()).unwrap(),
-                pubkey_salt_hash: Bytes32::from_bytes_be(&event.recipient_salt_hash).unwrap(),
-                token_index: event.token_index,
-                amount: {
-                    let mut buf = [0u8; 32];
-                    event.amount.to_big_endian(&mut buf);
-                    U256::from_bytes_be(&buf).unwrap()
-                },
-                is_eligible: event.is_eligible,
-                deposited_at: event.deposited_at.as_u64(),
-                tx_hash: Bytes32::from_bytes_be(&meta.transaction_hash.to_fixed_bytes()).unwrap(),
-                eth_block_number: meta.block_number.as_u64(),
-                eth_tx_index: meta.transaction_index.as_u64(),
+                deposit_id: event.depositId.to::<u64>(),
+                depositor: convert_address_to_intmax(event.sender),
+                pubkey_salt_hash: convert_b256_to_bytes32(event.recipientSaltHash),
+                token_index: event.tokenIndex,
+                amount: convert_u256_to_intmax(event.amount),
+                is_eligible: event.isEligible,
+                deposited_at: event.depositedAt.to::<u64>(),
+                tx_hash: convert_tx_hash_to_bytes32(meta.transaction_hash.unwrap()),
+                eth_block_number: meta.block_number.unwrap(),
+                eth_tx_index: meta.transaction_index.unwrap(),
             });
         }
         deposited_events.sort_by_key(|event| event.deposit_id);
         Ok(deposited_events)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::primitives::Address;
+
+    #[test]
+    fn test_liquidity_contract_new() {
+        let rpc_urls = vec!["http://localhost:8545".to_string()];
+        let address = Address::ZERO;
+        let contract = LiquidityContract::new(&rpc_urls, address);
+        assert!(contract.is_ok());
     }
 }
