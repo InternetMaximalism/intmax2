@@ -28,6 +28,10 @@ pub fn convert_tx_hash_to_bytes32(input: TxHash) -> Bytes32 {
     Bytes32::from_bytes_be(&input.0).unwrap()
 }
 
+pub fn convert_bytes32_to_tx_hash(input: Bytes32) -> TxHash {
+    TxHash::from_slice(&input.to_bytes_be())
+}
+
 pub fn convert_bytes32_to_b256(input: Bytes32) -> B256 {
     B256::from_slice(&input.to_bytes_be())
 }

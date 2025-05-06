@@ -1,3 +1,5 @@
+use std::{convert, time::Instant};
+
 use alloy::{
     network::TransactionBuilder,
     primitives::{Address, Bytes, B256, U256},
@@ -11,6 +13,11 @@ use intmax2_zkp::{
     ethereum_types::{
         address::Address as ZkpAddress, bytes16::Bytes16, bytes32::Bytes32, u256::U256 as ZkpU256,
     },
+};
+
+use crate::external_api::contract::{
+    convert::{convert_address_to_intmax, convert_bytes32_to_tx_hash, convert_tx_hash_to_bytes32},
+    utils::get_batch_transaction,
 };
 
 use super::{
@@ -50,7 +57,7 @@ pub struct BlockPosted {
     pub signature_hash: Bytes32,
 
     // meta data
-    pub tx_hash: B256,
+    pub tx_hash: Bytes32,
     pub eth_block_number: u64,
     pub eth_tx_index: u64,
 }
@@ -275,8 +282,6 @@ impl RollupContract {
 
 // Event related methods
 impl RollupContract {
-    // For now, we'll leave the event methods as placeholders
-    // since we need to understand how events are handled in alloy-rs
     pub async fn get_blocks_posted_event(
         &self,
         from_eth_block: u64,
@@ -287,27 +292,77 @@ impl RollupContract {
             from_eth_block,
             to_eth_block
         );
-
-        // This is a placeholder - we need to implement this properly
-        // once we understand how events are handled in alloy-rs
-        Err(BlockchainError::TransactionError(
-            "Event handling not implemented for alloy-rs yet".to_string(),
-        ))
+        let contract = Rollup::new(self.address, self.provider.clone());
+        let events = contract
+            .event_filter::<Rollup::BlockPosted>()
+            .address(self.address)
+            .from_block(from_eth_block)
+            .to_block(to_eth_block)
+            .query()
+            .await?;
+        let mut block_posited_events = Vec::new();
+        for (event, meta) in events {
+            block_posited_events.push(BlockPosted {
+                prev_block_hash: convert_b256_to_bytes32(event.prevBlockHash),
+                block_builder: convert_address_to_intmax(event.blockBuilder),
+                timestamp: event.timestamp,
+                block_number: event.blockNumber.to(),
+                deposit_tree_root: convert_b256_to_bytes32(event.depositTreeRoot),
+                signature_hash: convert_b256_to_bytes32(event.signatureHash),
+                tx_hash: convert_tx_hash_to_bytes32(meta.transaction_hash.unwrap()),
+                eth_block_number: meta.block_number.unwrap(),
+                eth_tx_index: meta.transaction_index.unwrap(),
+            });
+        }
+        block_posited_events.sort_by_key(|event| event.block_number);
+        Ok(block_posited_events)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub async fn get_full_block_with_meta(
         &self,
         block_posted_events: &[BlockPosted],
     ) -> Result<Vec<FullBlockWithMeta>, BlockchainError> {
-        use crate::external_api::contract::data_decoder::decode_post_block_calldata;
-        use std::time::Instant;
+        let tx_hashes = block_posted_events
+            .iter()
+            .map(|e| convert_bytes32_to_tx_hash(e.tx_hash))
+            .collect::<Vec<_>>();
+        let instant = Instant::now();
+        let txs = get_batch_transaction(&self.provider, &tx_hashes).await?;
+        log::info!(
+            "get_batch_transaction: {:?} for {} txs",
+            instant.elapsed(),
+            tx_hashes.len()
+        );
+        let mut full_blocks = Vec::new();
+        for (tx, event) in txs.iter().zip(block_posted_events) {
+            // let contract = self.get_contract().await?;
+            // let functions = contract.abi().functions();
+            // let full_block = decode_post_block_calldata(
+            //     functions,
+            //     event.prev_block_hash,
+            //     event.deposit_tree_root,
+            //     event.timestamp,
+            //     event.block_number,
+            //     event.block_builder,
+            //     &tx.input,
+            // )
+            // .map_err(|e| {
+            //     BlockchainError::DecodeCallDataError(format!(
+            //         "failed to decode post block calldata: {}",
+            //         e
+            //     ))
+            // })?;
+            full_blocks.push(FullBlockWithMeta {
+                full_block: todo!(),
+                eth_block_number: event.eth_block_number,
+                eth_tx_index: event.eth_tx_index,
+            });
+        }
 
-        // We need to implement get_batch_transaction for alloy-rs
-        // For now, we'll leave this as a placeholder
-        Err(BlockchainError::TransactionError(
-            "get_batch_transaction not implemented for alloy-rs yet".to_string(),
-        ))
+        // Sort by block number
+        full_blocks.sort_by_key(|block| block.full_block.block.block_number);
+
+        Ok(full_blocks)
     }
 
     pub async fn get_deposit_leaf_inserted_events(
@@ -320,12 +375,25 @@ impl RollupContract {
             from_eth_block,
             to_eth_block_number
         );
-
-        // This is a placeholder - we need to implement this properly
-        // once we understand how events are handled in alloy-rs
-        Err(BlockchainError::TransactionError(
-            "Event handling not implemented for alloy-rs yet".to_string(),
-        ))
+        let contract = Rollup::new(self.address, self.provider.clone());
+        let events = contract
+            .event_filter::<Rollup::DepositLeafInserted>()
+            .address(self.address)
+            .from_block(from_eth_block)
+            .to_block(to_eth_block_number)
+            .query()
+            .await?;
+        let mut deposit_leaf_inserted_events = Vec::new();
+        for (event, meta) in events {
+            deposit_leaf_inserted_events.push(DepositLeafInserted {
+                deposit_index: event.depositIndex,
+                deposit_hash: convert_b256_to_bytes32(event.depositHash),
+                eth_block_number: meta.block_number.unwrap(),
+                eth_tx_index: meta.transaction_index.unwrap(),
+            });
+        }
+        deposit_leaf_inserted_events.sort_by_key(|event| event.deposit_index);
+        Ok(deposit_leaf_inserted_events)
     }
 }
 

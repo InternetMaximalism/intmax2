@@ -1,19 +1,23 @@
+use super::error::BlockchainError;
+use crate::external_api::utils::time::sleep_for;
 use alloy::{
     network::EthereumWallet,
-    primitives::B256,
+    primitives::{TxHash, B256},
     providers::{
         fillers::{FillProvider, JoinFill, WalletFiller},
         utils::JoinedRecommendedFillers,
-        ProviderBuilder,
+        Provider, ProviderBuilder,
     },
-    rpc::client::RpcClient,
+    rpc::{client::RpcClient, types::Transaction},
     signers::local::PrivateKeySigner,
     transports::{
         http::Http,
         layers::{FallbackLayer, RetryBackoffLayer},
     },
 };
+use futures::{stream, StreamExt as _};
 use reqwest::Url;
+use std::{collections::HashMap, env};
 use tower::ServiceBuilder;
 
 pub type NormalProvider = FillProvider<JoinedRecommendedFillers, alloy::providers::RootProvider>;
@@ -22,7 +26,6 @@ pub type ProviderWithSigner = FillProvider<
     JoinFill<JoinedRecommendedFillers, WalletFiller<EthereumWallet>>,
     alloy::providers::RootProvider,
 >;
-use super::error::BlockchainError;
 
 pub fn get_provider(rpc_urls: &[String]) -> Result<NormalProvider, BlockchainError> {
     let retry_layer = RetryBackoffLayer::new(5, 1000, 100);
@@ -57,89 +60,82 @@ pub fn get_provider_with_signer(
     provider.clone().join_with(wallet_filler)
 }
 
-// #[cfg(not(target_arch = "wasm32"))]
-// pub async fn get_batch_transaction(
-//     rpc_url: &str,
-//     tx_hashes: &[H256],
-// ) -> Result<Vec<ethers::types::Transaction>, BlockchainError> {
-//     use crate::external_api::utils::time::sleep_for;
-//     use std::collections::HashMap;
+pub async fn get_batch_transaction(
+    provider: &NormalProvider,
+    tx_hashes: &[TxHash],
+) -> Result<Vec<Transaction>, BlockchainError> {
+    let mut target_tx_hashes = tx_hashes.to_vec();
+    let mut fetched_txs = HashMap::new();
+    let mut retry_count = 0;
+    let max_tries = std::env::var("MAX_TRIES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    while !target_tx_hashes.is_empty() {
+        let (partial_fetched_txs, failed_tx_hashes) =
+            get_batch_transaction_inner(provider, &target_tx_hashes).await?;
+        fetched_txs.extend(partial_fetched_txs);
+        if failed_tx_hashes.is_empty() {
+            break;
+        }
+        log::warn!(
+            "Fetched {} transactions, failed {}",
+            fetched_txs.len(),
+            failed_tx_hashes.len()
+        );
+        target_tx_hashes = failed_tx_hashes;
+        retry_count += 1;
+        if retry_count > max_tries {
+            return Err(BlockchainError::TxNotFoundBatch);
+        }
+        sleep_for(2).await;
+    }
+    let mut txs = Vec::new();
+    for tx_hash in tx_hashes {
+        txs.push(fetched_txs.get(tx_hash).unwrap().clone());
+    }
+    Ok(txs)
+}
 
-//     let mut target_tx_hashes = tx_hashes.to_vec();
-//     let mut fetched_txs = HashMap::new();
-//     let mut retry_count = 0;
-//     let max_tries = std::env::var("MAX_TRIES")
-//         .ok()
-//         .and_then(|s| s.parse().ok())
-//         .unwrap_or(10);
-//     while !target_tx_hashes.is_empty() {
-//         let (partial_fetched_txs, failed_tx_hashes) =
-//             get_batch_transaction_inner(rpc_url, &target_tx_hashes).await?;
-//         fetched_txs.extend(partial_fetched_txs);
-//         if failed_tx_hashes.is_empty() {
-//             break;
-//         }
-//         log::warn!(
-//             "Fetched {} transactions, failed {}",
-//             fetched_txs.len(),
-//             failed_tx_hashes.len()
-//         );
-//         target_tx_hashes = failed_tx_hashes;
-//         retry_count += 1;
-//         if retry_count > max_tries {
-//             return Err(BlockchainError::TxNotFoundBatch);
-//         }
-//         sleep_for(2).await;
-//     }
-//     let mut txs = Vec::new();
-//     for tx_hash in tx_hashes {
-//         txs.push(fetched_txs.get(tx_hash).unwrap().clone());
-//     }
-//     Ok(txs)
-// }
+async fn get_batch_transaction_inner(
+    provider: &NormalProvider,
+    tx_hashes: &[TxHash],
+) -> Result<(HashMap<TxHash, Transaction>, Vec<TxHash>), BlockchainError> {
+    let max_parallel_requests = env::var("MAX_PARALLEL_REQUESTS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
 
-// #[cfg(not(target_arch = "wasm32"))]
-// async fn get_batch_transaction_inner(
-//     rpc_url: &str,
-//     tx_hashes: &[H256],
-// ) -> Result<(HashMap<H256, ethers::types::Transaction>, Vec<H256>), BlockchainError> {
-//     use crate::external_api::contract::utils::get_transaction;
-//     use std::env;
-//     use tokio::task::JoinSet;
-//     let mut join_set = JoinSet::new();
-//     let max_parallel_requests = env::var("MAX_PARALLEL_REQUESTS")
-//         .ok()
-//         .and_then(|s| s.parse().ok())
-//         .unwrap_or(20);
-//     let semaphore = Arc::new(tokio::sync::Semaphore::new(max_parallel_requests));
-//     for &tx_hash in tx_hashes {
-//         let permit = Arc::clone(&semaphore);
-//         let rpc_url = rpc_url.to_string();
-//         join_set.spawn(async move {
-//             let _permit = permit.acquire().await.expect("Semaphore is never closed");
-//             let tx = get_transaction(&rpc_url, tx_hash)
-//                 .await?
-//                 .ok_or(BlockchainError::TxNotFound(tx_hash))?;
-//             Ok::<_, BlockchainError>((tx_hash, tx))
-//         });
-//     }
+    let results = stream::iter(tx_hashes)
+        .map(|&tx_hash| {
+            let provider = provider.clone();
+            async move {
+                match provider.get_transaction_by_hash(tx_hash).await {
+                    Ok(Some(tx)) => Ok((tx_hash, Ok(tx))),
+                    Ok(None) => Ok((tx_hash, Err(BlockchainError::TxNotFound(tx_hash)))),
+                    Err(e) => Err(e),
+                }
+            }
+        })
+        .buffer_unordered(max_parallel_requests)
+        .collect::<Vec<_>>()
+        .await;
 
-//     let mut fetched_txs = HashMap::new();
-//     let mut failed_tx_hashes = Vec::new();
-//     while let Some(result) = join_set.join_next().await {
-//         match result {
-//             Ok(Ok((tx_hash, tx))) => {
-//                 fetched_txs.insert(tx_hash, tx);
-//             }
-//             Ok(Err(e)) => {
-//                 if let BlockchainError::TxNotFound(tx_hash) = e {
-//                     failed_tx_hashes.push(tx_hash);
-//                 } else {
-//                     return Err(e);
-//                 }
-//             }
-//             Err(e) => return Err(BlockchainError::JoinError(e.to_string())),
-//         }
-//     }
-//     Ok((fetched_txs, failed_tx_hashes))
-// }
+    let mut fetched_txs = HashMap::new();
+    let mut failed_tx_hashes = Vec::new();
+
+    for result in results {
+        match result {
+            Ok((tx_hash, Ok(tx))) => {
+                fetched_txs.insert(tx_hash, tx);
+            }
+            Ok((tx_hash, Err(BlockchainError::TxNotFound(_)))) => {
+                failed_tx_hashes.push(tx_hash);
+            }
+            Ok((_, Err(e))) => return Err(e),
+            Err(e) => return Err(BlockchainError::JoinError(e.to_string())),
+        }
+    }
+
+    Ok((fetched_txs, failed_tx_hashes))
+}
