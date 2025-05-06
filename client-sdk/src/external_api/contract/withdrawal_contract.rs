@@ -5,7 +5,7 @@ use super::{
 };
 use crate::external_api::contract::handlers::send_transaction_with_gas_bump;
 use alloy::{
-    primitives::{Address, TxHash, B256, U256},
+    primitives::{Address, B256, U256},
     sol,
 };
 
@@ -23,7 +23,7 @@ pub struct WithdrawalContract {
 
 impl WithdrawalContract {
     pub async fn deploy(provider: NormalProvider, private_key: B256) -> anyhow::Result<Self> {
-        let signer = get_provider_with_signer(provider.clone(), private_key);
+        let signer = get_provider_with_signer(&provider, private_key);
         let impl_contract = WithdrawalAbi::deploy(signer).await?;
         let impl_address = *impl_contract.address();
         let proxy = ProxyContract::deploy(provider.clone(), private_key, impl_address, &[]).await?;
@@ -44,8 +44,8 @@ impl WithdrawalContract {
         rollup_address: Address,
         contribution_address: Address,
         direct_withdrawal_token_indices: Vec<U256>,
-    ) -> Result<TxHash, BlockchainError> {
-        let signer = get_provider_with_signer(self.provider.clone(), signer_private_key);
+    ) -> Result<(), BlockchainError> {
+        let signer = get_provider_with_signer(&self.provider, signer_private_key);
         let contract = WithdrawalAbi::new(self.address, signer.clone());
         let tx_request = contract
             .initialize(
@@ -58,8 +58,8 @@ impl WithdrawalContract {
                 direct_withdrawal_token_indices,
             )
             .into_transaction_request();
-        let tx_hash = send_transaction_with_gas_bump(signer, tx_request, "initialize").await?;
-        Ok(tx_hash)
+        send_transaction_with_gas_bump(signer, tx_request, "initialize").await?;
+        Ok(())
     }
 
     pub async fn get_direct_withdrawal_token_indices(&self) -> Result<Vec<u32>, BlockchainError> {

@@ -47,11 +47,14 @@ pub fn get_provider(rpc_urls: &[String]) -> Result<NormalProvider, BlockchainErr
     Ok(provider)
 }
 
-pub fn get_provider_with_signer(provider: NormalProvider, private_key: B256) -> ProviderWithSigner {
+pub fn get_provider_with_signer(
+    provider: &NormalProvider,
+    private_key: B256,
+) -> ProviderWithSigner {
     let signer = PrivateKeySigner::from_bytes(&private_key).unwrap();
     let wallet = EthereumWallet::new(signer);
     let wallet_filler = WalletFiller::new(wallet);
-    provider.join_with(wallet_filler)
+    provider.clone().join_with(wallet_filler)
 }
 
 // #[cfg(not(target_arch = "wasm32"))]
