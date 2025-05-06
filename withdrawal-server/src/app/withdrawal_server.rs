@@ -78,6 +78,15 @@ pub struct WithdrawalServer {
 }
 
 impl WithdrawalServer {
+    /// Creates a new instance of WithdrawalServer
+    ///
+    /// Uses Postgres image and requires 'event' and 'withdrawal' databases in it.
+    ///
+    /// # Arguments
+    /// * `env` - Environment variable with the necessary settings
+    ///
+    /// # Returns
+    /// * `Result(Self)` - The instance itself or the error
     pub async fn new(env: &Env) -> anyhow::Result<Self> {
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
@@ -622,4 +631,299 @@ pub fn privkey_to_keyset(privkey: H256) -> KeySet {
         .try_into()
         .unwrap();
     KeySet::new(privkey)
+}
+
+#[cfg(test)]
+pub mod test_withdrawal_server_helper {
+    use std::panic;
+    // For redis
+    use std::{
+        net::TcpListener,
+        process::{Command, Output, Stdio},
+    };
+
+    pub fn run_withdrawal_docker(port: u16, container_name: &str) -> Output {
+        let port_arg = format!("{}:5432", port);
+
+        let output = Command::new("docker")
+            .args([
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                container_name,
+                "--hostname",
+                "--postgres",
+                "-e",
+                "POSTGRES_USER=postgres",
+                "-e",
+                "POSTGRES_PASSWORD=password",
+                "-e",
+                "POSTGRES_DB=maindb",
+                "-p",
+                &port_arg,
+                "postgres:16.6",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during Redis container startup");
+
+        output
+    }
+
+    pub fn create_databases(container_name: &str) {
+        let commands = ["CREATE DATABASE event;", "CREATE DATABASE withdrawal;"];
+
+        for sql_cmd in commands {
+            let status = Command::new("docker")
+                .args([
+                    "exec",
+                    "-i", // No TTY needed; `-it` is for interactive terminal; `-i` is enough here
+                    container_name,
+                    "psql",
+                    "-U",
+                    "postgres",
+                    "-d",
+                    "maindb",
+                    "-c",
+                    sql_cmd,
+                ])
+                .status()
+                .expect("Failed to execute docker exec");
+
+            assert!(status.success(), "Couldn't run {}", sql_cmd);
+        }
+    }
+
+    pub fn stop_withdrawal_docker(container_name: &str) -> Output {
+        let output = Command::new("docker")
+            .args(["stop", container_name])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during Redis container stopping");
+
+        output
+    }
+
+    pub fn find_free_port() -> u16 {
+        TcpListener::bind("127.0.0.1:0")
+            .expect("Failed to bind to address")
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    pub fn assert_and_stop<F: FnOnce() + panic::UnwindSafe>(cont_name: &str, f: F) {
+        let res = panic::catch_unwind(f);
+
+        if let Err(panic_info) = res {
+            stop_withdrawal_docker(cont_name);
+            panic::resume_unwind(panic_info);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ethers::types::{H160, H256};
+    use std::{str::FromStr, thread::sleep, time::Duration};
+
+    use crate::{
+        app::withdrawal_server::test_withdrawal_server_helper::{
+            assert_and_stop, create_databases, find_free_port, run_withdrawal_docker,
+            stop_withdrawal_docker,
+        },
+        Env,
+    };
+
+    use super::*;
+
+    fn get_example_env() -> Env {
+        Env {
+            port: 9003,
+            database_url: "postgres://postgres:password@localhost:5432/withdrawal".to_string(),
+            database_max_connections: 10,
+            database_timeout: 10,
+
+            store_vault_server_base_url: "http://localhost:9000".to_string(),
+            use_s3: Some(true),
+            validity_prover_base_url: "http://localhost:9002".to_string(),
+
+            l2_rpc_url: "http://127.0.0.1:8545".to_string(),
+            l2_chain_id: 31337,
+            rollup_contract_address: H160::from_str("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512")
+                .unwrap(),
+            withdrawal_contract_address: H160::from_str(
+                "0x8a791620dd6260079bf849dc5567adc3f2fdc318",
+            )
+            .unwrap(),
+
+            is_faster_mining: true,
+            withdrawal_beneficiary_private_key: Some(
+                H256::from_str(
+                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
+                )
+                .unwrap(),
+            ),
+            claim_beneficiary_private_key: Some(
+                H256::from_str(
+                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
+                )
+                .unwrap(),
+            ),
+            direct_withdrawal_fee: Some("0:100".to_string()),
+            claimable_withdrawal_fee: Some("0:10".to_string()),
+            claim_fee: Some("0:100".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_getting_fee() {
+        // We use a port different from the default one (5432)
+        let port = find_free_port();
+        let cont_name = "withdrawal-test-getting-fee";
+
+        stop_withdrawal_docker(cont_name);
+        let output = run_withdrawal_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // 2.5 seconds should be enough for postgres container to be started to create databases
+        sleep(Duration::from_millis(2500));
+        assert_and_stop(cont_name, || create_databases(cont_name));
+
+        let mut env = get_example_env();
+        env.database_url =
+            format!("postgres://postgres:password@localhost:{}/withdrawal", port).to_string();
+        let server = WithdrawalServer::new(&env).await;
+
+        if let Err(err) = &server {
+            stop_withdrawal_docker(cont_name);
+            panic!("Withdrawal Server initialization failed: {:?}", err);
+        }
+        let server = server.unwrap();
+
+        // Here and later I use is_some() || is_some() and not && as an additional check of initializing WithdrawalServer.
+        // If only one variable is Some and another one is not, test will fail, so there is should be some error in WithdrawalServer new method.
+        let claim_fee = server.get_claim_fee();
+        if env.claim_beneficiary_private_key.is_some() || claim_fee.beneficiary.is_some() {
+            let claim_keyset = privkey_to_keyset(env.claim_beneficiary_private_key.unwrap());
+            assert_and_stop(cont_name, || {
+                assert_eq!(claim_fee.beneficiary.unwrap(), claim_keyset.pubkey)
+            });
+        }
+        if env.claim_fee.is_some() {
+            let fee = parse_fee_str(&env.claim_fee.unwrap()).unwrap();
+            assert_and_stop(cont_name, || assert_eq!(claim_fee.fee.unwrap(), fee));
+        }
+
+        let withdrawal_fee = server.get_withdrawal_fee();
+        if withdrawal_fee.beneficiary.is_some() || env.withdrawal_beneficiary_private_key.is_some()
+        {
+            let ben_keyset = privkey_to_keyset(env.withdrawal_beneficiary_private_key.unwrap());
+            assert_and_stop(cont_name, || {
+                assert_eq!(withdrawal_fee.beneficiary.unwrap(), ben_keyset.pubkey)
+            });
+        }
+        if withdrawal_fee.direct_withdrawal_fee.is_some() {
+            assert_and_stop(cont_name, || {
+                assert_eq!(withdrawal_fee.direct_withdrawal_fee.unwrap().len(), 1)
+            });
+        }
+
+        stop_withdrawal_docker(cont_name);
+    }
+}
+
+#[cfg(test)]
+mod keyset_tests {
+    use super::*;
+    use ark_bn254::{Fr, G1Affine};
+    use ark_ec::AffineRepr;
+    use num_bigint::BigUint;
+    use plonky2_bn254::fields::recover::RecoverFromX as _;
+
+    fn assert_keyset_valid(h: H256) {
+        let keyset = privkey_to_keyset(h);
+
+        // Get expected pubkey from privkey
+        let privkey_fr: Fr = BigUint::from(keyset.privkey).into();
+        let expected_pubkey_g1: G1Affine = (G1Affine::generator() * privkey_fr).into();
+
+        // Ensure pubkey is correct
+        assert_eq!(
+            keyset.pubkey_g1(),
+            expected_pubkey_g1,
+            "Public key mismatch for privkey: {:?}",
+            h
+        );
+
+        // Ensure pubkey is not dummy
+        assert!(
+            !keyset.pubkey.is_dummy_pubkey(),
+            "Pubkey should not be dummy: {:?}",
+            keyset.pubkey
+        );
+
+        // Check recovery via x-coordinate
+        let recovered = G1Affine::recover_from_x(keyset.pubkey.into());
+        assert_eq!(
+            recovered,
+            keyset.pubkey_g1(),
+            "Recovered pubkey from x doesn't match"
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_zero_privkey() {
+        let h = H256::zero();
+        assert_keyset_valid(h);
+    }
+
+    // It panics in KeySet::new, not in assert_keyset_valid
+    #[test]
+    #[should_panic(expected = "!pubkey.is_dummy_pubkey()")]
+    fn test_one_privkey() {
+        let mut bytes = [0u8; 32];
+        bytes[31] = 0x01;
+        let h = H256::from(bytes);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_max_privkey() {
+        let h = H256::from([0xFF; 32]);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_near_max_privkey() {
+        let mut bytes = [0xFF; 32];
+        bytes[31] = 0xFE;
+        let h = H256::from(bytes);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_mid_privkey() {
+        let mut bytes = [0u8; 32];
+        bytes[0] = 0x80; // MSB = 1, rest = 0
+        let h = H256::from(bytes);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_leading_zeros_privkey() {
+        let mut bytes = [0u8; 32];
+        bytes[30] = 0x01;
+        let h = H256::from(bytes);
+        assert_keyset_valid(h);
+    }
 }
