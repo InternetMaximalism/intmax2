@@ -1,5 +1,7 @@
-use alloy::transports::{RpcError, TransportErrorKind};
-use ethers::types::H256;
+use alloy::{
+    primitives::B256,
+    transports::{RpcError, TransportErrorKind},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BlockchainError {
@@ -29,7 +31,7 @@ pub enum BlockchainError {
     BlockBaseFeeNotFound,
 
     #[error("Transaction not found: {0:?}")]
-    TxNotFound(H256),
+    TxNotFound(B256),
 
     #[error("Transaction not found in batch")]
     TxNotFoundBatch,

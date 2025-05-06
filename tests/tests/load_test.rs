@@ -1,7 +1,7 @@
 use ethers::types::H256;
 use intmax2_client_sdk::external_api::{
     contract::{
-        convert::{convert_address_to_ethers, convert_address_to_intmax},
+        convert::{convert_address_to_alloy, convert_address_to_intmax},
         rollup_contract::RollupContract,
         utils::get_address,
     },
@@ -49,7 +49,7 @@ async fn load_test() -> anyhow::Result<()> {
     let rollup_contract = RollupContract::new(
         &env.l2_rpc_url,
         env.l2_chain_id,
-        convert_address_to_ethers(env.rollup_contract_address),
+        convert_address_to_alloy(env.rollup_contract_address),
     );
 
     let private_keys = env

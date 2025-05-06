@@ -1,6 +1,6 @@
 use intmax2_client_sdk::external_api::contract::{
     block_builder_reward::BlockBuilderRewardContract,
-    convert::{convert_address_to_ethers, convert_bytes32_to_h256},
+    convert::{convert_address_to_alloy, convert_bytes32_to_h256},
     utils::get_address,
 };
 use intmax2_interfaces::api::withdrawal_server::interface::WithdrawalStatus;
@@ -61,7 +61,7 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
             "REWARD_CONTRACT_ADDRESS is not set".to_string(),
         ));
     }
-    let reward_contract_address = convert_address_to_ethers(env.reward_contract_address.unwrap());
+    let reward_contract_address = convert_address_to_alloy(env.reward_contract_address.unwrap());
     let reward_contract =
         BlockBuilderRewardContract::new(&env.l2_rpc_url, env.l2_chain_id, reward_contract_address);
     let current_period = reward_contract.get_current_period().await?;

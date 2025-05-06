@@ -1,8 +1,8 @@
 use intmax2_client_sdk::external_api::{
     contract::{
         convert::{
-            convert_address_to_ethers, convert_address_to_intmax, convert_bytes32_to_h256,
-            convert_u256_to_ethers,
+            convert_address_to_alloy, convert_address_to_intmax, convert_bytes32_to_h256,
+            convert_u256_to_alloy,
         },
         erc1155_contract::ERC1155Contract,
         erc20_contract::ERC20Contract,
@@ -167,9 +167,9 @@ async fn balance_check_and_approve(
     let sender_private_key = convert_bytes32_to_h256(eth_private_key);
     let sender_address = get_address(chain_id, sender_private_key);
 
-    let amount = convert_u256_to_ethers(amount);
-    let token_address = convert_address_to_ethers(token_address);
-    let token_id = convert_u256_to_ethers(token_id);
+    let amount = convert_u256_to_alloy(amount);
+    let token_address = convert_address_to_alloy(token_address);
+    let token_id = convert_u256_to_alloy(token_id);
 
     match token_type {
         TokenType::NATIVE => {
@@ -275,15 +275,15 @@ async fn fetch_predicate_permission(
     }
     let predicate_client = PredicateClient::new(env.predicate_base_url.unwrap());
     let recipient_salt_hash = convert_bytes32_to_h256(recipient_salt_hash);
-    let token_address = convert_address_to_ethers(token_address);
+    let token_address = convert_address_to_alloy(token_address);
     let value = if token_type == TokenType::NATIVE {
         amount
     } else {
         0.into()
     };
-    let value = convert_u256_to_ethers(value);
-    let amount = convert_u256_to_ethers(amount);
-    let token_id = convert_u256_to_ethers(token_id);
+    let value = convert_u256_to_alloy(value);
+    let amount = convert_u256_to_alloy(amount);
+    let token_id = convert_u256_to_alloy(token_id);
     let request = match token_type {
         TokenType::NATIVE => PermissionRequest::Native {
             recipient_salt_hash,
@@ -306,7 +306,7 @@ async fn fetch_predicate_permission(
             amount,
         },
     };
-    let from = convert_address_to_ethers(from);
+    let from = convert_address_to_alloy(from);
     let permission = predicate_client
         .get_deposit_permission(from, aml_permitter_address, value, request)
         .await?;
