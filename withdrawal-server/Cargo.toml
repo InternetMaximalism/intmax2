@@ -4,30 +4,34 @@ version.workspace = true
 edition = "2021"
 
 [dependencies]
+actix-cors = { workspace = true }
+actix-web = { workspace = true }
 anyhow = { workspace = true }
-plonky2 = { workspace = true }
-intmax2-zkp = { workspace = true }
-intmax2-client-sdk = { path = "../client-sdk" }
-intmax2-interfaces = { path = "../interfaces" }
-server-common = { path = "../server-common" }
-tokio = { version = "1", features = ["full"] }
-reqwest = { workspace = true }
-ethers = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true }
-sqlx = { workspace = true }
+bincode = { workspace = true }
 chrono = { workspace = true }
-log = { workspace = true }
-uuid = { workspace = true }
 dotenv = { workspace = true }
 envy = { workspace = true }
 env_logger = { workspace = true }
-bincode = { workspace = true }
-thiserror = { workspace = true }
+ethers = { workspace = true }
 hashbrown = { workspace = true }
-actix-web = { workspace = true }
-actix-cors = { workspace = true }
-tracing-actix-web = { workspace = true }
+intmax2-zkp = { workspace = true }
+intmax2-client-sdk = { path = "../client-sdk" }
+intmax2-interfaces = { path = "../interfaces" }
+log = { workspace = true }
+plonky2 = { workspace = true }
+plonky2_bn254 = { git = "https://github.com/InternetMaximalism/plonky2_bn254" }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 serde_qs = { workspace = true }
+server-common = { path = "../server-common" }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+tracing-actix-web = { workspace = true }
+uuid = { workspace = true }
+ark-bn254 = "0.4.0"
+ark-ec = "0.4.2"
 base64 = "0.22.1"
 num-bigint = "0.4.6"
+num-traits = "0.2.19"
