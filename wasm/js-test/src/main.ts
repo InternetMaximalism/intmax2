@@ -1,4 +1,4 @@
-import { Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_tx_status, get_user_data, get_withdrawal_info, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
+import { await_tx_sendable, Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_tx_status, get_user_data, get_withdrawal_info, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsTransfer, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
 import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
 import { ethers } from 'ethers';
@@ -128,6 +128,11 @@ async function sendTx(config: Config, block_builder_base_url: string, publicKey:
   console.log("Fee beneficiary: ", fee_quote.beneficiary);
   console.log("Fee: ", fee_quote.fee?.amount);
   console.log("Collateral fee: ", fee_quote.collateral_fee?.amount);
+
+  console.log("Waiting for tx sendable...");
+  await await_tx_sendable(config, privateKey);
+  console.log("Tx sendable");
+
   let memo: JsTxRequestMemo = await send_tx_request(config, block_builder_base_url, privateKey, transfers, payment_memos, fee_quote.beneficiary, fee_quote.fee, fee_quote.collateral_fee);
   console.log("Transfer root of tx: ", memo.tx().transfer_tree_root);
   // wait for the block builder to propose the block
