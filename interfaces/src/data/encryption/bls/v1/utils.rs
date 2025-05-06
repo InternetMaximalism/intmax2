@@ -2,7 +2,7 @@
 //! <https://github.com/paradigmxyz/reth/blob/main/crates/net/ecies/src/algorithm.rs>
 //! <https://github.com/paradigmxyz/reth/blob/main/crates/net/ecies/src/util.rs>
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ark_bn254::{g1::G1Affine, G1Projective};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_std::{ops::Mul, Zero};

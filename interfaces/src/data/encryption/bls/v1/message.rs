@@ -5,7 +5,7 @@ use aes::{
     cipher::{KeyIvInit, StreamCipher},
     Aes128,
 };
-use alloy_primitives::{B128, B256};
+use alloy::primitives::{B128, B256};
 use ctr::Ctr64BE;
 use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait};
 

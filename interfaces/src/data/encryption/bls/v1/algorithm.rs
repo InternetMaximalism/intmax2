@@ -2,7 +2,7 @@ use aes::{
     cipher::{KeyIvInit, StreamCipher},
     Aes128,
 };
-use alloy_primitives::B128;
+use alloy::primitives::{bytes::BytesMut, B128};
 use ctr::Ctr64BE;
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
@@ -15,8 +15,6 @@ use super::{
     message::EncryptedMessage,
     utils::{ecdh_x, hmac_sha256, kdf, sha256, U256_SIZE},
 };
-
-pub use alloy_primitives::bytes::BytesMut;
 
 const ENCRYPTION_VERSION: u8 = 1;
 
@@ -80,7 +78,7 @@ impl EciesSender {
         let enc_key = B128::from_slice(&key[..16]);
         let mac_key = sha256(&key[16..32]);
 
-        let iv: B128 = rng.gen();
+        let iv: B128 = B128::random();
         let mut encryptor = Ctr64BE::<Aes128>::new((&enc_key.0).into(), (&iv.0).into());
 
         let mut encrypted = data.to_vec();
@@ -126,13 +124,12 @@ mod test {
         cipher::{KeyIvInit, StreamCipher},
         Aes128,
     };
-    use alloy_primitives::B128;
+    use alloy::primitives::B128;
     use ctr::Ctr64BE;
     use intmax2_zkp::{
         common::signature_content::key_set::KeySet,
         ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
     };
-    use rand::Rng;
 
     use crate::utils::random::default_rng;
 
@@ -183,7 +180,7 @@ mod test {
         let enc_key = B128::from_slice(&key[..16]);
         let mac_key = sha256(&key[16..32]);
 
-        let iv: B128 = rng.gen();
+        let iv = B128::random();
         let mut encryptor = Ctr64BE::<Aes128>::new((&enc_key.0).into(), (&iv.0).into());
 
         let mut encrypted = data.to_vec();

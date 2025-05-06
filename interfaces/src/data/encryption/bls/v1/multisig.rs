@@ -11,8 +11,6 @@ use super::{
     utils::{aggregate_ecdh_x, ecdh_xy},
 };
 
-pub use alloy_primitives::bytes::BytesMut;
-
 pub fn decrypt_bls_interaction(
     server_key: KeySet,
     client_key: KeySet,
@@ -150,6 +148,7 @@ pub fn calc_simple_aggregated_pubkey(signers: &[U256]) -> anyhow::Result<(U256, 
 
 #[cfg(test)]
 mod test {
+    use alloy::primitives::bytes::BytesMut;
     use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 
     use crate::{
@@ -159,7 +158,7 @@ mod test {
         utils::random::default_rng,
     };
 
-    use super::super::algorithm::{encrypt_bls, BytesMut, EciesSender};
+    use super::super::algorithm::{encrypt_bls, EciesSender};
 
     #[test]
     fn test_e2e_encryption_interaction() {
