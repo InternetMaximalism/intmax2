@@ -1,33 +1,48 @@
-use ethers::{
-    abi::{Function, Param, ParamType, StateMutability, Token},
-    types::{Address as EtherAddress, H256 as EtherH256, U256 as EtherU256},
+use alloy::{
+    primitives::{Address, Bytes, B256, U256},
+    sol,
+    sol_types::{SolCall, SolValue},
 };
 use intmax2_interfaces::api::error::ServerError;
 use serde::Deserialize;
 
 use crate::external_api::utils::query::post_request;
 
+sol! {
+    function depositNativeToken(bytes32 recipientSaltHash);
+    function depositERC20(address tokenAddress, bytes32 recipientSaltHash, uint256 amount);
+    function depositERC721(address tokenAddress, bytes32 recipientSaltHash, uint256 tokenId);
+    function depositERC1155(address tokenAddress, bytes32 recipientSaltHash, uint256 tokenId, uint256 amount);
+
+    struct PredicateMessage {
+        string taskId;
+        uint256 expiryBlock;
+        address[] signers;
+        bytes[] signature;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum PermissionRequest {
     Native {
-        recipient_salt_hash: EtherH256,
-        amount: EtherU256,
+        recipient_salt_hash: B256,
+        amount: U256,
     },
     ERC20 {
-        token_address: EtherAddress,
-        recipient_salt_hash: EtherH256,
-        amount: EtherU256,
+        token_address: Address,
+        recipient_salt_hash: B256,
+        amount: U256,
     },
     ERC721 {
-        token_address: EtherAddress,
-        recipient_salt_hash: EtherH256,
-        token_id: EtherU256,
+        token_address: Address,
+        recipient_salt_hash: B256,
+        token_id: U256,
     },
     ERC1155 {
-        token_address: EtherAddress,
-        recipient_salt_hash: EtherH256,
-        token_id: EtherU256,
-        amount: EtherU256,
+        token_address: Address,
+        recipient_salt_hash: B256,
+        token_id: U256,
+        amount: U256,
     },
 }
 
@@ -37,146 +52,28 @@ impl PermissionRequest {
             PermissionRequest::Native {
                 recipient_salt_hash,
                 ..
-            } => {
-                #[allow(deprecated)]
-                let function = Function {
-                    name: "depositNativeToken".to_string(),
-                    inputs: vec![Param {
-                        name: "recipientSaltHash".to_string(),
-                        kind: ParamType::FixedBytes(32),
-                        internal_type: None,
-                    }],
-                    constant: None,
-                    outputs: vec![],
-                    state_mutability: StateMutability::NonPayable,
-                };
-
-                function
-                    .encode_input(&[Token::FixedBytes(
-                        recipient_salt_hash.to_fixed_bytes().to_vec(),
-                    )])
-                    .unwrap()
-            }
+            } => depositNativeTokenCall::new((*recipient_salt_hash,)).abi_encode(),
             PermissionRequest::ERC20 {
                 token_address,
                 recipient_salt_hash,
                 amount,
             } => {
-                #[allow(deprecated)]
-                let function = Function {
-                    name: "depositERC20".to_string(),
-                    inputs: vec![
-                        Param {
-                            name: "tokenAddress".to_string(),
-                            kind: ParamType::Address,
-                            internal_type: None,
-                        },
-                        Param {
-                            name: "recipientSaltHash".to_string(),
-                            kind: ParamType::FixedBytes(32),
-                            internal_type: None,
-                        },
-                        Param {
-                            name: "amount".to_string(),
-                            kind: ParamType::Uint(256),
-                            internal_type: None,
-                        },
-                    ],
-                    constant: None,
-                    outputs: vec![],
-                    state_mutability: StateMutability::NonPayable,
-                };
-
-                function
-                    .encode_input(&[
-                        Token::Address(*token_address),
-                        Token::FixedBytes(recipient_salt_hash.to_fixed_bytes().to_vec()),
-                        Token::Uint(*amount),
-                    ])
-                    .unwrap()
+                depositERC20Call::new((*token_address, *recipient_salt_hash, *amount)).abi_encode()
             }
             PermissionRequest::ERC721 {
                 token_address,
                 recipient_salt_hash,
                 token_id,
-            } => {
-                #[allow(deprecated)]
-                let function = Function {
-                    name: "depositERC721".to_string(),
-                    inputs: vec![
-                        Param {
-                            name: "tokenAddress".to_string(),
-                            kind: ParamType::Address,
-                            internal_type: None,
-                        },
-                        Param {
-                            name: "recipientSaltHash".to_string(),
-                            kind: ParamType::FixedBytes(32),
-                            internal_type: None,
-                        },
-                        Param {
-                            name: "tokenId".to_string(),
-                            kind: ParamType::Uint(256),
-                            internal_type: None,
-                        },
-                    ],
-                    constant: None,
-                    outputs: vec![],
-                    state_mutability: StateMutability::NonPayable,
-                };
-
-                function
-                    .encode_input(&[
-                        Token::Address(*token_address),
-                        Token::FixedBytes(recipient_salt_hash.to_fixed_bytes().to_vec()),
-                        Token::Uint(*token_id),
-                    ])
-                    .unwrap()
-            }
+            } => depositERC721Call::new((*token_address, *recipient_salt_hash, *token_id))
+                .abi_encode(),
             PermissionRequest::ERC1155 {
                 token_address,
                 recipient_salt_hash,
                 token_id,
                 amount,
             } => {
-                #[allow(deprecated)]
-                let function = Function {
-                    name: "depositERC1155".to_string(),
-                    inputs: vec![
-                        Param {
-                            name: "tokenAddress".to_string(),
-                            kind: ParamType::Address,
-                            internal_type: None,
-                        },
-                        Param {
-                            name: "recipientSaltHash".to_string(),
-                            kind: ParamType::FixedBytes(32),
-                            internal_type: None,
-                        },
-                        Param {
-                            name: "tokenId".to_string(),
-                            kind: ParamType::Uint(256),
-                            internal_type: None,
-                        },
-                        Param {
-                            name: "amount".to_string(),
-                            kind: ParamType::Uint(256),
-                            internal_type: None,
-                        },
-                    ],
-                    constant: None,
-                    outputs: vec![],
-                    state_mutability: StateMutability::NonPayable,
-                };
-
-                function
-                    .encode_input(&[
-                        Token::Address(*token_address),
-                        Token::FixedBytes(recipient_salt_hash.to_fixed_bytes().to_vec()),
-                        Token::Uint(*token_id),
-                        Token::Uint(*amount),
-                    ])
-                    .unwrap()
+                depositERC1155Call::new((*token_address, *recipient_salt_hash, *token_id, *amount))
+                    .abi_encode()
             }
         }
     }
@@ -194,9 +91,9 @@ impl PredicateClient {
 
     pub async fn get_deposit_permission(
         &self,
-        from: EtherAddress,
-        to: EtherAddress,
-        value: EtherU256,
+        from: Address,
+        to: Address,
+        value: U256,
         request: PermissionRequest,
     ) -> Result<Vec<u8>, ServerError> {
         let encoded_data = request.to_encoded_data();
@@ -205,9 +102,9 @@ impl PredicateClient {
 
     async fn get_permission(
         &self,
-        from: EtherAddress,
-        to: EtherAddress,
-        value: EtherU256,
+        from: Address,
+        to: Address,
+        value: U256,
         encoded_data: &[u8],
     ) -> Result<Vec<u8>, ServerError> {
         let body = serde_json::json!({
@@ -232,25 +129,23 @@ pub struct PredicateResponse {
 }
 
 fn encode_predicate_message(message: PredicateResponse) -> Vec<u8> {
-    let tokens = Token::Tuple(vec![
-        Token::String(message.task_id),
-        Token::Uint(message.expiry_block.into()),
-        Token::Array(
-            message
-                .signers
-                .into_iter()
-                .map(|address| Token::Address(address.parse().unwrap()))
-                .collect(),
-        ),
-        Token::Array(
-            message
-                .signature
-                .into_iter()
-                .map(|signature| {
-                    Token::Bytes(hex::decode(signature.strip_prefix("0x").unwrap()).unwrap())
-                })
-                .collect(),
-        ),
-    ]);
-    ethers::abi::encode(&[tokens])
+    let message = PredicateMessage {
+        taskId: message.task_id,
+        expiryBlock: U256::from(message.expiry_block),
+        signers: message
+            .signers
+            .into_iter()
+            .map(|address| address.parse().unwrap())
+            .collect(),
+        signature: message
+            .signature
+            .into_iter()
+            .map(|signature| {
+                hex::decode(signature.strip_prefix("0x").unwrap())
+                    .unwrap()
+                    .into()
+            })
+            .collect::<Vec<Bytes>>(),
+    };
+    message.abi_encode()
 }

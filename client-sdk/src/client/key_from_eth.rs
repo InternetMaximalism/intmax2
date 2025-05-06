@@ -1,15 +1,15 @@
+use alloy::primitives::B256;
 use ark_bn254::Fr;
-use ethers::types::H256;
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use num_bigint::BigUint;
 use num_traits::identities::Zero;
 use sha2::{Digest, Sha512};
 
-pub fn generate_intmax_account_from_eth_key(eth_private_key: H256) -> KeySet {
+pub fn generate_intmax_account_from_eth_key(eth_private_key: B256) -> KeySet {
     let mut hasher = Sha512::new();
     loop {
         hasher.update(b"INTMAX");
-        hasher.update(eth_private_key.as_bytes());
+        hasher.update(eth_private_key.0);
         let digest = hasher.clone().finalize();
         let provisional_private_key: Fr = BigUint::from_bytes_be(&digest).into();
         if provisional_private_key.is_zero() {
@@ -23,13 +23,13 @@ pub fn generate_intmax_account_from_eth_key(eth_private_key: H256) -> KeySet {
 
 #[cfg(test)]
 mod test {
-    use ethers::types::H256;
+    use alloy::primitives::B256;
     use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
 
     use crate::client::key_from_eth::generate_intmax_account_from_eth_key;
 
     struct TestCase {
-        private_key: H256,
+        private_key: B256,
         public_key: String,
     }
 
