@@ -114,6 +114,16 @@ pub async fn prepare_deposit(
     Ok(deposit_result.into())
 }
 
+/// Wait for the tx to be sendable. Wait for the sync of validity prover and balance proof.
+#[wasm_bindgen]
+pub async fn await_tx_sendable(config: &Config, private_key: &str) -> Result<(), JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    client.await_tx_sendable(key).await?;
+    Ok(())
+}
+
 /// Function to send a tx request to the block builder. The return value contains information to take a backup.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]

@@ -200,7 +200,7 @@ impl Client {
         Ok(result)
     }
 
-    async fn ensure_tx_sendable(&self, key: KeySet) -> Result<UserData, ClientError> {
+    pub async fn await_tx_sendable(&self, key: KeySet) -> Result<UserData, ClientError> {
         // wait for sync
         let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
         wait_till_validity_prover_synced(
@@ -274,7 +274,7 @@ impl Client {
             }
         }
 
-        let user_data = self.ensure_tx_sendable(key).await?;
+        let user_data = self.await_tx_sendable(key).await?;
 
         // get fee info
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;

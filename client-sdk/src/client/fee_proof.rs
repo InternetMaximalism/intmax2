@@ -23,7 +23,6 @@ use intmax2_zkp::{
     constants::{NUM_SENDERS_IN_BLOCK, TRANSFER_TREE_HEIGHT, TX_TREE_HEIGHT},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
 };
-use num_bigint::BigUint;
 
 use super::{error::ClientError, sync::utils::generate_spent_witness};
 
@@ -80,8 +79,7 @@ pub async fn generate_fee_proof(
                     &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
                 )
                 .await?;
-            let sender_proof_set_ephemeral_key: U256 =
-                BigUint::from(ephemeral_key.privkey).try_into().unwrap();
+            let sender_proof_set_ephemeral_key = ephemeral_key.privkey;
 
             let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
             transfer_tree.push(collateral_transfer);
