@@ -12,7 +12,7 @@ intmax2-interfaces = { path = "../interfaces" }
 server-common = { path = "../server-common" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
-ethers = { workspace = true }
+alloy = { workspace = true }
 serde = { workspace = true }
 sqlx = { workspace = true }
 chrono = { workspace = true }

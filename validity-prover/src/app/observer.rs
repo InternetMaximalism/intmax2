@@ -7,7 +7,6 @@ use crate::EnvVar;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
-    utils::get_latest_block_number,
 };
 use intmax2_zkp::{
     common::witness::full_block::FullBlock,

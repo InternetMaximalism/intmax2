@@ -28,8 +28,9 @@ impl State {
 mod tests {
     use std::panic::AssertUnwindSafe;
 
+    use alloy::primitives::Address;
+
     use super::*;
-    use ethers::types::Address;
 
     use crate::app::storage::redis_storage::test_helper::{
         assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker,
@@ -49,8 +50,8 @@ mod tests {
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             l2_chain_id: 1337,
-            rollup_contract_address: Address::zero(),
-            block_builder_registry_contract_address: Address::zero(),
+            rollup_contract_address: Address::default(),
+            block_builder_registry_contract_address: Address::default(),
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
@@ -116,8 +117,8 @@ mod tests {
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             l2_chain_id: 1337,
-            rollup_contract_address: Address::zero(),
-            block_builder_registry_contract_address: Address::zero(),
+            rollup_contract_address: Address::default(),
+            block_builder_registry_contract_address: Address::default(),
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),

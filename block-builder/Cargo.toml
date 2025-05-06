@@ -12,7 +12,7 @@ chrono = { workspace = true }
 dotenv = { workspace = true }
 envy = { workspace = true }
 env_logger = { workspace = true }
-ethers = { workspace = true }
+alloy = { workspace = true }
 intmax2-zkp = { workspace = true }
 intmax2-client-sdk = { path = "../client-sdk" }
 intmax2-interfaces = { path = "../interfaces" }

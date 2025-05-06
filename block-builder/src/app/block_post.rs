@@ -1,4 +1,4 @@
-use ethers::types::H256;
+use alloy::primitives::B256;
 use intmax2_client_sdk::external_api::{
     contract::rollup_contract::RollupContract, validity_prover::ValidityProverClient,
 };
@@ -68,7 +68,7 @@ impl BlockPostTask {
 }
 
 pub(crate) async fn post_block(
-    block_builder_private_key: H256,
+    block_builder_private_key: B256,
     gas_limit: Option<u64>,
     eth_allowance_for_block: U256,
     rollup_contract: &RollupContract,

@@ -1,12 +1,12 @@
-use ethers::types::H256;
+use alloy::primitives::B256;
 use intmax2_client_sdk::{
     client::key_from_eth::generate_intmax_account_from_eth_key,
     external_api::{
         contract::{
             block_builder_registry::BlockBuilderRegistryContract,
-            error::BlockchainError,
+            convert::{convert_address_to_alloy, convert_u256_to_intmax},
             rollup_contract::RollupContract,
-            utils::{get_address, get_eth_balance},
+            utils::NormalProvider,
         },
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
@@ -46,7 +46,7 @@ pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
 #[derive(Debug, Clone)]
 pub struct Config {
     pub block_builder_url: String,
-    pub block_builder_private_key: H256,
+    pub block_builder_private_key: B256,
     pub block_builder_address: Address,
     pub gas_limit_for_block_post: Option<u64>,
     pub eth_allowance_for_block: U256,
@@ -64,28 +64,6 @@ pub struct Config {
     pub non_registration_collateral_fee: Option<HashMap<u32, U256>>,
 }
 
-#[async_trait::async_trait]
-pub trait EthBalanceProvider: Send + Sync {
-    async fn get_eth_balance(
-        &self,
-        rpc_url: &str,
-        address: ethers::types::Address,
-    ) -> Result<ethers::types::U256, BlockchainError>;
-}
-
-pub struct RealEthBalanceProvider;
-
-#[async_trait::async_trait]
-impl EthBalanceProvider for RealEthBalanceProvider {
-    async fn get_eth_balance(
-        &self,
-        rpc_url: &str,
-        address: ethers::types::Address,
-    ) -> Result<ethers::types::U256, BlockchainError> {
-        get_eth_balance(rpc_url, address).await
-    }
-}
-
 #[derive(Clone)]
 pub struct BlockBuilder {
     pub config: Config,
@@ -95,15 +73,12 @@ pub struct BlockBuilder {
     pub registry_contract: BlockBuilderRegistryContract,
 
     pub storage: Arc<Box<dyn Storage>>,
-    pub balance_provider: Arc<dyn EthBalanceProvider>,
+    pub provider: NormalProvider,
 }
 
 impl BlockBuilder {
     /// Create a new BlockBuilder instance
-    pub async fn new(
-        env: &EnvVar,
-        balance_provider: Arc<dyn EthBalanceProvider>,
-    ) -> Result<Self, BlockBuilderError> {
+    pub async fn new(env: &EnvVar, provider: NormalProvider) -> Result<Self, BlockBuilderError> {
         // Initialize clients
         let store_vault_server_client: Arc<Box<dyn StoreVaultClientInterface>> =
             if env.use_s3.unwrap_or(true) {
@@ -262,9 +237,7 @@ impl BlockBuilder {
     /// Check RPC connection and block builder's balance
     pub async fn blockchain_health_check(&self) -> Result<(), BlockBuilderError> {
         log::info!("check_balance");
-        let rpc_url = self.registry_contract.rpc_url.clone();
-        let block_builder_address =
-            ethers::types::Address::from_slice(&self.config.block_builder_address.to_bytes_be());
+        let block_builder_address = convert_address_to_alloy(self.config.block_builder_address);
         let balance = self
             .balance_provider
             .get_eth_balance(&rpc_url, block_builder_address)
@@ -275,7 +248,7 @@ impl BlockBuilder {
                     e
                 ))
             })?;
-        let balance = convert_u256_from_ether_to_intmax(balance);
+        let balance = convert_u256_to_intmax(balance);
         log::info!("block builder balance: {}", balance);
         if balance < self.config.eth_allowance_for_block {
             return Err(BlockBuilderError::BlockChainHealthError(format!(
@@ -397,14 +370,6 @@ impl BlockBuilder {
     }
 }
 
-fn convert_u256_from_ether_to_intmax(
-    u: ethers::types::U256,
-) -> intmax2_zkp::ethereum_types::u256::U256 {
-    let mut buf = [0u8; 32];
-    u.to_big_endian(&mut buf);
-    intmax2_zkp::ethereum_types::u256::U256::from_bytes_be(&buf).unwrap()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::app::storage::redis_storage::test_helper::{
@@ -412,8 +377,6 @@ mod tests {
     };
 
     use super::*;
-    use ethers::types::{Address, U256};
-
     use intmax2_client_sdk::external_api::contract::error::BlockchainError;
 
     struct MockBalanceProvider {
@@ -425,7 +388,7 @@ mod tests {
         async fn get_eth_balance(
             &self,
             _rpc_url: &str,
-            _address: Address,
+            _address: alloy::primitives::Address,
         ) -> Result<U256, BlockchainError> {
             Ok(self.value)
         }
@@ -441,8 +404,8 @@ mod tests {
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             l2_chain_id: 1337,
-            rollup_contract_address: Address::zero(),
-            block_builder_registry_contract_address: Address::zero(),
+            rollup_contract_address: Address::default(),
+            block_builder_registry_contract_address: Address::default(),
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
@@ -500,8 +463,8 @@ mod tests {
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             l2_chain_id: 1337,
-            rollup_contract_address: Address::zero(),
-            block_builder_registry_contract_address: Address::zero(),
+            rollup_contract_address: Address::default(),
+            block_builder_registry_contract_address: Address::default(),
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
@@ -550,8 +513,8 @@ mod tests {
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             l2_chain_id: 1337,
-            rollup_contract_address: Address::zero(),
-            block_builder_registry_contract_address: Address::zero(),
+            rollup_contract_address: Address::default(),
+            block_builder_registry_contract_address: Address::default(),
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
@@ -603,8 +566,8 @@ mod tests {
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             l2_chain_id: 1337,
-            rollup_contract_address: Address::zero(),
-            block_builder_registry_contract_address: Address::zero(),
+            rollup_contract_address: Address::default(),
+            block_builder_registry_contract_address: Address::default(),
             store_vault_server_base_url: "http://localhost:9000".to_string(),
             use_s3: Some(false),
             validity_prover_base_url: "http://localhost:9100".to_string(),
