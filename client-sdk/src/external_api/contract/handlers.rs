@@ -12,16 +12,16 @@ const MAX_GAS_BUMP_ATTEMPTS: u32 = 3;
 const GAS_BUMP_PERCENTAGE: u64 = 25; // Should be above 10 to avoid replacement transaction underpriced error
 
 pub async fn send_transaction_with_gas_bump(
-    provider: &ProviderWithSigner,
+    signer: ProviderWithSigner,
     tx_request: TransactionRequest,
     tx_name: &str,
 ) -> Result<TxHash, BlockchainError> {
-    let sendable_tx = provider.fill(tx_request).await?;
+    let sendable_tx = signer.fill(tx_request).await?;
     let tx_envelope = sendable_tx.try_into_envelope().unwrap();
     let tx_hash = tx_envelope.hash().clone();
     // make tx eip1559 object to get parameters
     let tx_eip1559 = tx_envelope.as_eip1559().unwrap().tx().clone();
-    match provider
+    match signer
         .send_tx_envelope(tx_envelope)
         .await?
         .with_timeout(Some(TIMEOUT))
@@ -38,7 +38,7 @@ pub async fn send_transaction_with_gas_bump(
         }
         Err(PendingTransactionError::TxWatcher(_)) => {
             // timeout, so we need to bump the gas
-            resend_tx_with_gas_bump(provider, tx_hash, &tx_eip1559, tx_name).await
+            resend_tx_with_gas_bump(signer, tx_hash, &tx_eip1559, tx_name).await
         }
         Err(e) => {
             return Err(BlockchainError::TransactionError(format!(
@@ -51,7 +51,7 @@ pub async fn send_transaction_with_gas_bump(
 }
 
 async fn resend_tx_with_gas_bump(
-    provider: &ProviderWithSigner,
+    signer: ProviderWithSigner,
     initial_tx_hash: TxHash,
     tx_eip1559: &TxEip1559,
     tx_name: &str,
@@ -63,7 +63,7 @@ async fn resend_tx_with_gas_bump(
     for attempt in 1..=MAX_GAS_BUMP_ATTEMPTS {
         // check if previous tx succeeded
         for tx_hash in pending_tx_hashes.iter().rev() {
-            let tx_receipt = provider.get_transaction_receipt(*tx_hash).await?;
+            let tx_receipt = signer.get_transaction_receipt(*tx_hash).await?;
             if let Some(tx_receipt) = tx_receipt {
                 log::info!(
                     "Previous tx settled with hash: {:?}",
@@ -81,7 +81,7 @@ async fn resend_tx_with_gas_bump(
             }
         }
         // bump gas
-        let fee_estimation = provider.estimate_eip1559_fees().await?;
+        let fee_estimation = signer.estimate_eip1559_fees().await?;
 
         let new_max_fee_per_gas = fee_estimation
             .max_fee_per_gas
@@ -101,7 +101,7 @@ async fn resend_tx_with_gas_bump(
             .value(current_tx.value);
 
         // send the new transaction
-        let sendable_tx = provider.fill(new_tx_request).await?;
+        let sendable_tx = signer.fill(new_tx_request).await?;
         let tx_envelope = sendable_tx.try_into_envelope().unwrap();
         log::info!(
             "Sending bumped gas tx {} attempt: {} with new max_fee_per_gas: {:?}, new max_priority_fee_per_gas: {:?}",
@@ -111,7 +111,7 @@ async fn resend_tx_with_gas_bump(
             new_max_priority_fee_per_gas,
         );
 
-        match provider
+        match signer
             .send_tx_envelope(tx_envelope.clone())
             .await?
             .with_timeout(Some(TIMEOUT))

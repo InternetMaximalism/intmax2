@@ -1,13 +1,12 @@
+use super::{
+    error::BlockchainError,
+    proxy_contract::ProxyContract,
+    utils::{get_provider_with_signer, NormalProvider},
+};
+use crate::external_api::contract::handlers::send_transaction_with_gas_bump;
 use alloy::{
     primitives::{Address, TxHash, B256, U256},
     sol,
-};
-
-use super::{
-    error::BlockchainError,
-    handlers::handle_contract_call,
-    proxy_contract::ProxyContract,
-    utils::{get_provider_with_signer, NormalProvider},
 };
 
 sol!(
@@ -47,7 +46,7 @@ impl WithdrawalContract {
         direct_withdrawal_token_indices: Vec<U256>,
     ) -> Result<TxHash, BlockchainError> {
         let signer = get_provider_with_signer(self.provider.clone(), signer_private_key);
-        let contract = WithdrawalAbi::new(self.address, signer);
+        let contract = WithdrawalAbi::new(self.address, signer.clone());
         let tx_request = contract
             .initialize(
                 admin,
@@ -59,12 +58,8 @@ impl WithdrawalContract {
                 direct_withdrawal_token_indices,
             )
             .into_transaction_request();
-        // let client =
-        //     get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        // let tx_hash = handle_contract_call(&client, &mut tx, "initialize", None).await?;
-        // Ok(tx_hash)
-
-        todo!()
+        let tx_hash = send_transaction_with_gas_bump(signer, tx_request, "initialize").await?;
+        Ok(tx_hash)
     }
 
     pub async fn get_direct_withdrawal_token_indices(&self) -> Result<Vec<u32>, BlockchainError> {
