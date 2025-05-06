@@ -24,7 +24,7 @@ impl ProxyContract {
         impl_address: Address,
         constructor: &[u8],
     ) -> anyhow::Result<ProxyContract> {
-        let signer = get_provider_with_signer(provider.clone(), private_key);
+        let signer = get_provider_with_signer(&provider, private_key);
         let contract =
             ERC1967Proxy::deploy(signer, impl_address, Bytes::from(constructor.to_vec())).await?;
         let deployed_block_number = provider.get_block_number().await?;
