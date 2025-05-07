@@ -4,9 +4,11 @@ use super::{
     leader_election::LeaderElection,
 };
 use crate::EnvVar;
+use alloy::providers::Provider;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
+    utils::NormalProvider,
 };
 use intmax2_zkp::{
     common::witness::full_block::FullBlock,
@@ -40,7 +42,11 @@ pub struct Observer {
 }
 
 impl Observer {
-    pub async fn new(env: &EnvVar) -> Result<Self, ObserverError> {
+    pub async fn new(
+        env: &EnvVar,
+        l1_provider: NormalProvider,
+        l2_provider: NormalProvider,
+    ) -> Result<Self, ObserverError> {
         let config = ObserverConfig {
             observer_event_block_interval: env.observer_event_block_interval,
             observer_max_query_times: env.observer_max_query_times,
@@ -62,16 +68,9 @@ impl Observer {
             "validity_prover:sync_leader",
             std::time::Duration::from_secs(env.leader_lock_ttl),
         )?;
-        let rollup_contract = RollupContract::new(
-            &env.l2_rpc_url,
-            env.l2_chain_id,
-            env.rollup_contract_address,
-        );
-        let liquidity_contract = LiquidityContract::new(
-            &env.l1_rpc_url,
-            env.l1_chain_id,
-            env.liquidity_contract_address,
-        );
+        let rollup_contract = RollupContract::new(l2_provider, env.rollup_contract_address);
+        let liquidity_contract =
+            LiquidityContract::new(l1_provider, env.liquidity_contract_address);
         // Initialize with genesis block if table is empty
         let count = sqlx::query!("SELECT COUNT(*) as count FROM full_blocks")
             .fetch_one(&pool)
@@ -200,8 +199,8 @@ impl Observer {
         event_type: EventType,
     ) -> Result<u64, ObserverError> {
         let current_eth_block_number = match event_type.to_chain_type() {
-            ChainType::L1 => get_latest_block_number(&self.liquidity_contract.rpc_url).await?,
-            ChainType::L2 => get_latest_block_number(&self.rollup_contract.rpc_url).await?,
+            ChainType::L1 => self.liquidity_contract.provider.get_block_number().await?,
+            ChainType::L2 => self.rollup_contract.provider.get_block_number().await?,
         };
         Ok(current_eth_block_number)
     }
@@ -618,7 +617,7 @@ impl Observer {
         loop {
             let this = this.clone();
             let handler =
-                tokio::spawn(async move { this.sync_events_inner_loop(event_type).await });
+                actix_web::rt::spawn(async move { this.sync_events_inner_loop(event_type).await });
 
             match handler.await {
                 Ok(Ok(_)) => {
@@ -652,7 +651,7 @@ impl Observer {
         let this = Arc::new(self.clone());
         for event_type in event_types {
             let this = this.clone();
-            tokio::spawn(async move {
+            actix_web::rt::spawn(async move {
                 this.sync_events_job(event_type).await;
             });
         }

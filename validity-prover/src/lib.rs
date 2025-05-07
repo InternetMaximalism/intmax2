@@ -1,4 +1,4 @@
-use ethers::types::Address;
+use alloy::primitives::Address;
 use serde::Deserialize;
 
 pub mod api;
@@ -26,9 +26,7 @@ pub struct EnvVar {
 
     // onchain settings
     pub l1_rpc_url: String,
-    pub l1_chain_id: u64,
     pub l2_rpc_url: String,
-    pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
     pub rollup_contract_deployed_block_number: u64,
     pub liquidity_contract_address: Address,

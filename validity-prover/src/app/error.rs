@@ -1,5 +1,6 @@
 use super::check_point_store::EventType;
 use crate::trees::merkle_tree::error::MerkleTreeError;
+use alloy::transports::{RpcError, TransportErrorKind};
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, EthereumTypeError};
 use redis::RedisError;
@@ -7,6 +8,9 @@ use server_common::redis::task_manager::TaskManagerError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ObserverError {
+    #[error("RPC error: {0}")]
+    RPCError(#[from] RpcError<TransportErrorKind>),
+
     #[error("Blockchain error: {0}")]
     BlockchainError(#[from] BlockchainError),
 

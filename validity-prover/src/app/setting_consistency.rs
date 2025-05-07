@@ -1,4 +1,4 @@
-use ethers::{types::Address, utils::hex::ToHexExt};
+use alloy::{hex::ToHexExt, primitives::Address};
 use sqlx::{Pool, Postgres};
 
 use super::error::SettingConsistencyError;

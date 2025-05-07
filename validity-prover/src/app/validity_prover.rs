@@ -12,6 +12,7 @@ use crate::{
     },
     EnvVar,
 };
+use intmax2_client_sdk::external_api::contract::utils::NormalProvider;
 use intmax2_interfaces::{
     api::validity_prover::interface::{TransitionProofTask, TransitionProofTaskResult},
     utils::circuit_verifiers::CircuitVerifiers,
@@ -69,7 +70,11 @@ pub struct ValidityProver {
 }
 
 impl ValidityProver {
-    pub async fn new(env: &EnvVar) -> Result<Self, ValidityProverError> {
+    pub async fn new(
+        env: &EnvVar,
+        l1_provider: NormalProvider,
+        l2_provider: NormalProvider,
+    ) -> Result<Self, ValidityProverError> {
         let config = ValidityProverConfig {
             is_sync_mode: env.is_sync_mode,
             witness_sync_interval: env.witness_sync_interval,
@@ -85,7 +90,7 @@ impl ValidityProver {
             env.task_ttl as usize,
             env.heartbeat_interval as usize,
         )?);
-        let observer = Observer::new(env).await?;
+        let observer = Observer::new(env, l1_provider, l2_provider).await?;
         let pool = Pool::connect(&env.database_url).await?;
         // check consistency
         {

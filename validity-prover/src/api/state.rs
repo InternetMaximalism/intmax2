@@ -1,4 +1,5 @@
 use futures::future;
+use intmax2_client_sdk::external_api::contract::utils::get_provider;
 use intmax2_interfaces::{
     api::validity_prover::{
         interface::DepositInfo,
@@ -40,7 +41,9 @@ pub struct State {
 
 impl State {
     pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
-        let validity_prover = ValidityProver::new(env).await?;
+        let l1_provider = get_provider(&[env.l1_rpc_url.clone()])?;
+        let l2_provider = get_provider(&[env.l2_rpc_url.clone()])?;
+        let validity_prover = ValidityProver::new(env, l1_provider, l2_provider).await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
         let config = CacheConfig {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
