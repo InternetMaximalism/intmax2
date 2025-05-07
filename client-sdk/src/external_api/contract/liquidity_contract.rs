@@ -57,6 +57,7 @@ impl Deposited {
 }
 
 sol!(
+    #[allow(clippy::too_many_arguments)]
     #[sol(rpc)]
     Liquidity,
     "abi/Liquidity.json",

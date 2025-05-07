@@ -18,7 +18,7 @@ pub async fn send_transaction_with_gas_bump(
 ) -> Result<TxHash, BlockchainError> {
     let sendable_tx = signer.fill(tx_request).await?;
     let tx_envelope = sendable_tx.try_into_envelope().unwrap();
-    let tx_hash = tx_envelope.hash().clone();
+    let tx_hash = *tx_envelope.hash();
     // make tx eip1559 object to get parameters
     let tx_eip1559 = tx_envelope.as_eip1559().unwrap().tx().clone();
     match signer
@@ -34,19 +34,16 @@ pub async fn send_transaction_with_gas_bump(
                 tx_name.to_string(),
                 tx_hash
             );
-            return Ok(tx_hash);
+            Ok(tx_hash)
         }
         Err(PendingTransactionError::TxWatcher(_)) => {
             // timeout, so we need to bump the gas
             resend_tx_with_gas_bump(signer, tx_hash, &tx_eip1559, tx_name).await
         }
-        Err(e) => {
-            return Err(BlockchainError::TransactionError(format!(
-                "{} failed with error: {:?}",
-                tx_name.to_string(),
-                e
-            )));
-        }
+        Err(e) => Err(BlockchainError::TransactionError(format!(
+            "{} failed with error: {:?}",
+            tx_name, e
+        ))),
     }
 }
 
@@ -74,8 +71,7 @@ async fn resend_tx_with_gas_bump(
                 } else {
                     return Err(BlockchainError::TransactionFailed(format!(
                         "Transaction {} failed with tx hash: {:?}",
-                        tx_name.to_string(),
-                        tx_receipt.transaction_hash
+                        tx_name, tx_receipt.transaction_hash
                     )));
                 }
             }
@@ -129,14 +125,13 @@ async fn resend_tx_with_gas_bump(
             Err(e) => {
                 return Err(BlockchainError::TransactionError(format!(
                     "{} failed with error: {:?}",
-                    tx_name.to_string(),
-                    e
+                    tx_name, e
                 )));
             }
         }
         // update the current transaction
         current_tx = tx_envelope.as_eip1559().unwrap().tx().clone();
-        pending_tx_hashes.push(tx_envelope.tx_hash().clone());
+        pending_tx_hashes.push(*tx_envelope.tx_hash());
     }
     Err(BlockchainError::MaxTxRetriesReached)
 }

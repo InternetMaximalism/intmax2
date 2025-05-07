@@ -32,6 +32,7 @@ use super::{
 };
 
 sol!(
+    #[allow(clippy::too_many_arguments)]
     #[sol(rpc)]
     Rollup,
     "abi/Rollup.json",

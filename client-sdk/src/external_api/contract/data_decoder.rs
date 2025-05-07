@@ -44,7 +44,7 @@ pub fn decode_post_block_calldata(
             let pubkeys = decoded
                 .senderPublicKeys
                 .into_iter()
-                .map(|pubkey| convert_u256_to_intmax(pubkey))
+                .map(convert_u256_to_intmax)
                 .collect::<Vec<U256>>();
             let signature = SignatureContent {
                 block_sign_payload,
@@ -68,7 +68,7 @@ pub fn decode_post_block_calldata(
                 pubkeys: Some(pubkeys),
                 account_ids: None,
             };
-            return Ok(full_block);
+            Ok(full_block)
         }
         Rollup::postNonRegistrationBlockCall::SELECTOR => {
             let decoded = Rollup::postNonRegistrationBlockCall::abi_decode(data)?;
@@ -103,7 +103,7 @@ pub fn decode_post_block_calldata(
                 pubkeys: None,
                 account_ids: Some(decoded.senderAccountIds.to_vec()),
             };
-            return Ok(full_block);
+            Ok(full_block)
         }
         _ => {
             anyhow::bail!("Unknown function selector");

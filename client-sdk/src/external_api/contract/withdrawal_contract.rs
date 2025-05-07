@@ -10,6 +10,7 @@ use alloy::{
 };
 
 sol!(
+    #[allow(clippy::too_many_arguments)]
     #[sol(rpc)]
     WithdrawalAbi,
     "abi/Withdrawal.json",
