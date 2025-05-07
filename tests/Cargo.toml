@@ -5,25 +5,21 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-bincode = "1.3.3"
+bincode = { workspace = true }
 plonky2 = { workspace = true }
 intmax2-zkp = { workspace = true }
 intmax2-client-sdk = { path = "../client-sdk" }
 intmax2-interfaces = { path = "../interfaces" }
-validity-prover = { path = "../validity-prover" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 alloy = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 thiserror = "2.0.12"
-actix-web = "4.10.2"
 hashbrown = "0.15.2"
-actix-cors = "0.7.1"
 log = "0.4.27"
 rand = "0.8.5"
 envy = "0.4.2"
-actix = "0.13.5"
 dotenv = "0.15.0"
 num-bigint = "0.4.6"
 env_logger.workspace = true

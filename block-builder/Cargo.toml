@@ -11,7 +11,6 @@ bincode = { workspace = true }
 chrono = { workspace = true }
 dotenv = { workspace = true }
 envy = { workspace = true }
-env_logger = { workspace = true }
 alloy = { workspace = true }
 intmax2-zkp = { workspace = true }
 intmax2-client-sdk = { path = "../client-sdk" }
@@ -30,7 +29,6 @@ tracing-actix-web = { workspace = true }
 uuid = { workspace = true }
 async-trait = "0.1.88"
 actix-rt = "2.10.0"
-mockall = "0.13.1"
 num-bigint = "0.4.6"
 num-traits = "0.2.19"
 redis = { version = "0.29.1", features = [

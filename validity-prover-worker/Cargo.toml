@@ -7,7 +7,6 @@ edition.workspace = true
 anyhow = { workspace = true }
 plonky2 = { workspace = true }
 intmax2-zkp = { workspace = true }
-intmax2-client-sdk = { path = "../client-sdk" }
 intmax2-interfaces = { path = "../interfaces" }
 server-common = { path = "../server-common" }
 tokio = { version = "1", features = ["full"] }
@@ -16,7 +15,6 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 sqlx = { workspace = true }
 chrono = { workspace = true }
-env_logger = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }
 dotenv = { workspace = true }
@@ -24,8 +22,6 @@ envy = { workspace = true }
 bincode = { workspace = true }
 thiserror = { workspace = true }
 actix-web = { workspace = true }
-actix-cors = { workspace = true }
-serde_qs = { workspace = true }
 rand = "0.8.5"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
