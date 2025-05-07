@@ -16,7 +16,9 @@ use intmax2_client_sdk::{
     },
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer},
+    common::{
+        generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer,
+    },
     ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use rand::Rng;
@@ -32,7 +34,7 @@ use tests::{
 };
 
 const ETH_TOKEN_INDEX: u32 = 0;
-const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
+// const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
 
 #[derive(Debug, Deserialize)]
 struct EnvVar {
@@ -40,7 +42,7 @@ struct EnvVar {
     transfer_admin_private_key: String,
     max_concurrent: Option<usize>,
     max_using_account: Option<usize>,
-    account_index: Option<u32>,
+    // account_index: Option<u32>,
     account_offset: Option<usize>,
     action: Option<Action>,
 }
@@ -164,11 +166,16 @@ impl TestSystem {
         keys: &[Account],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let action = self.action.unwrap_or_else(Action::random);
-        let switch_recipient = rand::thread_rng().gen_bool(0.5);
-        let sender_key = if switch_recipient { keys[1] } else { keys[0] };
-        let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
-        log::info!("sender_key: {}", sender_key.intmax_key.privkey);
-        log::info!("recipient_key: {}", recipient_key.intmax_key.privkey);
+        // let switch_recipient = rand::thread_rng().gen_bool(0.5);
+        // let sender_key = if switch_recipient { keys[1] } else { keys[0] };
+        // let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
+        let sender_key = keys[0];
+        let recipient_key = keys[1];
+        log::info!("sender_key: {}", sender_key.intmax_key.privkey.to_hex());
+        log::info!(
+            "recipient_key: {}",
+            recipient_key.intmax_key.privkey.to_hex()
+        );
 
         // Enable a random failpoint if applicable
         let scenario = Self::enable_random_failpoint(action);

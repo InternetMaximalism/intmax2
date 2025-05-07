@@ -17,7 +17,9 @@ use intmax2_client_sdk::{
     },
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer},
+    common::{
+        generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer,
+    },
     ethereum_types::u256::U256,
 };
 use serde::Deserialize;

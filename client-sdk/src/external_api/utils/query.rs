@@ -135,5 +135,5 @@ async fn handle_response<R: DeserializeOwned>(
     response
         .json::<R>()
         .await
-        .map_err(|e| ServerError::DeserializationError(e.to_string()))
+        .map_err(|e| ServerError::DeserializationError(format!("(URL: {}) {}", url, e.to_string())))
 }

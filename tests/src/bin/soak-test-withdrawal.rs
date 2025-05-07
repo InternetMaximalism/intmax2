@@ -16,7 +16,9 @@ use intmax2_client_sdk::{
     client::sync::utils::generate_salt, external_api::utils::query::get_request,
 };
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer},
+    common::{
+        generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer,
+    },
     ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;

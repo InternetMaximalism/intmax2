@@ -1,7 +1,9 @@
 use intmax2_cli::cli::send::send_transfers;
 use intmax2_client_sdk::client::sync::utils::generate_salt;
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer},
+    common::{
+        generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer,
+    },
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use num_bigint::BigUint;
@@ -25,7 +27,7 @@ pub async fn test_double_spend() -> Result<(), Box<dyn std::error::Error>> {
         derive_custom_intmax_keys(&master_mnemonic, DOUBLE_SPENT_ACCOUNT_INDEX, 1, 100)?;
 
     let sender_key = sender_keys[0];
-    println!("sender_key: {}", sender_key.privkey);
+    println!("sender_key: {}", sender_key.privkey.to_hex());
     let recipient_key = recipient_keys[0];
 
     log::info!("Sender: {}", sender_key.pubkey.to_hex());

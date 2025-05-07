@@ -127,12 +127,17 @@ impl TestSystem {
         &self,
         keys: &[Account],
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let switch_recipient = rand::thread_rng().gen_bool(0.5);
-        let sender_key = if switch_recipient { keys[1] } else { keys[0] };
-        let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
+        // let switch_recipient = rand::thread_rng().gen_bool(0.5);
+        // let sender_key = if switch_recipient { keys[1] } else { keys[0] };
+        // let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
+        let sender_key = keys[0];
+        let recipient_key = keys[1];
         let intermediate_key = keys[2];
-        log::info!("sender_key: {}", sender_key.intmax_key.privkey);
-        log::info!("recipient_key: {}", recipient_key.intmax_key.privkey);
+        log::info!("sender_key: {}", sender_key.intmax_key.privkey.to_hex());
+        log::info!(
+            "recipient_key: {}",
+            recipient_key.intmax_key.privkey.to_hex()
+        );
 
         // Enable a random failpoint if applicable
         let scenario = Self::enable_random_failpoint();
@@ -171,15 +176,19 @@ impl TestSystem {
             sender_key.eth_address,
             intermediate_key.pubkey.to_hex()
         );
-        let deposit_hash = self.execute_deposit(sender_key, intermediate_key).await?;
+        // let deposit_hash = self.execute_deposit(sender_key, intermediate_key).await?;
+        let deposit_hash =
+            Bytes32::from_hex("3b18541c675cb8c1bf3ef246c3783e329e991effd1e5ed4a6310aa67b1211785")
+                .unwrap();
         self.wait_for_mining_claimable(intermediate_key, deposit_hash)
             .await?;
         log::info!(
-            "Withdrawal: {} -> {:?}",
+            "Withdrawal: {}, {} -> {:?}",
+            intermediate_key.privkey.to_hex(),
             intermediate_key.pubkey.to_hex(),
             recipient_key.eth_address
         );
-        self.execute_withdrawal(intermediate_key, recipient_key)
+        self.execute_withdrawal(intermediate_key, recipient_key, true)
             .await?;
 
         Ok(())
@@ -212,7 +221,7 @@ impl TestSystem {
         // Abort test if balance is insufficient
         if sender_initial_balance.lt(&transfer_amount_with_fee) {
             log::warn!(
-                "Sender's balance is insufficient. Address: {}, Balance: {}",
+                "Sender's balance is insufficient. Address: {:?}, Balance: {}",
                 sender_key.eth_address,
                 sender_initial_balance
             );
@@ -308,6 +317,7 @@ impl TestSystem {
                 retry_config,
             )
             .await?;
+            log::info!("number of mining_list: {:?}", mining_list.len());
 
             let target_mining = mining_list
                 .into_iter()
@@ -318,8 +328,14 @@ impl TestSystem {
                     return Ok(());
                 }
 
-                log::warn!("Mining is not claimable yet. Retrying in 60 seconds");
-                tokio::time::sleep(Duration::from_secs(60)).await;
+                if let Some(maturity) = target_mining.maturity {
+                    let datetime = chrono::NaiveDateTime::from_timestamp(maturity as i64, 0);
+                    log::info!("maturity: {:?}", datetime);
+                } else {
+                    log::info!("maturity: Undecided");
+                }
+                log::warn!("Mining is not claimable yet. Retrying in 3600 seconds");
+                tokio::time::sleep(Duration::from_secs(3600)).await;
                 continue;
             }
 
@@ -332,6 +348,7 @@ impl TestSystem {
         &self,
         sender_key: KeySet,
         recipient_account: Account,
+        with_claim_fee: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let sender_initial_balance = get_eth_balance_on_intmax(sender_key).await?;
         log::info!(
@@ -354,33 +371,31 @@ impl TestSystem {
             .await?
             .direct_withdrawal_fee
             .unwrap();
-        let claim_fee_result = client.withdrawal_server.get_claim_fee().await?.fee.unwrap();
         let withdrawal_fee = withdrawal_fee_result
             .iter()
             .find(|fee| fee.token_index == ETH_TOKEN_INDEX)
             .unwrap();
+        let claim_fee_result = client.withdrawal_server.get_claim_fee().await?.fee.unwrap();
         let claim_fee = claim_fee_result
             .iter()
             .find(|fee| fee.token_index == ETH_TOKEN_INDEX)
             .unwrap();
-        let transfer_amount = sender_initial_balance
-            .sub(withdrawal_fee.amount)
-            .sub(claim_fee.amount);
+        let mut transfer_amount = sender_initial_balance.sub(withdrawal_fee.amount);
+        if with_claim_fee {
+            transfer_amount = transfer_amount.sub(claim_fee.amount);
+        }
+
+        // let block_builder_url =
+        //     std::env::var("BLOCK_BUILDER_URL").expect("BLOCK_BUILDER_URL must be set");
+        // let transfer_fee = client
+        //     .block_builder
+        //     .get_fee_info(&block_builder_url)
+        //     .await?;
+        let transfer_fee = U256::from_str("2500000000000").unwrap();
+        log::info!("transfer_fee: {}", transfer_fee);
+        transfer_amount = transfer_amount.sub(transfer_fee); // TODO: valid value
+
         log::info!("max_withdrawal_amount: {}", transfer_amount);
-
-        // // Abort test if balance is insufficient
-        // if sender_initial_balance.lt(&transfer_amount_with_fee) {
-        //     log::warn!(
-        //         "Sender's balance is insufficient. Pubkey: {}, Balance: {}",
-        //         sender_key.pubkey.to_hex(),
-        //         sender_initial_balance
-        //     );
-
-        //     let refilling_amount = transfer_amount_with_fee.sub(sender_initial_balance);
-        //     log::info!("Refilling amount: {}", refilling_amount);
-        //     self.refill_eth_on_intmax(&[sender_key], refilling_amount)
-        //         .await?;
-        // }
 
         let to = Address::from_bytes_be(recipient_account.eth_address.as_bytes()).unwrap();
         log::info!("withdrawal recipient: {}", to);
@@ -521,8 +536,8 @@ impl AsyncTask for RandomActionTask {
         let sender_keys = derive_custom_keys(
             &master_mnemonic,
             account_index,
-            // RANDOM_ACTION_ACCOUNT_INDEX,
-            3,
+            RANDOM_ACTION_ACCOUNT_INDEX,
+            // 3,
             (id * 3) as u32,
         )
         .unwrap();

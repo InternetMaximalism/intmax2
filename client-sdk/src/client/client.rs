@@ -31,7 +31,7 @@ use intmax2_zkp::{
         tx::Tx, witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
-    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 
 use num_bigint::BigUint;
@@ -236,7 +236,7 @@ impl Client {
 
         log::info!(
             "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {:?}, fee {:?}, collateral_fee {:?}",
-            key.pubkey,
+            key.pubkey.to_hex(),
             transfers.len(),
             fee_beneficiary,
             fee,
@@ -879,6 +879,10 @@ impl Client {
 fn balance_check(balances: &Balances, transfers: &[Transfer]) -> Result<(), ClientError> {
     let mut balances = balances.clone();
     for transfer in transfers {
+        println!(
+            "balance check: {:?} {} {}",
+            transfer.recipient, transfer.token_index, transfer.amount
+        );
         let prev_balance = balances.get(transfer.token_index);
         let is_insufficient = balances.sub_transfer(transfer);
         if is_insufficient {

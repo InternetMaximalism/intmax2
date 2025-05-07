@@ -283,7 +283,22 @@ pub async fn wait_for_withdrawal_finalization(key: KeySet) -> Result<(), CliErro
         })
         .collect::<Vec<_>>();
 
+    const WITHDRAWAL_WAITING_RETRY_TIMES: usize = 40;
+    const NUM_PENDING_WITHDRAWALS: usize = 30;
+    let mut retries = 0;
     while !pending_withdrawals.is_empty() {
+        if retries > WITHDRAWAL_WAITING_RETRY_TIMES {
+            if pending_withdrawals.len() < NUM_PENDING_WITHDRAWALS {
+                log::error!(
+                    "Failed to finalize withdrawal after {} retries",
+                    WITHDRAWAL_WAITING_RETRY_TIMES
+                );
+                break;
+            }
+
+            log::warn!("Too many pending withdrawals");
+        }
+
         log::info!("Waiting for withdrawal finalization...");
         tokio::time::sleep(Duration::from_secs(30)).await;
         withdrawal_info = client.get_withdrawal_info(key).await?;
@@ -308,7 +323,11 @@ pub async fn wait_for_withdrawal_finalization(key: KeySet) -> Result<(), CliErro
                 .map(|w| w.contract_withdrawal.withdrawal_hash())
                 .collect::<Vec<_>>()
         );
+
+        retries += 1;
     }
+
+    println!("Go to next step");
 
     Ok(())
 }
