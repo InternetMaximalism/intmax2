@@ -1,11 +1,9 @@
-use std::path::PathBuf;
-
 use clap::{Parser, Subcommand};
-use ethers::types::{Address as EthAddress, H256};
 use intmax2_interfaces::{
     api::store_vault_server::types::CursorOrder, data::deposit_data::TokenType,
 };
 use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[clap(name = "intmax2_cli")]
@@ -19,7 +17,7 @@ pub struct Args {
 pub enum Commands {
     Transfer {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
         to: Bytes32,
         #[clap(long)]
@@ -33,7 +31,7 @@ pub enum Commands {
     },
     Withdrawal {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
         to: Address,
         #[clap(long)]
@@ -49,7 +47,7 @@ pub enum Commands {
     },
     BatchTransfer {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
         csv_path: String,
         #[clap(long)]
@@ -59,15 +57,15 @@ pub enum Commands {
     },
     Deposit {
         #[clap(long)]
-        eth_private_key: H256,
+        eth_private_key: Bytes32,
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
         token_type: TokenType,
         #[clap(long)]
         amount: Option<U256>,
         #[clap(long)]
-        token_address: Option<EthAddress>,
+        token_address: Option<Address>,
         #[clap(long)]
         token_id: Option<U256>,
         #[clap(long, default_value = "false")]
@@ -75,25 +73,27 @@ pub enum Commands {
     },
     SyncWithdrawals {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
         fee_token_index: Option<u32>,
     },
     SyncClaims {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
-        recipient: EthAddress,
+        recipient: Address,
         #[clap(long)]
         fee_token_index: Option<u32>,
     },
     Balance {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
+        #[clap(long, default_value = "false")]
+        without_sync: bool,
     },
     History {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
         order: Option<CursorOrder>, // asc or desc
         #[clap(long)]
@@ -101,31 +101,35 @@ pub enum Commands {
     },
     WithdrawalStatus {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
     },
     MiningList {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
     },
     ClaimStatus {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
     },
     ClaimWithdrawals {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
-        eth_private_key: H256,
+        eth_private_key: Bytes32,
+    },
+    ClaimBuilderReward {
+        #[clap(long)]
+        eth_private_key: Bytes32,
     },
     Resync {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long, default_value = "false")]
         deep: bool,
     },
     MakeBackup {
         #[clap(long)]
-        private_key: H256,
+        private_key: Bytes32,
         #[clap(long)]
         dir: Option<PathBuf>,
         #[clap(long)]
@@ -135,9 +139,10 @@ pub enum Commands {
         #[clap(long)]
         path: PathBuf,
     },
+    CheckValidityProver,
     GenerateKey,
-    GenerateFromEthKey {
+    PublicKey {
         #[clap(long)]
-        eth_private_key: H256,
+        private_key: Bytes32,
     },
 }

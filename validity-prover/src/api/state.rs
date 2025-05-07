@@ -1,16 +1,19 @@
 use futures::future;
-use intmax2_interfaces::api::validity_prover::{
-    interface::DepositInfo,
-    types::{
-        GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
-        GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
-        GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
-        GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
-        GetDepositInfoBatchRequest, GetDepositInfoBatchResponse, GetDepositInfoQuery,
-        GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
-        GetUpdateWitnessQuery, GetUpdateWitnessResponse, GetValidityWitnessQuery,
-        GetValidityWitnessResponse,
+use intmax2_interfaces::{
+    api::validity_prover::{
+        interface::DepositInfo,
+        types::{
+            GetAccountInfoBatchRequest, GetAccountInfoBatchResponse, GetAccountInfoQuery,
+            GetAccountInfoResponse, GetBlockMerkleProofQuery, GetBlockMerkleProofResponse,
+            GetBlockNumberByTxTreeRootBatchRequest, GetBlockNumberByTxTreeRootBatchResponse,
+            GetBlockNumberByTxTreeRootQuery, GetBlockNumberByTxTreeRootResponse,
+            GetDepositInfoBatchRequest, GetDepositInfoBatchResponse, GetDepositInfoQuery,
+            GetDepositInfoResponse, GetDepositMerkleProofQuery, GetDepositMerkleProofResponse,
+            GetUpdateWitnessQuery, GetUpdateWitnessResponse, GetValidityProofQuery,
+            GetValidityProofResponse, GetValidityWitnessQuery, GetValidityWitnessResponse,
+        },
     },
+    data::proof_compression::CompressedValidityProof,
 };
 use intmax2_zkp::common::{
     trees::{block_hash_tree::BlockHashMerkleProof, deposit_tree::DepositMerkleProof},
@@ -207,6 +210,31 @@ impl State {
                 .set_with_ttl::<V>(&key, &validity_witness, self.config.static_ttl)
                 .await?;
             Ok(GetValidityWitnessResponse { validity_witness })
+        }
+    }
+
+    pub async fn get_validity_proof(
+        &self,
+        request: GetValidityProofQuery,
+    ) -> anyhow::Result<GetValidityProofResponse> {
+        type V = CompressedValidityProof;
+        let key = format!("get_validity_proof:{}", serde_qs::to_string(&request)?);
+        if let Some(validity_proof) = self.cache.get::<V>(&key).await? {
+            Ok(GetValidityProofResponse { validity_proof })
+        } else {
+            let validity_proof_raw = self
+                .validity_prover
+                .get_validity_proof(request.block_number)
+                .await?
+                .ok_or(anyhow::anyhow!(
+                    "No validity proof found for block number {}",
+                    request.block_number
+                ))?;
+            let validity_proof = CompressedValidityProof::new(&validity_proof_raw)?;
+            self.cache
+                .set_with_ttl::<V>(&key, &validity_proof, self.config.static_ttl)
+                .await?;
+            Ok(GetValidityProofResponse { validity_proof })
         }
     }
 

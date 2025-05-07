@@ -20,11 +20,12 @@ use intmax2_interfaces::{
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
         tx_data::TxData,
-        user_data::{Balances, ProcessStatus},
+        user_data::{Balances, ProcessStatus, UserData},
     },
-    utils::random::default_rng,
+    utils::{circuit_verifiers::CircuitVerifiers, random::default_rng},
 };
 use intmax2_zkp::{
+    circuits::validity::validity_pis::ValidityPublicInputs,
     common::{
         block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
         signature_content::key_set::KeySet, transfer::Transfer, trees::transfer_tree::TransferTree,
@@ -39,8 +40,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
-        fee_payment::generate_withdrawal_transfers, receipt::generate_transfer_receipt,
-        strategy::mining::validate_mining_deposit_criteria, sync::utils::generate_salt,
+        fee_payment::generate_withdrawal_transfers,
+        receipt::generate_transfer_receipt,
+        strategy::{
+            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
+        },
+        sync::utils::generate_salt,
     },
     external_api::{
         contract::{
@@ -63,6 +68,8 @@ use super::{
     receipt::validate_transfer_receipt,
     strategy::{
         mining::{fetch_mining_info, Mining},
+        strategy::determine_sequence,
+        tx::fetch_all_unprocessed_tx_info,
         tx_status::{get_tx_status, TxStatus},
     },
     sync::utils::{generate_spent_witness, get_balance_proof},
@@ -193,6 +200,35 @@ impl Client {
         Ok(result)
     }
 
+    pub async fn await_tx_sendable(&self, key: KeySet) -> Result<UserData, ClientError> {
+        // wait for sync
+        let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
+        wait_till_validity_prover_synced(
+            self.validity_prover.as_ref(),
+            false,
+            onchain_block_number,
+        )
+        .await?;
+        let mut user_data = self.get_user_data(key).await?;
+        let current_time = chrono::Utc::now().timestamp() as u64;
+        let tx_info = fetch_all_unprocessed_tx_info(
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
+            key,
+            current_time,
+            &user_data.tx_status,
+            self.config.tx_timeout,
+        )
+        .await?;
+        if !tx_info.settled.is_empty() || !tx_info.pending.is_empty() {
+            log::warn!("There are unprocessed tx info, start to sync");
+            self.sync(key).await?;
+            user_data = self.get_user_data(key).await?;
+            log::info!("Sync finished");
+        }
+        Ok(user_data)
+    }
+
     /// Send a transaction request to the block builder
     #[allow(clippy::too_many_arguments)]
     pub async fn send_tx_request(
@@ -267,6 +303,8 @@ impl Client {
             }
         }
 
+        let user_data = self.await_tx_sendable(key).await?;
+
         // get fee info
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
 
@@ -301,11 +339,6 @@ impl Client {
         } else {
             None
         };
-
-        // sync balance proof
-        self.sync(key).await?;
-
-        let user_data = self.get_user_data(key).await?;
 
         let balance_proof =
             get_balance_proof(&user_data)?.ok_or(ClientError::CannotSendTxByZeroBalanceAccount)?;
@@ -873,6 +906,57 @@ impl Client {
         transfer_receipt: &str,
     ) -> Result<TransferData, ClientError> {
         validate_transfer_receipt(self, key, transfer_receipt).await
+    }
+
+    pub async fn get_balances_without_sync(&self, key: KeySet) -> Result<Balances, ClientError> {
+        let (_, balances, _) = determine_sequence(
+            self.store_vault_server.as_ref(),
+            self.validity_prover.as_ref(),
+            &self.rollup_contract,
+            &self.liquidity_contract,
+            key,
+            self.config.deposit_timeout,
+            self.config.tx_timeout,
+        )
+        .await?;
+        Ok(balances)
+    }
+
+    pub async fn check_validity_prover(&self) -> Result<(), ClientError> {
+        let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
+        wait_till_validity_prover_synced(self.validity_prover.as_ref(), true, onchain_block_number)
+            .await?;
+        log::info!(
+            "validity prover is synced for onchain block {}",
+            onchain_block_number
+        );
+        let validity_proof = self
+            .validity_prover
+            .get_validity_proof(onchain_block_number)
+            .await?;
+        let verifier = CircuitVerifiers::load().get_validity_vd();
+        verifier.verify(validity_proof.clone()).map_err(|e| {
+            ClientError::ValidityProverError(format!("Failed to verify validity proof: {}", e))
+        })?;
+        let validity_pis =
+            ValidityPublicInputs::from_pis(&validity_proof.public_inputs).map_err(|e| {
+                ClientError::ValidityProverError(format!(
+                    "Failed to parse validity proof pis: {}",
+                    e
+                ))
+            })?;
+        let onchain_block_hash = self
+            .rollup_contract
+            .get_block_hash(onchain_block_number)
+            .await?;
+        if validity_pis.public_state.block_hash != onchain_block_hash {
+            return Err(ClientError::ValidityProverError(format!(
+                "Invalid block hash: validity prover {} != onchain {}",
+                validity_pis.public_state.block_hash, onchain_block_hash
+            )));
+        }
+        log::info!("validity proof is valid");
+        Ok(())
     }
 }
 

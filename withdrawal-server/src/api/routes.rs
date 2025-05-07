@@ -11,7 +11,7 @@ use intmax2_interfaces::{
         types::{
             GetClaimInfoRequest, GetClaimInfoResponse, GetWithdrawalInfoByRecipientQuery,
             GetWithdrawalInfoRequest, GetWithdrawalInfoResponse, RequestClaimRequest,
-            RequestWithdrawalRequest,
+            RequestClaimResponse, RequestWithdrawalRequest, RequestWithdrawalResponse,
         },
     },
     utils::signature::{Signable as _, WithAuth},
@@ -34,13 +34,13 @@ pub async fn get_claim_fee(state: Data<State>) -> Result<Json<ClaimFeeInfo>, Err
 pub async fn request_withdrawal(
     state: Data<State>,
     request: Json<WithAuth<RequestWithdrawalRequest>>,
-) -> Result<Json<()>, Error> {
+) -> Result<Json<RequestWithdrawalResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    state
+    let fee_result = state
         .withdrawal_server
         .request_withdrawal(
             pubkey,
@@ -50,20 +50,20 @@ pub async fn request_withdrawal(
         )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(()))
+    Ok(Json(RequestWithdrawalResponse { fee_result }))
 }
 
 #[post("/request-claim")]
 pub async fn request_claim(
     state: Data<State>,
     request: Json<WithAuth<RequestClaimRequest>>,
-) -> Result<Json<()>, Error> {
+) -> Result<Json<RequestClaimResponse>, Error> {
     request
         .inner
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    state
+    let fee_result = state
         .withdrawal_server
         .request_claim(
             pubkey,
@@ -73,7 +73,7 @@ pub async fn request_claim(
         )
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(()))
+    Ok(Json(RequestClaimResponse { fee_result }))
 }
 
 #[post("/get-withdrawal-info")]

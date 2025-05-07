@@ -516,7 +516,7 @@ impl TestSystem {
         for recipient in intmax_recipients {
             transfer_eth_on_ethereum(
                 &self.l1_rpc_url,
-                &format!("{:064x}", self.admin_key.eth_private_key),
+                &format!("{:?}", self.admin_key.eth_private_key.to_hex()),
                 *recipient,
                 amount,
             )

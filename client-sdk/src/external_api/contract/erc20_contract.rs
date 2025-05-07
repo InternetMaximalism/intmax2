@@ -79,6 +79,7 @@ impl ERC20Contract {
     pub async fn transfer(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         to: Address,
         amount: U256,
     ) -> Result<(), BlockchainError> {
@@ -86,13 +87,14 @@ impl ERC20Contract {
         let mut tx = contract.transfer(to, amount);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "transfer").await?;
+        handle_contract_call(&client, &mut tx, "transfer", gas_limit).await?;
         Ok(())
     }
 
     pub async fn approve(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         spender: Address,
         amount: U256,
     ) -> Result<(), BlockchainError> {
@@ -100,7 +102,7 @@ impl ERC20Contract {
         let mut tx = contract.approve(spender, amount);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "approve").await?;
+        handle_contract_call(&client, &mut tx, "approve", gas_limit).await?;
         Ok(())
     }
 

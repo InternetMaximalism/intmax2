@@ -18,4 +18,6 @@ pub struct EnvVar {
 
     pub s3_upload_timeout: u64,
     pub s3_download_timeout: u64,
+
+    pub cleanup_interval: u64,
 }

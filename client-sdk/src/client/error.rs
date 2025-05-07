@@ -63,6 +63,9 @@ pub enum ClientError {
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
 
+    #[error("Validity prover error: {0}")]
+    ValidityProverError(String),
+
     #[error("Backup error: {0}")]
     BackupError(String),
 

@@ -150,7 +150,6 @@ async fn validate_fee_single(
     sender_proof_set: &SenderProofSet,
     transfer_witness: &TransferWitness,
 ) -> Result<(), FeeError> {
-    // todo: validate spent proof inside `validate` method
     sender_proof_set
         .validate(U256::dummy_pubkey())
         .map_err(|e| {
@@ -388,4 +387,159 @@ pub fn convert_fee_vec(fee: &Option<HashMap<u32, U256>>) -> Option<Vec<Fee>> {
             })
             .collect()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use intmax2_zkp::ethereum_types::u256::U256;
+    use num_bigint::BigUint;
+    use num_traits::One;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_fee_amount_zero() {
+        let fee_str = "0:0";
+        let result = parse_fee_str(fee_str).unwrap();
+
+        let mut expected = HashMap::new();
+        expected.insert(0, U256::default());
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_few_fees() {
+        let fee_str = "0:100,1:200";
+        let result = parse_fee_str(fee_str).unwrap();
+
+        let mut expected = HashMap::new();
+        expected.insert(0, U256::try_from(BigUint::from(100u64)).unwrap());
+        expected.insert(1, U256::try_from(BigUint::from(200u64)).unwrap());
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_single_fee() {
+        let fee_str = "42:123456789";
+        let result = parse_fee_str(fee_str).unwrap();
+
+        let mut expected = HashMap::new();
+        expected.insert(42, U256::try_from(BigUint::from(123456789u64)).unwrap());
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_empty_string() {
+        let fee_str = "";
+        let result = parse_fee_str(fee_str);
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Parse error: Invalid fee format: should be token_index:fee_amount"
+        );
+    }
+
+    #[test]
+    fn test_invalid_format_missing_colon() {
+        let fee_str = "0-100,1:200";
+        let result = parse_fee_str(fee_str);
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Parse error: Invalid fee format: should be token_index:fee_amount"
+        );
+    }
+
+    #[test]
+    fn test_hex_token_index() {
+        let fee_str = "abc:100";
+        let result = parse_fee_str(fee_str);
+
+        assert!(result.is_err());
+        assert!(format!("{}", result.err().unwrap()).contains("Failed to parse token index"));
+    }
+
+    #[test]
+    fn test_hex_fee_amount() {
+        let fee_str = "0:abc";
+        let result = parse_fee_str(fee_str);
+
+        assert!(result.is_err());
+        assert!(format!("{}", result.err().unwrap()).contains("Failed to parse fee amount"));
+    }
+
+    #[test]
+    fn test_big_fee_amount() {
+        let fee_str = "1:1000000000000000000000000000000000000";
+        let result = parse_fee_str(fee_str).unwrap();
+
+        let mut expected = HashMap::new();
+        expected.insert(
+            1u32,
+            U256::try_from(
+                BigUint::parse_bytes("1000000000000000000000000000000000000".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_maximum_u256_fee() {
+        // max = 2^256 - 1
+        let max = (BigUint::one() << 256) - BigUint::one();
+        let fee_str = format!("1:{}", max);
+        let result = parse_fee_str(&fee_str).unwrap();
+
+        let mut expected = HashMap::new();
+        let u256 = U256::try_from(max).unwrap();
+        expected.insert(1, u256);
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_fee_amount_overflow_u256() {
+        // 2^256 — overflow for U256
+        let overflow = BigUint::one() << 256;
+        let fee_str = format!("0:{}", overflow);
+
+        let result = parse_fee_str(&fee_str);
+
+        assert!(matches!(
+            result,
+            Err(FeeError::ParseError(msg)) if msg.contains("Failed to convert fee amount")
+        ));
+    }
+
+    #[test]
+    fn test_negative_fee_amount() {
+        let fee_str = "0:-100";
+        let result = parse_fee_str(fee_str);
+
+        assert!(matches!(
+            result,
+            Err(FeeError::ParseError(msg)) if msg.contains("Failed to parse fee amount")
+        ));
+    }
+
+    #[test]
+    fn test_maximum_token_index() {
+        let fee_str = format!("{}:42", u32::MAX);
+        let result = parse_fee_str(&fee_str).unwrap();
+
+        let mut expected = HashMap::new();
+        let big = BigUint::from(42u32);
+        let u256 = U256::try_from(big).unwrap();
+        expected.insert(u32::MAX, u256);
+
+        assert_eq!(result, expected);
+    }
 }

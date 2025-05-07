@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    DELETE FROM s3_snapshot_pending_uploads\n                    WHERE digest = $1\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b352b0e1df3909a6fad40c908a8e6e79c24a64ca7d24af8301df34a258d0f1f8"
+}

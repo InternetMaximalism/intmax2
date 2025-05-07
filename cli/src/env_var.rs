@@ -1,5 +1,5 @@
-use ethers::types::Address;
 use intmax2_interfaces::api::store_vault_server::types::StoreVaultType;
+use intmax2_zkp::ethereum_types::address::Address;
 use serde::Deserialize;
 
 use common::env::EnvType;
@@ -32,7 +32,6 @@ pub struct EnvVar {
     pub l1_rpc_url: String,
     pub l1_chain_id: u64,
     pub liquidity_contract_address: Address,
-    pub aml_permitter_contract_address: Option<Address>,
     pub l2_rpc_url: String,
     pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
@@ -44,8 +43,8 @@ pub struct EnvVar {
     // optional block builder base url
     pub block_builder_base_url: Option<String>,
 
-    // optional token mapping base url
-    pub token_mapping_base_url: Option<String>,
+    // optional block builder reward contract address
+    pub reward_contract_address: Option<Address>,
 
     // optional private zkp server settings
     pub private_zkp_server_max_retires: Option<usize>,

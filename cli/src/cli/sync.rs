@@ -1,7 +1,6 @@
-use ethers::types::Address;
-use intmax2_zkp::common::signature_content::key_set::KeySet;
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::address::Address};
 
-use super::{client::get_client, error::CliError, utils::convert_address};
+use super::{client::get_client, error::CliError};
 
 pub async fn sync_withdrawals(key: KeySet, fee_token_index: Option<u32>) -> Result<(), CliError> {
     let client = get_client()?;
@@ -19,7 +18,6 @@ pub async fn sync_claims(
     fee_token_index: Option<u32>,
 ) -> Result<(), CliError> {
     let client = get_client()?;
-    let recipient = convert_address(recipient);
     let claim_fee = client.withdrawal_server.get_claim_fee().await?;
     let fee_token_index = fee_token_index.unwrap_or(0);
     client

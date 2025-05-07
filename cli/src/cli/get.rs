@@ -1,7 +1,7 @@
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::{signature_content::key_set::KeySet, trees::asset_tree::AssetLeaf},
-    ethereum_types::{address::Address, u256::U256},
+    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
 };
 
 use crate::cli::{client::get_client, history::format_timestamp};
@@ -16,12 +16,16 @@ pub struct BalanceInfo {
     pub token_id: Option<U256>,
 }
 
-pub async fn balance(key: KeySet) -> Result<Vec<BalanceInfo>, CliError> {
+pub async fn balance(key: KeySet, sync: bool) -> Result<Vec<BalanceInfo>, CliError> {
     let client = get_client()?;
-    client.sync(key).await?;
-
-    let user_data = client.get_user_data(key).await?;
-    let mut balances: Vec<(u32, AssetLeaf)> = user_data.balances().0.into_iter().collect();
+    let balances = if sync {
+        client.sync(key).await?;
+        let user_data = client.get_user_data(key).await?;
+        user_data.balances()
+    } else {
+        client.get_balances_without_sync(key).await?
+    };
+    let mut balances: Vec<(u32, AssetLeaf)> = balances.0.into_iter().collect();
     balances.sort_by_key(|(i, _leaf)| *i);
 
     let mut total_balance = vec![];
@@ -66,12 +70,16 @@ pub async fn withdrawal_status(key: KeySet) -> Result<(), CliError> {
     println!("Withdrawal status:");
     for (i, withdrawal_info) in withdrawal_info.iter().enumerate() {
         let withdrawal = withdrawal_info.contract_withdrawal.clone();
+        let l1_tx_hash = withdrawal_info
+            .l1_tx_hash
+            .map_or("N/A".to_string(), |h| h.to_hex());
         println!(
-            "#{}: recipient: {}, token_index: {}, amount: {}, status: {}",
+            "#{}: recipient: {}, token_index: {}, amount: {}, l1_tx_hash: {}, status: {}",
             i,
             withdrawal.recipient,
             withdrawal.token_index,
             withdrawal.amount,
+            l1_tx_hash,
             withdrawal_info.status
         );
     }
@@ -102,10 +110,19 @@ pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
     println!("Claim status:");
     for (i, claim_info) in claim_info.iter().enumerate() {
         let claim = claim_info.claim.clone();
+        let l1_tx_hash = claim_info
+            .l1_tx_hash
+            .map_or("N/A".to_string(), |h| h.to_hex());
         println!(
-            "#{}: recipient: {}, amount: {}, status: {}",
-            i, claim.recipient, claim.amount, claim_info.status
+            "#{}: recipient: {}, amount: {}, l1_tx_hash: {}, status: {}",
+            i, claim.recipient, claim.amount, l1_tx_hash, claim_info.status
         );
     }
+    Ok(())
+}
+
+pub async fn check_validity_prover() -> Result<(), CliError> {
+    let client = get_client()?;
+    client.check_validity_prover().await?;
     Ok(())
 }

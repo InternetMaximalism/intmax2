@@ -12,6 +12,7 @@ impl BlockBuilder {
         self.registry_contract
             .emit_heart_beat(
                 self.config.block_builder_private_key,
+                None,
                 &self.config.block_builder_url,
             )
             .await?;
@@ -117,6 +118,7 @@ impl BlockBuilder {
         log::info!("Posting block: {}", block_post_task.block_id);
         match post_block(
             self.config.block_builder_private_key,
+            self.config.gas_limit_for_block_post,
             self.config.eth_allowance_for_block,
             &self.rollup_contract,
             &self.validity_prover_client,

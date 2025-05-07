@@ -5,6 +5,12 @@ pub enum StoreVaultError {
     #[error("Lock error: {0}")]
     LockError(String),
 
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
+    #[error("Object error: {0}")]
+    ObjectError(String),
+
     #[error("Database error: {0}")]
     DBError(#[from] sqlx::Error),
 

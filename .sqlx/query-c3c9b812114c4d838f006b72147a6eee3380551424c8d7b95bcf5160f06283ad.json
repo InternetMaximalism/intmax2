@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                status as \"status: SqlWithdrawalStatus\",\n                contract_withdrawal\n            FROM withdrawals\n            WHERE pubkey = $1\n            ",
+  "query": "\n            SELECT \n                status as \"status: SqlWithdrawalStatus\",\n                contract_withdrawal,\n                l1_tx_hash\n            FROM withdrawals\n            WHERE recipient = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -25,6 +25,11 @@
         "ordinal": 1,
         "name": "contract_withdrawal",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "l1_tx_hash",
+        "type_info": "Bpchar"
       }
     ],
     "parameters": {
@@ -34,8 +39,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "3a26d9822923052e45d40808367d06ed8b968af0f0bcf2767a7a5ca6df938ab0"
+  "hash": "c3c9b812114c4d838f006b72147a6eee3380551424c8d7b95bcf5160f06283ad"
 }

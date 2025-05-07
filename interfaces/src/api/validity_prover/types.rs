@@ -1,5 +1,7 @@
 use super::interface::DepositInfo;
-use crate::api::validity_prover::interface::AccountInfo;
+use crate::{
+    api::validity_prover::interface::AccountInfo, data::proof_compression::CompressedValidityProof,
+};
 use intmax2_zkp::{
     common::{
         trees::{block_hash_tree::BlockHashMerkleProof, deposit_tree::DepositMerkleProof},
@@ -112,6 +114,17 @@ pub struct GetValidityWitnessResponse {
     pub validity_witness: ValidityWitness,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetValidityProofQuery {
+    pub block_number: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetValidityProofResponse {
+    pub validity_proof: CompressedValidityProof,
+}
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetBlockMerkleProofQuery {

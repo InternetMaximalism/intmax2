@@ -1,6 +1,9 @@
-use ethers::types::{Address, H256};
 use intmax2_client_sdk::external_api::{
     contract::{
+        convert::{
+            convert_address_to_ethers, convert_address_to_intmax, convert_bytes32_to_h256,
+            convert_u256_to_ethers,
+        },
         erc1155_contract::ERC1155Contract,
         erc20_contract::ERC20Contract,
         erc721_contract::ERC721Contract,
@@ -12,20 +15,16 @@ use intmax2_client_sdk::external_api::{
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
 };
 
 use crate::env_var::EnvVar;
 
-use super::{
-    client::get_client,
-    error::CliError,
-    utils::{convert_address, convert_u256, is_local},
-};
+use super::{client::get_client, error::CliError, utils::is_local};
 
 pub async fn deposit(
     key: KeySet,
-    eth_private_key: H256,
+    eth_private_key: Bytes32,
     token_type: TokenType,
     amount: U256,
     token_address: Address,
@@ -46,24 +45,21 @@ pub async fn deposit(
 
     log::info!("Balance check done");
 
-    let token_address_int = convert_address(token_address);
-    let depositor = get_address(liquidity_contract.chain_id, eth_private_key);
-    let depositor_int = convert_address(depositor);
+    let signer_private_key = convert_bytes32_to_h256(eth_private_key);
+    let depositor = get_address(liquidity_contract.chain_id, signer_private_key);
+    let depositor = convert_address_to_intmax(depositor);
 
     let deposit_result = client
         .prepare_deposit(
-            depositor_int,
+            depositor,
             key.pubkey,
             amount,
             token_type,
-            token_address_int,
+            token_address,
             token_id,
             is_mining,
         )
         .await?;
-
-    dbg!(deposit_result.deposit_data.pubkey_salt_hash);
-
     let deposit_data = deposit_result.deposit_data;
 
     let aml_permission = fetch_predicate_permission(
@@ -81,7 +77,8 @@ pub async fn deposit(
         TokenType::NATIVE => {
             liquidity_contract
                 .deposit_native(
-                    eth_private_key,
+                    signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.amount,
                     &aml_permission,
@@ -92,7 +89,8 @@ pub async fn deposit(
         TokenType::ERC20 => {
             liquidity_contract
                 .deposit_erc20(
-                    eth_private_key,
+                    signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.amount,
                     deposit_data.token_address,
@@ -104,7 +102,8 @@ pub async fn deposit(
         TokenType::ERC721 => {
             liquidity_contract
                 .deposit_erc721(
-                    eth_private_key,
+                    signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.token_address,
                     deposit_data.token_id,
@@ -116,7 +115,8 @@ pub async fn deposit(
         TokenType::ERC1155 => {
             liquidity_contract
                 .deposit_erc1155(
-                    eth_private_key,
+                    signer_private_key,
+                    None,
                     deposit_data.pubkey_salt_hash,
                     deposit_data.token_address,
                     deposit_data.token_id,
@@ -132,7 +132,7 @@ pub async fn deposit(
     if is_local()? {
         log::info!("get token index");
         let token_index = liquidity_contract
-            .get_token_index(token_type, token_address_int, token_id)
+            .get_token_index(token_type, token_address, token_id)
             .await?
             .ok_or(CliError::UnexpectedError(
                 "Cloud not find token index".to_string(),
@@ -142,7 +142,12 @@ pub async fn deposit(
         deposit_data.set_token_index(token_index);
         client
             .rollup_contract
-            .process_deposits(eth_private_key, 0, &[deposit_data.deposit_hash().unwrap()])
+            .process_deposits(
+                signer_private_key,
+                None,
+                0,
+                &[deposit_data.deposit_hash().unwrap()],
+            )
             .await?;
     }
 
@@ -151,22 +156,24 @@ pub async fn deposit(
 
 async fn balance_check_and_approve(
     liquidity_contract: &LiquidityContract,
-    eth_private_key: H256,
+    eth_private_key: Bytes32,
     amount: U256,
     token_type: TokenType,
     token_address: Address,
     token_id: U256,
 ) -> Result<(), CliError> {
-    let amount = convert_u256(amount);
-    let token_id = convert_u256(token_id);
-
     let chain_id = liquidity_contract.chain_id;
     let rpc_url = liquidity_contract.rpc_url.clone();
-    let address = get_address(chain_id, eth_private_key);
+    let sender_private_key = convert_bytes32_to_h256(eth_private_key);
+    let sender_address = get_address(chain_id, sender_private_key);
+
+    let amount = convert_u256_to_ethers(amount);
+    let token_address = convert_address_to_ethers(token_address);
+    let token_id = convert_u256_to_ethers(token_id);
 
     match token_type {
         TokenType::NATIVE => {
-            let balance = get_eth_balance(&rpc_url, address).await?;
+            let balance = get_eth_balance(&rpc_url, sender_address).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
                     "Insufficient eth balance".to_string(),
@@ -175,43 +182,51 @@ async fn balance_check_and_approve(
         }
         TokenType::ERC20 => {
             let contract = ERC20Contract::new(&rpc_url, chain_id, token_address);
-            let balance = contract.balance_of(address).await?;
+            let balance = contract.balance_of(sender_address).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
                     "Insufficient token balance".to_string(),
                 ));
             }
-
             // approve if necessary
             let allowance = contract
-                .allowance(address, liquidity_contract.address())
+                .allowance(sender_address, liquidity_contract.address())
                 .await?;
             if allowance < amount {
                 contract
-                    .approve(eth_private_key, liquidity_contract.address(), amount)
+                    .approve(
+                        sender_private_key,
+                        None,
+                        liquidity_contract.address(),
+                        amount,
+                    )
                     .await?;
             }
         }
         TokenType::ERC721 => {
             let contract = ERC721Contract::new(&rpc_url, chain_id, token_address);
             let owner = contract.owner_of(token_id).await?;
-            if owner != address {
+            if owner != sender_address {
                 return Err(CliError::InsufficientBalance(
                     "You don't have the nft of given token id".to_string(),
                 ));
             }
-
             // approve if necessary
             let operator = contract.get_approved(token_id).await?;
             if operator != liquidity_contract.address() {
                 contract
-                    .approve(eth_private_key, liquidity_contract.address(), token_id)
+                    .approve(
+                        sender_private_key,
+                        None,
+                        liquidity_contract.address(),
+                        token_id,
+                    )
                     .await?;
             }
         }
         TokenType::ERC1155 => {
             let contract = ERC1155Contract::new(&rpc_url, chain_id, token_address);
-            let balance = contract.balance_of(address, token_id).await?;
+            let balance = contract.balance_of(sender_address, token_id).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
                     "Insufficient token balance".to_string(),
@@ -219,12 +234,17 @@ async fn balance_check_and_approve(
             }
             // approve if necessary
             let is_approved = contract
-                .is_approved_for_all(address, liquidity_contract.address())
+                .is_approved_for_all(sender_address, liquidity_contract.address())
                 .await?;
 
             if !is_approved {
                 contract
-                    .set_approval_for_all(eth_private_key, liquidity_contract.address(), true)
+                    .set_approval_for_all(
+                        sender_private_key,
+                        None,
+                        liquidity_contract.address(),
+                        true,
+                    )
                     .await?;
             }
         }
@@ -241,29 +261,29 @@ async fn fetch_predicate_permission(
     token_address: Address,
     token_id: U256,
 ) -> Result<Vec<u8>, CliError> {
+    let client = get_client()?;
+    let aml_permitter_address = client.liquidity_contract.get_aml_permitter().await?;
     let env = envy::from_env::<EnvVar>()?;
-    if env.predicate_base_url.is_none() && env.aml_permitter_contract_address.is_none() {
+    if aml_permitter_address.is_zero() {
         log::info!("AML predicate is not set");
         return Ok(vec![]);
     }
-    if !(env.predicate_base_url.is_some() && env.aml_permitter_contract_address.is_some()) {
+    if env.predicate_base_url.is_none() {
         return Err(CliError::EnvError(
-            "Both predicate base url and aml permitter contract address must be set".to_string(),
+            "Predicate base url must be set".to_string(),
         ));
     }
-    let aml_permitter_contract_address = env.aml_permitter_contract_address.unwrap();
-
     let predicate_client = PredicateClient::new(env.predicate_base_url.unwrap());
-    let recipient_salt_hash = H256::from_slice(&recipient_salt_hash.to_bytes_be());
-
+    let recipient_salt_hash = convert_bytes32_to_h256(recipient_salt_hash);
+    let token_address = convert_address_to_ethers(token_address);
     let value = if token_type == TokenType::NATIVE {
         amount
     } else {
         0.into()
     };
-    let value = convert_u256(value);
-    let amount = convert_u256(amount);
-    let token_id = convert_u256(token_id);
+    let value = convert_u256_to_ethers(value);
+    let amount = convert_u256_to_ethers(amount);
+    let token_id = convert_u256_to_ethers(token_id);
     let request = match token_type {
         TokenType::NATIVE => PermissionRequest::Native {
             recipient_salt_hash,
@@ -286,8 +306,9 @@ async fn fetch_predicate_permission(
             amount,
         },
     };
+    let from = convert_address_to_ethers(from);
     let permission = predicate_client
-        .get_deposit_permission(from, aml_permitter_contract_address, value, request)
+        .get_deposit_permission(from, aml_permitter_address, value, request)
         .await?;
     Ok(permission)
 }

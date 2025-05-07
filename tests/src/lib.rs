@@ -1,4 +1,3 @@
-use ethers::types::H256;
 use futures::future::join_all;
 use intmax2_cli::cli::{
     client::get_client,
@@ -21,7 +20,7 @@ use intmax2_zkp::{
     common::{
         generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer,
     },
-    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;
 use std::{future::Future, time::Duration};
@@ -50,7 +49,7 @@ pub async fn wait_for_balance_synchronization(
 ) -> Result<Vec<BalanceInfo>, CliError> {
     loop {
         let timer = std::time::Instant::now();
-        let result = balance(key).await;
+        let result = balance(key, true).await;
         match result {
             Ok(balances) => {
                 log::info!(
@@ -139,7 +138,7 @@ pub async fn transfer_with_error_handling(
 }
 
 pub async fn deposit_native_token_with_error_handling(
-    depositor_eth_private_key: H256,
+    depositor_eth_private_key: Bytes32,
     recipient_key: KeySet,
     amount: U256,
     waiting_duration: Option<Duration>,
@@ -147,7 +146,7 @@ pub async fn deposit_native_token_with_error_handling(
 ) -> Result<(), CliError> {
     let token_type = TokenType::NATIVE;
     // let amount = ethers::types::U256::from(10);
-    let token_address = ethers::types::Address::default();
+    let token_address = Address::default();
     let token_id = U256::from(0);
 
     let timer = std::time::Instant::now();

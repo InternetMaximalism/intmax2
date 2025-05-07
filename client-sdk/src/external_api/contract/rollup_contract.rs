@@ -125,7 +125,7 @@ impl RollupContract {
         );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        let tx_hash = handle_contract_call(&client, &mut tx, "initialize").await?;
+        let tx_hash = handle_contract_call(&client, &mut tx, "initialize", None).await?;
         Ok(tx_hash)
     }
 
@@ -133,6 +133,7 @@ impl RollupContract {
     pub async fn post_registration_block(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
@@ -168,7 +169,8 @@ impl RollupContract {
             .value(msg_value);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        let tx_hash = handle_contract_call(&client, &mut tx, "post_registration_block").await?;
+        let tx_hash =
+            handle_contract_call(&client, &mut tx, "post_registration_block", gas_limit).await?;
         Ok(tx_hash)
     }
 
@@ -176,6 +178,7 @@ impl RollupContract {
     pub async fn post_non_registration_block(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         msg_value: U256,
         tx_tree_root: Bytes32,
         expiry: u64,
@@ -211,13 +214,16 @@ impl RollupContract {
             .value(msg_value);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        let tx_hash = handle_contract_call(&client, &mut tx, "post_non_registration_block").await?;
+        let tx_hash =
+            handle_contract_call(&client, &mut tx, "post_non_registration_block", gas_limit)
+                .await?;
         Ok(tx_hash)
     }
 
     pub async fn process_deposits(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         last_processed_deposit_id: u32,
         deposit_hashes: &[Bytes32],
     ) -> Result<H256, BlockchainError> {
@@ -230,7 +236,7 @@ impl RollupContract {
         let mut tx = contract.process_deposits(last_processed_deposit_id.into(), deposit_hashes);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        let tx_hash = handle_contract_call(&client, &mut tx, "process_deposits").await?;
+        let tx_hash = handle_contract_call(&client, &mut tx, "process_deposits", gas_limit).await?;
         Ok(tx_hash)
     }
 
@@ -253,6 +259,15 @@ impl RollupContract {
                 BlockchainError::RPCError("failed to get next deposit index".to_string())
             })?;
         Ok(next_deposit_index)
+    }
+
+    pub async fn get_block_hash(&self, block_number: u32) -> Result<Bytes32, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let block_hash: [u8; 32] =
+            with_retry(|| async { contract.get_block_hash(block_number).call().await })
+                .await
+                .map_err(|_| BlockchainError::RPCError("failed to get block hash".to_string()))?;
+        Ok(Bytes32::from_bytes_be(&block_hash).unwrap())
     }
 
     pub async fn get_penalty(&self) -> Result<U256, BlockchainError> {
@@ -459,6 +474,7 @@ mod tests {
         rollup_contract
             .post_registration_block(
                 private_key,
+                None,
                 0.into(),
                 signature.block_sign_payload.tx_tree_root,
                 signature.block_sign_payload.expiry.into(),
@@ -474,6 +490,7 @@ mod tests {
         rollup_contract
             .post_non_registration_block(
                 private_key,
+                None,
                 BigUint::from(10u32).pow(18).try_into().unwrap(),
                 signature.block_sign_payload.tx_tree_root,
                 signature.block_sign_payload.expiry.into(),

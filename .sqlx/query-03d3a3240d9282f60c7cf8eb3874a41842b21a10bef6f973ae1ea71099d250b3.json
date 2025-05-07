@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO s3_snapshot_pending_uploads (digest, pubkey, topic, timestamp)\n            VALUES ($1, $2, $3, $4)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "03d3a3240d9282f60c7cf8eb3874a41842b21a10bef6f973ae1ea71099d250b3"
+}

@@ -1,5 +1,9 @@
-use std::collections::HashMap;
-
+use super::error::BlockchainError;
+use crate::external_api::{
+    contract::utils::get_base_fee,
+    utils::{retry::with_retry, time::sleep_for},
+};
+use common::env::{get_env_type, EnvType};
 use ethers::{
     abi::Detokenize,
     core::k256::ecdsa::SigningKey,
@@ -8,13 +12,7 @@ use ethers::{
     signers::Wallet,
     types::{Transaction, H256, U256},
 };
-
-use crate::external_api::{
-    contract::utils::get_base_fee,
-    utils::{retry::with_retry, time::sleep_for},
-};
-
-use super::error::BlockchainError;
+use std::collections::HashMap;
 
 const MAX_GAS_BUMP_ATTEMPTS: u32 = 3;
 const WAIT_TIME: u64 = 20;
@@ -28,19 +26,24 @@ pub async fn handle_contract_call<S: ToString, O: Detokenize>(
         O,
     >,
     tx_name: S,
+    gas_limit: Option<u64>,
 ) -> Result<H256, BlockchainError> {
     let chain_id = client
         .get_chainid()
         .await
         .map_err(|e| BlockchainError::RPCError(e.to_string()))?
         .as_u64();
-    set_gas_price(chain_id, client.provider().url().as_str(), tx).await?;
+    set_tx_params(chain_id, client.provider().url().as_str(), tx, gas_limit).await?;
     let result = tx.send().await;
     match result {
         Ok(tx) => {
             let pending_tx = tx;
             let tx_hash = pending_tx.tx_hash();
             log::info!("{} tx hash: {:?}", tx_name.to_string(), tx_hash);
+            // if get_env_type() == EnvType::Local {
+            //     // early return if it is a local environment
+            //     return Ok(tx_hash);
+            // }
             // let tx: Transaction = with_retry(|| async {
             //     client
             //         .get_transaction(tx_hash)
@@ -156,13 +159,14 @@ async fn check_if_tx_succeeded(
     }
 }
 
-async fn set_gas_price<O>(
+async fn set_tx_params<O>(
     chain_id: u64,
     rpc_url: &str,
     tx: &mut ethers::contract::builders::ContractCall<
         SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
         O,
     >,
+    gas_limit: Option<u64>,
 ) -> Result<(), BlockchainError> {
     let base_fee = get_base_fee(rpc_url).await?;
     let max_priority_fee_per_gas: U256 = parse_initial_max_priority_fee_per_gas_env()?
@@ -181,6 +185,9 @@ async fn set_gas_price<O>(
         .clone()
         .max_priority_fee_per_gas(max_priority_fee_per_gas)
         .max_fee_per_gas(max_fee_per_gas);
+    if let Some(gas_limit) = gas_limit {
+        *inner_tx = inner_tx.clone().gas(gas_limit);
+    }
     Ok(())
 }
 

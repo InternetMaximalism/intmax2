@@ -337,3 +337,59 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
+
+    fn dummy_config() -> StorageConfig {
+        StorageConfig {
+            use_fee: false,
+            use_collateral: false,
+            block_builder_address: Address::default(),
+            fee_beneficiary: U256::default(),
+            tx_timeout: 60,
+            accepting_tx_interval: 10,
+            proposing_block_interval: 10,
+            deposit_check_interval: Some(5),
+            block_builder_id: "builder1".to_string(),
+            redis_url: None,
+            cluster_id: None,
+        }
+    }
+
+    fn dummy_tx_request(request_id: &str) -> TxRequest {
+        TxRequest {
+            request_id: request_id.to_string(),
+            pubkey: U256::from(1),
+            account_id: None,
+            tx: Default::default(), // assuming Tx: Default
+            fee_proof: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_add_tx_registration() {
+        let storage = InMemoryStorage::new(&dummy_config()).await;
+        let tx = dummy_tx_request("reg-1");
+
+        storage.add_tx(true, tx.clone()).await.unwrap();
+
+        let queue = storage.registration_tx_requests.read().await;
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.front().unwrap().request_id, tx.request_id);
+    }
+
+    #[tokio::test]
+    async fn test_add_tx_non_registration() {
+        let storage = InMemoryStorage::new(&dummy_config()).await;
+        let tx = dummy_tx_request("nonreg-1");
+
+        storage.add_tx(false, tx.clone()).await.unwrap();
+
+        let queue = storage.non_registration_tx_requests.read().await;
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.front().unwrap().request_id, tx.request_id);
+    }
+}

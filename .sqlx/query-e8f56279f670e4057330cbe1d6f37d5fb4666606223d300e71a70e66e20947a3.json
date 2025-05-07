@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                status as \"status: SqlClaimStatus\",\n                claim\n            FROM claims\n            WHERE pubkey = $1\n            ",
+  "query": "\n            SELECT \n                status as \"status: SqlClaimStatus\",\n                claim,\n                l1_tx_hash\n            FROM claims\n            WHERE pubkey = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -25,6 +25,11 @@
         "ordinal": 1,
         "name": "claim",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "l1_tx_hash",
+        "type_info": "Bpchar"
       }
     ],
     "parameters": {
@@ -34,8 +39,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "944c1b7a770cbe297b25bc2d0fd23a23adab87a08fc512a1067427aa86a99234"
+  "hash": "e8f56279f670e4057330cbe1d6f37d5fb4666606223d300e71a70e66e20947a3"
 }

@@ -6,12 +6,15 @@ use intmax2_client_sdk::{
     client::key_from_eth::generate_intmax_account_from_eth_key,
     external_api::contract::utils::get_address,
 };
-use intmax2_zkp::common::signature_content::key_set::KeySet;
+use intmax2_zkp::{
+    common::signature_content::key_set::KeySet,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
+};
 use tiny_hderive::bip32::ExtendedPrivKey;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Account {
-    pub eth_private_key: H256,
+    pub eth_private_key: Bytes32,
     pub eth_address: Address,
     pub intmax_key: KeySet,
 }
@@ -30,6 +33,18 @@ pub fn private_key_to_account(eth_private_key: H256) -> Account {
     let intmax_key = generate_intmax_account_from_eth_key(eth_private_key);
     let eth_address = get_address(chain_id, eth_private_key);
 
+    let mut bytes = [0u8; 32];
+    let mut i = 0;
+    for byte in eth_private_key.as_bytes() {
+        if i < 32 {
+            bytes[i] = *byte;
+            i += 1;
+        } else {
+            break;
+        }
+    }
+
+    let eth_private_key = Bytes32::from_bytes_be(&bytes).unwrap();
     Account {
         eth_private_key,
         eth_address,

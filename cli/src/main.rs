@@ -4,10 +4,13 @@ use intmax2_cli::{
     args::{Args, Commands},
     cli::{
         backup::{incorporate_backup, make_history_backup},
-        claim::claim_withdrawals,
+        claim::{claim_builder_reward, claim_withdrawals},
         deposit::deposit,
         error::CliError,
-        get::{balance, claim_status, log_balance, mining_list, withdrawal_status},
+        get::{
+            balance, check_validity_prover, claim_status, log_balance, mining_list,
+            withdrawal_status,
+        },
         history::history,
         send::send_transfers,
         sync::{resync, sync_claims, sync_withdrawals},
@@ -19,9 +22,8 @@ use intmax2_client_sdk::client::sync::utils::generate_salt;
 use intmax2_interfaces::utils::random::default_rng;
 use intmax2_zkp::{
     common::{signature_content::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{u256::U256 as IU256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
-use num_bigint::BigUint;
 use serde::Deserialize;
 
 const MAX_BATCH_TRANSFER: usize = 63;
@@ -64,7 +66,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         } => {
             let key = privkey_to_keyset(private_key);
             let transfer = Transfer {
-                recipient: IU256::from(to).into(),
+                recipient: U256::from(to).into(),
                 amount,
                 token_index,
                 salt: generate_salt(),
@@ -169,9 +171,15 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let key = privkey_to_keyset(private_key);
             sync_claims(key, recipient, fee_token_index).await?;
         }
-        Commands::Balance { private_key } => {
+        Commands::ClaimBuilderReward { eth_private_key } => {
+            claim_builder_reward(eth_private_key).await?;
+        }
+        Commands::Balance {
+            private_key,
+            without_sync,
+        } => {
             let key = privkey_to_keyset(private_key);
-            let balances = balance(key).await?;
+            let balances = balance(key, !without_sync).await?;
             log_balance(balances);
         }
         Commands::History {
@@ -219,22 +227,17 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         Commands::IncorporateBackup { path } => {
             incorporate_backup(&path)?;
         }
+        Commands::CheckValidityProver => {
+            check_validity_prover().await?;
+        }
         Commands::GenerateKey => {
             let mut rng = default_rng();
             let key = KeySet::rand(&mut rng);
-            let private_key = BigUint::from(key.privkey);
-            let private_key: IU256 = private_key.try_into().unwrap();
-            println!("Private key: {}", private_key.to_hex());
+            println!("Private key: {}", key.privkey.to_hex());
             println!("Public key: {}", key.pubkey.to_hex());
         }
-        Commands::GenerateFromEthKey { eth_private_key } => {
-            let provisional: IU256 = BigUint::from_bytes_be(eth_private_key.as_bytes())
-                .try_into()
-                .unwrap();
-            let key = KeySet::new(provisional);
-            let private_key = BigUint::from(key.privkey);
-            let private_key: IU256 = private_key.try_into().unwrap();
-            println!("Private key: {}", private_key.to_hex());
+        Commands::PublicKey { private_key } => {
+            let key = KeySet::new(private_key.into());
             println!("Public key: {}", key.pubkey.to_hex());
         }
     }
@@ -245,6 +248,6 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
 #[serde(rename_all = "camelCase")]
 pub struct TransferInput {
     recipient: String,
-    amount: IU256,
+    amount: U256,
     token_index: u32,
 }

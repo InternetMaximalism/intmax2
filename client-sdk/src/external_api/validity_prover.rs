@@ -12,7 +12,8 @@ use intmax2_interfaces::api::{
             GetDepositInfoQuery, GetDepositInfoResponse, GetDepositMerkleProofQuery,
             GetDepositMerkleProofResponse, GetLatestIncludedDepositIndexResponse,
             GetNextDepositIndexResponse, GetUpdateWitnessQuery, GetUpdateWitnessResponse,
-            GetValidityWitnessQuery, GetValidityWitnessResponse,
+            GetValidityProofQuery, GetValidityProofResponse, GetValidityWitnessQuery,
+            GetValidityWitnessResponse,
         },
     },
 };
@@ -23,7 +24,10 @@ use intmax2_zkp::{
     },
     ethereum_types::{bytes32::Bytes32, u256::U256},
 };
-use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig};
+use plonky2::{
+    field::goldilocks_field::GoldilocksField,
+    plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
+};
 
 use super::utils::query::{get_request, post_request};
 
@@ -192,6 +196,23 @@ impl ValidityProverClientInterface for ValidityProverClient {
         )
         .await?;
         Ok(response.validity_witness)
+    }
+
+    async fn get_validity_proof(
+        &self,
+        block_number: u32,
+    ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
+        let query = GetValidityProofQuery { block_number };
+        let response: GetValidityProofResponse = get_request(
+            &self.base_url,
+            "/validity-prover/get-validity-proof",
+            Some(query),
+        )
+        .await?;
+        let validity_proof = response.validity_proof.decompress().map_err(|e| {
+            ServerError::ProofDecodeError(format!("Failed to decompress proof: {}", e))
+        })?;
+        Ok(validity_proof)
     }
 
     async fn get_block_merkle_proof(

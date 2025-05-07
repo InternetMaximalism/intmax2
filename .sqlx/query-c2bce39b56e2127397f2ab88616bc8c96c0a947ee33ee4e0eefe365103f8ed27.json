@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT topic, pubkey, digest, timestamp\n            FROM s3_snapshot_pending_uploads\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "topic",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "pubkey",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "digest",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "timestamp",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c2bce39b56e2127397f2ab88616bc8c96c0a947ee33ee4e0eefe365103f8ed27"
+}

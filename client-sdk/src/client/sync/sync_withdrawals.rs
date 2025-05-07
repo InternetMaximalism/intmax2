@@ -1,5 +1,8 @@
 use intmax2_interfaces::{
-    api::{block_builder::interface::Fee, withdrawal_server::interface::WithdrawalFeeInfo},
+    api::{
+        block_builder::interface::Fee,
+        withdrawal_server::interface::{FeeResult, WithdrawalFeeInfo},
+    },
     data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData},
 };
 use intmax2_zkp::{
@@ -155,27 +158,42 @@ impl Client {
                 "Fail point before request withdrawal".to_string(),
             ))
         });
-        self.withdrawal_server
+        let fee_result = self
+            .withdrawal_server
             .request_withdrawal(
                 key,
                 &single_withdrawal_proof,
                 Some(fee_token_index),
                 &fee_transfer_digests,
             )
-            .await
-            .map_err(|e| {
-                log::error!("Failed to request withdrawal {}: {:?}", key.pubkey, e);
-                e
-            })?;
-        fail::fail_point!("after-request-withdrawal", |_| {
-            Err(SyncError::InternalError(
-                "Fail point after request withdrawal".to_string(),
-            ))
-        });
+            .await?;
+        match fee_result {
+            FeeResult::Success => {}
+            FeeResult::Insufficient => {
+                return Err(SyncError::FeeError(
+                    "insufficient fee at the request".to_string(),
+                ))
+            }
+            FeeResult::TokenIndexMismatch => {
+                return Err(SyncError::FeeError(
+                    "token index mismatch at the request".to_string(),
+                ))
+            }
+            _ => {
+                let reason = format!("fee error at the request: {:?}", fee_result);
+                for used_fee in &collected_fees {
+                    consume_payment(self.store_vault_server.as_ref(), key, used_fee, &reason)
+                        .await?;
+                }
+                return Err(SyncError::FeeError(format!(
+                    "invalid fee at the request: {:?}",
+                    fee_result
+                )));
+            }
+        }
 
         // consume fees
         for (i, used_fee) in collected_fees.iter().enumerate() {
-            // todo: batch consume
             consume_payment(
                 self.store_vault_server.as_ref(),
                 key,

@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
-
 use intmax2_zkp::circuits::{
-    balance::balance_processor::BalanceProcessor, validity::validity_processor::ValidityProcessor,
+    balance::balance_processor::BalanceProcessor,
+    claim::{determine_lock_time::LockTimeConfig, single_claim_processor::SingleClaimProcessor},
+    validity::validity_processor::ValidityProcessor,
     withdrawal::single_withdrawal_circuit::SingleWithdrawalCircuit,
 };
 use plonky2::{
@@ -11,39 +11,33 @@ use plonky2::{
 
 use super::serializer::U32GateSerializer;
 
+const VALIDITY_VD_PATH: &str = "circuit_data/validity_verifier_circuit_data.bin";
 const VALIDITY_VD_BYTES: &[u8] =
     include_bytes!("../../circuit_data/validity_verifier_circuit_data.bin");
-const TRANSITION_VD_BYTES: &[u8] =
-    include_bytes!("../../circuit_data/transition_verifier_circuit_data.bin");
+
+const BALANCE_VD_PATH: &str = "circuit_data/balance_verifier_circuit_data.bin";
 const BALANCE_VD_BYTES: &[u8] =
     include_bytes!("../../circuit_data/balance_verifier_circuit_data.bin");
+
+const TRANSITION_VD_PATH: &str = "circuit_data/transition_verifier_circuit_data.bin";
+const TRANSITION_VD_BYTES: &[u8] =
+    include_bytes!("../../circuit_data/transition_verifier_circuit_data.bin");
+
+const SINGLE_WITHDRAWAL_VD_PATH: &str = "circuit_data/single_withdrawal_verifier_circuit_data.bin";
 const SINGLE_WITHDRAWAL_VD_BYTES: &[u8] =
     include_bytes!("../../circuit_data/single_withdrawal_verifier_circuit_data.bin");
+
+const FASTER_SINGLE_CLAIM_VD_PATH: &str =
+    "circuit_data/faster_single_claim_verifier_circuit_data.bin";
+const FASTER_SINGLE_CLAIM_VD_BYTES: &[u8] =
+    include_bytes!("../../circuit_data/faster_single_claim_verifier_circuit_data.bin");
+
+const SINGLE_CLAIM_VD_PATH: &str = "circuit_data/single_claim_verifier_circuit_data.bin";
+const SINGLE_CLAIM_VD_BYTES: &[u8] =
+    include_bytes!("../../circuit_data/single_claim_verifier_circuit_data.bin");
+
+const SPENT_VD_PATH: &str = "circuit_data/spent_verifier_circuit_data.bin";
 const SPENT_VD_BYTES: &[u8] = include_bytes!("../../circuit_data/spent_verifier_circuit_data.bin");
-
-fn circuit_data_path() -> PathBuf {
-    PathBuf::from("circuit_data")
-}
-
-fn balance_circuit_data_path() -> PathBuf {
-    circuit_data_path().join("balance_verifier_circuit_data.bin")
-}
-
-fn validity_circuit_data_path() -> PathBuf {
-    circuit_data_path().join("validity_verifier_circuit_data.bin")
-}
-
-fn transition_circuit_data_path() -> PathBuf {
-    circuit_data_path().join("transition_verifier_circuit_data.bin")
-}
-
-fn single_withdrawal_circuit_data_path() -> PathBuf {
-    circuit_data_path().join("single_withdrawal_verifier_circuit_data.bin")
-}
-
-fn spent_circuit_data_path() -> PathBuf {
-    circuit_data_path().join("spent_verifier_circuit_data.bin")
-}
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -54,6 +48,8 @@ pub struct CircuitVerifiers {
     validity_vd: VerifierCircuitData<F, C, D>,
     transition_vd: VerifierCircuitData<F, C, D>,
     single_withdrawal_vd: VerifierCircuitData<F, C, D>,
+    single_claim_vd: VerifierCircuitData<F, C, D>,
+    faster_single_claim_vd: VerifierCircuitData<F, C, D>,
     spent_vd: VerifierCircuitData<F, C, D>,
 }
 
@@ -61,7 +57,8 @@ impl CircuitVerifiers {
     // Construct the circuit verifiers from the processors.
     pub fn construct() -> Self {
         let validity_processor = ValidityProcessor::new();
-        let balance_processor = BalanceProcessor::new(&validity_processor.get_verifier_data());
+        let validity_vd = validity_processor.get_verifier_data();
+        let balance_processor = BalanceProcessor::new(&validity_vd);
         let transition_vd = validity_processor
             .transition_processor
             .transition_wrapper_circuit
@@ -75,24 +72,29 @@ impl CircuitVerifiers {
             .spent_circuit
             .data
             .verifier_data();
+        let single_claim_processor =
+            SingleClaimProcessor::new(&validity_vd, &LockTimeConfig::normal());
+        let faster_single_claim_processor =
+            SingleClaimProcessor::new(&validity_vd, &LockTimeConfig::faster());
         Self {
             balance_vd,
-            validity_vd: validity_processor.validity_circuit.data.verifier_data(),
+            validity_vd,
             transition_vd,
             single_withdrawal_vd: single_withdrawal_circuit.data.verifier_data(),
+            single_claim_vd: single_claim_processor.get_verifier_data(),
+            faster_single_claim_vd: faster_single_claim_processor.get_verifier_data(),
             spent_vd,
         }
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
-        save_verifier_circuit_data(&balance_circuit_data_path(), &self.balance_vd)?;
-        save_verifier_circuit_data(&validity_circuit_data_path(), &self.validity_vd)?;
-        save_verifier_circuit_data(&transition_circuit_data_path(), &self.transition_vd)?;
-        save_verifier_circuit_data(
-            &single_withdrawal_circuit_data_path(),
-            &self.single_withdrawal_vd,
-        )?;
-        save_verifier_circuit_data(&spent_circuit_data_path(), &self.spent_vd)?;
+        save_verifier_circuit_data(BALANCE_VD_PATH, &self.balance_vd)?;
+        save_verifier_circuit_data(VALIDITY_VD_PATH, &self.validity_vd)?;
+        save_verifier_circuit_data(TRANSITION_VD_PATH, &self.transition_vd)?;
+        save_verifier_circuit_data(SINGLE_WITHDRAWAL_VD_PATH, &self.single_withdrawal_vd)?;
+        save_verifier_circuit_data(SINGLE_CLAIM_VD_PATH, &self.single_claim_vd)?;
+        save_verifier_circuit_data(FASTER_SINGLE_CLAIM_VD_PATH, &self.faster_single_claim_vd)?;
+        save_verifier_circuit_data(SPENT_VD_PATH, &self.spent_vd)?;
         Ok(())
     }
 
@@ -101,6 +103,10 @@ impl CircuitVerifiers {
         let validity_vd = deserialize_verifier_circuit_data(VALIDITY_VD_BYTES.to_vec()).unwrap();
         let single_withdrawal_vd =
             deserialize_verifier_circuit_data(SINGLE_WITHDRAWAL_VD_BYTES.to_vec()).unwrap();
+        let single_claim_vd =
+            deserialize_verifier_circuit_data(SINGLE_CLAIM_VD_BYTES.to_vec()).unwrap();
+        let faster_single_claim_vd =
+            deserialize_verifier_circuit_data(FASTER_SINGLE_CLAIM_VD_BYTES.to_vec()).unwrap();
         let transition_vd =
             deserialize_verifier_circuit_data(TRANSITION_VD_BYTES.to_vec()).unwrap();
         let spent_vd = deserialize_verifier_circuit_data(SPENT_VD_BYTES.to_vec()).unwrap();
@@ -109,6 +115,8 @@ impl CircuitVerifiers {
             validity_vd,
             transition_vd,
             single_withdrawal_vd,
+            single_claim_vd,
+            faster_single_claim_vd,
             spent_vd,
         }
     }
@@ -129,15 +137,19 @@ impl CircuitVerifiers {
         self.single_withdrawal_vd.clone()
     }
 
+    pub fn get_claim_vd(&self, is_faster_mining: bool) -> VerifierCircuitData<F, C, D> {
+        if is_faster_mining {
+            self.faster_single_claim_vd.clone()
+        } else {
+            self.single_claim_vd.clone()
+        }
+    }
     pub fn get_spent_vd(&self) -> VerifierCircuitData<F, C, D> {
         self.spent_vd.clone()
     }
 }
 
-fn save_verifier_circuit_data(
-    path: &Path,
-    vd: &VerifierCircuitData<F, C, D>,
-) -> anyhow::Result<()> {
+fn save_verifier_circuit_data(path: &str, vd: &VerifierCircuitData<F, C, D>) -> anyhow::Result<()> {
     let gate_serializer = U32GateSerializer;
     let circuit_bytes = vd
         .to_bytes(&gate_serializer)

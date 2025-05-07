@@ -997,3 +997,285 @@ impl Storage for RedisStorage {
         result
     }
 }
+
+#[cfg(test)]
+pub mod test_helper {
+    use std::panic;
+    // For redis
+    use std::{
+        net::TcpListener,
+        process::{Command, Output, Stdio},
+    };
+
+    pub fn run_redis_docker(port: u16, container_name: &str) -> Output {
+        let port_arg = format!("{}:6379", port);
+
+        let output = Command::new("docker")
+            .args([
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                container_name,
+                "-p",
+                &port_arg,
+                "redis:latest",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during Redis container startup");
+
+        output
+    }
+
+    pub fn stop_redis_docker(container_name: &str) -> Output {
+        let output = Command::new("docker")
+            .args(["stop", container_name])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during Redis container stopping");
+
+        output
+    }
+
+    pub fn find_free_port() -> u16 {
+        TcpListener::bind("127.0.0.1:0")
+            .expect("Failed to bind to address")
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    pub fn assert_and_stop<F: FnOnce() + panic::UnwindSafe>(cont_name: &str, f: F) {
+        let res = panic::catch_unwind(f);
+
+        if let Err(panic_info) = res {
+            stop_redis_docker(cont_name);
+            panic::resume_unwind(panic_info);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::panic::AssertUnwindSafe;
+
+    use super::*;
+    use intmax2_client_sdk::client::error::ClientError;
+    use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait};
+    use uuid::Uuid;
+
+    use test_helper::{assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker};
+
+    async fn setup_test_storage(instance_id: &str, redis_port: &str) -> RedisStorage {
+        let config = StorageConfig {
+            use_fee: true,
+            use_collateral: true,
+            block_builder_address: Address::zero(),
+            fee_beneficiary: U256::default(),
+            tx_timeout: 80,
+            accepting_tx_interval: 40,
+            proposing_block_interval: 10,
+            deposit_check_interval: Some(20),
+            redis_url: Some(redis_port.to_string()),
+            cluster_id: Some(instance_id.to_string()),
+            block_builder_id: Uuid::new_v4().to_string(),
+        };
+
+        RedisStorage::new(&config).await
+    }
+
+    #[tokio::test]
+    async fn test_acquire_release_lock() {
+        let port: u16 = 6381;
+        let cont_name = "redis-test-acquire-release";
+
+        // Run docker image
+        stop_redis_docker(cont_name);
+        let output = run_redis_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Create RedisStorage and test locks
+        let redis1 = setup_test_storage("redis-test", "redis://localhost:6381").await;
+        let redis2 = setup_test_storage("redis-test", "redis://localhost:6381").await;
+
+        let acquired1 = redis1.acquire_lock("test_lock").await.unwrap();
+        assert_and_stop(cont_name, || {
+            assert!(acquired1, "Couldn't acquire lock for redis1")
+        });
+
+        let acquired2 = redis2.acquire_lock("test_lock").await.unwrap();
+        assert_and_stop(cont_name, || {
+            assert!(!acquired2, "Could acquire lock for redis2")
+        });
+
+        redis1.release_lock("test_lock").await.unwrap();
+
+        let acquired2_after = redis2.acquire_lock("test_lock").await.unwrap();
+        assert_and_stop(cont_name, || {
+            assert!(acquired2_after, "Couldn't acquire lock for redis-test-2")
+        });
+
+        // Stop docker image
+        let output = stop_redis_docker(cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't stop {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_empty_process_requests() {
+        let port = find_free_port();
+        let cont_name = "redis-test-process-requests";
+
+        // Run docker image
+        stop_redis_docker(cont_name);
+        let output = run_redis_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Create redis storage
+        let redis_storage =
+            setup_test_storage("redis-test", &format!("redis://localhost:{}", port)).await;
+        let res = redis_storage.process_requests(true).await;
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
+
+        // Stop docker image
+        let output = stop_redis_docker(cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't stop {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_non_empty_process_requests() {
+        let port = find_free_port();
+        let cont_name = "redis-test-non-empty-process-requests";
+
+        // Run docker image
+        stop_redis_docker(cont_name);
+        let output = run_redis_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Create redis storage
+        let redis_storage =
+            setup_test_storage("redis-test", &format!("redis://localhost:{}", port)).await;
+
+        let res = redis_storage.add_tx(true, TxRequest::default()).await;
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
+
+        let res = redis_storage.process_requests(true).await;
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
+
+        let res = redis_storage
+            .query_proposal(Uuid::default().to_string().as_str())
+            .await;
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
+
+        let block_proposal = res.unwrap().unwrap();
+        assert_and_stop(cont_name, || {
+            assert!(block_proposal.block_sign_payload.is_registration_block)
+        });
+        assert_and_stop(cont_name, || {
+            assert_eq!(block_proposal.pubkeys.len(), NUM_SENDERS_IN_BLOCK)
+        });
+
+        let res = block_proposal
+            .verify(TxRequest::default().tx)
+            .map_err(|e| ClientError::InvalidBlockProposal(format!("{}", e)));
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
+
+        // Stop docker image
+        let output = stop_redis_docker(cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't stop {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_enqueue_dequeue_empty_block_post() {
+        let port = find_free_port();
+        let cont_name = "redis-test-enqueue-dequeue-empty-block-post";
+
+        // Run docker image
+        stop_redis_docker(cont_name);
+        let output = run_redis_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Create redis storage
+        let redis_storage =
+            setup_test_storage("redis-test", &format!("redis://localhost:{}", port)).await;
+
+        // Test enqueue and dequeue block post task
+        let res = redis_storage.enqueue_empty_block().await;
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
+
+        let res = redis_storage.dequeue_block_post_task().await;
+        assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
+
+        let block_post_task = res.unwrap().unwrap();
+
+        assert_and_stop(cont_name, || assert!(block_post_task.force_post));
+
+        assert_and_stop(cont_name, || {
+            assert!(!block_post_task.block_sign_payload.is_registration_block)
+        });
+        assert_and_stop(cont_name, || {
+            assert_eq!(
+                block_post_task.block_sign_payload.block_builder_address,
+                Address::default()
+            )
+        });
+        assert_and_stop(cont_name, || {
+            assert_eq!(
+                block_post_task.block_sign_payload.block_builder_nonce,
+                u32::default()
+            )
+        });
+
+        assert_and_stop(cont_name, || {
+            assert_eq!(block_post_task.pubkeys.len(), NUM_SENDERS_IN_BLOCK)
+        });
+
+        assert_and_stop(cont_name, || assert!(block_post_task.account_ids.is_some()));
+
+        // Stop docker image
+        let output = stop_redis_docker(cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't stop {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}

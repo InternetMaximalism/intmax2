@@ -24,8 +24,9 @@ impl BlsEncryption for SenderProofSet {}
 
 impl Validation for SenderProofSet {
     fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
-        // skip spent proof verification because spent circuit cannot be deserialized for now.
+        let verifiers = CircuitVerifiers::load();
         let spent_proof = self.spent_proof.decompress()?;
+        verifiers.get_spent_vd().verify(spent_proof.clone())?;
         let prev_balance_proof = self.prev_balance_proof.decompress()?;
         let balance_vd = CircuitVerifiers::load().get_balance_vd();
         balance_vd.verify(prev_balance_proof.clone())?;

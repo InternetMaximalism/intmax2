@@ -86,7 +86,7 @@ Please refer to [the examples of cli ](cli/README.md#examples)
 ## Reset DB
 
 ```bash
-(cd store-vault-server && sqlx database reset -y && sqlx database setup && cd ../validity-prover && sqlx database reset -y && sqlx database setup && cd ../withdrawal-server && sqlx database reset -y && sqlx database setup)
+(cd store-vault-server && sqlx database reset -y && cd ../legacy-store-vault-server && sqlx database reset -y && sqlx database setup && cd ../validity-prover && sqlx database reset -y && sqlx database setup && cd ../withdrawal-server && sqlx database reset -y && sqlx database setup)
 ```
 
 ## When you update the sql queries

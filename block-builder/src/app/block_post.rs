@@ -69,6 +69,7 @@ impl BlockPostTask {
 
 pub(crate) async fn post_block(
     block_builder_private_key: H256,
+    gas_limit: Option<u64>,
     eth_allowance_for_block: U256,
     rollup_contract: &RollupContract,
     validity_prover_client: &ValidityProverClient,
@@ -208,6 +209,7 @@ pub(crate) async fn post_block(
         rollup_contract
             .post_registration_block(
                 block_builder_private_key,
+                gas_limit,
                 eth_allowance_for_block,
                 block_post.block_sign_payload.tx_tree_root,
                 block_post.block_sign_payload.expiry.into(),
@@ -223,6 +225,7 @@ pub(crate) async fn post_block(
         rollup_contract
             .post_non_registration_block(
                 block_builder_private_key,
+                gas_limit,
                 eth_allowance_for_block,
                 block_post.block_sign_payload.tx_tree_root,
                 block_post.block_sign_payload.expiry.into(),

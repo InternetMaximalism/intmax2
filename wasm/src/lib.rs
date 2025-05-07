@@ -8,7 +8,10 @@ use intmax2_zkp::{
 };
 use js_types::{
     common::{JsClaimInfo, JsMining, JsTransfer, JsWithdrawalInfo},
-    data::{JsDepositResult, JsTransferData, JsTxResult, JsUserData},
+    data::{
+        balances_to_token_balances, JsDepositResult, JsTransferData, JsTxResult, JsUserData,
+        TokenBalance,
+    },
     fee::{JsFee, JsFeeQuote},
     payment_memo::JsPaymentMemoEntry,
     utils::{parse_address, parse_bytes32, parse_u256},
@@ -109,6 +112,16 @@ pub async fn prepare_deposit(
         .await
         .map_err(|e| JsError::new(&format!("failed to prepare deposit call: {}", e)))?;
     Ok(deposit_result.into())
+}
+
+/// Wait for the tx to be sendable. Wait for the sync of validity prover and balance proof.
+#[wasm_bindgen]
+pub async fn await_tx_sendable(config: &Config, private_key: &str) -> Result<(), JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    client.await_tx_sendable(key).await?;
+    Ok(())
 }
 
 /// Function to send a tx request to the block builder. The return value contains information to take a backup.
@@ -396,6 +409,26 @@ pub async fn validate_transfer_receipt(
         .validate_transfer_receipt(key, transfer_receipt)
         .await?;
     Ok(transfer_data.into())
+}
+
+#[wasm_bindgen]
+pub async fn get_balances_without_sync(
+    config: &Config,
+    private_key: &str,
+) -> Result<Vec<TokenBalance>, JsError> {
+    init_logger();
+    let key = str_privkey_to_keyset(private_key)?;
+    let client = get_client(config);
+    let balances = client.get_balances_without_sync(key).await?;
+    Ok(balances_to_token_balances(&balances))
+}
+
+#[wasm_bindgen]
+pub async fn check_validity_prover(config: &Config) -> Result<(), JsError> {
+    init_logger();
+    let client = get_client(config);
+    client.check_validity_prover().await?;
+    Ok(())
 }
 
 fn init_logger() {

@@ -114,7 +114,7 @@ impl LiquidityContract {
         );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        let tx_hash = handle_contract_call(&client, &mut tx, "initialize").await?;
+        let tx_hash = handle_contract_call(&client, &mut tx, "initialize", None).await?;
         Ok(tx_hash)
     }
 
@@ -136,6 +136,30 @@ impl LiquidityContract {
         let client = get_client_with_signer(&self.rpc_url, self.chain_id, private_key).await?;
         let contract = Liquidity::new(self.address, Arc::new(client));
         Ok(contract)
+    }
+
+    pub async fn get_aml_permitter(&self) -> Result<EthAddress, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let aml_permitter = with_retry(|| async { contract.aml_permitter().call().await })
+            .await
+            .map_err(|e| {
+                BlockchainError::RPCError(format!("Error getting AML permitter: {:?}", e))
+            })?;
+        Ok(aml_permitter)
+    }
+
+    pub async fn get_eligibility_permitter(&self) -> Result<EthAddress, BlockchainError> {
+        let contract = self.get_contract().await?;
+        let eligibility_permitter =
+            with_retry(|| async { contract.eligibility_permitter().call().await })
+                .await
+                .map_err(|e| {
+                    BlockchainError::RPCError(format!(
+                        "Error getting eligibility permitter: {:?}",
+                        e
+                    ))
+                })?;
+        Ok(eligibility_permitter)
     }
 
     pub async fn get_token_index(
@@ -228,6 +252,7 @@ impl LiquidityContract {
     pub async fn deposit_native(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
         amount: U256,
         aml_permission: &[u8],
@@ -245,13 +270,15 @@ impl LiquidityContract {
             .value(amount);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_native_token").await?;
+        handle_contract_call(&client, &mut tx, "deposit_native_token", gas_limit).await?;
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn deposit_erc20(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
         amount: U256,
         token_address: Address,
@@ -271,13 +298,15 @@ impl LiquidityContract {
         );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_erc20_token").await?;
+        handle_contract_call(&client, &mut tx, "deposit_erc20_token", gas_limit).await?;
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn deposit_erc721(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
         token_address: Address,
         token_id: U256,
@@ -297,7 +326,7 @@ impl LiquidityContract {
         );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_erc721_token").await?;
+        handle_contract_call(&client, &mut tx, "deposit_erc721_token", gas_limit).await?;
         Ok(())
     }
 
@@ -305,6 +334,7 @@ impl LiquidityContract {
     pub async fn deposit_erc1155(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         pubkey_salt_hash: Bytes32,
         token_address: Address,
         token_id: U256,
@@ -327,13 +357,14 @@ impl LiquidityContract {
         );
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "deposit_erc1155_token").await?;
+        handle_contract_call(&client, &mut tx, "deposit_erc1155_token", gas_limit).await?;
         Ok(())
     }
 
     pub async fn claim_withdrawals(
         &self,
         signer_private_key: H256,
+        gas_limit: Option<u64>,
         withdrawals: &[ContractWithdrawal],
     ) -> Result<(), BlockchainError> {
         let withdrawals = withdrawals
@@ -355,7 +386,7 @@ impl LiquidityContract {
         let mut tx = contract.claim_withdrawals(withdrawals);
         let client =
             get_client_with_signer(&self.rpc_url, self.chain_id, signer_private_key).await?;
-        handle_contract_call(&client, &mut tx, "claim_withdrawals").await?;
+        handle_contract_call(&client, &mut tx, "claim_withdrawals", gas_limit).await?;
         Ok(())
     }
 

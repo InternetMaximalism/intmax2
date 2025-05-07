@@ -20,7 +20,6 @@ pub struct EnvVar {
 
     // observer settings
     pub observer_event_block_interval: u64,
-    pub observer_backward_block_interval: u64,
     pub observer_max_query_times: usize,
     pub observer_sync_interval: u64,
     pub observer_restart_interval: u64,

@@ -38,6 +38,7 @@ pub struct ClaimFeeInfo {
 pub struct WithdrawalInfo {
     pub status: WithdrawalStatus,
     pub contract_withdrawal: ContractWithdrawal,
+    pub l1_tx_hash: Option<Bytes32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +46,7 @@ pub struct WithdrawalInfo {
 pub struct ClaimInfo {
     pub status: ClaimStatus,
     pub claim: Claim,
+    pub l1_tx_hash: Option<Bytes32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +113,17 @@ impl Display for ClaimStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum FeeResult {
+    Success,
+    DecryptionError,
+    ValidationError,
+    TokenIndexMismatch,
+    Insufficient,
+    AlreadyUsed,
+}
+
 #[async_trait(?Send)]
 pub trait WithdrawalServerClientInterface: Sync + Send {
     async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError>;
@@ -123,7 +136,7 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
-    ) -> Result<(), ServerError>;
+    ) -> Result<FeeResult, ServerError>;
 
     async fn request_claim(
         &self,
@@ -131,7 +144,7 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
-    ) -> Result<(), ServerError>;
+    ) -> Result<FeeResult, ServerError>;
 
     async fn get_withdrawal_info(&self, key: KeySet) -> Result<Vec<WithdrawalInfo>, ServerError>;
 
