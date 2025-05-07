@@ -5,19 +5,19 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-bincode = "1.3.3"
+bincode = { workspace = true }
 plonky2 = { workspace = true }
 plonky2_bn254 = { workspace = true }
 plonky2_keccak = { workspace = true }
 intmax2-zkp = { workspace = true }
 intmax2-interfaces = { path = "../interfaces" }
-common = {path = "../common" }
+common = { path = "../common" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
-alloy = {workspace = true }
+alloy = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-serde_with = { workspace = true}
+serde_with = { workspace = true }
 tower = "0.5.2"
 num-bigint = "0.4.6"
 aes-gcm = "0.10"
@@ -44,3 +44,4 @@ serde_qs = "0.15.0"
 rsa = "0.9.8"
 futures = "0.3.31"
 csv = "1.3.1"
+gloo-timers = { version = "0.3.0", features = ["futures"] }
