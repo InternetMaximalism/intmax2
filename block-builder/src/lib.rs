@@ -12,7 +12,6 @@ pub struct EnvVar {
     pub redis_url: Option<String>,
     pub cluster_id: Option<String>,
     pub l2_rpc_url: String,
-    pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
     pub block_builder_registry_contract_address: Address,
 

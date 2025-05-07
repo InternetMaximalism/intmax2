@@ -30,10 +30,8 @@ pub struct EnvVar {
 
     // blockchain settings
     pub l1_rpc_url: String,
-    pub l1_chain_id: u64,
     pub liquidity_contract_address: Address,
     pub l2_rpc_url: String,
-    pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
     pub withdrawal_contract_address: Address,
 

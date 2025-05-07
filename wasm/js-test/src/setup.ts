@@ -31,12 +31,10 @@ export const env = cleanEnv(process.env, {
 
     // L1 configurations
     L1_RPC_URL: url(),
-    L1_CHAIN_ID: num(),
     LIQUIDITY_CONTRACT_ADDRESS: str(),
 
     // L2 configurations
     L2_RPC_URL: url(),
-    L2_CHAIN_ID: num(),
     ROLLUP_CONTRACT_ADDRESS: str(),
     WITHDRAWAL_CONTRACT_ADDRESS: str(),
 
@@ -59,10 +57,8 @@ export const config = new Config(
     BigInt(env.BLOCK_BUILDER_QUERY_INTERVAL),
     BigInt(env.BLOCK_BUILDER_QUERY_LIMIT),
     env.L1_RPC_URL,
-    BigInt(env.L1_CHAIN_ID),
     env.LIQUIDITY_CONTRACT_ADDRESS,
     env.L2_RPC_URL,
-    BigInt(env.L2_CHAIN_ID),
     env.ROLLUP_CONTRACT_ADDRESS,
     env.WITHDRAWAL_CONTRACT_ADDRESS,
     env.USE_PRIVATE_ZKP_SERVER,

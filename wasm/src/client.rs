@@ -65,17 +65,11 @@ pub struct Config {
     /// URL of the Ethereum RPC
     pub l1_rpc_url: String,
 
-    /// Chain ID of the Ethereum network
-    pub l1_chain_id: u64,
-
     /// Address of the liquidity contract
     pub liquidity_contract_address: String,
 
     /// URL of the Scroll RPC
     pub l2_rpc_url: String,
-
-    /// Chain ID of the Scroll network
-    pub l2_chain_id: u64,
 
     /// Address of the rollup contract
     pub rollup_contract_address: String,
@@ -112,10 +106,8 @@ impl Config {
         block_builder_query_limit: u64,
 
         l1_rpc_url: String,
-        l1_chain_id: u64,
         liquidity_contract_address: String,
         l2_rpc_url: String,
-        l2_chain_id: u64,
         rollup_contract_address: String,
         withdrawal_contract_address: String,
         use_private_zkp_server: bool,
@@ -138,10 +130,8 @@ impl Config {
             block_builder_query_interval,
             block_builder_query_limit,
             l1_rpc_url,
-            l1_chain_id,
             liquidity_contract_address,
             l2_rpc_url,
-            l2_chain_id,
             rollup_contract_address,
             withdrawal_contract_address,
             use_private_zkp_server,

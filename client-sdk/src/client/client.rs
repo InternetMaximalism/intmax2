@@ -221,7 +221,7 @@ impl Client {
         )
         .await?;
         if !tx_info.settled.is_empty() || !tx_info.pending.is_empty() {
-            log::warn!("There are unprocessed tx info, start to sync");
+            log::warn!("There are unprocessed transactions, start to sync");
             self.sync(key).await?;
             user_data = self.get_user_data(key).await?;
             log::info!("Sync finished");
