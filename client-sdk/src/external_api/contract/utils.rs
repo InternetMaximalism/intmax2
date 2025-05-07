@@ -2,7 +2,7 @@ use super::error::BlockchainError;
 use crate::external_api::utils::time::sleep_for;
 use alloy::{
     network::EthereumWallet,
-    primitives::{TxHash, B256},
+    primitives::{Address, TxHash, B256},
     providers::{
         fillers::{FillProvider, JoinFill, WalletFiller},
         utils::JoinedRecommendedFillers,
@@ -58,6 +58,11 @@ pub fn get_provider_with_signer(
     let wallet = EthereumWallet::new(signer);
     let wallet_filler = WalletFiller::new(wallet);
     provider.clone().join_with(wallet_filler)
+}
+
+pub fn get_address_from_private_key(private_key: B256) -> Address {
+    let signer = PrivateKeySigner::from_bytes(&private_key).unwrap();
+    signer.address()
 }
 
 pub async fn get_batch_transaction(

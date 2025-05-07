@@ -22,6 +22,10 @@ pub struct ERC20Contract {
 }
 
 impl ERC20Contract {
+    pub fn new(provider: NormalProvider, address: Address) -> Self {
+        Self { provider, address }
+    }
+
     pub async fn deploy(
         provider: NormalProvider,
         private_key: B256,

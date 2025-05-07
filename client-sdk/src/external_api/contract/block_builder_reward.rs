@@ -2,7 +2,7 @@ use super::{
     error::BlockchainError,
     handlers::send_transaction_with_gas_bump,
     proxy_contract::ProxyContract,
-    utils::{get_provider, get_provider_with_signer, NormalProvider},
+    utils::{get_provider_with_signer, NormalProvider},
 };
 use alloy::{
     network::TransactionBuilder,
@@ -23,9 +23,8 @@ pub struct BlockBuilderRewardContract {
 }
 
 impl BlockBuilderRewardContract {
-    pub fn new(rpc_urls: &[String], address: Address) -> Result<Self, BlockchainError> {
-        let provider = get_provider(rpc_urls)?;
-        Ok(Self { provider, address })
+    pub fn new(provider: NormalProvider, address: Address) -> Self {
+        Self { provider, address }
     }
 
     pub async fn deploy(provider: NormalProvider, private_key: B256) -> anyhow::Result<Self> {

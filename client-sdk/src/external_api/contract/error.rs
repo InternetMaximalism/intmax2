@@ -14,7 +14,6 @@ pub enum BlockchainError {
     #[error("Transaction failed: {0}")]
     TransactionFailed(String),
 
-    // RPCError(String),
     #[error("RPC error: {0}")]
     RPCError(#[from] RpcError<TransportErrorKind>),
 
@@ -26,9 +25,6 @@ pub enum BlockchainError {
 
     #[error("Token not found")]
     TokenNotFound,
-
-    #[error("Block base fee not found")]
-    BlockBaseFeeNotFound,
 
     #[error("Transaction not found: {0:?}")]
     TxNotFound(B256),

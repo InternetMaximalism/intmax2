@@ -23,6 +23,10 @@ pub struct BlockBuilderRegistryContract {
 }
 
 impl BlockBuilderRegistryContract {
+    pub fn new(provider: NormalProvider, address: Address) -> Self {
+        Self { provider, address }
+    }
+
     pub async fn deploy(provider: NormalProvider, private_key: B256) -> anyhow::Result<Self> {
         let signer = get_provider_with_signer(&provider, private_key);
         let impl_contract = BlockBuilderRegistry::deploy(signer).await?;

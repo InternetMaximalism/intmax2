@@ -22,6 +22,10 @@ pub struct ERC721Contract {
 }
 
 impl ERC721Contract {
+    pub fn new(provider: NormalProvider, address: Address) -> Self {
+        Self { provider, address }
+    }
+
     pub async fn deploy(provider: NormalProvider, private_key: B256) -> anyhow::Result<Self> {
         let signer = get_provider_with_signer(&provider, private_key);
         let contract = ERC721::deploy(signer).await?;

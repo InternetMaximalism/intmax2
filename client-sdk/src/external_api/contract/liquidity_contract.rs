@@ -69,9 +69,8 @@ pub struct LiquidityContract {
 }
 
 impl LiquidityContract {
-    pub fn new(rpc_urls: &[String], address: Address) -> Result<Self, BlockchainError> {
-        let provider = get_provider(rpc_urls)?;
-        Ok(Self { provider, address })
+    pub fn new(provider: NormalProvider, address: Address) -> Self {
+        Self { provider, address }
     }
 
     pub async fn deploy(rpc_urls: &[String], private_key: B256) -> anyhow::Result<Self> {
@@ -392,19 +391,5 @@ impl LiquidityContract {
         }
         deposited_events.sort_by_key(|event| event.deposit_id);
         Ok(deposited_events)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use alloy::primitives::Address;
-
-    #[test]
-    fn test_liquidity_contract_new() {
-        let rpc_urls = vec!["http://localhost:8545".to_string()];
-        let address = Address::ZERO;
-        let contract = LiquidityContract::new(&rpc_urls, address);
-        assert!(contract.is_ok());
     }
 }
