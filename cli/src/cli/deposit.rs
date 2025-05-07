@@ -1,14 +1,15 @@
+use alloy::providers::Provider;
 use intmax2_client_sdk::external_api::{
     contract::{
         convert::{
-            convert_address_to_alloy, convert_address_to_intmax, convert_bytes32_to_h256,
+            convert_address_to_alloy, convert_address_to_intmax, convert_bytes32_to_b256,
             convert_u256_to_alloy,
         },
         erc1155_contract::ERC1155Contract,
         erc20_contract::ERC20Contract,
         erc721_contract::ERC721Contract,
         liquidity_contract::LiquidityContract,
-        utils::{get_address, get_eth_balance},
+        utils::get_address_from_private_key,
     },
     predicate::{PermissionRequest, PredicateClient},
 };
@@ -45,8 +46,8 @@ pub async fn deposit(
 
     log::info!("Balance check done");
 
-    let signer_private_key = convert_bytes32_to_h256(eth_private_key);
-    let depositor = get_address(liquidity_contract.chain_id, signer_private_key);
+    let signer_private_key = convert_bytes32_to_b256(eth_private_key);
+    let depositor = get_address_from_private_key(signer_private_key);
     let depositor = convert_address_to_intmax(depositor);
 
     let deposit_result = client
@@ -162,18 +163,18 @@ async fn balance_check_and_approve(
     token_address: Address,
     token_id: U256,
 ) -> Result<(), CliError> {
-    let chain_id = liquidity_contract.chain_id;
-    let rpc_url = liquidity_contract.rpc_url.clone();
-    let sender_private_key = convert_bytes32_to_h256(eth_private_key);
-    let sender_address = get_address(chain_id, sender_private_key);
+    let sender_private_key = convert_bytes32_to_b256(eth_private_key);
+    let sender_address = get_address_from_private_key(sender_private_key);
 
     let amount = convert_u256_to_alloy(amount);
     let token_address = convert_address_to_alloy(token_address);
     let token_id = convert_u256_to_alloy(token_id);
 
+    let provider = liquidity_contract.provider.clone();
+
     match token_type {
         TokenType::NATIVE => {
-            let balance = get_eth_balance(&rpc_url, sender_address).await?;
+            let balance = provider.get_balance(sender_address).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
                     "Insufficient eth balance".to_string(),
@@ -181,7 +182,7 @@ async fn balance_check_and_approve(
             }
         }
         TokenType::ERC20 => {
-            let contract = ERC20Contract::new(&rpc_url, chain_id, token_address);
+            let contract = ERC20Contract::new(provider, token_address);
             let balance = contract.balance_of(sender_address).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
@@ -190,21 +191,16 @@ async fn balance_check_and_approve(
             }
             // approve if necessary
             let allowance = contract
-                .allowance(sender_address, liquidity_contract.address())
+                .allowance(sender_address, liquidity_contract.address)
                 .await?;
             if allowance < amount {
                 contract
-                    .approve(
-                        sender_private_key,
-                        None,
-                        liquidity_contract.address(),
-                        amount,
-                    )
+                    .approve(sender_private_key, None, liquidity_contract.address, amount)
                     .await?;
             }
         }
         TokenType::ERC721 => {
-            let contract = ERC721Contract::new(&rpc_url, chain_id, token_address);
+            let contract = ERC721Contract::new(provider, token_address);
             let owner = contract.owner_of(token_id).await?;
             if owner != sender_address {
                 return Err(CliError::InsufficientBalance(
@@ -213,19 +209,19 @@ async fn balance_check_and_approve(
             }
             // approve if necessary
             let operator = contract.get_approved(token_id).await?;
-            if operator != liquidity_contract.address() {
+            if operator != liquidity_contract.address {
                 contract
                     .approve(
                         sender_private_key,
                         None,
-                        liquidity_contract.address(),
+                        liquidity_contract.address,
                         token_id,
                     )
                     .await?;
             }
         }
         TokenType::ERC1155 => {
-            let contract = ERC1155Contract::new(&rpc_url, chain_id, token_address);
+            let contract = ERC1155Contract::new(provider, token_address);
             let balance = contract.balance_of(sender_address, token_id).await?;
             if amount > balance {
                 return Err(CliError::InsufficientBalance(
@@ -234,7 +230,7 @@ async fn balance_check_and_approve(
             }
             // approve if necessary
             let is_approved = contract
-                .is_approved_for_all(sender_address, liquidity_contract.address())
+                .is_approved_for_all(sender_address, liquidity_contract.address)
                 .await?;
 
             if !is_approved {
@@ -242,7 +238,7 @@ async fn balance_check_and_approve(
                     .set_approval_for_all(
                         sender_private_key,
                         None,
-                        liquidity_contract.address(),
+                        liquidity_contract.address,
                         true,
                     )
                     .await?;
@@ -274,7 +270,7 @@ async fn fetch_predicate_permission(
         ));
     }
     let predicate_client = PredicateClient::new(env.predicate_base_url.unwrap());
-    let recipient_salt_hash = convert_bytes32_to_h256(recipient_salt_hash);
+    let recipient_salt_hash = convert_bytes32_to_b256(recipient_salt_hash);
     let token_address = convert_address_to_alloy(token_address);
     let value = if token_type == TokenType::NATIVE {
         amount

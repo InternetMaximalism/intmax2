@@ -1,7 +1,8 @@
+use alloy::primitives::U256;
 use intmax2_client_sdk::external_api::contract::{
     block_builder_reward::BlockBuilderRewardContract,
-    convert::{convert_address_to_alloy, convert_bytes32_to_h256},
-    utils::get_address,
+    convert::{convert_address_to_alloy, convert_bytes32_to_b256},
+    utils::get_address_from_private_key,
 };
 use intmax2_interfaces::api::withdrawal_server::interface::WithdrawalStatus;
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
@@ -11,7 +12,7 @@ use crate::{cli::client::get_client, env_var::EnvVar};
 use super::error::CliError;
 
 pub async fn claim_withdrawals(key: KeySet, eth_private_key: Bytes32) -> Result<(), CliError> {
-    let signer_private_key = convert_bytes32_to_h256(eth_private_key);
+    let signer_private_key = convert_bytes32_to_b256(eth_private_key);
     let client = get_client()?;
     let withdrawal_info = client.get_withdrawal_info(key).await?;
     let mut claim_withdrawals = Vec::new();
@@ -49,8 +50,8 @@ pub async fn claim_withdrawals(key: KeySet, eth_private_key: Bytes32) -> Result<
 
 pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliError> {
     let env = envy::from_env::<EnvVar>()?;
-    let signer_private_key = convert_bytes32_to_h256(eth_private_key);
-    let user_address = get_address(env.l2_chain_id, signer_private_key);
+    let signer_private_key = convert_bytes32_to_b256(eth_private_key);
+    let user_address = get_address_from_private_key(signer_private_key);
     log::info!(
         "Claiming block builder reward for user address: {}",
         user_address
@@ -61,9 +62,10 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
             "REWARD_CONTRACT_ADDRESS is not set".to_string(),
         ));
     }
+
+    let provider = get_client()?.rollup_contract.provider.clone();
     let reward_contract_address = convert_address_to_alloy(env.reward_contract_address.unwrap());
-    let reward_contract =
-        BlockBuilderRewardContract::new(&env.l2_rpc_url, env.l2_chain_id, reward_contract_address);
+    let reward_contract = BlockBuilderRewardContract::new(provider, reward_contract_address);
     let current_period = reward_contract.get_current_period().await?;
     log::info!("Current period: {}", current_period);
 
@@ -72,7 +74,7 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
         let claimable_reward = reward_contract
             .get_claimable_reward(period_number, user_address)
             .await?;
-        if claimable_reward > 0.into() {
+        if claimable_reward > U256::ZERO {
             log::info!(
                 "Claiming block builder reward for period {}: {}",
                 period_number,

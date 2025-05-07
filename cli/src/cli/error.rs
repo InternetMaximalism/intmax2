@@ -1,3 +1,4 @@
+use alloy::transports::{RpcError, TransportErrorKind};
 use envy::Error as EnvyError;
 use intmax2_client_sdk::{
     client::{error::ClientError, sync::error::SyncError},
@@ -14,8 +15,8 @@ pub enum CliError {
     #[error("Envy error:{0}")]
     EnvyError(#[from] EnvyError),
 
-    #[error("Env error:{0}")]
-    EnvError(String),
+    #[error("RPC error: {0}")]
+    RPCError(#[from] RpcError<TransportErrorKind>),
 
     #[error("Sync error: {0}")]
     SyncError(#[from] SyncError),
@@ -28,6 +29,9 @@ pub enum CliError {
 
     #[error("CSV deserialize error: {0}")]
     CSVDeserializeError(#[from] csv::Error),
+
+    #[error("Env error:{0}")]
+    EnvError(String),
 
     #[error("Backup error: {0}")]
     BackupError(String),

@@ -4480,6 +4480,7 @@ dependencies = [
 name = "intmax2-cli"
 version = "0.1.22"
 dependencies = [
+ "alloy",
  "anyhow",
  "chrono",
  "clap",
@@ -4490,7 +4491,6 @@ dependencies = [
  "dotenv",
  "env_logger",
  "envy",
- "ethers",
  "hex",
  "intmax2-client-sdk",
  "intmax2-interfaces",
