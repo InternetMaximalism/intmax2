@@ -38,7 +38,7 @@
 //    - Value: {worker_id}
 //    - TTL: {heartbeat_ttl} seconds
 
-use redis::{aio::Connection, AsyncCommands as _, Client};
+use redis::{aio::MultiplexedConnection, AsyncCommands as _, Client};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::time::sleep;
 
@@ -95,8 +95,8 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
         })
     }
 
-    async fn get_connection(&self) -> Result<Connection> {
-        Ok(self.client.get_async_connection().await?)
+    async fn get_connection(&self) -> Result<MultiplexedConnection> {
+        Ok(self.client.get_multiplexed_async_connection().await?)
     }
 
     pub async fn clear_all(&self) -> Result<()> {
@@ -177,7 +177,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
                     .srem(&self.completed_key, task_id)
                     .hdel(&self.tasks_key, task_id)
                     .hdel(&self.results_key, task_id);
-                pipe.query_async::<_, ()>(&mut conn).await?;
+                pipe.query_async::<()>(&mut conn).await?;
             }
         }
         Ok(())
@@ -241,7 +241,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
     pub async fn submit_heartbeat(&self, worker_id: &str, task_id: u32) -> Result<()> {
         let mut conn = self.get_connection().await?;
         let key = format!("{}:{}", self.heartbeat_prefix, task_id);
-        conn.set_ex::<_, _, ()>(&key, worker_id, self.heartbeat_ttl)
+        conn.set_ex::<_, _, ()>(&key, worker_id, self.heartbeat_ttl as u64)
             .await?;
         Ok(())
     }

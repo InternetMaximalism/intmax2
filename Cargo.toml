@@ -28,7 +28,7 @@ plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", b
 plonky2_bn254 = { git = "https://github.com/InternetMaximalism/plonky2_bn254" }
 plonky2_keccak = { git = "https://github.com/InternetMaximalism/plonky2_keccak" }
 # Only features sync,macros,io-util,rt,time are supported on wasm.
-tokio = { version = "1", features = [
+tokio = { version = "1.45", features = [
     "io-util",
     "macros",
     "rt",
@@ -38,24 +38,27 @@ tokio = { version = "1", features = [
 reqwest = { version = "0.12.15", features = ["json"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.215", features = ["derive"] }
-alloy = {version = "0.15.9", features = ["rand"] }
+alloy = { version = "0.15.9", features = ["rand"] }
 anyhow = "1.0.98"
-sqlx = { version = "0.8.2", features = [
+sqlx = { version = "0.8.5", features = [
     "chrono",
     "postgres",
     "runtime-tokio-native-tls",
     "uuid",
     "bigdecimal",
 ] }
-chrono = "0.4.40"
+chrono = "0.4"
 log = "0.4.27"
 uuid = { version = "1.12.1", features = ["v4", "v7"] }
-redis = { version = "0.23", features = ["tokio-native-tls-comp"] }
+redis = { version = "0.30", features = [
+    "tokio-native-tls-comp",
+    "connection-manager",
+] }
 dotenv = "0.15.0"
 envy = "0.4.2"
 bincode = "1.3.3"
 thiserror = "2.0.12"
-hashbrown = "0.15.2"
+hashbrown = "0.15.3"
 actix-web = "4.10.2"
 actix-cors = "0.7.1"
 tracing-actix-web = "0.7"

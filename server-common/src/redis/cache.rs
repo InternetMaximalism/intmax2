@@ -1,4 +1,4 @@
-use redis::{aio::Connection, AsyncCommands as _, Client};
+use redis::{aio::MultiplexedConnection, AsyncCommands as _, Client};
 use serde::{de::DeserializeOwned, Serialize};
 use std::time::Duration;
 
@@ -25,8 +25,8 @@ impl RedisCache {
         })
     }
 
-    async fn get_connection(&self) -> Result<Connection, RedisCacheError> {
-        let conn = self.client.get_async_connection().await?;
+    async fn get_connection(&self) -> Result<MultiplexedConnection, RedisCacheError> {
+        let conn = self.client.get_multiplexed_async_connection().await?;
         Ok(conn)
     }
 
@@ -67,7 +67,7 @@ impl RedisCache {
         let mut conn = self.get_connection().await?;
         let serialized = serde_json::to_string(value)?;
         let key = format!("{}:{}", self.prefix, key);
-        let () = conn.set_ex(key, serialized, ttl.as_secs() as usize).await?;
+        let () = conn.set_ex(key, serialized, ttl.as_secs()).await?;
         Ok(())
     }
 
