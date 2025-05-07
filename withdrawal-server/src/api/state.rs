@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use intmax2_client_sdk::external_api::contract::utils::get_provider;
+
 use crate::{app::withdrawal_server::WithdrawalServer, Env};
 
 #[derive(Clone)]
@@ -9,7 +11,8 @@ pub struct State {
 
 impl State {
     pub async fn new(env: &Env) -> anyhow::Result<Self> {
-        let withdrawal_server = WithdrawalServer::new(env).await?;
+        let provider = get_provider(&[env.l2_rpc_url.clone()])?;
+        let withdrawal_server = WithdrawalServer::new(env, provider).await?;
         Ok(State {
             withdrawal_server: Arc::new(withdrawal_server),
         })

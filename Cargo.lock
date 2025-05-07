@@ -9133,6 +9133,7 @@ version = "0.1.22"
 dependencies = [
  "actix-cors",
  "actix-web",
+ "alloy",
  "anyhow",
  "base64 0.22.1",
  "bincode",
@@ -9140,7 +9141,6 @@ dependencies = [
  "dotenv",
  "env_logger",
  "envy",
- "ethers",
  "hashbrown 0.15.2",
  "intmax2-client-sdk",
  "intmax2-interfaces",

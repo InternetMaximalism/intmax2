@@ -2,6 +2,7 @@ use crate::{
     app::status::{SqlClaimStatus, SqlWithdrawalStatus},
     Env,
 };
+use alloy::primitives::B256;
 use intmax2_interfaces::{
     api::{
         store_vault_server::interface::StoreVaultClientInterface,
@@ -15,7 +16,6 @@ use intmax2_interfaces::{
 };
 
 use super::{error::WithdrawalServerError, fee::parse_fee_str};
-use ethers::types::H256;
 use intmax2_client_sdk::{
     client::{
         fee_payment::FeeType,
@@ -23,7 +23,10 @@ use intmax2_client_sdk::{
         sync::utils::quote_withdrawal_claim_fee,
     },
     external_api::{
-        contract::{rollup_contract::RollupContract, withdrawal_contract::WithdrawalContract},
+        contract::{
+            convert::convert_b256_to_bytes32, rollup_contract::RollupContract,
+            utils::NormalProvider, withdrawal_contract::WithdrawalContract,
+        },
         s3_store_vault::S3StoreVaultClient,
         store_vault_server::StoreVaultServerClient,
         validity_prover::ValidityProverClient,
@@ -47,7 +50,6 @@ use intmax2_zkp::{
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
     utils::conversion::ToU64,
 };
-use num_bigint::BigUint;
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -78,7 +80,7 @@ pub struct WithdrawalServer {
 }
 
 impl WithdrawalServer {
-    pub async fn new(env: &Env) -> anyhow::Result<Self> {
+    pub async fn new(env: &Env, provider: NormalProvider) -> anyhow::Result<Self> {
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
             idle_timeout: env.database_timeout,
@@ -134,16 +136,9 @@ impl WithdrawalServer {
             ))
         };
         let validity_prover = ValidityProverClient::new(&env.validity_prover_base_url);
-        let rollup_contract = RollupContract::new(
-            &env.l2_rpc_url,
-            env.l2_chain_id,
-            env.rollup_contract_address,
-        );
-        let withdrawal_contract = WithdrawalContract::new(
-            &env.l2_rpc_url,
-            env.l2_chain_id,
-            env.withdrawal_contract_address,
-        );
+        let rollup_contract = RollupContract::new(provider.clone(), env.rollup_contract_address);
+        let withdrawal_contract =
+            WithdrawalContract::new(provider, env.withdrawal_contract_address);
 
         Ok(Self {
             config,
@@ -617,9 +612,7 @@ impl WithdrawalServer {
     }
 }
 
-pub fn privkey_to_keyset(privkey: H256) -> KeySet {
-    let privkey: U256 = BigUint::from_bytes_be(privkey.as_bytes())
-        .try_into()
-        .unwrap();
-    KeySet::new(privkey)
+pub fn privkey_to_keyset(privkey: B256) -> KeySet {
+    let privkey: Bytes32 = convert_b256_to_bytes32(privkey);
+    KeySet::new(privkey.into())
 }
