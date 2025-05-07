@@ -9,7 +9,7 @@ intmax2-zkp = { workspace = true }
 intmax2-client-sdk = { path = "../client-sdk" }
 intmax2-interfaces = { path = "../interfaces" }
 reqwest = { workspace = true }
-ethers = { workspace = true }
+alloy = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 log = { workspace = true }

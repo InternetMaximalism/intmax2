@@ -5,7 +5,7 @@ use intmax2_client_sdk::{
         block_builder::BlockBuilderClient,
         contract::{
             liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
-            withdrawal_contract::WithdrawalContract,
+            utils::get_provider, withdrawal_contract::WithdrawalContract,
         },
         private_zkp_server::{PrivateZKPServerClient, PrivateZKPServerConfig},
         s3_store_vault::S3StoreVaultClient,
@@ -185,20 +185,20 @@ pub fn get_client(config: &Config) -> Client {
         block_builder_query_limit: config.block_builder_query_limit,
     };
 
+    let l1_provider = get_provider(&[config.l1_rpc_url.clone()]).unwrap();
+    let l2_provider = get_provider(&[config.l2_rpc_url.clone()]).unwrap();
+
     let liquidity_contract = LiquidityContract::new(
-        &config.l1_rpc_url,
-        config.l1_chain_id,
+        l1_provider,
         config.liquidity_contract_address.parse().unwrap(),
     );
 
     let rollup_contract = RollupContract::new(
-        &config.l2_rpc_url,
-        config.l2_chain_id,
+        l2_provider.clone(),
         config.rollup_contract_address.parse().unwrap(),
     );
     let withdrawal_contract = WithdrawalContract::new(
-        &config.l2_rpc_url,
-        config.l2_chain_id,
+        l2_provider,
         config.withdrawal_contract_address.parse().unwrap(),
     );
 

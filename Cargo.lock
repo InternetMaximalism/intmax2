@@ -4608,10 +4608,10 @@ dependencies = [
 name = "intmax2-wasm-lib"
 version = "0.1.22"
 dependencies = [
+ "alloy",
  "anyhow",
  "bincode",
  "console_error_panic_hook",
- "ethers",
  "getrandom 0.2.15",
  "hex",
  "intmax2-client-sdk",

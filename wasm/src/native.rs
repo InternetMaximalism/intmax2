@@ -14,7 +14,7 @@ use crate::{
         },
         utils::parse_bytes32,
     },
-    utils::{parse_h256_as_u256, str_privkey_to_keyset},
+    utils::str_privkey_to_keyset,
 };
 use intmax2_client_sdk::{
     client::multisig,
@@ -144,7 +144,7 @@ pub async fn fetch_encrypted_data(
 #[wasm_bindgen]
 pub async fn get_account_info(config: &Config, public_key: &str) -> Result<JsAccountInfo, JsError> {
     init_logger();
-    let pubkey = parse_h256_as_u256(public_key)?;
+    let pubkey = parse_bytes32(public_key)?.into();
     let client = get_client(config);
     let account_info = client.validity_prover.get_account_info(pubkey).await?;
     Ok(account_info.into())

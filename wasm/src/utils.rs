@@ -1,33 +1,24 @@
-use ethers::types::H256;
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
-};
-use num_bigint::BigUint;
+use alloy::primitives::B256;
+use intmax2_client_sdk::external_api::contract::convert::convert_b256_to_bytes32;
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use wasm_bindgen::JsError;
-
-pub fn h256_to_bytes32(h256: H256) -> Bytes32 {
-    Bytes32::from_bytes_be(h256.as_bytes()).unwrap()
-}
 
 pub fn str_privkey_to_keyset(privkey: &str) -> Result<KeySet, JsError> {
     let privkey = parse_h256(privkey)?;
-    Ok(h256_to_keyset(privkey))
+    let privkey = convert_b256_to_bytes32(privkey);
+    Ok(KeySet::new(privkey.into()))
 }
 
-fn h256_to_keyset(h256: H256) -> KeySet {
-    let key: U256 = BigUint::from_bytes_be(h256.as_bytes()).try_into().unwrap();
-    KeySet::new(key)
-}
-
-pub fn parse_h256(s: &str) -> Result<H256, JsError> {
-    let x: H256 = s
+pub fn parse_h256(s: &str) -> Result<B256, JsError> {
+    let x: B256 = s
         .parse()
-        .map_err(|e| JsError::new(&format!("failed to parse h256 {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to parse b256 {}", e)))?;
     Ok(x)
 }
 
-pub fn parse_h256_as_u256(s: &str) -> Result<U256, JsError> {
-    let x = parse_h256(s)?;
-    Ok(h256_to_bytes32(x).into())
+pub fn parse_bytes32(s: &str) -> Result<Bytes32, JsError> {
+    let x: Bytes32 = s
+        .parse()
+        .map_err(|e| JsError::new(&format!("failed to parse bytes32 {}", e)))?;
+    Ok(x)
 }

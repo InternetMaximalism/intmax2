@@ -18,7 +18,7 @@ use js_types::{
     wrapper::JsTxRequestMemo,
 };
 use num_bigint::BigUint;
-use utils::{parse_h256, parse_h256_as_u256, str_privkey_to_keyset};
+use utils::{parse_h256, str_privkey_to_keyset};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 pub mod client;
@@ -62,13 +62,13 @@ pub fn get_deposit_hash(
 ) -> Result<String, JsError> {
     init_logger();
     let depositor = parse_address(depositor)?;
-    let recipient_salt_hash = parse_h256_as_u256(recipient_salt_hash)?;
+    let recipient_salt_hash = parse_bytes32(recipient_salt_hash)?;
     let amount = parse_u256(amount)?;
     let is_eligible = is_eligible as u32;
 
     let deposit = Deposit {
         depositor,
-        pubkey_salt_hash: recipient_salt_hash.into(),
+        pubkey_salt_hash: recipient_salt_hash,
         amount,
         token_index,
         is_eligible: is_eligible != 0,
@@ -93,7 +93,7 @@ pub async fn prepare_deposit(
 ) -> Result<JsDepositResult, JsError> {
     init_logger();
     let depositor = parse_address(depositor)?;
-    let recipient = parse_h256_as_u256(recipient)?;
+    let recipient: U256 = parse_bytes32(recipient)?.into();
     let amount = parse_u256(amount)?;
     let token_type = TokenType::try_from(token_type).map_err(|e| JsError::new(&e))?;
     let token_address = parse_address(token_address)?;
@@ -147,7 +147,10 @@ pub async fn send_tx_request(
         .iter()
         .map(|e| e.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
-    let beneficiary = beneficiary.map(|b| parse_h256_as_u256(&b)).transpose()?;
+    let beneficiary: Option<U256> = beneficiary
+        .map(|b| parse_bytes32(&b))
+        .transpose()?
+        .map(|b| b.into());
     let fee = fee.map(|f| f.try_into()).transpose()?;
     let collateral_fee = collateral_fee.map(|f| f.try_into()).transpose()?;
 
@@ -198,7 +201,7 @@ pub async fn get_tx_status(
 ) -> Result<String, JsError> {
     init_logger();
     let client = get_client(config);
-    let pubkey = parse_h256_as_u256(pubkey)?;
+    let pubkey = parse_bytes32(pubkey)?.into();
     let tx_tree_root = parse_bytes32(tx_tree_root)?;
     let status = client
         .get_tx_status(pubkey, tx_tree_root)
@@ -332,7 +335,7 @@ pub async fn quote_transfer_fee(
     fee_token_index: u32,
 ) -> Result<JsFeeQuote, JsError> {
     init_logger();
-    let pubkey = parse_h256_as_u256(pubkey)?;
+    let pubkey = parse_bytes32(pubkey)?.into();
     let client = get_client(config);
     let fee_quote = client
         .quote_transfer_fee(block_builder_url, pubkey, fee_token_index)
@@ -388,7 +391,7 @@ pub async fn generate_transfer_receipt(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let transfer_digest = parse_bytes32(transfer_digest)?;
-    let receiver = parse_h256_as_u256(receiver)?;
+    let receiver = parse_bytes32(receiver)?.into();
     let client = get_client(config);
     let receipt = client
         .generate_transfer_receipt(key, transfer_digest, receiver)
