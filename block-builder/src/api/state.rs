@@ -1,10 +1,7 @@
-use std::sync::Arc;
+use intmax2_client_sdk::external_api::contract::utils::get_provider;
 
 use crate::{
-    app::{
-        block_builder::{BlockBuilder, RealEthBalanceProvider},
-        error::BlockBuilderError,
-    },
+    app::{block_builder::BlockBuilder, error::BlockBuilderError},
     EnvVar,
 };
 
@@ -15,7 +12,8 @@ pub struct State {
 
 impl State {
     pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
-        let block_builder = BlockBuilder::new(env, Arc::new(RealEthBalanceProvider)).await?;
+        let provider = get_provider(&[env.l2_rpc_url.clone()])?;
+        let block_builder = BlockBuilder::new(env, provider).await?;
         Ok(State { block_builder })
     }
 
