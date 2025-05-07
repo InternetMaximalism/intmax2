@@ -1,9 +1,9 @@
-use ethers::types::H256;
+use alloy::primitives::B256;
 use intmax2_client_sdk::external_api::{
     contract::{
         convert::{convert_address_to_alloy, convert_address_to_intmax},
         rollup_contract::RollupContract,
-        utils::get_address,
+        utils::{get_address_from_private_key, get_provider},
     },
     utils::time::sleep_for,
 };
@@ -32,7 +32,6 @@ pub struct EnvVar {
     // client settings
     pub private_keys: String,
     pub l2_rpc_url: String,
-    pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
     pub sleep_time: u64,
 }
@@ -46,9 +45,10 @@ async fn load_test() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
     let env = envy::from_env::<EnvVar>()?;
+    let provider = get_provider(&[env.l2_rpc_url.clone()])?;
+
     let rollup_contract = RollupContract::new(
-        &env.l2_rpc_url,
-        env.l2_chain_id,
+        provider,
         convert_address_to_alloy(env.rollup_contract_address),
     );
 
@@ -56,7 +56,7 @@ async fn load_test() -> anyhow::Result<()> {
         .private_keys
         .split(',')
         .map(|key| key.parse().unwrap())
-        .collect::<Vec<H256>>();
+        .collect::<Vec<B256>>();
 
     log::info!("num private keys: {}", private_keys.len());
     let mut total_posted_blocks = 0;
@@ -66,7 +66,7 @@ async fn load_test() -> anyhow::Result<()> {
             Vec::new();
         for &private_key in &private_keys {
             let block_builder_address =
-                convert_address_to_intmax(get_address(env.l2_chain_id, private_key));
+                convert_address_to_intmax(get_address_from_private_key(private_key));
             let rollup_contract = rollup_contract.clone();
             futures.push(tokio::spawn(async move {
                 let mut rng = intmax2_interfaces::utils::random::default_rng();
@@ -108,7 +108,7 @@ async fn load_test() -> anyhow::Result<()> {
 
 async fn post_registration_block<R: Rng>(
     rng: &mut R,
-    signer_private_key: H256,
+    signer_private_key: B256,
     rollup_contract: &RollupContract,
     block_builder_address: Address,
 ) -> anyhow::Result<()> {
@@ -167,7 +167,7 @@ async fn post_registration_block<R: Rng>(
 
 async fn post_non_registration_block<R: Rng>(
     rng: &mut R,
-    signer_private_key: H256,
+    signer_private_key: B256,
     rollup_contract: &RollupContract,
     block_builder_address: Address,
 ) -> anyhow::Result<()> {

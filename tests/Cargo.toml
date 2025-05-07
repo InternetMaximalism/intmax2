@@ -13,7 +13,7 @@ intmax2-interfaces = { path = "../interfaces" }
 validity-prover = { path = "../validity-prover" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
-ethers = { workspace = true }
+alloy = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 thiserror = "2.0.12"

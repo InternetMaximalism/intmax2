@@ -6,7 +6,7 @@ use super::{
     error::BlockchainError,
     handlers::send_transaction_with_gas_bump,
     proxy_contract::ProxyContract,
-    utils::{get_provider, get_provider_with_signer, NormalProvider},
+    utils::{get_provider_with_signer, NormalProvider},
 };
 use alloy::{
     network::TransactionBuilder,
@@ -73,8 +73,7 @@ impl LiquidityContract {
         Self { provider, address }
     }
 
-    pub async fn deploy(rpc_urls: &[String], private_key: B256) -> anyhow::Result<Self> {
-        let provider = get_provider(rpc_urls)?;
+    pub async fn deploy(provider: NormalProvider, private_key: B256) -> anyhow::Result<Self> {
         let signer = get_provider_with_signer(&provider, private_key);
         let contract = Liquidity::deploy(signer).await?;
         let impl_address = *contract.address();

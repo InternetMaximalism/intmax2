@@ -1,6 +1,10 @@
-use ethers::types::{Address, H256};
+use alloy::primitives::{Address, B256};
 use intmax2_client_sdk::external_api::{
-    contract::{rollup_contract::RollupContract, utils::get_address},
+    contract::{
+        convert::convert_address_to_intmax,
+        rollup_contract::RollupContract,
+        utils::{get_address_from_private_key, get_provider},
+    },
     utils::time::sleep_for,
 };
 use intmax2_zkp::{
@@ -11,7 +15,7 @@ use intmax2_zkp::{
         },
     },
     constants::NUM_SENDERS_IN_BLOCK,
-    ethereum_types::{self, bytes32::Bytes32, u32limb_trait::U32LimbTrait},
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
 };
 use num_bigint::BigUint;
 use serde::Deserialize;
@@ -19,9 +23,8 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub struct EnvVar {
     // client settings
-    pub deployer_private_key: H256,
+    pub deployer_private_key: B256,
     pub l2_rpc_url: String,
-    pub l2_chain_id: u64,
     pub rollup_contract_address: Address,
     pub rollup_contract_deployed_block_number: u64,
 }
@@ -36,15 +39,11 @@ async fn post_blocks() -> anyhow::Result<()> {
 
     dotenv::dotenv().ok();
     let env = envy::from_env::<EnvVar>()?;
-    let rollup_contract = RollupContract::new(
-        &env.l2_rpc_url,
-        env.l2_chain_id,
-        env.rollup_contract_address,
-    );
-    let block_builder_address = ethereum_types::address::Address::from_bytes_be(
-        get_address(env.l2_chain_id, env.deployer_private_key).as_bytes(),
-    )
-    .unwrap();
+
+    let provider = get_provider(&[env.l2_rpc_url.clone()])?;
+    let rollup_contract = RollupContract::new(provider, env.rollup_contract_address);
+    let block_builder_address =
+        convert_address_to_intmax(get_address_from_private_key(env.deployer_private_key));
 
     loop {
         let payload = BlockSignPayload {
