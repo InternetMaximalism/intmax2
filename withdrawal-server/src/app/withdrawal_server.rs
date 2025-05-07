@@ -241,18 +241,18 @@ impl WithdrawalServer {
         let withdrawal_hash_str = withdrawal_hash.to_hex();
 
         // If there is already a request with the same withdrawal_hash, return early
-        let existing_request = sqlx::query!(
+        let already_exists: (bool,) = sqlx::query_as::<_, (bool,)>(
             r#"
-            SELECT COUNT(*) as count
-            FROM withdrawals
-            WHERE withdrawal_hash = $1
+            SELECT EXISTS(
+                SELECT 1 FROM withdrawals
+                WHERE withdrawal_hash = $1
+            )
             "#,
-            withdrawal_hash_str
         )
+        .bind(&withdrawal_hash_str)
         .fetch_one(&self.pool)
         .await?;
-        let count = existing_request.count.unwrap_or(0);
-        if count > 0 {
+        if already_exists.0 {
             return Ok(FeeResult::Success);
         }
 
@@ -331,19 +331,19 @@ impl WithdrawalServer {
             self.add_spent_transfers(&transfers).await?;
         }
 
-        // If there is already a request with the same withdrawal_hash, return early
-        let existing_request = sqlx::query!(
+        // If there is already a request with the same nullifier_str, return early
+        let already_exists: (bool,) = sqlx::query_as::<_, (bool,)>(
             r#"
-            SELECT COUNT(*) as count
-            FROM claims
-            WHERE nullifier = $1
+            SELECT EXISTS(
+                SELECT 1 FROM claims
+                WHERE nullifier = $1
+            )
             "#,
-            nullifier_str
         )
+        .bind(&nullifier_str)
         .fetch_one(&self.pool)
         .await?;
-        let count = existing_request.count.unwrap_or(0);
-        if count > 0 {
+        if already_exists.0 {
             return Ok(FeeResult::Success);
         }
 
@@ -645,12 +645,15 @@ pub fn privkey_to_keyset(privkey: H256) -> KeySet {
 
 #[cfg(test)]
 pub mod test_withdrawal_server_helper {
-    use std::panic;
+    use std::{fs, io::Read, panic};
     // For redis
     use std::{
         net::TcpListener,
         process::{Command, Output, Stdio},
     };
+
+    use server_common::db::DbPool;
+    use sqlx::query;
 
     pub fn run_withdrawal_docker(port: u16, container_name: &str) -> Output {
         let port_arg = format!("{}:5432", port);
@@ -706,6 +709,26 @@ pub mod test_withdrawal_server_helper {
         }
     }
 
+    pub async fn create_tables(pool: &DbPool, file_path: &str) {
+        // Open and read file
+        let mut file =
+            fs::File::open(file_path).unwrap_or_else(|e| panic!("Failed to open SQL file: {}", e));
+        let mut sql_content = String::new();
+        file.read_to_string(&mut sql_content)
+            .unwrap_or_else(|e| panic!("Failed to read SQL file: {}", e));
+
+        // Execute the SQL content
+        for statement in sql_content.split(';') {
+            let trimmed = statement.trim();
+            if !trimmed.is_empty() {
+                query(trimmed)
+                    .execute(pool)
+                    .await
+                    .unwrap_or_else(|e| panic!("Failed to execute SQL: {}", e));
+            }
+        }
+    }
+
     pub fn stop_withdrawal_docker(container_name: &str) -> Output {
         let output = Command::new("docker")
             .args(["stop", container_name])
@@ -738,12 +761,17 @@ pub mod test_withdrawal_server_helper {
 #[cfg(test)]
 mod tests {
     use ethers::types::{H160, H256};
+    use intmax2_zkp::ethereum_types::u256::U256;
+    use serde_json::json;
     use std::{str::FromStr, thread::sleep, time::Duration};
 
     use crate::{
-        app::withdrawal_server::test_withdrawal_server_helper::{
-            assert_and_stop, create_databases, find_free_port, run_withdrawal_docker,
-            stop_withdrawal_docker,
+        app::{
+            fee::parse_fee_str,
+            withdrawal_server::test_withdrawal_server_helper::{
+                assert_and_stop, create_databases, create_tables, find_free_port,
+                run_withdrawal_docker, stop_withdrawal_docker,
+            },
         },
         Env,
     };
@@ -819,31 +847,181 @@ mod tests {
         }
         let server = server.unwrap();
 
-        // Here and later I use is_some() || is_some() and not && as an additional check of initializing WithdrawalServer.
-        // If only one variable is Some and another one is not, test will fail, so there is should be some error in WithdrawalServer new method.
-        let claim_fee = server.get_claim_fee();
-        if env.claim_beneficiary_private_key.is_some() || claim_fee.beneficiary.is_some() {
-            let claim_keyset = privkey_to_keyset(env.claim_beneficiary_private_key.unwrap());
-            assert_and_stop(cont_name, || {
-                assert_eq!(claim_fee.beneficiary.unwrap(), claim_keyset.pubkey)
-            });
-        }
-        if env.claim_fee.is_some() {
-            let fee = parse_fee_str(&env.claim_fee.unwrap()).unwrap();
-            assert_and_stop(cont_name, || assert_eq!(claim_fee.fee.unwrap(), fee));
+        // Create needed SQL tables
+        create_tables(
+            &server.pool,
+            "./migrations/20250309092609_create_initial_tables.up.sql",
+        )
+        .await;
+
+        // Test get_claim_fee and get_withdrawal_fee
+        {
+            // Here and later I use is_some() || is_some() and not && as an additional check of initializing WithdrawalServer.
+            // If only one variable is Some and another one is not, test will fail, so there is should be some error in WithdrawalServer new method.
+            let claim_fee = server.get_claim_fee();
+            if env.claim_beneficiary_private_key.is_some() || claim_fee.beneficiary.is_some() {
+                let claim_keyset = privkey_to_keyset(env.claim_beneficiary_private_key.unwrap());
+                assert_and_stop(cont_name, || {
+                    assert_eq!(claim_fee.beneficiary.unwrap(), claim_keyset.pubkey)
+                });
+            }
+            if env.claim_fee.is_some() {
+                let fee = parse_fee_str(&env.claim_fee.unwrap()).unwrap();
+                assert_and_stop(cont_name, || assert_eq!(claim_fee.fee.unwrap(), fee));
+            }
+
+            let withdrawal_fee = server.get_withdrawal_fee();
+            if withdrawal_fee.beneficiary.is_some()
+                || env.withdrawal_beneficiary_private_key.is_some()
+            {
+                let ben_keyset = privkey_to_keyset(env.withdrawal_beneficiary_private_key.unwrap());
+                assert_and_stop(cont_name, || {
+                    assert_eq!(withdrawal_fee.beneficiary.unwrap(), ben_keyset.pubkey)
+                });
+            }
+            if withdrawal_fee.direct_withdrawal_fee.is_some() {
+                assert_and_stop(cont_name, || {
+                    assert_eq!(withdrawal_fee.direct_withdrawal_fee.unwrap().len(), 1)
+                });
+            }
         }
 
-        let withdrawal_fee = server.get_withdrawal_fee();
-        if withdrawal_fee.beneficiary.is_some() || env.withdrawal_beneficiary_private_key.is_some()
+        // Test inserting and checking withdrawal and claim tables for needed hash
         {
-            let ben_keyset = privkey_to_keyset(env.withdrawal_beneficiary_private_key.unwrap());
-            assert_and_stop(cont_name, || {
-                assert_eq!(withdrawal_fee.beneficiary.unwrap(), ben_keyset.pubkey)
+            let pubkey_str = U256::from_hex(
+                "0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
+            )
+            .unwrap();
+            let recipient_str = "0xabc";
+            let withdrawal_hash = "0xdeadbeef";
+            let proof_bytes = vec![1u8, 2, 3, 4]; // Replace with actual proof if needed
+            let claim_value = json!({
+                "recipient": recipient_str,
+                "amount": "1000",
+                "token_index": 1,
+                "block_number": 42,
+                "block_hash": "0xblockhash",
+                "nullifier": withdrawal_hash
             });
-        }
-        if withdrawal_fee.direct_withdrawal_fee.is_some() {
+            let uuid_str = uuid::Uuid::new_v4().to_string();
+
+            // Check claims table for some withdrawal_hash record
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM withdrawals WHERE withdrawal_hash = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of withdrawal_hash in claims table");
+
             assert_and_stop(cont_name, || {
-                assert_eq!(withdrawal_fee.direct_withdrawal_fee.unwrap().len(), 1)
+                assert!(!exists.0, "Claim should not contain withdrawal_hash")
+            });
+
+            sqlx::query(
+                r#"
+                INSERT INTO withdrawals (
+                    uuid,
+                    pubkey,
+                    recipient,
+                    withdrawal_hash,
+                    single_withdrawal_proof,
+                    contract_withdrawal,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                "#,
+            )
+            .bind(&uuid_str)
+            .bind(pubkey_str.to_hex())
+            .bind(recipient_str)
+            .bind(withdrawal_hash)
+            .bind(&proof_bytes)
+            .bind(&claim_value)
+            .bind(SqlWithdrawalStatus::Requested as SqlWithdrawalStatus)
+            .execute(&server.pool)
+            .await
+            .expect("Failed to insert record into withdrawals table");
+
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM withdrawals WHERE withdrawal_hash = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of withdrawal_hash in withdrawals table");
+
+            assert_and_stop(cont_name, || {
+                assert!(
+                    exists.0,
+                    "Withdrawals should contain withdrawal_hash after insertion"
+                )
+            });
+
+            // Check claims table for some nullifier record
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM claims WHERE nullifier = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of nullifier in claims table");
+
+            assert_and_stop(cont_name, || {
+                assert!(!exists.0, "Claim should not contain nullifier")
+            });
+
+            sqlx::query(
+                r#"
+                INSERT INTO claims (
+                    uuid,
+                    pubkey,
+                    recipient,
+                    nullifier,
+                    single_claim_proof,
+                    claim,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)
+                "#,
+            )
+            .bind(&uuid_str)
+            .bind(pubkey_str.to_hex())
+            .bind(recipient_str)
+            .bind(withdrawal_hash)
+            .bind(&proof_bytes)
+            .bind(&claim_value)
+            .bind(SqlClaimStatus::Requested as SqlClaimStatus)
+            .execute(&server.pool)
+            .await
+            .expect("Failed to insert claim into database");
+
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM claims WHERE nullifier = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of nullifier in claims table");
+
+            assert_and_stop(cont_name, || {
+                assert!(exists.0, "Claim should contain nullifier after insertion")
             });
         }
 
