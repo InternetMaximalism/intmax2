@@ -2,6 +2,7 @@ use std::{
     env::VarError,
     ops::{Add, Sub},
     str::FromStr,
+    thread::sleep,
     time::Duration,
 };
 
@@ -513,14 +514,9 @@ impl TestSystem {
         let balance = get_eth_balance(&self.l1_rpc_url, self.admin_key.eth_address).await?;
         log::info!("Admin's balance: {}", balance);
         log::info!("Admin's address: {:?}", self.admin_key.eth_address);
+        let private_key = self.admin_key.eth_private_key.to_hex();
         for recipient in intmax_recipients {
-            transfer_eth_on_ethereum(
-                &self.l1_rpc_url,
-                &format!("{:?}", self.admin_key.eth_private_key.to_hex()),
-                *recipient,
-                amount,
-            )
-            .await?;
+            transfer_eth_on_ethereum(&self.l1_rpc_url, &private_key, *recipient, amount).await?;
         }
 
         Ok(())
@@ -574,6 +570,7 @@ impl AsyncTask for RandomActionTask {
                 log::warn!("(id: {}) failed: {:?}", id, e);
             }
         }
+        sleep(std::time::Duration::from_secs(1800));
 
         Ok(())
     }

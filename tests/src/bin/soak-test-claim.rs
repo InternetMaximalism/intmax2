@@ -49,6 +49,7 @@ const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
 #[derive(Debug, Deserialize)]
 struct EnvVar {
     l1_rpc_url: String,
+    deposit_admin_private_key: String,
     withdrawal_admin_private_key: String,
     max_concurrent: Option<usize>,
     max_using_account: Option<usize>,
@@ -58,7 +59,8 @@ struct EnvVar {
 #[derive(Debug)]
 struct TestSystem {
     l1_rpc_url: String,
-    admin_key: Account,
+    deposit_admin_key: Account,
+    withdrawal_admin_key: Account,
 }
 
 // Failpoints that are safe to use with each action
@@ -96,7 +98,10 @@ impl TestSystem {
         let config = envy::from_env::<EnvVar>().unwrap();
         Self {
             l1_rpc_url: config.l1_rpc_url,
-            admin_key: private_key_to_account(
+            deposit_admin_key: private_key_to_account(
+                H256::from_str(&config.deposit_admin_private_key).unwrap(),
+            ),
+            withdrawal_admin_key: private_key_to_account(
                 H256::from_str(&config.withdrawal_admin_private_key).unwrap(),
             ),
         }
@@ -176,10 +181,10 @@ impl TestSystem {
             sender_key.eth_address,
             intermediate_key.pubkey.to_hex()
         );
-        // let deposit_hash = self.execute_deposit(sender_key, intermediate_key).await?;
-        let deposit_hash =
-            Bytes32::from_hex("3b18541c675cb8c1bf3ef246c3783e329e991effd1e5ed4a6310aa67b1211785")
-                .unwrap();
+        let deposit_hash = self.execute_deposit(sender_key, intermediate_key).await?;
+        // let deposit_hash =
+        //     Bytes32::from_hex("3b18541c675cb8c1bf3ef246c3783e329e991effd1e5ed4a6310aa67b1211785")
+        //         .unwrap();
         self.wait_for_mining_claimable(intermediate_key, deposit_hash)
             .await?;
         log::info!(
@@ -475,17 +480,12 @@ impl TestSystem {
         intmax_recipients: &[ethers::types::Address],
         amount: ethers::types::U256,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let balance = get_eth_balance(&self.l1_rpc_url, self.admin_key.eth_address).await?;
+        let balance = get_eth_balance(&self.l1_rpc_url, self.deposit_admin_key.eth_address).await?;
         log::info!("Admin's balance: {}", balance);
-        log::info!("Admin's address: {:?}", self.admin_key.eth_address);
+        log::info!("Admin's address: {:?}", self.deposit_admin_key.eth_address);
+        let private_key = self.deposit_admin_key.eth_private_key.to_hex();
         for recipient in intmax_recipients {
-            transfer_eth_on_ethereum(
-                &self.l1_rpc_url,
-                &format!("{:?}", self.admin_key.eth_private_key.to_hex()),
-                *recipient,
-                amount,
-            )
-            .await?;
+            transfer_eth_on_ethereum(&self.l1_rpc_url, &private_key, *recipient, amount).await?;
         }
 
         Ok(())
