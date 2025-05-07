@@ -7,7 +7,7 @@ use alloy::{
 };
 use std::time::Duration;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(20);
 const MAX_GAS_BUMP_ATTEMPTS: u32 = 3;
 const GAS_BUMP_PERCENTAGE: u64 = 25; // Should be above 10 to avoid replacement transaction underpriced error
 
@@ -79,16 +79,24 @@ async fn resend_tx_with_gas_bump(
         // bump gas
         let fee_estimation = signer.estimate_eip1559_fees().await?;
 
-        let new_max_fee_per_gas = fee_estimation
-            .max_fee_per_gas
-            .max(current_tx.max_fee_per_gas * (100 + GAS_BUMP_PERCENTAGE as u128) / 100);
-        let new_max_priority_fee_per_gas = fee_estimation
-            .max_priority_fee_per_gas
-            .max(current_tx.max_priority_fee_per_gas * (100 + GAS_BUMP_PERCENTAGE as u128) / 100);
+        let (new_max_priority_fee_per_gas, new_max_fee_per_gas) =
+            if fee_estimation.max_priority_fee_per_gas > current_tx.max_priority_fee_per_gas {
+                // use the estimated fee which is higher than the current fee
+                (
+                    fee_estimation.max_priority_fee_per_gas,
+                    fee_estimation.max_fee_per_gas,
+                )
+            } else {
+                // bump the gas by a percentage
+                (
+                    current_tx.max_priority_fee_per_gas * (100 + GAS_BUMP_PERCENTAGE as u128) / 100,
+                    current_tx.max_fee_per_gas * (100 + GAS_BUMP_PERCENTAGE as u128) / 100,
+                )
+            };
 
         let new_tx_request = TransactionRequest::default()
-            .max_priority_fee_per_gas(new_max_fee_per_gas)
-            .max_fee_per_gas(new_max_priority_fee_per_gas)
+            .max_priority_fee_per_gas(new_max_priority_fee_per_gas)
+            .max_fee_per_gas(new_max_fee_per_gas)
             .nonce(current_tx.nonce)
             .to(current_tx.to().unwrap())
             .nonce(current_tx.nonce)

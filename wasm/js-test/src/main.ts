@@ -32,6 +32,7 @@ async function main() {
   // get the account's balance
   let userData = await get_user_data(config, privateKey);
   let balances = userData.balances;
+  console.log("Balances:");
   for (let i = 0; i < balances.length; i++) {
     const balance = balances[i];
     console.log(`Token ${balance.token_index}: ${balance.amount}`);
