@@ -27,7 +27,17 @@ pub type ProviderWithSigner = FillProvider<
     alloy::providers::RootProvider,
 >;
 
-pub fn get_provider(rpc_urls: &[String]) -> Result<NormalProvider, BlockchainError> {
+pub fn get_provider(rpc_urls: &str) -> Result<NormalProvider, BlockchainError> {
+    let retry_layer = RetryBackoffLayer::new(5, 1000, 100);
+    let url: Url = rpc_urls.parse().map_err(|e| {
+        BlockchainError::ParseError(format!("Failed to parse URL {}: {}", rpc_urls, e))
+    })?;
+    let client = RpcClient::builder().layer(retry_layer).http(url);
+    let provider = ProviderBuilder::new().connect_client(client);
+    Ok(provider)
+}
+
+pub fn get_provider_with_fallback(rpc_urls: &[String]) -> Result<NormalProvider, BlockchainError> {
     let retry_layer = RetryBackoffLayer::new(5, 1000, 100);
     let transports = rpc_urls
         .iter()

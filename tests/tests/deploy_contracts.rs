@@ -2,8 +2,8 @@ use alloy::primitives::{Address, B256, U256};
 use intmax2_client_sdk::external_api::contract::{
     block_builder_registry::BlockBuilderRegistryContract, erc1155_contract::ERC1155Contract,
     erc20_contract::ERC20Contract, erc721_contract::ERC721Contract,
-    liquidity_contract::LiquidityContract, rollup_contract::RollupContract, utils::get_provider,
-    withdrawal_contract::WithdrawalContract,
+    liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+    utils::get_provider_with_fallback, withdrawal_contract::WithdrawalContract,
 };
 use serde::Deserialize;
 
@@ -20,7 +20,7 @@ async fn deploy_contracts() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let config = envy::from_env::<EnvVar>().unwrap();
 
-    let provider = get_provider(&[config.rpc_url.clone()]).unwrap();
+    let provider = get_provider_with_fallback(&[config.rpc_url.clone()]).unwrap();
 
     let rollup_contract =
         RollupContract::deploy(provider.clone(), config.deployer_private_key).await?;

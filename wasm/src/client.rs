@@ -175,8 +175,8 @@ pub fn get_client(config: &Config) -> Client {
         block_builder_query_limit: config.block_builder_query_limit,
     };
 
-    let l1_provider = get_provider(&[config.l1_rpc_url.clone()]).unwrap();
-    let l2_provider = get_provider(&[config.l2_rpc_url.clone()]).unwrap();
+    let l1_provider = get_provider(&config.l1_rpc_url).unwrap();
+    let l2_provider = get_provider(&config.l2_rpc_url).unwrap();
 
     let liquidity_contract = LiquidityContract::new(
         l1_provider,

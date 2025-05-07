@@ -7,7 +7,7 @@ use intmax2_client_sdk::{
         block_builder::BlockBuilderClient,
         contract::{
             convert::convert_address_to_alloy, liquidity_contract::LiquidityContract,
-            rollup_contract::RollupContract, utils::get_provider,
+            rollup_contract::RollupContract, utils::get_provider_with_fallback,
             withdrawal_contract::WithdrawalContract,
         },
         local_backup_store_vault::{
@@ -82,8 +82,8 @@ pub fn get_client() -> Result<Client, CliError> {
         };
     let withdrawal_server = Box::new(WithdrawalServerClient::new(&env.withdrawal_server_base_url));
 
-    let l1_provider = get_provider(&[env.l1_rpc_url.clone()])?;
-    let l2_provider = get_provider(&[env.l2_rpc_url.clone()])?;
+    let l1_provider = get_provider_with_fallback(&[env.l1_rpc_url.clone()])?;
+    let l2_provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
 
     let liquidity_contract = LiquidityContract::new(
         l1_provider,

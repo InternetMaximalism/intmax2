@@ -3,7 +3,7 @@ use intmax2_client_sdk::external_api::{
     contract::{
         convert::convert_address_to_intmax,
         rollup_contract::RollupContract,
-        utils::{get_address_from_private_key, get_provider},
+        utils::{get_address_from_private_key, get_provider_with_fallback},
     },
     utils::time::sleep_for,
 };
@@ -40,7 +40,7 @@ async fn post_blocks() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let env = envy::from_env::<EnvVar>()?;
 
-    let provider = get_provider(&[env.l2_rpc_url.clone()])?;
+    let provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
     let rollup_contract = RollupContract::new(provider, env.rollup_contract_address);
     let block_builder_address =
         convert_address_to_intmax(get_address_from_private_key(env.deployer_private_key));

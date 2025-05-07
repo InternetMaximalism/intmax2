@@ -1,4 +1,4 @@
-use intmax2_client_sdk::external_api::contract::utils::get_provider;
+use intmax2_client_sdk::external_api::contract::utils::get_provider_with_fallback;
 
 use crate::{
     app::{block_builder::BlockBuilder, error::BlockBuilderError},
@@ -12,7 +12,7 @@ pub struct State {
 
 impl State {
     pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
-        let provider = get_provider(&[env.l2_rpc_url.clone()])?;
+        let provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
         let block_builder = BlockBuilder::new(env, provider).await?;
         Ok(State { block_builder })
     }
