@@ -14,7 +14,7 @@ use intmax2_interfaces::{
     },
 };
 
-use super::{error::WithdrawalServerError, fee::parse_fee_str};
+use super::{error::WithdrawalServerError, fee::parse_optional_fee_str};
 use ethers::types::H256;
 use intmax2_client_sdk::{
     client::{
@@ -68,6 +68,46 @@ struct Config {
     claim_fee: Option<Vec<Fee>>,
 }
 
+impl Config {
+    pub fn from_env(env: &Env) -> Result<Self, WithdrawalServerError> {
+        let withdrawal_beneficiary_key = env
+            .withdrawal_beneficiary_private_key
+            .as_ref()
+            .map(|&key| privkey_to_keyset(key));
+
+        let direct_withdrawal_fee = parse_optional_fee_str(&env.direct_withdrawal_fee)?;
+        let claimable_withdrawal_fee: Option<Vec<Fee>> =
+            parse_optional_fee_str(&env.claimable_withdrawal_fee)?;
+        if (direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some())
+            && withdrawal_beneficiary_key.is_none()
+        {
+            return Err(WithdrawalServerError::ConfigError(
+                "Withdrawal fee beneficiary is needed".to_string(),
+            ));
+        }
+
+        let claim_beneficiary_key: Option<KeySet> = env
+            .claim_beneficiary_private_key
+            .as_ref()
+            .map(|&s| privkey_to_keyset(s));
+        let claim_fee: Option<Vec<Fee>> = parse_optional_fee_str(&env.claim_fee)?;
+        if claim_fee.is_some() && claim_beneficiary_key.is_none() {
+            return Err(WithdrawalServerError::ConfigError(
+                "Claim fee beneficiary is needed".to_string(),
+            ));
+        }
+
+        Ok(Self {
+            is_faster_mining: env.is_faster_mining,
+            withdrawal_beneficiary_key,
+            claim_beneficiary_key,
+            direct_withdrawal_fee,
+            claimable_withdrawal_fee,
+            claim_fee,
+        })
+    }
+}
+
 pub struct WithdrawalServer {
     config: Config,
     pub pool: DbPool,
@@ -94,45 +134,9 @@ impl WithdrawalServer {
             url: env.database_url.to_string(),
         })
         .await?;
-        let withdrawal_beneficiary_key: Option<KeySet> = env
-            .withdrawal_beneficiary_private_key
-            .as_ref()
-            .map(|&s| privkey_to_keyset(s));
-        let direct_withdrawal_fee: Option<Vec<Fee>> = env
-            .direct_withdrawal_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        let claimable_withdrawal_fee: Option<Vec<Fee>> = env
-            .claimable_withdrawal_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        if (direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some())
-            && withdrawal_beneficiary_key.is_none()
-        {
-            return Err(anyhow::anyhow!("withdrawal fee beneficiary is needed"));
-        }
-        let claim_beneficiary_key: Option<KeySet> = env
-            .claim_beneficiary_private_key
-            .as_ref()
-            .map(|&s| privkey_to_keyset(s));
-        let claim_fee: Option<Vec<Fee>> = env
-            .claim_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        if claim_fee.is_some() && claim_beneficiary_key.is_none() {
-            return Err(anyhow::anyhow!("claim fee beneficiary is needed"));
-        }
-        let config = Config {
-            is_faster_mining: env.is_faster_mining,
-            withdrawal_beneficiary_key,
-            claim_beneficiary_key,
-            direct_withdrawal_fee,
-            claimable_withdrawal_fee,
-            claim_fee,
-        };
+
+        let config = Config::from_env(env)?;
+
         let store_vault_server: Box<dyn StoreVaultClientInterface> = if env.use_s3.unwrap_or(true) {
             log::info!("Using s3_store_vault");
             Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
@@ -197,18 +201,12 @@ impl WithdrawalServer {
                 .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
 
         // validate block hash existence
-        let onchain_block_hash = self
-            .rollup_contract
-            .get_block_hash(withdrawal.block_number)
-            .await?;
-        if onchain_block_hash != withdrawal.block_hash {
-            return Err(WithdrawalServerError::InvalidBlockHash(format!(
-                "Invalid block hash: expected {}, got {} at block number {}",
-                withdrawal.block_hash.to_hex(),
-                onchain_block_hash.to_hex(),
-                withdrawal.block_number
-            )));
-        }
+        Self::validate_block_hash_existence(
+            &self.rollup_contract,
+            withdrawal.block_number,
+            withdrawal.block_hash,
+        )
+        .await?;
 
         // validate fee
         let direct_withdrawal_tokens = self
@@ -310,18 +308,12 @@ impl WithdrawalServer {
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
 
         // validate block hash existence
-        let onchain_block_hash = self
-            .rollup_contract
-            .get_block_hash(claim.block_number)
-            .await?;
-        if onchain_block_hash != claim.block_hash {
-            return Err(WithdrawalServerError::InvalidBlockHash(format!(
-                "Invalid block hash: expected {}, got {} at block number {}",
-                claim.block_hash.to_hex(),
-                onchain_block_hash.to_hex(),
-                claim.block_number
-            )));
-        }
+        Self::validate_block_hash_existence(
+            &self.rollup_contract,
+            claim.block_number,
+            claim.block_hash,
+        )
+        .await?;
 
         let nullifier = claim.nullifier;
         let nullifier_str = nullifier.to_hex();
@@ -623,6 +615,24 @@ impl WithdrawalServer {
                 Err(e.into())
             }
         }
+    }
+
+    // Helper methods
+    async fn validate_block_hash_existence(
+        contract: &RollupContract,
+        block_number: u32,
+        expected_hash: Bytes32,
+    ) -> Result<(), WithdrawalServerError> {
+        let onchain_hash = contract.get_block_hash(block_number).await?;
+        if onchain_hash != expected_hash {
+            return Err(WithdrawalServerError::InvalidBlockHash(format!(
+                "Invalid block hash: expected {}, got {} at block number {}",
+                expected_hash.to_hex(),
+                onchain_hash.to_hex(),
+                block_number
+            )));
+        }
+        Ok(())
     }
 }
 

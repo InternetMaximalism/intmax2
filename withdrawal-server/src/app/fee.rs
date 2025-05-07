@@ -25,6 +25,15 @@ pub fn parse_fee_str(fee: &str) -> Result<Vec<Fee>, WithdrawalServerError> {
     Ok(fees)
 }
 
+pub fn parse_optional_fee_str(
+    fee: &Option<String>,
+) -> Result<Option<Vec<Fee>>, WithdrawalServerError> {
+    match fee {
+        Some(f) => Ok(Some(parse_fee_str(f)?)),
+        None => Ok(None),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
