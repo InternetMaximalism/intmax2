@@ -163,6 +163,8 @@ impl BlockBuilder {
         let block_builder_address =
             convert_address_to_intmax(get_address_from_private_key(env.block_builder_private_key));
         // log configuration
+        log::info!("block_builder_address: {}", block_builder_address);
+        log::info!("block_builder_url: {}", env.block_builder_url);
         log::info!(
             "gas limit for block post: {:?}",
             env.gas_limit_for_block_post.clone()
