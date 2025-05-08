@@ -21,6 +21,15 @@ pub async fn send_transaction_with_gas_bump(
     let tx_hash = *tx_envelope.hash();
     // make tx eip1559 object to get parameters
     let tx_eip1559 = tx_envelope.as_eip1559().unwrap().tx().clone();
+    log::info!(
+        "Sending transaction: {} with nonce {}, gas limit {}, value {}, max fee per gas {:?}, max priority fee per gas {:?}",
+        tx_name,
+        tx_eip1559.nonce,
+        tx_eip1559.gas_limit,
+        tx_eip1559.value,
+        tx_eip1559.max_fee_per_gas,
+        tx_eip1559.max_priority_fee_per_gas
+    );
     match signer
         .send_tx_envelope(tx_envelope)
         .await?
@@ -53,6 +62,7 @@ async fn resend_tx_with_gas_bump(
     tx_eip1559: &TxEip1559,
     tx_name: &str,
 ) -> Result<TxHash, BlockchainError> {
+    log::info!("Resending transaction: {}", tx_name);
     let mut pending_tx_hashes = vec![initial_tx_hash];
 
     let mut current_tx = tx_eip1559.clone();

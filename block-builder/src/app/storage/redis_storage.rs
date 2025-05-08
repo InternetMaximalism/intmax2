@@ -119,7 +119,7 @@ impl RedisStorage {
             .await?;
 
         if result.is_some() {
-            log::info!("Lock acquired: {}", lock_name);
+            log::debug!("Lock acquired: {}", lock_name);
             Ok(true)
         } else {
             log::info!("Lock already held: {}", lock_name,);
@@ -154,7 +154,7 @@ impl RedisStorage {
             .arg(instance_id)
             .invoke_async(&mut conn)
             .await?;
-        log::info!("Lock released: {}", lock_name);
+        log::debug!("Lock released: {}", lock_name);
         Ok(())
     }
 

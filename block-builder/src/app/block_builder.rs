@@ -98,8 +98,10 @@ impl BlockBuilder {
             };
         let validity_prover_client = ValidityProverClient::new(&env.validity_prover_base_url);
         let rollup_contract = RollupContract::new(provider.clone(), env.rollup_contract_address);
-        let registry_contract =
-            BlockBuilderRegistryContract::new(provider, env.rollup_contract_address);
+        let registry_contract = BlockBuilderRegistryContract::new(
+            provider,
+            env.block_builder_registry_contract_address,
+        );
         let config = Self::create_config(env)?;
         let storage = Self::create_storage(env, &config).await?;
 

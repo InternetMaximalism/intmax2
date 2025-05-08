@@ -24,9 +24,6 @@ impl BlockBuilder {
             // wait for the initial heart beat
             tokio::time::sleep(Duration::from_secs(self.config.initial_heart_beat_delay)).await;
 
-            // emit initial heart beat
-            self.emit_heart_beat().await?;
-
             // emit heart beat periodically
             let mut interval =
                 tokio::time::interval(Duration::from_secs(self.config.heart_beat_interval));
