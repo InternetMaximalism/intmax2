@@ -27,7 +27,7 @@ pub struct HistoryEntry<T> {
     pub meta: MetaData,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum EntryStatus {
     Settled(u32),   // Settled at block number but not processed yet

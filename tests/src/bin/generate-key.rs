@@ -51,10 +51,7 @@ async fn test_derive_intmax_account(address_type: &str) -> Result<(), Box<dyn st
                 let key = derive_deposit_keys(&master_mnemonic, 1, address_index)?;
                 let private_key: num_bigint::BigUint = key[0].intmax_key.privkey.into();
                 println!("address index: {}", address_index);
-                println!(
-                    "Ethereum private key: {}",
-                    key[0].eth_private_key.encode_hex()
-                );
+                println!("Ethereum private key: {}", key[0].eth_private_key.to_hex());
                 println!("INTMAX private key: {:#064x}", private_key);
                 println!("INTMAX address: {}", key[0].intmax_key.pubkey);
                 println!(
@@ -89,7 +86,7 @@ mod test {
         client::key_from_eth::generate_intmax_account_from_eth_key,
         external_api::contract::utils::get_address,
     };
-    use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
+    use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait};
     use tests::EnvVar;
 
     #[ignore]
@@ -123,7 +120,7 @@ mod test {
             .filter_level(log::LevelFilter::Info)
             .init();
 
-        let private_key = H256::from_slice(&hex::decode(config.private_key)?); // INTMAX private key
+        let private_key = Bytes32::from_hex(&config.private_key)?; // INTMAX private key
         let key = privkey_to_keyset(private_key);
         println!("INTMAX address: {}", key.pubkey);
         println!("INTMAX address (hex): {}", key.pubkey.to_hex());

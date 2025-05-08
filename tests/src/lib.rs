@@ -9,12 +9,24 @@ use intmax2_cli::cli::{
     withdrawal::send_withdrawal,
 };
 use intmax2_client_sdk::{
-    client::{error::ClientError, strategy::error::StrategyError, sync::error::SyncError},
+    client::{
+        error::ClientError,
+        history::{EntryStatus, HistoryEntry},
+        strategy::error::StrategyError,
+        sync::error::SyncError,
+    },
     external_api::utils::retry::{retry_if, RetryConfig},
 };
 use intmax2_interfaces::{
-    api::{error::ServerError, withdrawal_server::interface::WithdrawalStatus},
-    data::deposit_data::TokenType,
+    api::{
+        error::ServerError,
+        store_vault_server::types::{CursorOrder, MetaDataCursor},
+        withdrawal_server::interface::WithdrawalStatus,
+    },
+    data::{
+        deposit_data::{DepositData, TokenType},
+        meta_data::MetaData,
+    },
 };
 use intmax2_zkp::{
     common::{
@@ -329,6 +341,54 @@ pub async fn wait_for_withdrawal_finalization(key: KeySet) -> Result<(), CliErro
     println!("Go to next step");
 
     Ok(())
+}
+
+pub async fn wait_for_deposit_confirmation(key: KeySet) -> Result<(), Box<dyn std::error::Error>> {
+    let client = get_client().unwrap();
+    let cursor = MetaDataCursor {
+        cursor: None,
+        order: CursorOrder::Desc,
+        limit: Some(1),
+    };
+
+    loop {
+        let (deposit_history, _) = client.fetch_deposit_history(key, &cursor).await?;
+        let latest_deposit = deposit_history.first().unwrap().clone();
+        if let EntryStatus::Settled(_) = latest_deposit.status {
+            return Ok(());
+        }
+
+        log::warn!("New deposit is not found yet. Retrying in 60 seconds");
+        tokio::time::sleep(Duration::from_secs(60)).await;
+    }
+}
+
+pub async fn wait_for_deposit_confirmation_with_hash(
+    key: KeySet,
+    latest_deposit: &HistoryEntry<DepositData>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = get_client().unwrap();
+    let cursor = MetaDataCursor {
+        cursor: Some(MetaData {
+            timestamp: latest_deposit.meta.timestamp,
+            digest: Bytes32::default(),
+        }),
+        order: CursorOrder::Desc,
+        limit: None,
+    };
+
+    loop {
+        let (deposit_history, _) = client.fetch_deposit_history(key, &cursor).await?;
+        let new_latest_deposit = deposit_history.first().unwrap().clone();
+        if latest_deposit.data.deposit_hash() != new_latest_deposit.data.deposit_hash() {
+            if let EntryStatus::Settled(_) = new_latest_deposit.status {
+                return Ok(());
+            }
+        }
+
+        log::warn!("New deposit is not found yet. Retrying in 60 seconds");
+        tokio::time::sleep(Duration::from_secs(60)).await;
+    }
 }
 
 pub fn mul_u256(amount: U256, max_transfers_per_transaction: usize, num_accounts: usize) -> U256 {

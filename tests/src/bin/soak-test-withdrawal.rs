@@ -3,10 +3,6 @@ use std::{
     time::Duration,
 };
 
-use ethers::{
-    types::H256,
-    utils::hex::{self},
-};
 use futures::future::join_all;
 use intmax2_cli::{
     cli::{error::CliError, send::send_transfers},
@@ -19,7 +15,7 @@ use intmax2_zkp::{
     common::{
         generic_address::GenericAddress, signature_content::key_set::KeySet, transfer::Transfer,
     },
-    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use serde::Deserialize;
 use tests::{
@@ -66,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     log::info!("Start withdrawal soak test");
-    let private_key = H256::from_slice(&hex::decode(config.withdrawal_admin_private_key)?);
+    let private_key = Bytes32::from_hex(&config.withdrawal_admin_private_key).unwrap();
     let admin_intmax_key = privkey_to_keyset(private_key);
 
     let config_server_base_url = config.config_server_base_url.to_string();

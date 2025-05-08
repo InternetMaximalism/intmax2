@@ -1,12 +1,11 @@
 use std::time::Duration;
 
-use ethers::{types::H256, utils::hex};
 use futures::future::join_all;
 use intmax2_cli::{cli::send::send_transfers, format::privkey_to_keyset};
 use intmax2_client_sdk::client::sync::utils::generate_salt;
 use intmax2_zkp::{
     common::{generic_address::GenericAddress, transfer::Transfer},
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+    ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use tests::{
     accounts::{derive_intmax_keys, mnemonic_to_account},
@@ -24,7 +23,7 @@ async fn test_bulk_transfers() -> Result<(), Box<dyn std::error::Error>> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    let private_key = H256::from_slice(&hex::decode(config.private_key)?);
+    let private_key = Bytes32::from_hex(&config.private_key)?; // INTMAX private key
     let intmax_sender = privkey_to_keyset(private_key);
     println!("Sender: {}", private_key);
     println!("pubkey: {}", intmax_sender.pubkey.to_hex());
@@ -66,7 +65,7 @@ async fn test_sync_balance() -> Result<(), Box<dyn std::error::Error>> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    let private_key = H256::from_slice(&hex::decode(config.private_key)?);
+    let private_key = Bytes32::from_hex(&config.private_key)?; // INTMAX private key
     let intmax_sender = privkey_to_keyset(private_key);
     println!("Sender: {}", private_key);
     println!("pubkey: {}", intmax_sender.pubkey.to_hex());

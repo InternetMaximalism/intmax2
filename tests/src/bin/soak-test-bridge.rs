@@ -1,20 +1,16 @@
-use std::{
-    env::VarError,
-    ops::{Add, Sub},
-    str::FromStr,
-    time::Duration,
-};
+use std::{env::VarError, ops::Sub, str::FromStr, time::Duration};
 
 use ethers::types::H256;
 use fail::FailScenario;
 use intmax2_cli::cli::{client::get_client, error::CliError};
 use intmax2_client_sdk::{
-    client::strategy::mining::MiningStatus,
+    client::history::EntryStatus,
     external_api::{
         contract::utils::get_eth_balance,
         utils::retry::{retry_if, RetryConfig},
     },
 };
+use intmax2_interfaces::api::store_vault_server::types::{CursorOrder, MetaDataCursor};
 use intmax2_zkp::{
     common::{deposit::Deposit, signature_content::key_set::KeySet},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
@@ -28,8 +24,10 @@ use tests::{
     ethereum::transfer_eth_on_ethereum,
     get_eth_balance_on_intmax,
     task::{process_queue, AsyncTask},
-    wait_for_withdrawal_finalization, withdraw_directly_with_error_handling,
+    wait_for_deposit_confirmation, wait_for_withdrawal_finalization,
+    withdraw_directly_with_error_handling,
 };
+use tokio::time::sleep;
 
 const ETH_TOKEN_INDEX: u32 = 0;
 const RANDOM_ACTION_ACCOUNT_INDEX: u32 = 4;
@@ -111,7 +109,7 @@ impl TestSystem {
         }
     }
 
-    async fn execute_random_action(
+    async fn execute_bridge_action(
         &self,
         keys: &[Account],
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -119,31 +117,33 @@ impl TestSystem {
         // let sender_key = if switch_recipient { keys[1] } else { keys[0] };
         // let recipient_key = if switch_recipient { keys[0] } else { keys[1] };
         let sender_key = keys[0];
-        let recipient_key = keys[0];
+        let recipient_key = keys[1];
         let intermediate_key = keys[2];
-        log::info!(
-            "intermediate Intmax key: {}",
-            intermediate_key.intmax_key.privkey.to_hex()
-        );
         let sender_eth_balance = get_eth_balance(&self.l1_rpc_url, sender_key.eth_address).await?;
         let recipient_eth_balance =
             get_eth_balance(&self.l1_rpc_url, recipient_key.eth_address).await?;
         log::info!(
-            "sender eth address: {}, balance: {}",
-            sender_key.eth_address,
-            sender_eth_balance.to_string()
+            "ETH balance of sender {}: {}",
+            sender_key.eth_private_key,
+            sender_eth_balance
         );
         log::info!(
-            "recipient eth address: {}, balance = {}",
+            "ETH balance of recipient {} ({:?}): {} ",
+            recipient_key.eth_private_key,
             recipient_key.eth_address,
-            recipient_eth_balance.to_string()
+            recipient_eth_balance
+        );
+        log::info!(
+            "intermediate_key: {}, pubkey: {}",
+            intermediate_key.intmax_key.privkey.to_hex(),
+            intermediate_key.intmax_key.pubkey.to_hex(),
         );
 
         // Enable a random failpoint if applicable
         let scenario = Self::enable_random_failpoint();
 
         let result = self
-            .execute_mining(sender_key, intermediate_key.intmax_key, recipient_key)
+            .execute_bridge(sender_key, intermediate_key.intmax_key, recipient_key)
             .await;
 
         // Clean up the failpoint if one was enabled
@@ -165,63 +165,118 @@ impl TestSystem {
         result
     }
 
-    async fn execute_mining(
+    async fn execute_bridge(
         &self,
         sender_key: Account,
         intermediate_key: KeySet,
         recipient_key: Account,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let client = get_client()?;
-        let mining_list = client
-            .get_mining_list(intermediate_key)
-            .await
-            .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
-            .unwrap();
-
-        let incomplete_mining_list = mining_list
-            .into_iter()
-            .filter(|mining| !matches!(mining.status, MiningStatus::Claimable(_)))
-            .collect::<Vec<_>>();
-        let deposit_hash = if incomplete_mining_list.is_empty() {
-            log::info!(
-                "Deposit: {:?} -> {}",
-                sender_key.eth_address,
-                intermediate_key.pubkey.to_hex()
-            );
-            self.execute_deposit(sender_key, intermediate_key).await?
-        } else {
-            println!("the number of mining: {:?}", incomplete_mining_list.len());
-            let target_mining = incomplete_mining_list.first().unwrap();
-            log::info!(
-                "the number of mining: {:?} ({})",
-                target_mining.deposit_data.deposit_hash(),
-                target_mining.status
-            );
-            log::info!(
-                "Deposit: {:?} -> {}",
-                sender_key.eth_address,
-                intermediate_key.pubkey.to_hex()
-            );
-            target_mining.deposit_data.deposit_hash().unwrap()
-        };
-        self.wait_for_mining_claimable(intermediate_key, deposit_hash)
+        self.execute_deposit_wrapper(sender_key, intermediate_key)
             .await?;
-        log::info!(
-            "Withdrawal: {}, {} -> {:?}",
-            intermediate_key.privkey.to_hex(),
-            intermediate_key.pubkey.to_hex(),
-            recipient_key.eth_address
-        );
-        self.execute_withdrawal(intermediate_key, recipient_key, true)
+
+        self.execute_withdrawal(intermediate_key, recipient_key, false)
             .await?;
 
         Ok(())
+    }
+
+    async fn execute_deposit_wrapper(
+        &self,
+        sender_key: Account,
+        intermediate_key: KeySet,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let eth_balance = get_eth_balance_on_intmax(intermediate_key).await?;
+        let amount = U256::from_hex("0x038d7ea4c68000").unwrap(); // 0.001 ETH
+        log::info!(
+            "ETH balance of intermediate {} ({}): {}",
+            intermediate_key.privkey.to_hex(),
+            intermediate_key.pubkey.to_hex(),
+            eth_balance
+        );
+
+        if eth_balance.le(&amount) {
+            let deposit_needed = self.get_deposit_needed(intermediate_key, amount).await?;
+            if deposit_needed {
+                log::info!(
+                    "Deposit: {:?} -> {}",
+                    sender_key.eth_address,
+                    intermediate_key.pubkey.to_hex()
+                );
+                self.execute_deposit(sender_key, intermediate_key, amount)
+                    .await?;
+
+                println!("Sleeping for 10 minutes...");
+                sleep(Duration::from_secs(600)).await;
+            }
+        }
+
+        println!("Waiting for balance synchronization...");
+        wait_for_deposit_confirmation(intermediate_key).await?;
+        // wait_for_balance_synchronization(intermediate_key, Duration::from_secs(60)).await?;
+
+        println!(
+            "pubkey {} has sufficient balance {}",
+            intermediate_key.pubkey.to_hex(),
+            amount.to_string()
+        );
+
+        Ok(())
+    }
+
+    async fn get_deposit_needed(
+        &self,
+        intermediate_key: KeySet,
+        amount: U256,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let client = get_client().unwrap();
+        let (deposit_history, _) = client
+            .fetch_deposit_history(
+                intermediate_key,
+                &MetaDataCursor {
+                    cursor: None,
+                    order: CursorOrder::Desc,
+                    limit: Some(1),
+                },
+            )
+            .await?;
+
+        match deposit_history.first() {
+            Some(deposit) => {
+                log::info!("Deposit history: {:?}", deposit);
+                if deposit.status != EntryStatus::Pending {
+                    log::warn!("(need deposit) No pending deposit was found");
+                    return Ok(true);
+                }
+
+                let deposit_amount = deposit.data.amount;
+                // deposit_amount < amount
+                if !amount.le(&deposit_amount) {
+                    log::warn!(
+                        "(need deposit) Insufficient balance for withdrawal. Deposit amount: {}",
+                        deposit_amount
+                    );
+                    return Ok(true);
+                }
+
+                // This address has enough balance
+                log::info!(
+                    "(not need deposit) Sufficient balance for withdrawal. Deposit amount: {}",
+                    deposit_amount
+                );
+                return Ok(false);
+            }
+            None => {
+                log::warn!("(need deposit) No deposit history found");
+                return Ok(true);
+            }
+        };
     }
 
     async fn execute_deposit(
         &self,
         sender_key: Account,
         recipient_key: KeySet,
+        deposit_amount: U256,
     ) -> Result<Bytes32, Box<dyn std::error::Error>> {
         let sender_initial_balance =
             get_eth_balance(&self.l1_rpc_url, sender_key.eth_address).await?;
@@ -236,16 +291,26 @@ impl TestSystem {
             recipient_key.pubkey.to_hex(),
             recipient_initial_balance
         );
-        println!("0x{:0>64}", "16345785d8a0000");
-        let deposit_amount = U256::from_hex(&format!("0x{:0>64}", "16345785d8a0000")).unwrap(); // 0.1 ETH
-        let transfer_amount = ethers::types::U256::from_str("16345785d8a0000").unwrap(); // 0.1 ETH
-        let fee = ethers::types::U256::from_str("0x38d7ea4c68000").unwrap(); // 0.001 ETH
-        let transfer_amount_with_fee = transfer_amount.add(fee);
+        println!("transfer amount: {}", deposit_amount.to_string());
+        let fee = U256::from_str("0x038d7ea4c68000").unwrap(); // 0.001 ETH
+        println!("fee: {}", fee.to_string());
+        let transfer_amount_with_fee_hex = (deposit_amount + fee).to_hex();
+        println!(
+            "transfer_amount_with_fee_hex: {}",
+            transfer_amount_with_fee_hex
+        );
+        let transfer_amount_with_fee =
+            ethers::types::U256::from_str(&transfer_amount_with_fee_hex)?;
+        println!(
+            "transfer_amount_with_fee: {}",
+            transfer_amount_with_fee.to_string()
+        );
 
         // Abort test if balance is insufficient
-        if sender_initial_balance.lt(&transfer_amount_with_fee) {
+        // sender_initial_balance < transfer_amount_with_fee
+        if !transfer_amount_with_fee.le(&sender_initial_balance) {
             log::warn!(
-                "Sender's balance is insufficient. Address: {:?}, Balance: {}",
+                "Sender's balance is insufficient, so refill ETH from admin's address. Address: {:?}, Balance: {}",
                 sender_key.eth_address,
                 sender_initial_balance
             );
@@ -262,7 +327,7 @@ impl TestSystem {
             recipient_key,
             deposit_amount,
             Some(Duration::from_secs(10)),
-            true,
+            false,
         )
         .await?;
         log::info!("Deposit completed {}", sender_key.eth_address);
@@ -281,19 +346,6 @@ impl TestSystem {
             recipient_key.pubkey.to_hex(),
             recipient_final_balance
         );
-        // let expected_recipient_balance =
-        //     recipient_initial_balance + U256::from_hex(&transfer_amount.encode_hex()).unwrap();
-
-        // if recipient_final_balance == expected_recipient_balance {
-        //     log::info!("transfer transaction was processed");
-        // } else {
-        //     log::warn!("Recipient's balance does not match expected value");
-        //     log::warn!(
-        //         "Expected: {}, Actual: {}",
-        //         expected_recipient_balance,
-        //         recipient_final_balance
-        //     );
-        // }
 
         let deposit = Deposit {
             depositor: Address::from_bytes_be(sender_key.eth_address.as_bytes()).unwrap(),
@@ -307,58 +359,6 @@ impl TestSystem {
         Ok(deposit_hash)
     }
 
-    async fn wait_for_mining_claimable(
-        &self,
-        key: KeySet,
-        target_deposit_hash: Bytes32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let client = get_client().unwrap();
-
-        let retry_config = RetryConfig {
-            max_retries: 100,
-            initial_delay: 30000,
-        };
-        let retry_condition = |_: &CliError| true;
-
-        loop {
-            let mining_list = retry_if(
-                retry_condition,
-                || async {
-                    client
-                        .get_mining_list(key)
-                        .await
-                        .map_err(|e| -> CliError { e.into() })
-                },
-                retry_config,
-            )
-            .await?;
-            log::info!("number of mining_list: {:?}", mining_list.len());
-
-            let target_mining = mining_list
-                .into_iter()
-                .find(|mining| mining.deposit_data.deposit_hash() == Some(target_deposit_hash));
-
-            if let Some(target_mining) = target_mining {
-                if matches!(target_mining.status, MiningStatus::Claimable(_)) {
-                    return Ok(());
-                }
-
-                if let Some(maturity) = target_mining.maturity {
-                    let datetime = chrono::DateTime::from_timestamp(maturity as i64, 0);
-                    log::info!("maturity: {:?}", datetime);
-                } else {
-                    log::info!("maturity: Undecided");
-                }
-                log::warn!("Mining is not claimable yet. Retrying in 3600 seconds");
-                tokio::time::sleep(Duration::from_secs(3600)).await;
-                continue;
-            }
-
-            log::warn!("Mining is not found yet. Retrying in 60 seconds");
-            tokio::time::sleep(Duration::from_secs(60)).await;
-        }
-    }
-
     async fn execute_withdrawal(
         &self,
         sender_key: KeySet,
@@ -367,14 +367,14 @@ impl TestSystem {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let sender_initial_balance = get_eth_balance_on_intmax(sender_key).await?;
         log::info!(
-            "initial balance of sender {}: {}",
+            "(withdrawal) initial balance of sender on Intmax {}: {}",
             sender_key.pubkey.to_hex(),
             sender_initial_balance
         );
         let recipient_initial_balance =
             get_eth_balance(&self.l1_rpc_url, recipient_account.eth_address).await?;
         log::info!(
-            "initial balance of recipient {}: {}",
+            "(withdrawal) initial balance of recipient on Ethereum {}: {}",
             recipient_account.eth_address,
             recipient_initial_balance
         );
@@ -395,8 +395,10 @@ impl TestSystem {
             .iter()
             .find(|fee| fee.token_index == ETH_TOKEN_INDEX)
             .unwrap();
+        log::info!("withdrawal_fee: {}", withdrawal_fee.amount.to_string());
         let mut transfer_amount = sender_initial_balance.sub(withdrawal_fee.amount);
         if with_claim_fee {
+            log::info!("claim_fee: {}", claim_fee.amount.to_string());
             transfer_amount = transfer_amount.sub(claim_fee.amount);
         }
 
@@ -406,7 +408,7 @@ impl TestSystem {
         //     .block_builder
         //     .get_fee_info(&block_builder_url)
         //     .await?;
-        let transfer_fee = U256::from_str("2500000000000").unwrap();
+        let transfer_fee = U256::from_str("67000000000000").unwrap(); // TODO: valid value
         log::info!("transfer_fee: {}", transfer_fee);
         transfer_amount = transfer_amount.sub(transfer_fee); // TODO: valid value
 
@@ -453,37 +455,8 @@ impl TestSystem {
             recipient_final_balance
         );
 
-        // let expected_recipient_balance = U256::from(recipient_initial_balance) + (transfer_amount);
-
-        // if recipient_final_balance.eq(&expected_recipient_balance) {
-        //     log::info!("Withdrawal transaction was processed");
-        // } else {
-        //     log::warn!("Recipient's balance does not match expected value");
-        //     log::warn!(
-        //         "Expected: {}, Actual: {}",
-        //         expected_recipient_balance,
-        //         recipient_final_balance
-        //     );
-        // }
-
         Ok::<(), Box<dyn std::error::Error>>(())
     }
-
-    // async fn refill_eth_on_intmax(
-    //     &self,
-    //     intmax_recipients: &[KeySet],
-    //     amount: U256,
-    // ) -> Result<(), Box<dyn std::error::Error>> {
-    //     let balance = get_eth_balance_on_intmax(self.admin_key.intmax_key).await?;
-    //     log::info!("Admin's balance: {}", balance);
-
-    //     let chunk_size = 63;
-    //     for recipients in intmax_recipients.chunks(chunk_size) {
-    //         transfer_from(self.admin_key.intmax_key, recipients, amount).await?;
-    //     }
-
-    //     Ok(())
-    // }
 
     async fn refill_eth_on_ethereum(
         &self,
@@ -526,7 +499,7 @@ impl AsyncTask for RandomActionTask {
 
         let test_system = TestSystem::new();
         let result = test_system
-            .execute_random_action(sender_keys.as_slice())
+            .execute_bridge_action(sender_keys.as_slice())
             .await;
         match result {
             Ok(_) => {
