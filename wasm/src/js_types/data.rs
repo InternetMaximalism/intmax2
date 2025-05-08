@@ -107,6 +107,7 @@ impl From<DepositResult> for JsDepositResult {
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTxResult {
     pub tx_tree_root: String,
+    pub tx_digest: String,
     pub transfer_digests: Vec<String>,
     pub withdrawal_digests: Vec<String>,
     pub transfer_data_vec: Vec<JsTransferData>,
@@ -118,6 +119,7 @@ impl From<TxResult> for JsTxResult {
     fn from(tx_result: TxResult) -> Self {
         Self {
             tx_tree_root: tx_result.tx_tree_root.to_hex(),
+            tx_digest: tx_result.tx_digest.to_hex(),
             transfer_digests: tx_result
                 .transfer_digests
                 .into_iter()

@@ -129,6 +129,7 @@ pub struct FeeQuote {
 #[serde(rename_all = "camelCase")]
 pub struct TxResult {
     pub tx_tree_root: Bytes32,
+    pub tx_digest: Bytes32,
     pub transfer_digests: Vec<Bytes32>,
     pub withdrawal_digests: Vec<Bytes32>,
     pub transfer_data_vec: Vec<TransferData>,
@@ -596,6 +597,14 @@ impl Client {
                 }
             })
             .collect();
+        let tx_digest = digests
+            .iter()
+            .zip(entries.iter())
+            .find(|(_digest, entry)| entry.topic == DataType::Tx.to_topic())
+            .ok_or(ClientError::UnexpectedError(
+                "tx_digest not found".to_string(),
+            ))?
+            .0;
 
         // Save payment memo after posting signature because it's not critical data,
         // and we should reduce the time before posting the signature.
@@ -639,6 +648,7 @@ impl Client {
 
         let result = TxResult {
             tx_tree_root: proposal.block_sign_payload.tx_tree_root,
+            tx_digest: *tx_digest,
             transfer_digests,
             withdrawal_digests,
             transfer_data_vec,
