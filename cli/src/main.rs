@@ -7,7 +7,10 @@ use intmax2_cli::{
         claim::{claim_builder_reward, claim_withdrawals},
         deposit::deposit,
         error::CliError,
-        get::{balance, check_validity_prover, claim_status, mining_list, withdrawal_status},
+        get::{
+            balance, check_validity_prover, claim_status, get_payment_memos, get_user_data,
+            mining_list, withdrawal_status,
+        },
         history::history,
         send::send_transfers,
         sync::{resync, sync_claims, sync_withdrawals},
@@ -178,6 +181,10 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let key = privkey_to_keyset(private_key);
             balance(key, !without_sync).await?;
         }
+        Commands::UserData { private_key } => {
+            let key = privkey_to_keyset(private_key);
+            get_user_data(key).await?;
+        }
         Commands::History {
             private_key,
             order,
@@ -198,6 +205,10 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         Commands::ClaimStatus { private_key } => {
             let key = privkey_to_keyset(private_key);
             claim_status(key).await?;
+        }
+        Commands::PaymentMemos { private_key, name } => {
+            let key = privkey_to_keyset(private_key);
+            get_payment_memos(key, &name).await?;
         }
         Commands::ClaimWithdrawals {
             private_key,

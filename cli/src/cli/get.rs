@@ -1,3 +1,5 @@
+use colored::Colorize;
+use intmax2_client_sdk::client::misc::payment_memo::get_all_payment_memos;
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::{signature_content::key_set::KeySet, trees::asset_tree::AssetLeaf},
@@ -105,5 +107,54 @@ pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
 pub async fn check_validity_prover() -> Result<(), CliError> {
     let client = get_client()?;
     client.check_validity_prover().await?;
+    Ok(())
+}
+
+pub async fn get_payment_memos(key: KeySet, name: &str) -> Result<(), CliError> {
+    let client = get_client()?;
+    let payment_memos =
+        get_all_payment_memos(client.store_vault_server.as_ref(), key, name).await?;
+    println!("Payment memos:");
+    for (i, memo) in payment_memos.iter().enumerate() {
+        println!(
+            "#{}: digest: {}, timestamp: {}, memo: {}",
+            i,
+            memo.meta.digest.to_hex(),
+            format_timestamp(memo.meta.timestamp),
+            memo.memo
+        );
+    }
+    Ok(())
+}
+
+pub async fn get_user_data(key: KeySet) -> Result<(), CliError> {
+    let client = get_client()?;
+    let user_data = client.get_user_data(key).await?;
+    println!(
+        "{}: {:?}\n",
+        "Nullifiers".bright_magenta(),
+        user_data.full_private_state.nullifier_tree.nullifiers()
+    );
+    println!(
+        "{}: {:?}\n",
+        "Deposit Status".bright_blue(),
+        user_data.deposit_status
+    );
+    println!(
+        "{}: {:?}\n",
+        "Transfer Status".bright_green(),
+        user_data.transfer_status
+    );
+    println!("{}: {:?}\n", "Tx Status".bright_cyan(), user_data.tx_status);
+    println!(
+        "{}: {:?}\n",
+        "Withdrawal Status".bright_yellow(),
+        user_data.withdrawal_status
+    );
+    println!(
+        "{}: {:?}\n",
+        "Claim Status".bright_red(),
+        user_data.claim_status
+    );
     Ok(())
 }

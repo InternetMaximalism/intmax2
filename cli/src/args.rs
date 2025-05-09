@@ -91,6 +91,10 @@ pub enum Commands {
         #[clap(long, default_value = "false")]
         without_sync: bool,
     },
+    UserData {
+        #[clap(long)]
+        private_key: Bytes32,
+    },
     History {
         #[clap(long)]
         private_key: Bytes32,
@@ -116,6 +120,12 @@ pub enum Commands {
         private_key: Bytes32,
         #[clap(long)]
         eth_private_key: Bytes32,
+    },
+    PaymentMemos {
+        #[clap(long)]
+        private_key: Bytes32,
+        #[clap(long)]
+        name: String,
     },
     ClaimBuilderReward {
         #[clap(long)]
