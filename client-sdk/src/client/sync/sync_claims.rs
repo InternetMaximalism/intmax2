@@ -36,6 +36,7 @@ impl Client {
         let minings = determine_claims(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
+            self.withdrawal_server.as_ref(),
             &self.rollup_contract,
             &self.liquidity_contract,
             self.config.is_faster_mining,

@@ -40,6 +40,7 @@ impl Client {
         let (withdrawals, pending) = determine_withdrawals(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
+            self.withdrawal_server.as_ref(),
             &self.rollup_contract,
             key,
             self.config.tx_timeout,
@@ -202,6 +203,10 @@ impl Client {
         key: KeySet,
         pending_withdrawal_digests: Vec<Bytes32>,
     ) -> Result<(), SyncError> {
+        if pending_withdrawal_digests.is_empty() {
+            // no pending withdrawals
+            return Ok(());
+        }
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         user_data.withdrawal_status.pending_digests = pending_withdrawal_digests;
         // save user data

@@ -2,6 +2,7 @@ use intmax2_interfaces::{
     api::{
         store_vault_server::interface::StoreVaultClientInterface,
         validity_prover::interface::ValidityProverClientInterface,
+        withdrawal_server::interface::WithdrawalServerClientInterface,
     },
     data::{
         deposit_data::DepositData, meta_data::MetaDataWithBlockNumber, transfer_data::TransferData,
@@ -11,7 +12,8 @@ use intmax2_interfaces::{
 use itertools::Itertools;
 
 use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
+    circuits::claim::utils::get_mining_deposit_nullifier,
+    common::{signature_content::key_set::KeySet, withdrawal::get_withdrawal_nullifier},
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
 };
 
@@ -296,6 +298,7 @@ async fn collect_receives(
 pub async fn determine_withdrawals(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
+    withdrawal_server: &dyn WithdrawalServerClientInterface,
     rollup_contract: &RollupContract,
     key: KeySet,
     tx_timeout: u64,
@@ -328,13 +331,32 @@ pub async fn determine_withdrawals(
         .iter()
         .map(|(meta, _)| meta.digest)
         .collect();
-    Ok((withdrawal_info.settled, pending_withdrawal_digests))
+
+    // fetch requested withdrawals
+    let requested_withdrawal_info = withdrawal_server.get_withdrawal_info(key).await?;
+    let requested_withdrawal_nullifiers = requested_withdrawal_info
+        .iter()
+        .map(|info| info.contract_withdrawal.nullifier)
+        .collect_vec();
+
+    // filter out requested withdrawals depending on the nullifier
+    let settled_withdrawals = withdrawal_info
+        .settled
+        .into_iter()
+        .filter(|(_, transfer_data)| {
+            let nullifier = get_withdrawal_nullifier(&transfer_data.transfer);
+            !requested_withdrawal_nullifiers.contains(&nullifier)
+        })
+        .collect_vec();
+
+    Ok((settled_withdrawals, pending_withdrawal_digests))
 }
 
 #[allow(clippy::too_many_arguments)]
 pub async fn determine_claims(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
+    withdrawal_server: &dyn WithdrawalServerClientInterface,
     rollup_contract: &RollupContract,
     liquidity_contract: &LiquidityContract,
     is_faster_mining: bool,
@@ -362,10 +384,29 @@ pub async fn determine_claims(
         deposit_timeout,
     )
     .await?;
-    // pickup the largest deposit
     let claims = minings
         .into_iter()
         .filter(|mining| matches!(mining.status, MiningStatus::Claimable(_)))
+        .collect::<Vec<_>>();
+
+    // fetch requested claims
+    let requested_claim_info = withdrawal_server.get_claim_info(key).await?;
+    let requested_claim_nullifiers = requested_claim_info
+        .iter()
+        .map(|info| info.claim.nullifier)
+        .collect_vec();
+
+    // filter out requested claims depending on the nullifier
+    let claims = claims
+        .into_iter()
+        .filter(|mining| {
+            let nullifier = get_mining_deposit_nullifier(
+                &mining.deposit_data.deposit().unwrap(),
+                mining.deposit_data.deposit_salt,
+            );
+            !requested_claim_nullifiers.contains(&nullifier)
+        })
         .collect();
+
     Ok(claims)
 }
