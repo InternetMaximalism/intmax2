@@ -50,7 +50,7 @@ impl From<ClaimStatus> for SqlClaimStatus {
     fn from(status: ClaimStatus) -> Self {
         match status {
             ClaimStatus::Requested => SqlClaimStatus::Requested,
-            ClaimStatus::Verified => SqlClaimStatus::Relayed,
+            ClaimStatus::Verified => SqlClaimStatus::Verified,
             ClaimStatus::Relayed => SqlClaimStatus::Relayed,
             ClaimStatus::Success => SqlClaimStatus::Success,
             ClaimStatus::Failed => SqlClaimStatus::Failed,

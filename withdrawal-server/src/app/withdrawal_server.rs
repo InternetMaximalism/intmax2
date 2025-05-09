@@ -15,7 +15,7 @@ use intmax2_interfaces::{
     },
 };
 
-use super::{error::WithdrawalServerError, fee::parse_fee_str};
+use super::{error::WithdrawalServerError, fee::parse_optional_fee_str};
 use intmax2_client_sdk::{
     client::{
         fee_payment::FeeType,
@@ -70,6 +70,46 @@ struct Config {
     claim_fee: Option<Vec<Fee>>,
 }
 
+impl Config {
+    pub fn from_env(env: &Env) -> Result<Self, WithdrawalServerError> {
+        let withdrawal_beneficiary_key = env
+            .withdrawal_beneficiary_private_key
+            .as_ref()
+            .map(|&key| privkey_to_keyset(key));
+
+        let direct_withdrawal_fee = parse_optional_fee_str(&env.direct_withdrawal_fee)?;
+        let claimable_withdrawal_fee: Option<Vec<Fee>> =
+            parse_optional_fee_str(&env.claimable_withdrawal_fee)?;
+        if (direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some())
+            && withdrawal_beneficiary_key.is_none()
+        {
+            return Err(WithdrawalServerError::ConfigError(
+                "Withdrawal fee beneficiary is needed".to_string(),
+            ));
+        }
+
+        let claim_beneficiary_key: Option<KeySet> = env
+            .claim_beneficiary_private_key
+            .as_ref()
+            .map(|&s| privkey_to_keyset(s));
+        let claim_fee: Option<Vec<Fee>> = parse_optional_fee_str(&env.claim_fee)?;
+        if claim_fee.is_some() && claim_beneficiary_key.is_none() {
+            return Err(WithdrawalServerError::ConfigError(
+                "Claim fee beneficiary is needed".to_string(),
+            ));
+        }
+
+        Ok(Self {
+            is_faster_mining: env.is_faster_mining,
+            withdrawal_beneficiary_key,
+            claim_beneficiary_key,
+            direct_withdrawal_fee,
+            claimable_withdrawal_fee,
+            claim_fee,
+        })
+    }
+}
+
 pub struct WithdrawalServer {
     config: Config,
     pub pool: DbPool,
@@ -80,6 +120,15 @@ pub struct WithdrawalServer {
 }
 
 impl WithdrawalServer {
+    /// Creates a new instance of WithdrawalServer
+    ///
+    /// Uses Postgres image and requires 'event' and 'withdrawal' databases in it.
+    ///
+    /// # Arguments
+    /// * `env` - Environment variable with the necessary settings
+    ///
+    /// # Returns
+    /// * `Result(Self)` - The instance itself or the error
     pub async fn new(env: &Env, provider: NormalProvider) -> anyhow::Result<Self> {
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
@@ -87,45 +136,9 @@ impl WithdrawalServer {
             url: env.database_url.to_string(),
         })
         .await?;
-        let withdrawal_beneficiary_key: Option<KeySet> = env
-            .withdrawal_beneficiary_private_key
-            .as_ref()
-            .map(|&s| privkey_to_keyset(s));
-        let direct_withdrawal_fee: Option<Vec<Fee>> = env
-            .direct_withdrawal_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        let claimable_withdrawal_fee: Option<Vec<Fee>> = env
-            .claimable_withdrawal_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        if (direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some())
-            && withdrawal_beneficiary_key.is_none()
-        {
-            return Err(anyhow::anyhow!("withdrawal fee beneficiary is needed"));
-        }
-        let claim_beneficiary_key: Option<KeySet> = env
-            .claim_beneficiary_private_key
-            .as_ref()
-            .map(|&s| privkey_to_keyset(s));
-        let claim_fee: Option<Vec<Fee>> = env
-            .claim_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        if claim_fee.is_some() && claim_beneficiary_key.is_none() {
-            return Err(anyhow::anyhow!("claim fee beneficiary is needed"));
-        }
-        let config = Config {
-            is_faster_mining: env.is_faster_mining,
-            withdrawal_beneficiary_key,
-            claim_beneficiary_key,
-            direct_withdrawal_fee,
-            claimable_withdrawal_fee,
-            claim_fee,
-        };
+
+        let config = Config::from_env(env)?;
+
         let store_vault_server: Box<dyn StoreVaultClientInterface> = if env.use_s3.unwrap_or(true) {
             log::info!("Using s3_store_vault");
             Box::new(S3StoreVaultClient::new(&env.store_vault_server_base_url))
@@ -183,18 +196,12 @@ impl WithdrawalServer {
                 .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
 
         // validate block hash existence
-        let onchain_block_hash = self
-            .rollup_contract
-            .get_block_hash(withdrawal.block_number)
-            .await?;
-        if onchain_block_hash != withdrawal.block_hash {
-            return Err(WithdrawalServerError::InvalidBlockHash(format!(
-                "Invalid block hash: expected {}, got {} at block number {}",
-                withdrawal.block_hash.to_hex(),
-                onchain_block_hash.to_hex(),
-                withdrawal.block_number
-            )));
-        }
+        Self::validate_block_hash_existence(
+            &self.rollup_contract,
+            withdrawal.block_number,
+            withdrawal.block_hash,
+        )
+        .await?;
 
         // validate fee
         let direct_withdrawal_tokens = self
@@ -229,18 +236,18 @@ impl WithdrawalServer {
         let withdrawal_hash_str = withdrawal_hash.to_hex();
 
         // If there is already a request with the same withdrawal_hash, return early
-        let existing_request = sqlx::query!(
+        let already_exists: (bool,) = sqlx::query_as::<_, (bool,)>(
             r#"
-            SELECT COUNT(*) as count
-            FROM withdrawals
-            WHERE withdrawal_hash = $1
+            SELECT EXISTS(
+                SELECT 1 FROM withdrawals
+                WHERE withdrawal_hash = $1
+            )
             "#,
-            withdrawal_hash_str
         )
+        .bind(&withdrawal_hash_str)
         .fetch_one(&self.pool)
         .await?;
-        let count = existing_request.count.unwrap_or(0);
-        if count > 0 {
+        if already_exists.0 {
             return Ok(FeeResult::Success);
         }
 
@@ -296,18 +303,12 @@ impl WithdrawalServer {
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
 
         // validate block hash existence
-        let onchain_block_hash = self
-            .rollup_contract
-            .get_block_hash(claim.block_number)
-            .await?;
-        if onchain_block_hash != claim.block_hash {
-            return Err(WithdrawalServerError::InvalidBlockHash(format!(
-                "Invalid block hash: expected {}, got {} at block number {}",
-                claim.block_hash.to_hex(),
-                onchain_block_hash.to_hex(),
-                claim.block_number
-            )));
-        }
+        Self::validate_block_hash_existence(
+            &self.rollup_contract,
+            claim.block_number,
+            claim.block_hash,
+        )
+        .await?;
 
         let nullifier = claim.nullifier;
         let nullifier_str = nullifier.to_hex();
@@ -325,19 +326,19 @@ impl WithdrawalServer {
             self.add_spent_transfers(&transfers).await?;
         }
 
-        // If there is already a request with the same withdrawal_hash, return early
-        let existing_request = sqlx::query!(
+        // If there is already a request with the same nullifier_str, return early
+        let already_exists: (bool,) = sqlx::query_as::<_, (bool,)>(
             r#"
-            SELECT COUNT(*) as count
-            FROM claims
-            WHERE nullifier = $1
+            SELECT EXISTS(
+                SELECT 1 FROM claims
+                WHERE nullifier = $1
+            )
             "#,
-            nullifier_str
         )
+        .bind(&nullifier_str)
         .fetch_one(&self.pool)
         .await?;
-        let count = existing_request.count.unwrap_or(0);
-        if count > 0 {
+        if already_exists.0 {
             return Ok(FeeResult::Success);
         }
 
@@ -610,9 +611,513 @@ impl WithdrawalServer {
             }
         }
     }
+
+    // Helper methods
+    async fn validate_block_hash_existence(
+        contract: &RollupContract,
+        block_number: u32,
+        expected_hash: Bytes32,
+    ) -> Result<(), WithdrawalServerError> {
+        let onchain_hash = contract.get_block_hash(block_number).await?;
+        if onchain_hash != expected_hash {
+            return Err(WithdrawalServerError::InvalidBlockHash(format!(
+                "Invalid block hash: expected {}, got {} at block number {}",
+                expected_hash.to_hex(),
+                onchain_hash.to_hex(),
+                block_number
+            )));
+        }
+        Ok(())
+    }
 }
 
 pub fn privkey_to_keyset(privkey: B256) -> KeySet {
     let privkey: Bytes32 = convert_b256_to_bytes32(privkey);
     KeySet::new(privkey.into())
+}
+
+#[cfg(test)]
+pub mod test_withdrawal_server_helper {
+    use std::{fs, io::Read, panic};
+    // For redis
+    use std::{
+        net::TcpListener,
+        process::{Command, Output, Stdio},
+    };
+
+    use server_common::db::DbPool;
+    use sqlx::query;
+
+    pub fn run_withdrawal_docker(port: u16, container_name: &str) -> Output {
+        let port_arg = format!("{}:5432", port);
+
+        let output = Command::new("docker")
+            .args([
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                container_name,
+                "--hostname",
+                "--postgres",
+                "-e",
+                "POSTGRES_USER=postgres",
+                "-e",
+                "POSTGRES_PASSWORD=password",
+                "-e",
+                "POSTGRES_DB=maindb",
+                "-p",
+                &port_arg,
+                "postgres:16.6",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during Redis container startup");
+
+        output
+    }
+
+    pub fn create_databases(container_name: &str) {
+        let commands = ["CREATE DATABASE event;", "CREATE DATABASE withdrawal;"];
+
+        for sql_cmd in commands {
+            let status = Command::new("docker")
+                .args([
+                    "exec",
+                    "-i", // No TTY needed; `-it` is for interactive terminal; `-i` is enough here
+                    container_name,
+                    "psql",
+                    "-U",
+                    "postgres",
+                    "-d",
+                    "maindb",
+                    "-c",
+                    sql_cmd,
+                ])
+                .status()
+                .expect("Failed to execute docker exec");
+
+            assert!(status.success(), "Couldn't run {}", sql_cmd);
+        }
+    }
+
+    pub async fn create_tables(pool: &DbPool, file_path: &str) {
+        // Open and read file
+        let mut file =
+            fs::File::open(file_path).unwrap_or_else(|e| panic!("Failed to open SQL file: {}", e));
+        let mut sql_content = String::new();
+        file.read_to_string(&mut sql_content)
+            .unwrap_or_else(|e| panic!("Failed to read SQL file: {}", e));
+
+        // Execute the SQL content
+        for statement in sql_content.split(';') {
+            let trimmed = statement.trim();
+            if !trimmed.is_empty() {
+                query(trimmed)
+                    .execute(pool)
+                    .await
+                    .unwrap_or_else(|e| panic!("Failed to execute SQL: {}", e));
+            }
+        }
+    }
+
+    pub fn stop_withdrawal_docker(container_name: &str) -> Output {
+        let output = Command::new("docker")
+            .args(["stop", container_name])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during Redis container stopping");
+
+        output
+    }
+
+    pub fn find_free_port() -> u16 {
+        TcpListener::bind("127.0.0.1:0")
+            .expect("Failed to bind to address")
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    pub fn assert_and_stop<F: FnOnce() + panic::UnwindSafe>(cont_name: &str, f: F) {
+        let res = panic::catch_unwind(f);
+
+        if let Err(panic_info) = res {
+            stop_withdrawal_docker(cont_name);
+            panic::resume_unwind(panic_info);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::{
+        primitives::Address,
+        providers::{mock::Asserter, ProviderBuilder},
+    };
+    use intmax2_zkp::ethereum_types::u256::U256;
+    use serde_json::json;
+    use std::{str::FromStr as _, thread::sleep, time::Duration};
+
+    use crate::{
+        app::{
+            fee::parse_fee_str,
+            withdrawal_server::test_withdrawal_server_helper::{
+                assert_and_stop, create_databases, create_tables, find_free_port,
+                run_withdrawal_docker, stop_withdrawal_docker,
+            },
+        },
+        Env,
+    };
+
+    use super::*;
+
+    fn get_provider() -> NormalProvider {
+        let provider_asserter = Asserter::new();
+        ProviderBuilder::default()
+            .with_gas_estimation()
+            .with_simple_nonce_management()
+            .fetch_chain_id()
+            .connect_mocked_client(provider_asserter)
+    }
+
+    fn get_example_env() -> Env {
+        Env {
+            port: 9003,
+            database_url: "postgres://postgres:password@localhost:5432/withdrawal".to_string(),
+            database_max_connections: 10,
+            database_timeout: 10,
+
+            store_vault_server_base_url: "http://localhost:9000".to_string(),
+            use_s3: Some(true),
+            validity_prover_base_url: "http://localhost:9002".to_string(),
+
+            l2_rpc_url: "http://127.0.0.1:8545".to_string(),
+            rollup_contract_address: Address::from_str(
+                "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+            )
+            .unwrap(),
+            withdrawal_contract_address: Address::from_str(
+                "0x8a791620dd6260079bf849dc5567adc3f2fdc318",
+            )
+            .unwrap(),
+
+            is_faster_mining: true,
+            withdrawal_beneficiary_private_key: Some(
+                B256::from_str(
+                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
+                )
+                .unwrap(),
+            ),
+            claim_beneficiary_private_key: Some(
+                B256::from_str(
+                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
+                )
+                .unwrap(),
+            ),
+            direct_withdrawal_fee: Some("0:100".to_string()),
+            claimable_withdrawal_fee: Some("0:10".to_string()),
+            claim_fee: Some("0:100".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_getting_fee() {
+        // We use a port different from the default one (5432)
+        let port = find_free_port();
+        let cont_name = "withdrawal-test-getting-fee";
+
+        stop_withdrawal_docker(cont_name);
+        let output = run_withdrawal_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // 2.5 seconds should be enough for postgres container to be started to create databases
+        sleep(Duration::from_millis(2500));
+        assert_and_stop(cont_name, || create_databases(cont_name));
+
+        let mut env = get_example_env();
+        env.database_url =
+            format!("postgres://postgres:password@localhost:{}/withdrawal", port).to_string();
+        let server = WithdrawalServer::new(&env, get_provider()).await;
+
+        if let Err(err) = &server {
+            stop_withdrawal_docker(cont_name);
+            panic!("Withdrawal Server initialization failed: {:?}", err);
+        }
+        let server = server.unwrap();
+
+        // Create needed SQL tables
+        create_tables(
+            &server.pool,
+            "./migrations/20250309092609_create_initial_tables.up.sql",
+        )
+        .await;
+
+        // Test get_claim_fee and get_withdrawal_fee
+        {
+            // Here and later I use is_some() || is_some() and not && as an additional check of initializing WithdrawalServer.
+            // If only one variable is Some and another one is not, test will fail, so there is should be some error in WithdrawalServer new method.
+            let claim_fee = server.get_claim_fee();
+            if env.claim_beneficiary_private_key.is_some() || claim_fee.beneficiary.is_some() {
+                let claim_keyset = privkey_to_keyset(env.claim_beneficiary_private_key.unwrap());
+                assert_and_stop(cont_name, || {
+                    assert_eq!(claim_fee.beneficiary.unwrap(), claim_keyset.pubkey)
+                });
+            }
+            if env.claim_fee.is_some() {
+                let fee = parse_fee_str(&env.claim_fee.unwrap()).unwrap();
+                assert_and_stop(cont_name, || assert_eq!(claim_fee.fee.unwrap(), fee));
+            }
+
+            let withdrawal_fee = server.get_withdrawal_fee();
+            if withdrawal_fee.beneficiary.is_some()
+                || env.withdrawal_beneficiary_private_key.is_some()
+            {
+                let ben_keyset = privkey_to_keyset(env.withdrawal_beneficiary_private_key.unwrap());
+                assert_and_stop(cont_name, || {
+                    assert_eq!(withdrawal_fee.beneficiary.unwrap(), ben_keyset.pubkey)
+                });
+            }
+            if withdrawal_fee.direct_withdrawal_fee.is_some() {
+                assert_and_stop(cont_name, || {
+                    assert_eq!(withdrawal_fee.direct_withdrawal_fee.unwrap().len(), 1)
+                });
+            }
+        }
+
+        // Test inserting and checking withdrawal and claim tables for needed hash
+        {
+            let pubkey_str = U256::from_hex(
+                "0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
+            )
+            .unwrap();
+            let recipient_str = "0xabc";
+            let withdrawal_hash = "0xdeadbeef";
+            let proof_bytes = vec![1u8, 2, 3, 4]; // Replace with actual proof if needed
+            let claim_value = json!({
+                "recipient": recipient_str,
+                "amount": "1000",
+                "token_index": 1,
+                "block_number": 42,
+                "block_hash": "0xblockhash",
+                "nullifier": withdrawal_hash
+            });
+            let uuid_str = uuid::Uuid::new_v4().to_string();
+
+            // Check claims table for some withdrawal_hash record
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM withdrawals WHERE withdrawal_hash = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of withdrawal_hash in claims table");
+
+            assert_and_stop(cont_name, || {
+                assert!(!exists.0, "Claim should not contain withdrawal_hash")
+            });
+
+            sqlx::query(
+                r#"
+                INSERT INTO withdrawals (
+                    uuid,
+                    pubkey,
+                    recipient,
+                    withdrawal_hash,
+                    single_withdrawal_proof,
+                    contract_withdrawal,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                "#,
+            )
+            .bind(&uuid_str)
+            .bind(pubkey_str.to_hex())
+            .bind(recipient_str)
+            .bind(withdrawal_hash)
+            .bind(&proof_bytes)
+            .bind(&claim_value)
+            .bind(SqlWithdrawalStatus::Requested as SqlWithdrawalStatus)
+            .execute(&server.pool)
+            .await
+            .expect("Failed to insert record into withdrawals table");
+
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM withdrawals WHERE withdrawal_hash = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of withdrawal_hash in withdrawals table");
+
+            assert_and_stop(cont_name, || {
+                assert!(
+                    exists.0,
+                    "Withdrawals should contain withdrawal_hash after insertion"
+                )
+            });
+
+            // Check claims table for some nullifier record
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM claims WHERE nullifier = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of nullifier in claims table");
+
+            assert_and_stop(cont_name, || {
+                assert!(!exists.0, "Claim should not contain nullifier")
+            });
+
+            sqlx::query(
+                r#"
+                INSERT INTO claims (
+                    uuid,
+                    pubkey,
+                    recipient,
+                    nullifier,
+                    single_claim_proof,
+                    claim,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)
+                "#,
+            )
+            .bind(&uuid_str)
+            .bind(pubkey_str.to_hex())
+            .bind(recipient_str)
+            .bind(withdrawal_hash)
+            .bind(&proof_bytes)
+            .bind(&claim_value)
+            .bind(SqlClaimStatus::Requested as SqlClaimStatus)
+            .execute(&server.pool)
+            .await
+            .expect("Failed to insert claim into database");
+
+            let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1 FROM claims WHERE nullifier = $1
+                )
+                "#,
+            )
+            .bind(withdrawal_hash)
+            .fetch_one(&server.pool)
+            .await
+            .expect("Failed to check existence of nullifier in claims table");
+
+            assert_and_stop(cont_name, || {
+                assert!(exists.0, "Claim should contain nullifier after insertion")
+            });
+        }
+
+        stop_withdrawal_docker(cont_name);
+    }
+}
+
+#[cfg(test)]
+mod keyset_tests {
+    use super::*;
+    use ark_bn254::{Fr, G1Affine};
+    use ark_ec::AffineRepr;
+    use num_bigint::BigUint;
+    use plonky2_bn254::fields::recover::RecoverFromX as _;
+
+    fn assert_keyset_valid(h: B256) {
+        let keyset = privkey_to_keyset(h);
+
+        // Get expected pubkey from privkey
+        let privkey_fr: Fr = BigUint::from(keyset.privkey).into();
+        let expected_pubkey_g1: G1Affine = (G1Affine::generator() * privkey_fr).into();
+
+        // Ensure pubkey is correct
+        assert_eq!(
+            keyset.pubkey_g1(),
+            expected_pubkey_g1,
+            "Public key mismatch for privkey: {:?}",
+            h
+        );
+
+        // Ensure pubkey is not dummy
+        assert!(
+            !keyset.pubkey.is_dummy_pubkey(),
+            "Pubkey should not be dummy: {:?}",
+            keyset.pubkey
+        );
+
+        // Check recovery via x-coordinate
+        let recovered = G1Affine::recover_from_x(keyset.pubkey.into());
+        assert_eq!(
+            recovered,
+            keyset.pubkey_g1(),
+            "Recovered pubkey from x doesn't match"
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_zero_privkey() {
+        let h = B256::ZERO;
+        assert_keyset_valid(h);
+    }
+
+    // It panics in KeySet::new, not in assert_keyset_valid
+    #[test]
+    #[should_panic(expected = "!pubkey.is_dummy_pubkey()")]
+    fn test_one_privkey() {
+        let mut bytes = [0u8; 32];
+        bytes[31] = 0x01;
+        let h = B256::from(bytes);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_max_privkey() {
+        let h = B256::from([0xFF; 32]);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_near_max_privkey() {
+        let mut bytes = [0xFF; 32];
+        bytes[31] = 0xFE;
+        let h = B256::from(bytes);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_mid_privkey() {
+        let mut bytes = [0u8; 32];
+        bytes[0] = 0x80; // MSB = 1, rest = 0
+        let h = B256::from(bytes);
+        assert_keyset_valid(h);
+    }
+
+    #[test]
+    fn test_leading_zeros_privkey() {
+        let mut bytes = [0u8; 32];
+        bytes[30] = 0x01;
+        let h = B256::from(bytes);
+        assert_keyset_valid(h);
+    }
 }

@@ -41,4 +41,7 @@ pub enum WithdrawalServerError {
 
     #[error("Serialization error {0}")]
     SerializationError(String),
+
+    #[error("Config error {0}")]
+    ConfigError(String),
 }

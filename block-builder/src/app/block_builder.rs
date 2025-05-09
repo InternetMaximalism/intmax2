@@ -370,7 +370,7 @@ mod tests {
         providers::{mock::Asserter, ProviderBuilder},
     };
 
-    use crate::app::storage::redis_storage::test_helper::{
+    use crate::app::storage::redis_storage::test_redis_helper::{
         find_free_port, run_redis_docker, stop_redis_docker,
     };
 
