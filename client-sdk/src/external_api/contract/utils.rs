@@ -4,9 +4,11 @@ use alloy::{
     network::EthereumWallet,
     primitives::{Address, TxHash, B256},
     providers::{
-        fillers::{FillProvider, JoinFill, WalletFiller},
-        utils::JoinedRecommendedFillers,
-        Provider, ProviderBuilder,
+        fillers::{
+            ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller, SimpleNonceManager,
+            WalletFiller,
+        },
+        Identity, Provider, ProviderBuilder,
     },
     rpc::{client::RpcClient, types::Transaction},
     signers::local::PrivateKeySigner,
@@ -20,20 +22,32 @@ use reqwest::Url;
 use std::{collections::HashMap, env};
 use tower::ServiceBuilder;
 
-pub type NormalProvider = FillProvider<JoinedRecommendedFillers, alloy::providers::RootProvider>;
+// Use simple nonce manager for the nonce filler because it's easier to handle nonce errors.
+pub type JoinedRecommendedFillersWithSimpleNonce = JoinFill<
+    JoinFill<JoinFill<Identity, GasFiller>, NonceFiller<SimpleNonceManager>>,
+    ChainIdFiller,
+>;
+
+pub type NormalProvider =
+    FillProvider<JoinedRecommendedFillersWithSimpleNonce, alloy::providers::RootProvider>;
 
 pub type ProviderWithSigner = FillProvider<
-    JoinFill<JoinedRecommendedFillers, WalletFiller<EthereumWallet>>,
+    JoinFill<JoinedRecommendedFillersWithSimpleNonce, WalletFiller<EthereumWallet>>,
     alloy::providers::RootProvider,
 >;
 
+// alloy does not support fallback transport in WASM, so we use a provider without fallback transport in WASM.
 pub fn get_provider(rpc_urls: &str) -> Result<NormalProvider, BlockchainError> {
     let retry_layer = RetryBackoffLayer::new(5, 1000, 100);
     let url: Url = rpc_urls.parse().map_err(|e| {
         BlockchainError::ParseError(format!("Failed to parse URL {}: {}", rpc_urls, e))
     })?;
     let client = RpcClient::builder().layer(retry_layer).http(url);
-    let provider = ProviderBuilder::new().connect_client(client);
+    let provider = ProviderBuilder::default()
+        .with_gas_estimation()
+        .with_simple_nonce_management()
+        .fetch_chain_id()
+        .connect_client(client);
     Ok(provider)
 }
 
@@ -56,7 +70,11 @@ pub fn get_provider_with_fallback(rpc_urls: &[String]) -> Result<NormalProvider,
     let client = RpcClient::builder()
         .layer(retry_layer)
         .transport(transport, false);
-    let provider = ProviderBuilder::new().connect_client(client);
+    let provider = ProviderBuilder::default()
+        .with_gas_estimation()
+        .with_simple_nonce_management()
+        .fetch_chain_id()
+        .connect_client(client);
     Ok(provider)
 }
 

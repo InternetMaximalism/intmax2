@@ -376,6 +376,15 @@ mod tests {
 
     use super::*;
 
+    fn get_provider() -> NormalProvider {
+        let provider_asserter = Asserter::new();
+        ProviderBuilder::default()
+            .with_gas_estimation()
+            .with_simple_nonce_management()
+            .fetch_chain_id()
+            .connect_mocked_client(provider_asserter)
+    }
+
     #[tokio::test]
     async fn test_get_fee_info() {
         // Initialize our own EnvVar
@@ -409,10 +418,7 @@ mod tests {
             non_registration_collateral_fee: None,
         };
 
-        let provider_asserter = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(provider_asserter.clone());
-
-        let block_builder = BlockBuilder::new(&env, provider).await.unwrap();
+        let block_builder = BlockBuilder::new(&env, get_provider()).await.unwrap();
         let info = block_builder.get_fee_info();
 
         assert_eq!(
@@ -463,10 +469,7 @@ mod tests {
             non_registration_collateral_fee: None,
         };
 
-        let provider_asserter = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(provider_asserter.clone());
-
-        let block_builder = BlockBuilder::new(&env, provider).await.unwrap();
+        let block_builder = BlockBuilder::new(&env, get_provider()).await.unwrap();
         let result = block_builder.blockchain_health_check().await;
 
         assert!(matches!(
@@ -508,10 +511,7 @@ mod tests {
             non_registration_collateral_fee: None,
         };
 
-        let provider_asserter = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(provider_asserter.clone());
-
-        let block_builder = BlockBuilder::new(&env, provider).await.unwrap();
+        let block_builder = BlockBuilder::new(&env, get_provider()).await.unwrap();
         let result = block_builder.blockchain_health_check().await;
 
         assert!(matches!(
@@ -566,10 +566,7 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        let provider_asserter = Asserter::new();
-        let provider = ProviderBuilder::new().connect_mocked_client(provider_asserter.clone());
-
-        let _ = BlockBuilder::new(&env, provider).await.unwrap();
+        let _ = BlockBuilder::new(&env, get_provider()).await.unwrap();
 
         // Stop docker image
         let output = stop_redis_docker(cont_name);
