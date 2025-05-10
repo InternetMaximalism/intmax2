@@ -74,7 +74,7 @@ curl $PROVER_URL/proof/wrapper/withdrawal/1 | jq
 
 ### Claim
 
-**NOTICE: Please use `faster_single_claim_proof.txt` instead of `single_claim_proof.txt`, and `faster_claim_proof.txt` instead of `claim_proof.txt` if you are using the faster mining mode.**
+**NOTICE: Please use `single_faster_claim_proof.txt` instead of `single_claim_proof.txt`, and `faster_claim_proof.txt` instead of `claim_proof.txt` if you are using the faster mining mode.**
 
 ```sh
 # generate proof

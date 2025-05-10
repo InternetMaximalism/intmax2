@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+intmax2-interfaces = { path = "../../interfaces" }
+intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp" }
+plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
 actix = "0.13"
 actix-web = "4.4"
 serde = "1.0.188"
@@ -16,9 +19,6 @@ actix-web-validator = "5.0.1"
 rand = "0.8.5"
 serde_qs = "0.13.0"
 base64 = "0.22.1"
-intmax2-interfaces = { path = "../../interfaces" }
-intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp" }
-plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
 tokio = "1.39.2"
 hex = "0.4.3"
 anyhow = "1.0.86"
