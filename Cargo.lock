@@ -2088,7 +2088,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2670,7 +2670,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "976dd42dc7e85965fe702eb8164f21f450704bdde31faefd6471dba214cb594e"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3725,7 +3725,7 @@ dependencies = [
 [[package]]
 name = "intmax2-zkp"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/intmax2-zkp?rev=537f65#537f65ce9a4d2f423420384f36c65f7cb07133ba"
+source = "git+https://github.com/InternetMaximalism/intmax2-zkp#d55e9cc4db422d197abf167d0726791499966855"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3734,8 +3734,6 @@ dependencies = [
  "ark-std 0.4.0",
  "base64 0.22.1",
  "bincode",
- "chrono",
- "env_logger",
  "ff",
  "hex",
  "itertools 0.12.1",
@@ -5323,7 +5321,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6193,7 +6191,7 @@ dependencies = [
  "getrandom 0.3.2",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
