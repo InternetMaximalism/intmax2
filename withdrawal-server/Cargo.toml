@@ -11,7 +11,6 @@ bincode = { workspace = true }
 chrono = { workspace = true }
 dotenv = { workspace = true }
 envy = { workspace = true }
-env_logger = { workspace = true }
 hashbrown = { workspace = true }
 intmax2-zkp = { workspace = true }
 intmax2-client-sdk = { path = "../client-sdk" }
@@ -30,8 +29,8 @@ thiserror = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 tracing-actix-web = { workspace = true }
 uuid = { workspace = true }
-ark-bn254 = "0.4.0"
-ark-ec = "0.4.2"
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
 base64 = "0.22.1"
 num-bigint = "0.4.6"
 num-traits = "0.2.19"

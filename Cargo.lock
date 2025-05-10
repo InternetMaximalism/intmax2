@@ -7398,7 +7398,6 @@ dependencies = [
  "bincode",
  "chrono",
  "dotenv",
- "env_logger",
  "envy",
  "hashbrown 0.15.3",
  "intmax2-client-sdk",
