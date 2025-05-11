@@ -20,6 +20,10 @@ pub struct TestConfig {
     pub tx_status_check_interval: u64,
     pub tx_resend_interval: u64,
     pub tx_resend_retries: u64,
+
+    pub bridge_loop_eth_wait_time: u64,
+    pub bridge_loop_intmax_wait_time: u64,
+    pub transfer_loop_wait_time: u64,
 }
 
 impl TestConfig {

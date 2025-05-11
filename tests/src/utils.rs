@@ -1,13 +1,19 @@
 use alloy::{
-    primitives::{Address as AlloyAddress, U256 as AlloyU256},
+    primitives::{Address as AlloyAddress, B256, U256 as AlloyU256},
     providers::Provider,
 };
 use intmax2_client_sdk::{
-    client::client::Client,
-    external_api::{contract::utils::NormalProvider, indexer::IndexerClient},
+    client::{client::Client, key_from_eth::generate_intmax_account_from_eth_key},
+    external_api::{
+        contract::utils::{get_address_from_private_key, NormalProvider},
+        indexer::IndexerClient,
+    },
 };
 use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
-use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
+use intmax2_zkp::{
+    common::signature_content::key_set::KeySet,
+    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+};
 
 pub async fn calculate_balance_with_gas_deduction(
     provider: &NormalProvider,
@@ -42,4 +48,22 @@ pub async fn get_block_builder_url(indexer_url: &str) -> anyhow::Result<String> 
         return Err(anyhow::anyhow!("Block builder info is empty"));
     }
     Ok(block_builder_info.first().unwrap().url.clone())
+}
+
+pub async fn print_info(client: &Client, eth_private_key: B256) -> anyhow::Result<()> {
+    let eth_address = get_address_from_private_key(eth_private_key);
+    let eth_balance = client
+        .liquidity_contract
+        .provider
+        .get_balance(eth_address)
+        .await?;
+    println!("ETH Address: {}", eth_address);
+    println!("ETH Balance: {}", eth_balance);
+
+    let key = generate_intmax_account_from_eth_key(eth_private_key);
+    client.sync(key).await?;
+    let balance = get_balance_on_intmax(client, key).await?;
+    println!("Intmax Address: {}", key.pubkey.to_hex());
+    println!("Intmax Balance: {}", balance);
+    Ok(())
 }
