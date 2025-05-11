@@ -1,26 +1,35 @@
-use std::time::Duration;
-
-use alloy::{
-    primitives::{Address as AlloyAddress, B256, U256 as AlloyU256},
-    providers::Provider,
-};
+use alloy::{primitives::B256, providers::Provider as _};
+use anyhow::Context;
 use intmax2_cli::cli::deposit::fetch_predicate_permission;
 use intmax2_client_sdk::{
-    client::{client::Client, key_from_eth::generate_intmax_account_from_eth_key},
-    external_api::contract::{
-        convert::{convert_address_to_intmax, convert_u256_to_intmax},
-        utils::{get_address_from_private_key, NormalProvider},
+    client::{
+        client::Client, fee_payment::generate_fee_payment_memo,
+        key_from_eth::generate_intmax_account_from_eth_key,
+    },
+    external_api::{
+        contract::{
+            convert::{convert_address_to_intmax, convert_u256_to_intmax},
+            utils::get_address_from_private_key,
+        },
+        utils::time::sleep_for,
     },
 };
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_interfaces::{
+    api::withdrawal_server::interface::WithdrawalStatus, data::deposit_data::TokenType,
+};
 use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{address::Address, u256::U256},
+    common::{salt::Salt, transfer::Transfer, withdrawal::get_withdrawal_nullifier},
+    ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait},
+};
+use std::time::Duration;
+
+use crate::{
+    config::TestConfig,
+    send::send_transfers,
+    utils::{calculate_balance_with_gas_deduction, get_balance_on_intmax, get_block_builder_url},
 };
 
-use crate::config::TestConfig;
-
-pub async fn single_deposit_withdrawal(
+pub async fn single_deposit(
     config: &TestConfig,
     client: &Client,
     eth_private_key: B256,
@@ -77,7 +86,7 @@ pub async fn single_deposit_withdrawal(
     // Wait for the deposit to be synced to the validity prover
     let mut retries = 0;
     loop {
-        if retries >= config.deposit_check_retries {
+        if retries >= config.deposit_sync_check_retries {
             return Err(anyhow::anyhow!("Deposit is not synced to validity prover"));
         }
         let deposit_info = client
@@ -88,7 +97,7 @@ pub async fn single_deposit_withdrawal(
             break;
         }
         log::warn!("Deposit is not synced to validity prover, retrying...");
-        tokio::time::sleep(Duration::from_secs(config.deposit_check_interval)).await;
+        tokio::time::sleep(Duration::from_secs(config.deposit_sync_check_interval)).await;
         retries += 1;
     }
     log::info!("Deposit is synced to validity prover");
@@ -96,7 +105,7 @@ pub async fn single_deposit_withdrawal(
     // Wait for the deposit to be relayed to the L2
     let mut retries = 0;
     loop {
-        if retries >= config.deposit_check_retries {
+        if retries >= config.deposit_relay_check_retries {
             return Err(anyhow::anyhow!("Deposit is not synced to validity prover"));
         }
         let deposit_info = client
@@ -110,7 +119,7 @@ pub async fn single_deposit_withdrawal(
             break;
         }
         log::warn!("Deposit is not synced to L2, retrying...");
-        tokio::time::sleep(Duration::from_secs(config.deposit_check_interval)).await;
+        tokio::time::sleep(Duration::from_secs(config.deposit_relay_check_interval)).await;
         retries += 1;
     }
     log::info!("Deposit is relayed to L2");
@@ -126,38 +135,152 @@ pub async fn single_deposit_withdrawal(
             intmax_balance
         ));
     }
-
-    // withdraw
-
-    let transfer_fee = client
-        .quote_transfer_fee(block_builder_url, pubkey, fee_token_index)
-        .await?;
-
     Ok(())
 }
 
-async fn calculate_balance_with_gas_deduction(
-    provider: &NormalProvider,
-    address: AlloyAddress,
-    multiplier: u64,
-    gas_limit: u64,
-) -> anyhow::Result<AlloyU256> {
-    let balance = provider.get_balance(address).await?;
-    let gas_estimation = provider.estimate_eip1559_fees().await?;
-    let gas_price = gas_estimation.max_fee_per_gas + gas_estimation.max_priority_fee_per_gas;
-    let gas_fee = AlloyU256::from(gas_price) * AlloyU256::from(gas_limit);
-    if balance < gas_fee * AlloyU256::from(multiplier) {
+pub async fn single_withdrawal(
+    config: &TestConfig,
+    client: &Client,
+    eth_private_key: B256,
+    with_claim_fee: bool,
+) -> anyhow::Result<()> {
+    let key = generate_intmax_account_from_eth_key(eth_private_key);
+    let intmax_balance = get_balance_on_intmax(client, key).await?;
+    let ethereum_address = get_address_from_private_key(eth_private_key);
+    let fee_token_index = 0;
+
+    let block_builder_url = get_block_builder_url(&config.indexer_base_url).await?;
+
+    // fetch transfer fee
+    let transfer_fee_quote = client
+        .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
+        .await?;
+    let transfer_fee = transfer_fee_quote
+        .fee
+        .clone()
+        .map_or(U256::zero(), |f| f.amount);
+
+    // fetch withdraw fee
+    let withdraw_fee_quote = client.quote_withdrawal_fee(0, fee_token_index).await?;
+    let withdraw_fee = withdraw_fee_quote.fee.map_or(U256::zero(), |f| f.amount);
+
+    // fetch claim fee
+    let claim_fee = if with_claim_fee {
+        let claim_fee_quote = client.quote_claim_fee(fee_token_index).await?;
+        claim_fee_quote.fee.map_or(U256::zero(), |f| f.amount)
+    } else {
+        U256::zero()
+    };
+    if intmax_balance < transfer_fee + withdraw_fee + claim_fee {
         return Err(anyhow::anyhow!(
-            "Insufficient balance for gas fee: balance: {}",
-            balance
+            "Insufficient balance for withdrawal: balance: {}, transfer fee: {}, withdraw fee: {}, claim fee: {}",
+            intmax_balance,
+            transfer_fee,
+            withdraw_fee,
+            claim_fee
         ));
     }
-    let new_balance = balance - gas_fee * AlloyU256::from(multiplier);
-    Ok(new_balance)
-}
+    let withdrawal_amount = intmax_balance - transfer_fee - withdraw_fee - claim_fee;
+    let withdrawal_transfer = Transfer {
+        recipient: convert_address_to_intmax(ethereum_address).into(),
+        token_index: 0,
+        amount: withdrawal_amount,
+        salt: Salt::rand(&mut rand::thread_rng()),
+    };
+    let withdrawal_transfers = client
+        .generate_withdrawal_transfers(&withdrawal_transfer, fee_token_index, with_claim_fee)
+        .await?;
+    let payment_memos = generate_fee_payment_memo(
+        &withdrawal_transfers.transfers,
+        withdrawal_transfers.withdrawal_fee_transfer_index,
+        withdrawal_transfers.claim_fee_transfer_index,
+    )?;
 
-async fn get_balance_on_intmax(client: &Client, key: KeySet) -> anyhow::Result<U256> {
-    let balance = client.get_user_data(key).await?.balances();
-    let eth_balance = balance.0.get(&0).map_or(U256::default(), |b| b.amount);
-    Ok(eth_balance)
+    let mut retries = 0;
+    loop {
+        if retries >= config.tx_resend_retries {
+            return Err(anyhow::anyhow!(
+                "Failed to send withdrawal after {} retries",
+                retries
+            ));
+        }
+        let result = send_transfers(
+            config,
+            client,
+            key,
+            &withdrawal_transfers.transfers,
+            payment_memos.clone(),
+            fee_token_index,
+        )
+        .await;
+        match result {
+            Ok(_) => break,
+            Err(e) => {
+                log::warn!("Failed to send withdrawal: {}", e);
+            }
+        }
+        log::warn!("Retrying...");
+        sleep_for(config.tx_resend_interval).await;
+        retries += 1;
+    }
+
+    // execute withdrawal
+    let withdrawal_fee_info = client.withdrawal_server.get_withdrawal_fee().await?;
+    client
+        .sync_withdrawals(key, &withdrawal_fee_info, fee_token_index)
+        .await
+        .context("Failed to sync withdrawals")?;
+
+    let nullifier = get_withdrawal_nullifier(&withdrawal_transfer);
+
+    let mut retries = 0;
+    loop {
+        if retries >= config.withdrawal_check_retries {
+            return Err(anyhow::anyhow!(
+                "Failed to check withdrawal after {} retries",
+                retries
+            ));
+        }
+        let withdrawal_info = client
+            .get_withdrawal_info(key)
+            .await
+            .context("Failed to get withdrawal info")?;
+        let corresponding_withdrawal_info = withdrawal_info
+            .iter()
+            .find(|w| w.contract_withdrawal.nullifier == nullifier)
+            .ok_or(anyhow::anyhow!("Withdrawal not found"))?;
+
+        log::info!(
+            "Withdrawal status: {}",
+            corresponding_withdrawal_info.status
+        );
+        match corresponding_withdrawal_info.status {
+            WithdrawalStatus::Success => {
+                log::info!("Withdrawal is successful");
+                break;
+            }
+            WithdrawalStatus::Failed => {
+                return Err(anyhow::anyhow!("Withdrawal failed"));
+            }
+            _ => {}
+        }
+        log::warn!("Withdrawal is not successful yet, retrying...");
+        tokio::time::sleep(Duration::from_secs(config.withdrawal_check_interval)).await;
+        retries += 1;
+    }
+
+    // check l1 balance
+    let eth_balance = client
+        .liquidity_contract
+        .provider
+        .get_balance(ethereum_address)
+        .await?;
+    let eth_balance = convert_u256_to_intmax(eth_balance);
+    if eth_balance < withdrawal_amount {
+        return Err(anyhow::anyhow!(
+            "Withdrawal is not reflected in the balance: {}",
+            eth_balance
+        ));
+    }
+    Ok(())
 }
