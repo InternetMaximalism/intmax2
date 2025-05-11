@@ -349,7 +349,7 @@ impl Client {
         if pending_info.pending_deposit_digests.is_empty()
             && pending_info.pending_transfer_digests.is_empty()
         {
-            // early return if there is no pending info
+            // // early return if there is no pending info
             return Ok(());
         }
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
