@@ -1,5 +1,6 @@
 use alloy::primitives::B256;
 use anyhow::Context;
+use chrono::{Local, TimeZone as _};
 use intmax2_client_sdk::{
     client::{
         client::Client,
@@ -61,17 +62,19 @@ pub async fn mining_loop(
         let deposit_data = single_deposit(config, client, eth_private_key, deposit_amount)
             .await
             .context("Failed to perform deposit")?;
-        log::info!(
-            "Deposit completed. Sleeping for {} seconds",
-            config.bridge_loop_intmax_wait_time
-        );
+        log::info!("Deposit completed",);
 
         let mining_info = get_mining_info(client, key, deposit_data.pubkey_salt_hash).await?;
         let maturity = mining_info.maturity.ok_or(anyhow::anyhow!(
             "No maturity found for the corresponding mining info"
         ))?;
+        let local_time = Local.timestamp_opt(maturity as i64, 0).single().unwrap();
+        log::info!(
+            "Maturity time: {}, Current time: {}",
+            local_time,
+            Local::now()
+        );
         let sleep_time = maturity.saturating_sub(maturity);
-        log::info!(" Maturity: {}, Sleep time: {}", maturity, sleep_time);
         sleep_for(sleep_time).await;
 
         let mut retry = 0;
@@ -89,7 +92,7 @@ pub async fn mining_loop(
             if !matches!(mining_info.status, MiningStatus::Locking) {
                 return Err(anyhow::anyhow!("Mining info status is not locking"));
             }
-            log::warn!("Waiting for block posting..., retrying...",);
+            log::warn!("Mining info status is not claimable yet, retrying...");
             sleep_for(config.mining_info_check_interval).await;
             retry += 1;
         }
@@ -101,13 +104,16 @@ pub async fn mining_loop(
 
         let fee_info = client.withdrawal_server.get_claim_fee().await?;
         client.sync_claims(key, recipient, &fee_info, 0).await?;
-        log::info!("Claim synced");
+        log::info!(
+            "Claim synced, sleep for {} seconds",
+            config.claim_check_wait_time
+        );
+        sleep_for(config.claim_check_wait_time).await;
 
         let nullifier = get_mining_deposit_nullifier(
-            &deposit_data.deposit().unwrap(),
-            deposit_data.deposit_salt,
+            &mining_info.deposit_data.deposit().unwrap(),
+            mining_info.deposit_data.deposit_salt,
         );
-
         let mut retries = 0;
         loop {
             if retries >= config.claim_check_retries {

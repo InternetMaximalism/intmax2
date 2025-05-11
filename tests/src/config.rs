@@ -17,6 +17,7 @@ pub struct TestConfig {
     // mining config
     pub mining_info_check_interval: u64,
     pub mining_info_check_retries: u64,
+    pub claim_check_wait_time: u64,
     pub claim_check_interval: u64,
     pub claim_check_retries: u64,
 

@@ -26,6 +26,7 @@ The test CLI provides several commands to test different aspects of the Intmax2 
 ### Mining Configuration
 - `MINING_INFO_CHECK_INTERVAL`: Interval in seconds to check mining info
 - `MINING_INFO_CHECK_RETRIES`: Number of retries for checking mining info
+- `CLAIM_CHECK_WAIT_TIME`: Time in seconds to wait before checking claim status
 - `CLAIM_CHECK_INTERVAL`: Interval in seconds to check claim status
 - `CLAIM_CHECK_RETRIES`: Number of retries for checking claim status
 
