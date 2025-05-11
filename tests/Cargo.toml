@@ -10,6 +10,7 @@ plonky2 = { workspace = true }
 intmax2-zkp = { workspace = true }
 intmax2-client-sdk = { path = "../client-sdk" }
 intmax2-interfaces = { path = "../interfaces" }
+intmax2-cli = { path = "../cli" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 alloy = { workspace = true }

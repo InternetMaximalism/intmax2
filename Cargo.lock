@@ -6212,6 +6212,7 @@ dependencies = [
  "envy",
  "futures",
  "hashbrown 0.15.3",
+ "intmax2-cli",
  "intmax2-client-sdk",
  "intmax2-interfaces",
  "intmax2-zkp",

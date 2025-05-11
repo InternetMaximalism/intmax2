@@ -1,17 +1,20 @@
 use alloy::providers::Provider;
-use intmax2_client_sdk::external_api::{
-    contract::{
-        convert::{
-            convert_address_to_alloy, convert_address_to_intmax, convert_bytes32_to_b256,
-            convert_u256_to_alloy,
+use intmax2_client_sdk::{
+    client::client::Client,
+    external_api::{
+        contract::{
+            convert::{
+                convert_address_to_alloy, convert_address_to_intmax, convert_bytes32_to_b256,
+                convert_u256_to_alloy,
+            },
+            erc1155_contract::ERC1155Contract,
+            erc20_contract::ERC20Contract,
+            erc721_contract::ERC721Contract,
+            liquidity_contract::LiquidityContract,
+            utils::get_address_from_private_key,
         },
-        erc1155_contract::ERC1155Contract,
-        erc20_contract::ERC20Contract,
-        erc721_contract::ERC721Contract,
-        liquidity_contract::LiquidityContract,
-        utils::get_address_from_private_key,
+        predicate::{PermissionRequest, PredicateClient},
     },
-    predicate::{PermissionRequest, PredicateClient},
 };
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
@@ -64,6 +67,7 @@ pub async fn deposit(
     let deposit_data = deposit_result.deposit_data;
 
     let aml_permission = fetch_predicate_permission(
+        &client,
         depositor,
         deposit_data.pubkey_salt_hash,
         token_type,
@@ -249,7 +253,8 @@ async fn balance_check_and_approve(
     Ok(())
 }
 
-async fn fetch_predicate_permission(
+pub async fn fetch_predicate_permission(
+    client: &Client,
     from: Address,
     recipient_salt_hash: Bytes32,
     token_type: TokenType,
@@ -257,7 +262,6 @@ async fn fetch_predicate_permission(
     token_address: Address,
     token_id: U256,
 ) -> Result<Vec<u8>, CliError> {
-    let client = get_client()?;
     let aml_permitter_address = client.liquidity_contract.get_aml_permitter().await?;
     let env = envy::from_env::<EnvVar>()?;
     if aml_permitter_address.is_zero() {
