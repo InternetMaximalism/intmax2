@@ -24,7 +24,7 @@ pub async fn bridge_loop(
     print_info(client, eth_private_key).await?;
 
     if from_withdrawal {
-        single_withdrawal(config, client, eth_private_key, false)
+        single_withdrawal(config, client, eth_private_key, false, true)
             .await
             .context("Failed to perform withdrawal")?;
     }
@@ -50,7 +50,7 @@ pub async fn bridge_loop(
         );
         sleep_for(config.bridge_loop_intmax_wait_time).await;
 
-        single_withdrawal(config, client, eth_private_key, false)
+        single_withdrawal(config, client, eth_private_key, false, true)
             .await
             .context("Failed to perform withdrawal")?;
         log::info!(

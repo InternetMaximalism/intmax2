@@ -30,6 +30,7 @@ pub async fn single_withdrawal(
     client: &Client,
     eth_private_key: B256,
     with_claim_fee: bool,
+    wait_for_completion: bool,
 ) -> anyhow::Result<()> {
     let key = generate_intmax_account_from_eth_key(eth_private_key);
     let intmax_balance = get_balance_on_intmax(client, key).await?;
@@ -124,9 +125,12 @@ pub async fn single_withdrawal(
         .sync_withdrawals(key, &withdrawal_fee_info, fee_token_index)
         .await
         .context("Failed to sync withdrawals")?;
+    if !wait_for_completion {
+        log::info!("Withdrawal is in progress, skipping completion check");
+        return Ok(());
+    }
 
     let nullifier = get_withdrawal_nullifier(&withdrawal_transfer);
-
     let mut retries = 0;
     loop {
         if retries >= config.withdrawal_check_retries {

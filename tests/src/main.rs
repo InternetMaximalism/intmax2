@@ -23,6 +23,10 @@ pub enum Commands {
         #[clap(long)]
         eth_private_key: B256,
     },
+    MiningLoop {
+        #[clap(long)]
+        eth_private_key: B256,
+    },
     Info {
         #[clap(long)]
         eth_private_key: B256,
@@ -53,6 +57,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::TransferLoop { eth_private_key } => {
             tests::transfer_loop::transfer_loop(&config, &client, eth_private_key).await?;
+        }
+        Commands::MiningLoop { eth_private_key } => {
+            tests::mining_loop::mining_loop(&config, &client, eth_private_key).await?;
         }
     }
     Ok(())

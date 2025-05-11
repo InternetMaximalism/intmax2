@@ -7,7 +7,7 @@ use intmax2_client_sdk::{
         convert::convert_address_to_intmax, utils::get_address_from_private_key,
     },
 };
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_interfaces::data::deposit_data::{DepositData, TokenType};
 use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 use std::time::Duration;
 
@@ -16,7 +16,7 @@ pub async fn single_deposit(
     client: &Client,
     eth_private_key: B256,
     amount: U256,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<DepositData> {
     let key = generate_intmax_account_from_eth_key(eth_private_key);
     let depositor = get_address_from_private_key(eth_private_key);
     let depositor = convert_address_to_intmax(depositor);
@@ -109,5 +109,5 @@ pub async fn single_deposit(
             intmax_balance
         ));
     }
-    Ok(())
+    Ok(deposit_data)
 }

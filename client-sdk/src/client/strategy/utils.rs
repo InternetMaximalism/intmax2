@@ -6,7 +6,7 @@ use super::error::StrategyError;
 
 const VALIDITY_PROVER_SYNC_SLEEP_TIME: u64 = 5;
 const MAX_SYNC_TRIES: u32 = 5;
-const MAX_PROOF_SYNC_TRIES: u32 = 20;
+const MAX_PROOF_SYNC_TRIES: u32 = 40;
 
 pub async fn wait_till_validity_prover_synced(
     validity_prover: &dyn ValidityProverClientInterface,
