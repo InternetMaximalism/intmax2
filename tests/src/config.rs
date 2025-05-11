@@ -1,3 +1,6 @@
+use serde::Deserialize;
+
+#[derive(Deserialize)]
 pub struct TestConfig {
     pub indexer_base_url: String,
 
@@ -17,4 +20,11 @@ pub struct TestConfig {
     pub tx_status_check_interval: u64,
     pub tx_resend_interval: u64,
     pub tx_resend_retries: u64,
+}
+
+impl TestConfig {
+    pub fn load_from_env() -> anyhow::Result<Self> {
+        let config = envy::from_env::<TestConfig>()?;
+        Ok(config)
+    }
 }

@@ -1,42 +1,30 @@
-use crate::{
-    config::TestConfig,
-    utils::{calculate_balance_with_gas_deduction, get_balance_on_intmax},
-};
+use crate::{config::TestConfig, utils::get_balance_on_intmax};
 use alloy::primitives::B256;
 use intmax2_cli::cli::deposit::fetch_predicate_permission;
 use intmax2_client_sdk::{
     client::{client::Client, key_from_eth::generate_intmax_account_from_eth_key},
     external_api::contract::{
-        convert::{convert_address_to_intmax, convert_u256_to_intmax},
-        utils::get_address_from_private_key,
+        convert::convert_address_to_intmax, utils::get_address_from_private_key,
     },
 };
 use intmax2_interfaces::data::deposit_data::TokenType;
-use intmax2_zkp::ethereum_types::address::Address;
+use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 use std::time::Duration;
 
 pub async fn single_deposit(
     config: &TestConfig,
     client: &Client,
     eth_private_key: B256,
+    amount: U256,
 ) -> anyhow::Result<()> {
     let key = generate_intmax_account_from_eth_key(eth_private_key);
     let depositor = get_address_from_private_key(eth_private_key);
-    let gas_limit = 200000;
-    let deposit_amount = calculate_balance_with_gas_deduction(
-        &client.liquidity_contract.provider,
-        depositor,
-        2,
-        gas_limit,
-    )
-    .await?;
-
     let depositor = convert_address_to_intmax(depositor);
     let deposit_result = client
         .prepare_deposit(
             depositor,
             key.pubkey,
-            convert_u256_to_intmax(deposit_amount),
+            amount,
             TokenType::NATIVE,
             Address::default(),
             0.into(),
