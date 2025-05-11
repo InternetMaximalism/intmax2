@@ -51,6 +51,9 @@ pub async fn get_block_builder_url(indexer_url: &str) -> anyhow::Result<String> 
 }
 
 pub async fn print_info(client: &Client, eth_private_key: B256) -> anyhow::Result<()> {
+    let key = generate_intmax_account_from_eth_key(eth_private_key);
+    client.sync(key).await?;
+
     let eth_address = get_address_from_private_key(eth_private_key);
     let eth_balance = client
         .liquidity_contract
@@ -59,9 +62,6 @@ pub async fn print_info(client: &Client, eth_private_key: B256) -> anyhow::Resul
         .await?;
     println!("ETH Address: {}", eth_address);
     println!("ETH Balance: {}", eth_balance);
-
-    let key = generate_intmax_account_from_eth_key(eth_private_key);
-    client.sync(key).await?;
     let balance = get_balance_on_intmax(client, key).await?;
     println!("Intmax Address: {}", key.pubkey.to_hex());
     println!("Intmax Balance: {}", balance);

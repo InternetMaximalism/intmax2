@@ -1,9 +1,13 @@
 use alloy::primitives::{Address, B256, U256};
 use intmax2_client_sdk::external_api::contract::{
-    block_builder_registry::BlockBuilderRegistryContract, erc1155_contract::ERC1155Contract,
-    erc20_contract::ERC20Contract, erc721_contract::ERC721Contract,
-    liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
-    utils::get_provider_with_fallback, withdrawal_contract::WithdrawalContract,
+    block_builder_registry::BlockBuilderRegistryContract,
+    erc1155_contract::ERC1155Contract,
+    erc20_contract::ERC20Contract,
+    erc721_contract::ERC721Contract,
+    liquidity_contract::LiquidityContract,
+    rollup_contract::RollupContract,
+    utils::{get_address_from_private_key, get_provider_with_fallback},
+    withdrawal_contract::WithdrawalContract,
 };
 use serde::Deserialize;
 
@@ -11,7 +15,6 @@ use serde::Deserialize;
 struct EnvVar {
     pub rpc_url: String,
     pub deployer_private_key: B256,
-    pub token_holder: Address,
 }
 
 #[tokio::test]
@@ -82,12 +85,9 @@ async fn deploy_contracts() -> anyhow::Result<()> {
         withdrawal_contract.address
     );
 
-    let erc20_token = ERC20Contract::deploy(
-        provider.clone(),
-        config.deployer_private_key,
-        config.token_holder,
-    )
-    .await?;
+    let deployer = get_address_from_private_key(config.deployer_private_key);
+    let erc20_token =
+        ERC20Contract::deploy(provider.clone(), config.deployer_private_key, deployer).await?;
     println!("erc20 contract address: {:?}", erc20_token.address);
 
     let erc721_token =
