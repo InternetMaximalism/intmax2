@@ -24,7 +24,7 @@ pub async fn wait_till_validity_prover_synced(
         }
         tries += 1;
         log::warn!(
-            "validity prover is not synced with block number {}, current block number is {}",
+            "validity prover is not synced: target {}, current {}",
             block_number,
             synced_block_number
         );
@@ -45,7 +45,7 @@ pub async fn wait_till_validity_prover_synced(
         }
         tries += 1;
         log::warn!(
-            "waiting for validity proof at block number {}, current: {}",
+            "waiting for validity proof: target {}, current {}",
             block_number,
             validity_proof_block_number
         );
