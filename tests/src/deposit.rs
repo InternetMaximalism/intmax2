@@ -89,10 +89,16 @@ pub async fn single_deposit(
         let deposit_info = client
             .validity_prover
             .get_deposit_info(deposit_data.pubkey_salt_hash)
-            .await?
-            .ok_or(anyhow::anyhow!(
-                "Deposit is disappeared from validity prover"
-            ))?;
+            .await?;
+        if deposit_info.is_none() {
+            // This should not happen, but if it does, we ignore it and continue
+            log::error!(
+                "Deposit info disappeared after sync: pubkey_salt_hash {}",
+                deposit_data.pubkey_salt_hash
+            );
+            continue;
+        }
+        let deposit_info = deposit_info.unwrap();
         if deposit_info.block_number.is_some() {
             break;
         }

@@ -1,6 +1,6 @@
 use alloy::primitives::B256;
 use anyhow::Context;
-use chrono::{Local, TimeZone as _};
+use chrono::{Local, TimeZone as _, Utc};
 use intmax2_client_sdk::{
     client::{
         client::Client,
@@ -74,7 +74,8 @@ pub async fn mining_loop(
             local_time,
             Local::now()
         );
-        let sleep_time = maturity.saturating_sub(maturity);
+        let current_timestamp = Utc::now().timestamp() as u64;
+        let sleep_time = maturity.saturating_sub(current_timestamp);
         sleep_for(sleep_time).await;
 
         let mut retry = 0;
