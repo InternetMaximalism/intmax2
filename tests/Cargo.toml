@@ -18,7 +18,7 @@ serde = { workspace = true }
 thiserror = "2.0.12"
 hashbrown = "0.15.2"
 log = "0.4.27"
-rand = "0.8.5"
+rand = "0.9.1"
 envy = "0.4.2"
 dotenv = "0.15.0"
 num-bigint = "0.4.6"
