@@ -234,7 +234,11 @@ impl Observer {
             .await?;
         if local_last_eth_block_number.is_none() {
             let is_synced = self.is_synced(EventType::DepositLeafInserted).await?;
-            if !is_synced {
+            if is_synced {
+                // This means no deposit leaf inserted events though we have synced all events
+                return Ok(Some(Vec::new()));
+            } else {
+                //  We have not synced all events yet
                 return Ok(None);
             }
         }

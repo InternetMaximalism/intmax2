@@ -204,8 +204,7 @@ impl ValidityProver {
             }
             let deposit_tree_root = self.deposit_hash_tree.get_root(block_number as u64).await?;
             if full_block.block.deposit_tree_root != deposit_tree_root {
-                // Reset merkle tree
-                self.reset_merkle_tree(block_number).await?;
+                self.reset_state().await?;
                 return Err(ValidityProverError::DepositTreeRootMismatch(
                     full_block.block.deposit_tree_root,
                     deposit_tree_root,
@@ -230,7 +229,7 @@ impl ValidityProver {
             {
                 Ok(w) => w,
                 Err(e) => {
-                    self.reset_merkle_tree(block_number).await?;
+                    self.reset_state().await?;
                     return Err(ValidityProverError::FailedToUpdateTrees(e.to_string()));
                 }
             };
@@ -276,12 +275,14 @@ impl ValidityProver {
         Ok(())
     }
 
+    /// delete all data from validity witness and each tree after the block number which is one greater than the oldest timestamp of each tree
     #[instrument(skip(self))]
-    async fn reset_merkle_tree(&self, block_number: u32) -> Result<(), ValidityProverError> {
-        tracing::warn!("Reset merkle tree from block number {}", block_number);
-        self.account_tree.reset(block_number as u64).await?;
-        self.block_tree.reset(block_number as u64).await?;
-        self.deposit_hash_tree.reset(block_number as u64).await?;
+    async fn reset_state(&self) -> Result<(), ValidityProverError> {
+        let reset_block_number = self.get_last_block_number().await? as u64 + 1;
+        tracing::warn!("Reset state: reset block number {}", reset_block_number);
+        self.account_tree.reset(reset_block_number).await?;
+        self.block_tree.reset(reset_block_number).await?;
+        self.deposit_hash_tree.reset(reset_block_number).await?;
         Ok(())
     }
 
