@@ -18,7 +18,9 @@ use intmax2_cli::{
     },
     format::{format_token_info, parse_generic_address, privkey_to_keyset},
 };
-use intmax2_client_sdk::client::sync::utils::generate_salt;
+use intmax2_client_sdk::client::{
+    key_from_eth::generate_intmax_account_from_eth_key, sync::utils::generate_salt,
+};
 use intmax2_interfaces::utils::random::default_rng;
 use intmax2_zkp::{
     common::{signature_content::key_set::KeySet, transfer::Transfer},
@@ -245,6 +247,11 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         }
         Commands::PublicKey { private_key } => {
             let key = KeySet::new(private_key.into());
+            println!("Public key: {}", key.pubkey.to_hex());
+        }
+        Commands::KeyFromEth { eth_private_key } => {
+            let key = generate_intmax_account_from_eth_key(eth_private_key);
+            println!("Private key: {}", key.privkey.to_hex());
             println!("Public key: {}", key.pubkey.to_hex());
         }
     }

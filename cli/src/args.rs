@@ -1,3 +1,4 @@
+use alloy::primitives::B256;
 use clap::{Parser, Subcommand};
 use intmax2_interfaces::{
     api::store_vault_server::types::CursorOrder, data::deposit_data::TokenType,
@@ -154,5 +155,9 @@ pub enum Commands {
     PublicKey {
         #[clap(long)]
         private_key: Bytes32,
+    },
+    KeyFromEth {
+        #[clap(long)]
+        eth_private_key: B256,
     },
 }
