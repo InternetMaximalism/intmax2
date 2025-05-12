@@ -37,7 +37,7 @@ pub async fn transfer_loop(
         loop {
             if retries >= config.tx_resend_retries {
                 return Err(anyhow::anyhow!(
-                    "Failed to send withdrawal after {} retries",
+                    "Failed to send transfer after {} retries",
                     retries
                 ));
             }
