@@ -61,7 +61,9 @@ pub async fn single_deposit(
     let mut retries = 0;
     loop {
         if retries >= config.deposit_sync_check_retries {
-            return Err(anyhow::anyhow!("Deposit is not synced to validity prover"));
+            return Err(anyhow::anyhow!(
+                "Deposit is not synced to validity prover after retries"
+            ));
         }
         let deposit_info = client
             .validity_prover
@@ -80,7 +82,9 @@ pub async fn single_deposit(
     let mut retries = 0;
     loop {
         if retries >= config.deposit_relay_check_retries {
-            return Err(anyhow::anyhow!("Deposit is not synced to validity prover"));
+            return Err(anyhow::anyhow!(
+                "Deposit is not relayed to L2 after retries"
+            ));
         }
         let deposit_info = client
             .validity_prover
@@ -92,7 +96,7 @@ pub async fn single_deposit(
         if deposit_info.block_number.is_some() {
             break;
         }
-        log::warn!("Deposit is not synced to L2, retrying...");
+        log::warn!("Deposit is not relayed to L2, retrying...");
         tokio::time::sleep(Duration::from_secs(config.deposit_relay_check_interval)).await;
         retries += 1;
     }
