@@ -35,4 +35,7 @@ pub enum ServerError {
 
     #[error("Internal error: {0}")]
     InternalError(String),
+
+    #[error("Malformed URL: {0}")]
+    MalformedUrl(String),
 }

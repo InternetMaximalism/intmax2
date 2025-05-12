@@ -1,5 +1,5 @@
 use intmax2_interfaces::api::error::ServerError;
-use reqwest::Response;
+use reqwest::{Response, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{debug::is_debug_mode, retry::with_retry};
@@ -17,6 +17,8 @@ pub async fn post_request<B: Serialize, R: DeserializeOwned>(
     body: Option<&B>,
 ) -> Result<R, ServerError> {
     let url = format!("{}{}", base_url, endpoint);
+    let _ = Url::parse(&url)
+        .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {}: {}", url, e)))?;
     let client = reqwest::Client::new();
     let response = if let Some(body) = body {
         with_retry(|| async { client.post(&url).json(body).send().await }).await
@@ -50,6 +52,8 @@ where
     R: DeserializeOwned,
 {
     let mut url = format!("{}{}", base_url, endpoint);
+    let _ = Url::parse(&url)
+        .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {}: {}", url, e)))?;
     let query_str = query
         .as_ref()
         .map(|q| {
