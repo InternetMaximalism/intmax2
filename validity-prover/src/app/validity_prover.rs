@@ -275,7 +275,7 @@ impl ValidityProver {
         Ok(())
     }
 
-    /// delete all data from validity witness and each tree after the block number which is one greater than the oldest timestamp of each tree
+    // Reset the state of the trees which are not synced with the validity witness
     #[instrument(skip(self))]
     async fn reset_state(&self) -> Result<(), ValidityProverError> {
         let reset_block_number = self.get_last_block_number().await? as u64 + 1;
