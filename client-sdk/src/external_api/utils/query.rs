@@ -1,5 +1,5 @@
 use intmax2_interfaces::api::error::ServerError;
-use reqwest::{Response, Url};
+use reqwest::{header, Response, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{debug::is_debug_mode, retry::with_retry};
@@ -16,17 +16,29 @@ pub async fn post_request<B: Serialize, R: DeserializeOwned>(
     endpoint: &str,
     body: Option<&B>,
 ) -> Result<R, ServerError> {
+    post_request_with_bearer_token(base_url, endpoint, None, body).await
+}
+
+pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
+    base_url: &str,
+    endpoint: &str,
+    bearer_token: Option<String>,
+    body: Option<&B>,
+) -> Result<R, ServerError> {
     let url = format!("{}{}", base_url, endpoint);
     let _ = Url::parse(&url)
         .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {}: {}", url, e)))?;
     let client = reqwest::Client::new();
-    let response = if let Some(body) = body {
-        with_retry(|| async { client.post(&url).json(body).send().await }).await
-    } else {
-        with_retry(|| async { client.post(&url).send().await }).await
+    let mut request = client.post(url.clone());
+    if let Some(token) = bearer_token {
+        request = request.header(header::AUTHORIZATION, token);
     }
-    .map_err(|e| ServerError::NetworkError(e.to_string()))?;
-
+    if let Some(body) = body {
+        request = request.json(body);
+    }
+    let response = with_retry(|| async { request.try_clone().unwrap().send().await })
+        .await
+        .map_err(|e| ServerError::NetworkError(e.to_string()))?;
     // Serialize the body to a string for logging
     let body_str = if let Some(body) = &body {
         let body_str = serde_json::to_string(body)
@@ -107,6 +119,7 @@ async fn handle_response<R: DeserializeOwned>(
             abr_request,
         ));
     }
+
     response
         .json::<R>()
         .await
