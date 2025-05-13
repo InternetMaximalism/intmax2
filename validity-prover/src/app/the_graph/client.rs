@@ -1,6 +1,6 @@
 use crate::app::the_graph::types::{BlockPostedsData, GraphQLResponse};
 
-use super::types::BlockPostedEntry;
+use super::types::{BlockPostedEntry, DepositLeafInsertedData, DepositLeafInsertedEntry};
 use intmax2_client_sdk::external_api::utils::query::post_request_with_bearer_token;
 use intmax2_interfaces::api::error::ServerError;
 use serde_json::json;
@@ -27,24 +27,24 @@ impl TheGraphClient {
             l2_bearer_token,
         }
     }
+
     pub async fn fetch_block_posteds(
         &self,
         next_block_number: u32,
         limit: usize,
     ) -> Result<Vec<BlockPostedEntry>, ServerError> {
         let query = r#"
-        query GetBlocksAfterNumber($blockNumber: BigInt!, $limit: Int!) {
+        query GetBlocks($nextBlockNumber: BigInt!, $limit: Int!) {
         blockPosteds(
             first: $limit,
-            where: { rollupBlockNumber_gte: $blockNumber }
+            where: { rollupBlockNumber_gt: $nextBlockNumber }
             orderBy: rollupBlockNumber
         ) {
-            id
             prevBlockHash
             blockBuilder
             depositTreeRoot
             rollupBlockNumber
-            timestamp
+            blockTimestamp
             transactionHash
         }
         }
@@ -52,7 +52,7 @@ impl TheGraphClient {
         let request = json!({
             "query": query,
             "variables": {
-                "blockNumber": next_block_number - 1,
+                "nextBlockNumber": next_block_number,
                 "limit": limit,
             }
         });
@@ -65,6 +65,41 @@ impl TheGraphClient {
         )
         .await?;
         Ok(response.data.block_posteds)
+    }
+
+    pub async fn fetch_deposit_leaves(
+        &self,
+        next_deposit_index: u32,
+        limit: usize,
+    ) -> Result<Vec<DepositLeafInsertedEntry>, ServerError> {
+        let query = r#"
+        query GetDepositLeaves($nextDepositIndex: BigInt!, $limit: Int!) {
+        depositLeafInserteds(
+            first: $limit,
+            where: { depositIndex_gt: $nextDepositIndex }
+            orderBy: depositIndex
+        ) {
+            depositHash
+            depositIndex
+            transactionHash
+        }
+        }
+        "#;
+        let request = json!({
+            "query": query,
+            "variables": {
+                "nextDepositIndex": next_deposit_index,
+                "limit": limit,
+            }
+        });
+        let response: GraphQLResponse<DepositLeafInsertedData> = post_request_with_bearer_token(
+            &self.l2_url,
+            "",
+            self.l2_bearer_token.clone(),
+            Some(&request),
+        )
+        .await?;
+        Ok(response.data.deposit_leaf_inserteds)
     }
 }
 
@@ -81,6 +116,18 @@ mod tests {
             None,
         );
         let result = client.fetch_block_posteds(1, 1).await.unwrap();
+        dbg!(result);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_deposit_leaf_inserteds() {
+        let client = TheGraphClient::new(
+            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
+            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
+            None,
+            None,
+        );
+        let result = client.fetch_deposit_leaves(1, 1).await.unwrap();
         dbg!(result);
     }
 }
