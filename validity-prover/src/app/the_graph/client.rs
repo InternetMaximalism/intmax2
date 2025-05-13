@@ -1,6 +1,9 @@
 use crate::app::the_graph::types::{BlockPostedsData, GraphQLResponse};
 
-use super::types::{BlockPostedEntry, DepositLeafInsertedData, DepositLeafInsertedEntry};
+use super::types::{
+    BlockPostedEntry, DepositLeafInsertedData, DepositLeafInsertedEntry, DepositedData,
+    DepositedEntry,
+};
 use intmax2_client_sdk::external_api::utils::query::post_request_with_bearer_token;
 use intmax2_interfaces::api::error::ServerError;
 use serde_json::json;
@@ -101,6 +104,46 @@ impl TheGraphClient {
         .await?;
         Ok(response.data.deposit_leaf_inserteds)
     }
+
+    pub async fn fetch_deposited(
+        &self,
+        next_deposit_id: u64,
+        limit: usize,
+    ) -> Result<Vec<DepositedEntry>, ServerError> {
+        let query = r#"
+        query GetDeposited($nextDepositId: BigInt!, $limit: Int!) {
+        depositeds(
+            first: $limit,
+            where: { depositId_gt: $nextDepositId }
+            orderBy: depositId
+        ) {
+            depositId
+            sender
+            tokenIndex
+            amount
+            recipientSaltHash
+            isEligible
+            depositedAt
+            transactionHash
+        }
+        }
+        "#;
+        let request = json!({
+            "query": query,
+            "variables": {
+                "nextDepositId": next_deposit_id,
+                "limit": limit,
+            }
+        });
+        let response: GraphQLResponse<DepositedData> = post_request_with_bearer_token(
+            &self.l1_url,
+            "",
+            self.l1_bearer_token.clone(),
+            Some(&request),
+        )
+        .await?;
+        Ok(response.data.depositeds)
+    }
 }
 
 #[cfg(test)]
@@ -128,6 +171,18 @@ mod tests {
             None,
         );
         let result = client.fetch_deposit_leaves(1, 1).await.unwrap();
+        dbg!(result);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_deposited() {
+        let client = TheGraphClient::new(
+            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
+            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
+            None,
+            None,
+        );
+        let result = client.fetch_deposited(1, 1).await.unwrap();
         dbg!(result);
     }
 }

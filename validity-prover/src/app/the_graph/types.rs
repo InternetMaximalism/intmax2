@@ -1,4 +1,4 @@
-use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32};
+use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 
@@ -19,8 +19,6 @@ pub struct BlockPostedEntry {
     pub rollup_block_number: u32,
     #[serde_as(as = "DisplayFromStr")]
     pub block_timestamp: u64,
-
-    // metadata
     pub transaction_hash: Bytes32,
 }
 
@@ -46,8 +44,25 @@ pub struct DepositLeafInsertedData {
     pub deposit_leaf_inserteds: Vec<DepositLeafInsertedEntry>,
 }
 
-// {
-//     "depositHash": "0xd57a2c7e4431b8cec99930e570f380ba08ce341303cbbd99144078cc14150822",
-//     "depositIndex": "5",
-//     "transactionHash": "0x1c23bb0a7d0672f7eb34ca896d1be2ee3c39172e99786d7d930a4b4d2b8c97d0"
-//   },
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DepositedEntry {
+    #[serde_as(as = "DisplayFromStr")]
+    pub deposit_id: u64,
+    pub sender: Address,
+    #[serde_as(as = "DisplayFromStr")]
+    pub token_index: u32,
+    pub amount: U256,
+    pub recipient_salt_hash: Bytes32,
+    pub is_eligible: bool,
+    #[serde_as(as = "DisplayFromStr")]
+    pub deposited_at: u64,
+    pub transaction_hash: Bytes32,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DepositedData {
+    pub depositeds: Vec<DepositedEntry>,
+}
