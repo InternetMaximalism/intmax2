@@ -151,6 +151,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_fetch_block_posteds() {
         let client = TheGraphClient::new(
             "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
@@ -158,11 +159,11 @@ mod tests {
             None,
             None,
         );
-        let result = client.fetch_block_posteds(1, 1).await.unwrap();
-        dbg!(result);
+        let _result = client.fetch_block_posteds(1, 1).await.unwrap();
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_fetch_deposit_leaf_inserteds() {
         let client = TheGraphClient::new(
             "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
@@ -170,11 +171,11 @@ mod tests {
             None,
             None,
         );
-        let result = client.fetch_deposit_leaves(1, 1).await.unwrap();
-        dbg!(result);
+        let _result = client.fetch_deposit_leaves(1, 1).await.unwrap();
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_fetch_deposited() {
         let client = TheGraphClient::new(
             "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
@@ -182,7 +183,6 @@ mod tests {
             None,
             None,
         );
-        let result = client.fetch_deposited(1, 1).await.unwrap();
-        dbg!(result);
+        let _result = client.fetch_deposited(1, 1).await.unwrap();
     }
 }
