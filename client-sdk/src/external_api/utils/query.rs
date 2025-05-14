@@ -117,8 +117,24 @@ async fn handle_response<R: DeserializeOwned>(
         ));
     }
 
-    response
-        .json::<R>()
-        .await
-        .map_err(|e| ServerError::DeserializationError(e.to_string()))
+    let response_text = response.text().await.map_err(|e| {
+        ServerError::DeserializationError(format!("Failed to read response: {}", e))
+    })?;
+
+    match serde_json::from_str::<R>(&response_text) {
+        Ok(result) => Ok(result),
+        Err(e) => {
+            let abr_response = if log::log_enabled!(log::Level::Debug) {
+                // full request string
+                response_text
+            } else {
+                // Truncate the response string to 500 characters if it is too long
+                response_text.chars().take(500).collect::<String>()
+            };
+            Err(ServerError::DeserializationError(format!(
+                "Failed to deserialize response of url:{} response:{}, error:{}",
+                url, abr_response, e
+            )))
+        }
+    }
 }
