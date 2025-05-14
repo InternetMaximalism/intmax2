@@ -146,17 +146,26 @@ impl TheGraphQueryClient {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use super::*;
+
+    fn create_client() -> TheGraphQueryClient {
+        dotenv::dotenv().ok();
+        let l1_url = env::var("THE_GRAPH_L1_URL").unwrap_or_else(|_| {
+            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string()
+        });
+        let l2_url = env::var("THE_GRAPH_L2_URL")
+            .unwrap_or_else(|_| "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string());
+        let l1_bearer_token = env::var("THE_GRAPH_L1_BEARER").ok();
+        let l2_bearer_token = env::var("THE_GRAPH_L2_BEARER").ok();
+        TheGraphQueryClient::new(l1_url, l2_url, l1_bearer_token, l2_bearer_token)
+    }
 
     #[tokio::test]
     #[ignore]
     async fn test_fetch_block_posteds() {
-        let client = TheGraphQueryClient::new(
-            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
-            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
-            None,
-            None,
-        );
+        let client = create_client();
 
         let next_block_number = 1;
         let limit = 1;
@@ -171,12 +180,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_fetch_deposit_leaf_inserteds() {
-        let client = TheGraphQueryClient::new(
-            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
-            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
-            None,
-            None,
-        );
+        let client = create_client();
+
         let next_deposit_index = 1;
         let limit = 1;
         let result = client
@@ -190,12 +195,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_fetch_deposited() {
-        let client = TheGraphQueryClient::new(
-            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
-            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
-            None,
-            None,
-        );
+        let client = create_client();
+
         let next_deposit_id = 1;
         let limit = 1;
         let result = client
