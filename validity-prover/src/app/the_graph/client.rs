@@ -1,19 +1,22 @@
-use crate::app::the_graph::types::{BlockPostedsData, GraphQLResponse};
+use std::time::Instant;
 
-use super::types::{
-    BlockPostedEntry, DepositLeafInsertedData, DepositLeafInsertedEntry, DepositedData,
-    DepositedEntry,
+use super::{error::GraphClientError, query_client::TheGraphQueryClient};
+use alloy::consensus::Transaction as _;
+use intmax2_client_sdk::external_api::contract::{
+    convert::convert_bytes32_to_tx_hash,
+    data_decoder::decode_post_block_calldata,
+    error::BlockchainError,
+    liquidity_contract::Deposited,
+    rollup_contract::{DepositLeafInserted, FullBlockWithMeta},
+    utils::{get_batch_transaction, NormalProvider},
 };
-use intmax2_client_sdk::external_api::utils::query::post_request_with_bearer_token;
-use intmax2_interfaces::api::error::ServerError;
-use serde_json::json;
 
+// A wrapper around TheGraphClient that provides additional functionality for interacting with the L1 and L2 providers.
 #[derive(Clone, Debug)]
 pub struct TheGraphClient {
-    pub l1_url: String,
-    pub l1_bearer_token: Option<String>,
-    pub l2_url: String,
-    pub l2_bearer_token: Option<String>,
+    pub client: TheGraphQueryClient,
+    pub l1_provider: NormalProvider,
+    pub l2_provider: NormalProvider,
 }
 
 impl TheGraphClient {
@@ -22,167 +25,135 @@ impl TheGraphClient {
         l2_url: String,
         l1_bearer_token: Option<String>,
         l2_bearer_token: Option<String>,
+        l1_provider: NormalProvider,
+        l2_provider: NormalProvider,
     ) -> Self {
         Self {
-            l1_url,
-            l1_bearer_token,
-            l2_url,
-            l2_bearer_token,
+            client: TheGraphQueryClient::new(l1_url, l2_url, l1_bearer_token, l2_bearer_token),
+            l1_provider,
+            l2_provider,
         }
     }
 
-    pub async fn fetch_block_posteds(
+    pub async fn get_full_block_with_meta(
         &self,
         next_block_number: u32,
         limit: usize,
-    ) -> Result<Vec<BlockPostedEntry>, ServerError> {
-        let query = r#"
-        query GetBlocks($nextBlockNumber: BigInt!, $limit: Int!) {
-        blockPosteds(
-            first: $limit,
-            where: { rollupBlockNumber_gt: $nextBlockNumber }
-            orderBy: rollupBlockNumber
-        ) {
-            prevBlockHash
-            blockBuilder
-            depositTreeRoot
-            rollupBlockNumber
-            blockTimestamp
-            transactionHash
-        }
-        }
-        "#;
-        let request = json!({
-            "query": query,
-            "variables": {
-                "nextBlockNumber": next_block_number,
-                "limit": limit,
-            }
-        });
+    ) -> Result<Vec<FullBlockWithMeta>, GraphClientError> {
+        let block_posteds = self
+            .client
+            .fetch_block_posteds(next_block_number, limit)
+            .await?;
 
-        let response: GraphQLResponse<BlockPostedsData> = post_request_with_bearer_token(
-            &self.l2_url,
-            "",
-            self.l2_bearer_token.clone(),
-            Some(&request),
-        )
-        .await?;
-        Ok(response.data.block_posteds)
+        // fetch transactions for calldata and metadata
+        let tx_hashes = block_posteds
+            .iter()
+            .map(|entry| convert_bytes32_to_tx_hash(entry.transaction_hash))
+            .collect::<Vec<_>>();
+        let instant = Instant::now();
+        let txs = get_batch_transaction(&self.l2_provider, &tx_hashes).await?;
+        log::info!(
+            "get_batch_transaction: {:?} for {} txs",
+            instant.elapsed(),
+            tx_hashes.len()
+        );
+        let mut full_blocks = Vec::new();
+        for (tx, event) in txs.iter().zip(block_posteds) {
+            let input = tx.input();
+            let full_block = decode_post_block_calldata(
+                event.prev_block_hash,
+                event.deposit_tree_root,
+                event.block_timestamp,
+                event.rollup_block_number,
+                event.block_builder,
+                input,
+            )
+            .map_err(|e| {
+                BlockchainError::DecodeCallDataError(format!(
+                    "failed to decode post block calldata: {}",
+                    e
+                ))
+            })?;
+            full_blocks.push(FullBlockWithMeta {
+                full_block,
+                eth_block_number: tx.block_number.unwrap(),
+                eth_tx_index: tx.transaction_index.unwrap(),
+            });
+        }
+
+        Ok(full_blocks)
     }
 
-    pub async fn fetch_deposit_leaves(
+    pub async fn get_deposit_leaf_inserted_events(
         &self,
         next_deposit_index: u32,
         limit: usize,
-    ) -> Result<Vec<DepositLeafInsertedEntry>, ServerError> {
-        let query = r#"
-        query GetDepositLeaves($nextDepositIndex: BigInt!, $limit: Int!) {
-        depositLeafInserteds(
-            first: $limit,
-            where: { depositIndex_gt: $nextDepositIndex }
-            orderBy: depositIndex
-        ) {
-            depositHash
-            depositIndex
-            transactionHash
+    ) -> Result<Vec<DepositLeafInserted>, GraphClientError> {
+        let deposit_leaf_inserteds = self
+            .client
+            .fetch_deposit_leaves(next_deposit_index, limit)
+            .await?;
+
+        // fetch transactions for tx metadata
+        let tx_hashes = deposit_leaf_inserteds
+            .iter()
+            .map(|entry| convert_bytes32_to_tx_hash(entry.transaction_hash))
+            .collect::<Vec<_>>();
+        let instant = Instant::now();
+        let txs = get_batch_transaction(&self.l2_provider, &tx_hashes).await?;
+        log::info!(
+            "get_batch_transaction: {:?} for {} txs",
+            instant.elapsed(),
+            tx_hashes.len()
+        );
+
+        let mut deposit_leaf_events = Vec::new();
+        for (tx, event) in txs.iter().zip(deposit_leaf_inserteds) {
+            deposit_leaf_events.push(DepositLeafInserted {
+                deposit_index: event.deposit_index,
+                deposit_hash: event.deposit_hash,
+                eth_block_number: tx.block_number.unwrap(),
+                eth_tx_index: tx.transaction_index.unwrap(),
+            });
         }
-        }
-        "#;
-        let request = json!({
-            "query": query,
-            "variables": {
-                "nextDepositIndex": next_deposit_index,
-                "limit": limit,
-            }
-        });
-        let response: GraphQLResponse<DepositLeafInsertedData> = post_request_with_bearer_token(
-            &self.l2_url,
-            "",
-            self.l2_bearer_token.clone(),
-            Some(&request),
-        )
-        .await?;
-        Ok(response.data.deposit_leaf_inserteds)
+
+        Ok(deposit_leaf_events)
     }
 
-    pub async fn fetch_deposited(
+    pub async fn get_deposits_events(
         &self,
         next_deposit_id: u64,
         limit: usize,
-    ) -> Result<Vec<DepositedEntry>, ServerError> {
-        let query = r#"
-        query GetDeposited($nextDepositId: BigInt!, $limit: Int!) {
-        depositeds(
-            first: $limit,
-            where: { depositId_gt: $nextDepositId }
-            orderBy: depositId
-        ) {
-            depositId
-            sender
-            tokenIndex
-            amount
-            recipientSaltHash
-            isEligible
-            depositedAt
-            transactionHash
+    ) -> Result<Vec<Deposited>, GraphClientError> {
+        let depositeds = self.client.fetch_deposited(next_deposit_id, limit).await?;
+
+        // fetch transactions for tx metadata
+        let tx_hashes = depositeds
+            .iter()
+            .map(|entry| convert_bytes32_to_tx_hash(entry.transaction_hash))
+            .collect::<Vec<_>>();
+        let instant = Instant::now();
+        let txs = get_batch_transaction(&self.l2_provider, &tx_hashes).await?;
+        log::info!(
+            "get_batch_transaction: {:?} for {} txs",
+            instant.elapsed(),
+            tx_hashes.len()
+        );
+        let mut deposits_events = Vec::new();
+        for (tx, event) in txs.iter().zip(depositeds) {
+            deposits_events.push(Deposited {
+                deposit_id: event.deposit_id,
+                depositor: event.sender,
+                pubkey_salt_hash: event.recipient_salt_hash,
+                token_index: event.token_index,
+                amount: event.amount,
+                is_eligible: event.is_eligible,
+                deposited_at: event.deposited_at,
+                tx_hash: event.transaction_hash,
+                eth_block_number: tx.block_number.unwrap(),
+                eth_tx_index: tx.transaction_index.unwrap(),
+            });
         }
-        }
-        "#;
-        let request = json!({
-            "query": query,
-            "variables": {
-                "nextDepositId": next_deposit_id,
-                "limit": limit,
-            }
-        });
-        let response: GraphQLResponse<DepositedData> = post_request_with_bearer_token(
-            &self.l1_url,
-            "",
-            self.l1_bearer_token.clone(),
-            Some(&request),
-        )
-        .await?;
-        Ok(response.data.depositeds)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_fetch_block_posteds() {
-        let client = TheGraphClient::new(
-            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
-            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
-            None,
-            None,
-        );
-        let _result = client.fetch_block_posteds(1, 1).await.unwrap();
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_fetch_deposit_leaf_inserteds() {
-        let client = TheGraphClient::new(
-            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
-            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
-            None,
-            None,
-        );
-        let _result = client.fetch_deposit_leaves(1, 1).await.unwrap();
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_fetch_deposited() {
-        let client = TheGraphClient::new(
-            "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string(),
-            "http://localhost:8000/subgraphs/name/rollup-subgraph".to_string(),
-            None,
-            None,
-        );
-        let _result = client.fetch_deposited(1, 1).await.unwrap();
+        Ok(deposits_events)
     }
 }
