@@ -1,4 +1,4 @@
-use super::check_point_store::EventType;
+use super::{check_point_store::EventType, the_graph::error::GraphClientError};
 use crate::trees::merkle_tree::error::MerkleTreeError;
 use alloy::transports::{RpcError, TransportErrorKind};
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
@@ -8,6 +8,12 @@ use server_common::redis::task_manager::TaskManagerError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ObserverError {
+    #[error("Env error: {0}")]
+    EnvError(String),
+
+    #[error("Graph client error: {0}")]
+    GraphClientError(#[from] GraphClientError),
+
     #[error("RPC error: {0}")]
     RPCError(#[from] RpcError<TransportErrorKind>),
 

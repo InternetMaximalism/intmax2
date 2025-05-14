@@ -106,7 +106,7 @@ impl TheGraphClient {
         Ok(deposit_leaf_events)
     }
 
-    pub async fn get_deposits_events(
+    pub async fn get_deposited_events(
         &self,
         next_deposit_id: u64,
         limit: usize,
