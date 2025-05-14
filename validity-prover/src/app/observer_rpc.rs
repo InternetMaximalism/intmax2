@@ -3,32 +3,19 @@ use super::{
     error::ObserverError,
     leader_election::LeaderElection,
     observer_api::ObserverApi,
+    observer_common::{ObserverConfig, SyncEvent},
 };
-use crate::EnvVar;
+use crate::{app::observer_common::initialize_observer_db, EnvVar};
 use alloy::providers::Provider;
 use intmax2_client_sdk::external_api::contract::{
-    liquidity_contract::LiquidityContract,
-    rollup_contract::{FullBlockWithMeta, RollupContract},
+    liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
 };
 use intmax2_zkp::{
-    common::witness::full_block::FullBlock, ethereum_types::u32limb_trait::U32LimbTrait as _,
-    utils::leafable::Leafable as _,
+    ethereum_types::u32limb_trait::U32LimbTrait as _, utils::leafable::Leafable as _,
 };
 use log::warn;
 use server_common::db::{DbPool, DbPoolConfig};
-use std::sync::Arc;
 use tracing::{debug, info, instrument};
-
-#[derive(Debug, Clone)]
-pub struct ObserverConfig {
-    pub observer_event_block_interval: u64,
-    pub observer_max_query_times: usize,
-    pub observer_sync_interval: u64,
-    pub observer_restart_interval: u64,
-
-    pub rollup_contract_deployed_block_number: u64,
-    pub liquidity_contract_deployed_block_number: u64,
-}
 
 #[derive(Clone)]
 pub struct RPCObserver {
@@ -42,7 +29,11 @@ pub struct RPCObserver {
 }
 
 impl RPCObserver {
-    pub async fn new(env: &EnvVar, observer_api: ObserverApi) -> Result<Self, ObserverError> {
+    pub async fn new(
+        env: &EnvVar,
+        observer_api: ObserverApi,
+        leader_election: LeaderElection,
+    ) -> Result<Self, ObserverError> {
         let config = ObserverConfig {
             observer_event_block_interval: env.observer_event_block_interval,
             observer_max_query_times: env.observer_max_query_times,
@@ -59,36 +50,8 @@ impl RPCObserver {
         })
         .await?;
         let check_point_store = CheckPointStore::new(pool.clone());
-        let leader_election = LeaderElection::new(
-            &env.redis_url,
-            "validity_prover:sync_leader",
-            std::time::Duration::from_secs(env.leader_lock_ttl),
-        )?;
+        initialize_observer_db(pool.clone()).await?;
 
-        // Initialize with genesis block if table is empty
-        let count = sqlx::query!("SELECT COUNT(*) as count FROM full_blocks")
-            .fetch_one(&pool)
-            .await?
-            .count
-            .unwrap_or(0);
-        if count == 0 {
-            let genesis = FullBlockWithMeta {
-                full_block: FullBlock::genesis(),
-                eth_block_number: 0,
-                eth_tx_index: 0,
-            };
-            // Insert genesis block
-            sqlx::query!(
-                "INSERT INTO full_blocks (block_number, eth_block_number, eth_tx_index, full_block) 
-                 VALUES ($1, $2, $3, $4)",
-                0i32,
-                genesis.eth_block_number as i64,
-                genesis.eth_tx_index as i64,
-                bincode::serialize(&genesis.full_block).unwrap()
-            )
-            .execute(&pool)
-            .await?;
-        }
         Ok(RPCObserver {
             config,
             rollup_contract: observer_api.rollup_contract.clone(),
@@ -415,6 +378,13 @@ impl RPCObserver {
             }
         }
     }
+}
+
+#[async_trait::async_trait(?Send)]
+impl SyncEvent for RPCObserver {
+    fn config(&self) -> ObserverConfig {
+        self.config.clone()
+    }
 
     #[instrument(skip(self))]
     async fn sync_events(&self, event_type: EventType) -> Result<(), ObserverError> {
@@ -452,64 +422,5 @@ impl RPCObserver {
             local_next_event_id, onchain_next_event_id
         );
         Ok(())
-    }
-
-    #[instrument(skip(self))]
-    async fn sync_events_inner_loop(&self, event_type: EventType) -> Result<(), ObserverError> {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
-            self.config.observer_sync_interval,
-        ));
-        loop {
-            interval.tick().await;
-            self.sync_events(event_type).await?;
-        }
-    }
-
-    #[instrument(skip(self))]
-    async fn sync_events_job(&self, event_type: EventType) {
-        let this = Arc::new(self.clone());
-        // auto restart loop
-        loop {
-            let this = this.clone();
-            let handler =
-                actix_web::rt::spawn(async move { this.sync_events_inner_loop(event_type).await });
-
-            match handler.await {
-                Ok(Ok(_)) => {
-                    tracing::error!("Sync events job should never return Ok");
-                }
-                Ok(Err(e)) => {
-                    tracing::error!("Sync events {} job panic: {}", event_type, e);
-                }
-                Err(e) => {
-                    tracing::error!("Sync events {} job error: {}", event_type, e);
-                }
-            }
-            // wait for a while before restarting
-            tokio::time::sleep(tokio::time::Duration::from_secs(
-                self.config.observer_restart_interval,
-            ))
-            .await;
-            log::info!("Restarting sync events job for {}", event_type);
-        }
-    }
-
-    #[instrument(skip(self))]
-    pub fn start_all_jobs(&self) {
-        self.leader_election.start_job();
-
-        let event_types = vec![
-            EventType::Deposited,
-            EventType::DepositLeafInserted,
-            EventType::BlockPosted,
-        ];
-        let this = Arc::new(self.clone());
-        for event_type in event_types {
-            let this = this.clone();
-            actix_web::rt::spawn(async move {
-                this.sync_events_job(event_type).await;
-            });
-        }
-        log::info!("Observer started all jobs");
     }
 }

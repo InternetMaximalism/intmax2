@@ -23,12 +23,16 @@ use intmax2_zkp::common::{
     trees::{block_hash_tree::BlockHashMerkleProof, deposit_tree::DepositMerkleProof},
     witness::validity_witness::ValidityWitness,
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use server_common::redis::cache::RedisCache;
 
 use crate::{
-    app::{observer_api::ObserverApi, validity_prover::ValidityProver},
+    app::{
+        leader_election::LeaderElection, observer_api::ObserverApi,
+        observer_common::start_observer_jobs, observer_rpc::RPCObserver,
+        validity_prover::ValidityProver,
+    },
     EnvVar,
 };
 
@@ -53,21 +57,30 @@ impl State {
         let liquidity_contract =
             LiquidityContract::new(l1_provider, env.liquidity_contract_address);
         let observer_api = ObserverApi::new(env, rollup_contract, liquidity_contract).await?;
-        let validity_prover = ValidityProver::new(env, observer_api).await?;
+        let leader_election = LeaderElection::new(
+            &env.redis_url,
+            "validity_prover:sync_leader",
+            std::time::Duration::from_secs(env.leader_lock_ttl),
+        )?;
+        let validity_prover =
+            ValidityProver::new(env, observer_api.clone(), leader_election.clone()).await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
         let config = CacheConfig {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
             static_ttl: Duration::from_secs(env.static_cache_ttl),
         };
+        let observer = RPCObserver::new(env, observer_api, leader_election.clone()).await?;
+
+        // start jos
+        leader_election.start_job();
+        start_observer_jobs(Arc::new(observer));
+        validity_prover.clone().start_all_jobs().await.unwrap();
+
         Ok(Self {
             validity_prover,
             cache,
             config,
         })
-    }
-
-    pub async fn job(&self) {
-        self.validity_prover.clone().start_all_jobs().await.unwrap();
     }
 
     pub async fn get_block_number(&self) -> anyhow::Result<u32> {

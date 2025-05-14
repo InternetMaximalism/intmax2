@@ -72,7 +72,11 @@ pub struct ValidityProver {
 }
 
 impl ValidityProver {
-    pub async fn new(env: &EnvVar, observer_api: ObserverApi) -> Result<Self, ValidityProverError> {
+    pub async fn new(
+        env: &EnvVar,
+        observer_api: ObserverApi,
+        leader_election: LeaderElection,
+    ) -> Result<Self, ValidityProverError> {
         let config = ValidityProverConfig {
             is_sync_mode: env.is_sync_mode,
             witness_sync_interval: env.witness_sync_interval,
@@ -88,11 +92,6 @@ impl ValidityProver {
             env.task_ttl as usize,
             env.heartbeat_interval as usize,
         )?);
-        let leader_election = LeaderElection::new(
-            &env.redis_url,
-            "validity_prover:sync_leader",
-            std::time::Duration::from_secs(env.leader_lock_ttl),
-        )?;
         let pool = Pool::connect(&env.database_url).await?;
         // check consistency
         {
