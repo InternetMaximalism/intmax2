@@ -1,8 +1,7 @@
+use super::retry::with_retry;
 use intmax2_interfaces::api::error::ServerError;
 use reqwest::{header, Response, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
-use super::{debug::is_debug_mode, retry::with_retry};
 
 #[derive(Debug, Deserialize)]
 struct ErrorResponse {
@@ -39,6 +38,7 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
     let response = with_retry(|| async { request.try_clone().unwrap().send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
+
     // Serialize the body to a string for logging
     let body_str = if let Some(body) = &body {
         let body_str = serde_json::to_string(body)
@@ -47,10 +47,9 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
     } else {
         None
     };
-    if is_debug_mode() {
-        let body_size = body_str.as_ref().map(|s| s.len()).unwrap_or(0);
-        log::info!("POST request url: {} body size: {} bytes", url, body_size);
-    }
+    let body_size = body_str.as_ref().map(|s| s.len()).unwrap_or(0);
+    log::debug!("POST request url: {} body size: {} bytes", url, body_size);
+
     handle_response(response, &url, &body_str).await
 }
 
@@ -81,9 +80,7 @@ where
     let response = with_retry(|| async { client.get(&url).send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
-    if is_debug_mode() {
-        log::info!("GET request url: {}", url);
-    }
+    log::debug!("GET request url: {}", url);
     handle_response(response, &url, &query_str).await
 }
 
@@ -102,7 +99,7 @@ async fn handle_response<R: DeserializeOwned>(
             Ok(error_resp) => error_resp.message.unwrap_or(error_resp.error),
             Err(_) => error_text,
         };
-        let abr_request = if is_debug_mode() {
+        let abr_request = if log::log_enabled!(log::Level::Debug) {
             // full request string
             request_str.clone().unwrap_or_default()
         } else {
