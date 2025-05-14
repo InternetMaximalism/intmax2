@@ -30,7 +30,7 @@ use server_common::redis::cache::RedisCache;
 use crate::{
     app::{
         leader_election::LeaderElection, observer_api::ObserverApi,
-        observer_common::start_observer_jobs, observer_rpc::RPCObserver,
+        observer_common::start_observer_jobs, observer_graph::TheGraphObserver,
         validity_prover::ValidityProver,
     },
     EnvVar,
@@ -69,7 +69,7 @@ impl State {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
             static_ttl: Duration::from_secs(env.static_cache_ttl),
         };
-        let observer = RPCObserver::new(env, observer_api, leader_election.clone()).await?;
+        let observer = TheGraphObserver::new(env, observer_api, leader_election.clone()).await?;
 
         // start jos
         leader_election.start_job();
