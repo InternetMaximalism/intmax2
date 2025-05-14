@@ -118,7 +118,7 @@ impl TheGraphClient {
             .iter()
             .map(|entry| convert_bytes32_to_tx_hash(entry.transaction_hash))
             .collect::<Vec<_>>();
-        let txs = get_batch_transaction(&self.l2_provider, &tx_hashes).await?;
+        let txs = get_batch_transaction(&self.l1_provider, &tx_hashes).await?;
 
         let mut deposits_events = Vec::new();
         for (tx, event) in txs.iter().zip(depositeds) {
