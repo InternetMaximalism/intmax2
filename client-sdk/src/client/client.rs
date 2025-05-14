@@ -75,6 +75,10 @@ use super::{
     sync::utils::{generate_spent_witness, get_balance_proof},
 };
 
+// Buffer time for the expiry of the block proposal
+// This is to prevent "expiry too far" error when the client time is not synced with the server time
+const EXPIRY_BUFFER: u64 = 60;
+
 pub struct Client {
     pub config: ClientConfig,
 
@@ -487,10 +491,11 @@ impl Client {
             return Err(ClientError::InvalidBlockProposal(
                 "proposal expired".to_string(),
             ));
-        } else if expiry > current_time + self.config.tx_timeout {
-            return Err(ClientError::InvalidBlockProposal(
-                "proposal expiry too far".to_string(),
-            ));
+        } else if expiry > current_time + self.config.tx_timeout + EXPIRY_BUFFER {
+            return Err(ClientError::InvalidBlockProposal(format!(
+                "proposal expiry {} is too far: current time {}, timeout {}, buffer {}",
+                expiry, current_time, self.config.tx_timeout, EXPIRY_BUFFER
+            )));
         }
 
         let mut entries = vec![];
