@@ -1,5 +1,8 @@
 use futures::future;
-use intmax2_client_sdk::external_api::contract::utils::get_provider_with_fallback;
+use intmax2_client_sdk::external_api::contract::{
+    liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+    utils::get_provider_with_fallback,
+};
 use intmax2_interfaces::{
     api::validity_prover::{
         interface::DepositInfo,
@@ -24,7 +27,10 @@ use std::time::Duration;
 
 use server_common::redis::cache::RedisCache;
 
-use crate::{app::validity_prover::ValidityProver, EnvVar};
+use crate::{
+    app::{observer_api::ObserverApi, validity_prover::ValidityProver},
+    EnvVar,
+};
 
 pub struct CacheConfig {
     pub dynamic_ttl: Duration,
@@ -43,7 +49,11 @@ impl State {
     pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
         let l1_provider = get_provider_with_fallback(&[env.l1_rpc_url.clone()])?;
         let l2_provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
-        let validity_prover = ValidityProver::new(env, l1_provider, l2_provider).await?;
+        let rollup_contract = RollupContract::new(l2_provider, env.rollup_contract_address);
+        let liquidity_contract =
+            LiquidityContract::new(l1_provider, env.liquidity_contract_address);
+        let observer_api = ObserverApi::new(env, rollup_contract, liquidity_contract).await?;
+        let validity_prover = ValidityProver::new(env, observer_api).await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
         let config = CacheConfig {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
@@ -99,7 +109,7 @@ impl State {
         } else {
             let deposit_index = self
                 .validity_prover
-                .observer
+                .observer_api
                 .get_next_deposit_index()
                 .await?;
             self.cache
@@ -117,7 +127,7 @@ impl State {
         } else {
             let deposit_id = self
                 .validity_prover
-                .observer
+                .observer_api
                 .get_local_last_deposit_id()
                 .await?;
             self.cache
@@ -135,7 +145,7 @@ impl State {
         } else {
             let deposit_index = self
                 .validity_prover
-                .observer
+                .observer_api
                 .get_latest_included_deposit_index()
                 .await?;
             self.cache
@@ -252,7 +262,7 @@ impl State {
         } else {
             let deposit_info = self
                 .validity_prover
-                .observer
+                .observer_api
                 .get_deposit_info(request.pubkey_salt_hash)
                 .await?;
             // the result is mutable

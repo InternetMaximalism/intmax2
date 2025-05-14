@@ -1,6 +1,6 @@
 use intmax2_client_sdk::external_api::contract::{
-    liquidity_contract::Deposited,
-    rollup_contract::{DepositLeafInserted, FullBlockWithMeta},
+    liquidity_contract::{Deposited, LiquidityContract},
+    rollup_contract::{DepositLeafInserted, FullBlockWithMeta, RollupContract},
 };
 use intmax2_interfaces::api::validity_prover::interface::DepositInfo;
 use intmax2_zkp::{
@@ -8,11 +8,39 @@ use intmax2_zkp::{
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
     utils::leafable::Leafable as _,
 };
+use server_common::db::{DbPool, DbPoolConfig};
 use tracing::instrument;
 
-use super::{check_point_store::EventType, error::ObserverError, observer::Observer};
+use crate::EnvVar;
 
-impl Observer {
+use super::{check_point_store::EventType, error::ObserverError};
+
+#[derive(Clone)]
+pub struct ObserverApi {
+    pub(crate) rollup_contract: RollupContract,
+    pub(crate) liquidity_contract: LiquidityContract,
+    pub(crate) pool: DbPool,
+}
+
+impl ObserverApi {
+    pub async fn new(
+        env: &EnvVar,
+        rollup_contract: RollupContract,
+        liquidity_contract: LiquidityContract,
+    ) -> Result<Self, ObserverError> {
+        let pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: env.database_url.to_string(),
+        })
+        .await?;
+        Ok(Self {
+            rollup_contract,
+            liquidity_contract,
+            pool,
+        })
+    }
+
     pub async fn get_local_last_deposit_id(&self) -> Result<u64, ObserverError> {
         let result = sqlx::query!("SELECT MAX(deposit_id) FROM deposited_events")
             .fetch_optional(&self.pool)

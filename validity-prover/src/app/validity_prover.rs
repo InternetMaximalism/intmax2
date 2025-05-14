@@ -1,4 +1,6 @@
-use super::{error::ValidityProverError, observer::Observer};
+use super::{
+    error::ValidityProverError, leader_election::LeaderElection, observer_api::ObserverApi,
+};
 use crate::{
     app::setting_consistency::SettingConsistency,
     trees::{
@@ -12,7 +14,6 @@ use crate::{
     },
     EnvVar,
 };
-use intmax2_client_sdk::external_api::contract::utils::NormalProvider;
 use intmax2_interfaces::{
     api::validity_prover::interface::{TransitionProofTask, TransitionProofTaskResult},
     utils::circuit_verifiers::CircuitVerifiers,
@@ -62,7 +63,8 @@ pub struct ValidityProver {
     pub(crate) config: ValidityProverConfig,
     pub(crate) manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
     pub(crate) validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
-    pub(crate) observer: Observer,
+    pub(crate) observer_api: ObserverApi,
+    pub(crate) leader_election: LeaderElection,
     pub(crate) account_tree: SqlIndexedMerkleTree,
     pub(crate) block_tree: SqlIncrementalMerkleTree<Bytes32>,
     pub(crate) deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
@@ -70,11 +72,7 @@ pub struct ValidityProver {
 }
 
 impl ValidityProver {
-    pub async fn new(
-        env: &EnvVar,
-        l1_provider: NormalProvider,
-        l2_provider: NormalProvider,
-    ) -> Result<Self, ValidityProverError> {
+    pub async fn new(env: &EnvVar, observer_api: ObserverApi) -> Result<Self, ValidityProverError> {
         let config = ValidityProverConfig {
             is_sync_mode: env.is_sync_mode,
             witness_sync_interval: env.witness_sync_interval,
@@ -90,7 +88,11 @@ impl ValidityProver {
             env.task_ttl as usize,
             env.heartbeat_interval as usize,
         )?);
-        let observer = Observer::new(env, l1_provider, l2_provider).await?;
+        let leader_election = LeaderElection::new(
+            &env.redis_url,
+            "validity_prover:sync_leader",
+            std::time::Duration::from_secs(env.leader_lock_ttl),
+        )?;
         let pool = Pool::connect(&env.database_url).await?;
         // check consistency
         {
@@ -136,11 +138,13 @@ impl ValidityProver {
             url: env.database_url.clone(),
         })
         .await?;
+
         Ok(Self {
             config,
             manager,
             validity_circuit: Arc::new(OnceLock::new()),
-            observer,
+            observer_api,
+            leader_election,
             pool,
             account_tree,
             block_tree,
@@ -157,9 +161,9 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn sync_validity_witness(&self) -> Result<(), ValidityProverError> {
-        self.observer.leader_election.wait_for_leadership().await?;
+        self.leader_election.wait_for_leadership().await?;
 
-        let observer_block_number = self.observer.get_local_last_block_number().await?;
+        let observer_block_number = self.observer_api.get_local_last_block_number().await?;
         tracing::info!(
             "Start sync_validity_witness: current block number {}, observer block number {}, validity proof block number: {}",
             self.get_last_block_number().await?,
@@ -182,13 +186,13 @@ impl ValidityProver {
                 block_number
             );
             let full_block_with_meta = self
-                .observer
+                .observer_api
                 .get_full_block_with_meta(block_number)
                 .await?
                 .unwrap();
             let full_block = full_block_with_meta.full_block;
             let deposit_events = self
-                .observer
+                .observer_api
                 .get_deposits_between_blocks(block_number)
                 .await?;
             if deposit_events.is_none() {
@@ -288,7 +292,7 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn generate_validity_proof(&self) -> Result<(), ValidityProverError> {
-        self.observer.leader_election.wait_for_leadership().await?;
+        self.leader_election.wait_for_leadership().await?;
         // Get the largest block_number and its proof from the validity_proofs table that already exists
         let record = sqlx::query!(
             r#"
@@ -374,7 +378,7 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     async fn add_tasks(&self) -> Result<(), ValidityProverError> {
-        self.observer.leader_election.wait_for_leadership().await?;
+        self.leader_election.wait_for_leadership().await?;
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
@@ -466,8 +470,8 @@ impl ValidityProver {
         // clear all tasks
         self.manager.clear_all().await?;
 
-        // run observer job
-        self.observer.start_all_jobs();
+        // // run observer job
+        // self.observer_api.start_all_jobs();
 
         let this = Arc::new(self.clone());
 

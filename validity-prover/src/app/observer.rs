@@ -2,13 +2,13 @@ use super::{
     check_point_store::{ChainType, CheckPointStore, EventType},
     error::ObserverError,
     leader_election::LeaderElection,
+    observer_api::ObserverApi,
 };
 use crate::EnvVar;
 use alloy::providers::Provider;
 use intmax2_client_sdk::external_api::contract::{
     liquidity_contract::LiquidityContract,
     rollup_contract::{FullBlockWithMeta, RollupContract},
-    utils::NormalProvider,
 };
 use intmax2_zkp::{
     common::witness::full_block::FullBlock, ethereum_types::u32limb_trait::U32LimbTrait as _,
@@ -35,17 +35,14 @@ pub struct Observer {
     pub(crate) config: ObserverConfig,
     pub(crate) rollup_contract: RollupContract,
     pub(crate) liquidity_contract: LiquidityContract,
+    pub(crate) observer_api: ObserverApi,
     pub(crate) check_point_store: CheckPointStore,
     pub(crate) leader_election: LeaderElection,
     pub(crate) pool: DbPool,
 }
 
 impl Observer {
-    pub async fn new(
-        env: &EnvVar,
-        l1_provider: NormalProvider,
-        l2_provider: NormalProvider,
-    ) -> Result<Self, ObserverError> {
+    pub async fn new(env: &EnvVar, observer_api: ObserverApi) -> Result<Self, ObserverError> {
         let config = ObserverConfig {
             observer_event_block_interval: env.observer_event_block_interval,
             observer_max_query_times: env.observer_max_query_times,
@@ -67,9 +64,7 @@ impl Observer {
             "validity_prover:sync_leader",
             std::time::Duration::from_secs(env.leader_lock_ttl),
         )?;
-        let rollup_contract = RollupContract::new(l2_provider, env.rollup_contract_address);
-        let liquidity_contract =
-            LiquidityContract::new(l1_provider, env.liquidity_contract_address);
+
         // Initialize with genesis block if table is empty
         let count = sqlx::query!("SELECT COUNT(*) as count FROM full_blocks")
             .fetch_one(&pool)
@@ -96,8 +91,9 @@ impl Observer {
         }
         Ok(Observer {
             config,
-            rollup_contract,
-            liquidity_contract,
+            rollup_contract: observer_api.rollup_contract.clone(),
+            liquidity_contract: observer_api.liquidity_contract.clone(),
+            observer_api,
             check_point_store,
             leader_election,
             pool,
@@ -298,7 +294,10 @@ impl Observer {
         self.leader_election.wait_for_leadership().await?;
         let checkpoint_eth_block_number =
             self.check_point_store.get_check_point(event_type).await?;
-        let local_last_eth_block_number = self.get_local_last_eth_block_number(event_type).await?;
+        let local_last_eth_block_number = self
+            .observer_api
+            .get_local_last_eth_block_number(event_type)
+            .await?;
         let from_eth_block_number = checkpoint_eth_block_number
             .max(local_last_eth_block_number)
             .unwrap_or(self.default_eth_block_number(event_type));
@@ -420,8 +419,14 @@ impl Observer {
     #[instrument(skip(self))]
     async fn sync_events(&self, event_type: EventType) -> Result<(), ObserverError> {
         // determine whether to sync or not
-        let mut local_next_event_id = self.get_local_next_event_id(event_type).await?;
-        let onchain_next_event_id = self.get_onchain_next_event_id(event_type).await?;
+        let mut local_next_event_id = self
+            .observer_api
+            .get_local_next_event_id(event_type)
+            .await?;
+        let onchain_next_event_id = self
+            .observer_api
+            .get_onchain_next_event_id(event_type)
+            .await?;
         if local_next_event_id >= onchain_next_event_id {
             debug!(
                 "No new events to sync. Local: {}, Onchain: {}",
