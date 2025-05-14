@@ -19,13 +19,13 @@ use tracing::{debug, info, instrument};
 
 #[derive(Clone)]
 pub struct RPCObserver {
-    pub(crate) config: ObserverConfig,
-    pub(crate) rollup_contract: RollupContract,
-    pub(crate) liquidity_contract: LiquidityContract,
-    pub(crate) observer_api: ObserverApi,
-    pub(crate) check_point_store: CheckPointStore,
-    pub(crate) leader_election: LeaderElection,
-    pub(crate) pool: DbPool,
+    pub config: ObserverConfig,
+    pub rollup_contract: RollupContract,
+    pub liquidity_contract: LiquidityContract,
+    pub observer_api: ObserverApi,
+    pub check_point_store: CheckPointStore,
+    pub leader_election: LeaderElection,
+    pub pool: DbPool,
 }
 
 impl RPCObserver {
