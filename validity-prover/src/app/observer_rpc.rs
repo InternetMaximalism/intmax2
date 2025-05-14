@@ -31,7 +31,7 @@ pub struct ObserverConfig {
 }
 
 #[derive(Clone)]
-pub struct Observer {
+pub struct RPCObserver {
     pub(crate) config: ObserverConfig,
     pub(crate) rollup_contract: RollupContract,
     pub(crate) liquidity_contract: LiquidityContract,
@@ -41,7 +41,7 @@ pub struct Observer {
     pub(crate) pool: DbPool,
 }
 
-impl Observer {
+impl RPCObserver {
     pub async fn new(env: &EnvVar, observer_api: ObserverApi) -> Result<Self, ObserverError> {
         let config = ObserverConfig {
             observer_event_block_interval: env.observer_event_block_interval,
@@ -89,7 +89,7 @@ impl Observer {
             .execute(&pool)
             .await?;
         }
-        Ok(Observer {
+        Ok(RPCObserver {
             config,
             rollup_contract: observer_api.rollup_contract.clone(),
             liquidity_contract: observer_api.liquidity_contract.clone(),
