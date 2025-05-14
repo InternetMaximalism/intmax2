@@ -1,8 +1,6 @@
-use crate::app::the_graph::types::{BlockPostedsData, GraphQLResponse};
-
 use super::types::{
-    BlockPostedEntry, DepositLeafInsertedData, DepositLeafInsertedEntry, DepositedData,
-    DepositedEntry,
+    BlockPostedEntry, BlockPostedsData, DepositLeafInsertedData, DepositLeafInsertedEntry,
+    DepositedData, DepositedEntry, GraphQLResponse,
 };
 use intmax2_client_sdk::external_api::utils::query::post_request_with_bearer_token;
 use intmax2_interfaces::api::error::ServerError;
