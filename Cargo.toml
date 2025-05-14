@@ -66,5 +66,6 @@ tracing-actix-web = "0.7"
 serde_with = { version = "3.12.0", features = ["base64"] }
 serde_qs = { version = "0.15.0", features = ["actix4"] }
 env_logger = "0.11.8"
+tracing = { version = "0.1.41" }
 ark-ec = "0.4.2"
 ark-bn254 = "0.4.0"

@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use super::{error::GraphClientError, query_client::TheGraphQueryClient};
 use alloy::consensus::Transaction as _;
 use intmax2_client_sdk::external_api::contract::{
@@ -50,13 +48,7 @@ impl TheGraphClient {
             .iter()
             .map(|entry| convert_bytes32_to_tx_hash(entry.transaction_hash))
             .collect::<Vec<_>>();
-        let instant = Instant::now();
         let txs = get_batch_transaction(&self.l2_provider, &tx_hashes).await?;
-        log::info!(
-            "get_batch_transaction: {:?} for {} txs",
-            instant.elapsed(),
-            tx_hashes.len()
-        );
         let mut full_blocks = Vec::new();
         for (tx, event) in txs.iter().zip(block_posteds) {
             let input = tx.input();
@@ -99,13 +91,7 @@ impl TheGraphClient {
             .iter()
             .map(|entry| convert_bytes32_to_tx_hash(entry.transaction_hash))
             .collect::<Vec<_>>();
-        let instant = Instant::now();
         let txs = get_batch_transaction(&self.l2_provider, &tx_hashes).await?;
-        log::info!(
-            "get_batch_transaction: {:?} for {} txs",
-            instant.elapsed(),
-            tx_hashes.len()
-        );
 
         let mut deposit_leaf_events = Vec::new();
         for (tx, event) in txs.iter().zip(deposit_leaf_inserteds) {
@@ -132,13 +118,8 @@ impl TheGraphClient {
             .iter()
             .map(|entry| convert_bytes32_to_tx_hash(entry.transaction_hash))
             .collect::<Vec<_>>();
-        let instant = Instant::now();
         let txs = get_batch_transaction(&self.l2_provider, &tx_hashes).await?;
-        log::info!(
-            "get_batch_transaction: {:?} for {} txs",
-            instant.elapsed(),
-            tx_hashes.len()
-        );
+
         let mut deposits_events = Vec::new();
         for (tx, event) in txs.iter().zip(depositeds) {
             deposits_events.push(Deposited {

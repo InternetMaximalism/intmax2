@@ -21,6 +21,7 @@ use futures::{stream, StreamExt as _};
 use reqwest::Url;
 use std::{collections::HashMap, env};
 use tower::ServiceBuilder;
+use tracing::instrument;
 
 // Use simple nonce manager for the nonce filler because it's easier to handle nonce errors.
 pub type JoinedRecommendedFillersWithSimpleNonce = JoinFill<
@@ -93,6 +94,7 @@ pub fn get_address_from_private_key(private_key: B256) -> Address {
     signer.address()
 }
 
+#[instrument(skip(provider))]
 pub async fn get_batch_transaction(
     provider: &NormalProvider,
     tx_hashes: &[TxHash],
@@ -111,7 +113,7 @@ pub async fn get_batch_transaction(
         if failed_tx_hashes.is_empty() {
             break;
         }
-        log::warn!(
+        tracing::warn!(
             "Fetched {} transactions, failed {}",
             fetched_txs.len(),
             failed_tx_hashes.len()
