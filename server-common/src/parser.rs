@@ -12,7 +12,7 @@ pub enum UrlParseError {
     },
 }
 
-/// Parses a comma-separated string of URLs into a Vec<String>
+/// Parses a comma-separated string of URLs into a `Vec<String>`
 /// Each URL is trimmed of whitespace and validated using the url crate
 ///
 /// # Examples
