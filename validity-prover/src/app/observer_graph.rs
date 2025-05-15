@@ -15,6 +15,7 @@ use super::{
     leader_election::LeaderElection,
     observer_api::ObserverApi,
     observer_common::{ObserverConfig, SyncEvent},
+    rate_manager::RateManager,
     the_graph::client::TheGraphClient,
 };
 
@@ -28,6 +29,7 @@ pub struct TheGraphObserver {
     pub graph_client: TheGraphClient,
     pub observer_api: ObserverApi,
     pub leader_election: LeaderElection,
+    pub rate_manager: RateManager,
     pub pool: DbPool,
 }
 
@@ -36,6 +38,7 @@ impl TheGraphObserver {
         env: &EnvVar,
         observer_api: ObserverApi,
         leader_election: LeaderElection,
+        rate_manager: RateManager,
     ) -> Result<Self, ObserverError> {
         let config = ObserverConfig {
             observer_event_block_interval: env.observer_event_block_interval,
@@ -77,6 +80,7 @@ impl TheGraphObserver {
             observer_api,
             graph_client,
             leader_election,
+            rate_manager,
             pool,
         })
     }

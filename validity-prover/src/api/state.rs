@@ -31,7 +31,7 @@ use crate::{
     app::{
         leader_election::LeaderElection, observer_api::ObserverApi,
         observer_common::start_observer_jobs, observer_graph::TheGraphObserver,
-        validity_prover::ValidityProver,
+        rate_manager::RateManager, validity_prover::ValidityProver,
     },
     EnvVar,
 };
@@ -62,6 +62,11 @@ impl State {
             "validity_prover:sync_leader",
             std::time::Duration::from_secs(env.leader_lock_ttl),
         )?;
+        let rate_manager = RateManager::new(
+            Duration::from_secs(env.rate_manager_window),
+            Duration::from_secs(env.rate_manager_timeout),
+        );
+
         let validity_prover =
             ValidityProver::new(env, observer_api.clone(), leader_election.clone()).await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
@@ -69,7 +74,9 @@ impl State {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
             static_ttl: Duration::from_secs(env.static_cache_ttl),
         };
-        let observer = TheGraphObserver::new(env, observer_api, leader_election.clone()).await?;
+
+        let observer =
+            TheGraphObserver::new(env, observer_api, leader_election.clone(), rate_manager).await?;
 
         // start jos
         leader_election.start_job();

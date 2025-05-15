@@ -51,4 +51,8 @@ pub struct EnvVar {
     // cache
     pub dynamic_cache_ttl: u64,
     pub static_cache_ttl: u64,
+
+    // rate manager
+    pub rate_manager_window: u64,
+    pub rate_manager_timeout: u64,
 }

@@ -4,6 +4,7 @@ use super::{
     leader_election::LeaderElection,
     observer_api::ObserverApi,
     observer_common::{ObserverConfig, SyncEvent},
+    rate_manager::RateManager,
 };
 use crate::{app::observer_common::initialize_observer_db, EnvVar};
 use alloy::providers::Provider;
@@ -25,6 +26,7 @@ pub struct RPCObserver {
     pub observer_api: ObserverApi,
     pub check_point_store: CheckPointStore,
     pub leader_election: LeaderElection,
+    pub rate_manager: RateManager,
     pub pool: DbPool,
 }
 
@@ -33,6 +35,7 @@ impl RPCObserver {
         env: &EnvVar,
         observer_api: ObserverApi,
         leader_election: LeaderElection,
+        rate_manager: RateManager,
     ) -> Result<Self, ObserverError> {
         let config = ObserverConfig {
             observer_event_block_interval: env.observer_event_block_interval,
@@ -59,6 +62,7 @@ impl RPCObserver {
             observer_api,
             check_point_store,
             leader_election,
+            rate_manager,
             pool,
         })
     }
