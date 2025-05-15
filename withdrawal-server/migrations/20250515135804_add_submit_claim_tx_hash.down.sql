@@ -1,2 +1,2 @@
 ALTER TABLE claims
-DROP COLUMN submit_claim_proof_tx_hash CHAR(66);
+DROP COLUMN submit_claim_proof_tx_hash;
