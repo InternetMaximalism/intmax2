@@ -98,6 +98,9 @@ pub enum ValidityProverError {
     #[error("Leader election error: {0}")]
     LeaderError(#[from] LeaderError),
 
+    #[error("Rate manager error: {0}")]
+    RateManagerError(#[from] RateManagerError),
+
     #[error("Block witness generation error: {0}")]
     BlockWitnessGenerationError(String),
 

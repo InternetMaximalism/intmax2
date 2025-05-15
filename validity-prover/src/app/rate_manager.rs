@@ -59,6 +59,8 @@ impl RateManager {
     }
 
     pub async fn add(&self, key: &str) -> Result<(), RateManagerError> {
+        self.cleanup().await?;
+
         let mut counts = timeout(self.timeout, self.counts.lock())
             .await
             .map_err(|_| RateManagerError::Timeout("Timeout while adding key".to_string()))?;

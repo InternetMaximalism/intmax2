@@ -49,6 +49,11 @@ const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
 const MAX_TASKS: u32 = 30;
 
+pub const SYNC_VALIDITY_WITNESS_KEY: &str = "sync_validity_witness";
+pub const GENERATE_VALIDITY_PROOF_KEY: &str = "generate_validity_proof";
+pub const ADD_TASKS_KEY: &str = "add_tasks";
+pub const CLEANUP_INACTIVE_TASKS_KEY: &str = "cleanup_inactive_tasks";
+
 #[derive(Clone, Debug)]
 pub struct ValidityProverConfig {
     pub is_sync_mode: bool,
@@ -431,6 +436,7 @@ impl ValidityProver {
             tokio::time::interval(Duration::from_secs(self.config.witness_sync_interval));
         loop {
             interval.tick().await;
+            self.rate_manager.add(SYNC_VALIDITY_WITNESS_KEY).await?;
             self.sync_validity_witness().await?;
         }
     }
@@ -440,6 +446,7 @@ impl ValidityProver {
             tokio::time::interval(Duration::from_secs(self.config.validity_proof_interval));
         loop {
             interval.tick().await;
+            self.rate_manager.add(GENERATE_VALIDITY_PROOF_KEY).await?;
             self.generate_validity_proof().await?;
         }
     }
@@ -449,6 +456,7 @@ impl ValidityProver {
             tokio::time::interval(Duration::from_secs(self.config.add_tasks_interval));
         loop {
             interval.tick().await;
+            self.rate_manager.add(ADD_TASKS_KEY).await?;
             self.add_tasks().await?;
         }
     }
@@ -459,6 +467,7 @@ impl ValidityProver {
         ));
         loop {
             interval.tick().await;
+            self.rate_manager.add(CLEANUP_INACTIVE_TASKS_KEY).await?;
             self.manager.cleanup_inactive_tasks().await?;
         }
     }
