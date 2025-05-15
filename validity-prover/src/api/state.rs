@@ -24,6 +24,7 @@ use intmax2_zkp::common::{
     witness::validity_witness::ValidityWitness,
 };
 use std::{sync::Arc, time::Duration};
+use tracing::info;
 
 use server_common::redis::cache::RedisCache;
 
@@ -112,9 +113,12 @@ impl State {
         };
 
         // start jos
-        leader_election.start_job();
-        run_and_switch_observers(Arc::new(rpc_observer), graph_observer).await;
-        validity_prover.clone().start_all_jobs().await.unwrap();
+        if env.is_sync_mode {
+            leader_election.start_job();
+            run_and_switch_observers(Arc::new(rpc_observer), graph_observer).await;
+            validity_prover.start_all_jobs().await?;
+            info!("Started all jobs");
+        }
 
         Ok(Self {
             validity_prover,

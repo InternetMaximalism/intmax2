@@ -474,11 +474,6 @@ impl ValidityProver {
 
     #[instrument(skip(self))]
     pub async fn start_all_jobs(&self) -> Result<(), ValidityProverError> {
-        if !self.config.is_sync_mode {
-            // If is_sync_mode is false, do not start the job
-            return Ok(());
-        }
-
         // clear all tasks
         self.manager.clear_all().await?;
 
