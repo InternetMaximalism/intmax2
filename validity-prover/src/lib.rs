@@ -56,4 +56,5 @@ pub struct EnvVar {
     pub observer_error_threshold: u64,
     pub rate_manager_window: u64,
     pub rate_manager_timeout: u64,
+    pub thread_heartbeat_timeout: u64,
 }
