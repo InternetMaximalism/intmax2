@@ -45,6 +45,7 @@ pub struct CacheConfig {
 /// Added cache layer to the state.
 pub struct State {
     pub validity_prover: ValidityProver,
+    pub rate_manager: RateManager,
     pub cache: RedisCache,
     pub config: CacheConfig,
 }
@@ -67,8 +68,13 @@ impl State {
             Duration::from_secs(env.rate_manager_timeout),
         );
 
-        let validity_prover =
-            ValidityProver::new(env, observer_api.clone(), leader_election.clone()).await?;
+        let validity_prover = ValidityProver::new(
+            env,
+            observer_api.clone(),
+            leader_election.clone(),
+            rate_manager.clone(),
+        )
+        .await?;
         let cache = RedisCache::new(&env.redis_url, "validity_prover:cache")?;
         let config = CacheConfig {
             dynamic_ttl: Duration::from_secs(env.dynamic_cache_ttl),
@@ -85,8 +91,13 @@ impl State {
         let graph_observer = if env.the_graph_l1_url.is_some() && env.the_graph_l2_url.is_some() {
             log::info!("The Graph observer is enabled");
             Some(Arc::new(
-                TheGraphObserver::new(env, observer_api, leader_election.clone(), rate_manager)
-                    .await?,
+                TheGraphObserver::new(
+                    env,
+                    observer_api,
+                    leader_election.clone(),
+                    rate_manager.clone(),
+                )
+                .await?,
             ))
         } else {
             None
@@ -99,6 +110,7 @@ impl State {
 
         Ok(Self {
             validity_prover,
+            rate_manager,
             cache,
             config,
         })

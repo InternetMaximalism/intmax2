@@ -1,5 +1,6 @@
 use super::{
     error::ValidityProverError, leader_election::LeaderElection, observer_api::ObserverApi,
+    rate_manager::RateManager,
 };
 use crate::{
     app::setting_consistency::SettingConsistency,
@@ -60,15 +61,16 @@ pub struct ValidityProverConfig {
 
 #[derive(Clone)]
 pub struct ValidityProver {
-    pub(crate) config: ValidityProverConfig,
-    pub(crate) manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
-    pub(crate) validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
-    pub(crate) observer_api: ObserverApi,
-    pub(crate) leader_election: LeaderElection,
-    pub(crate) account_tree: SqlIndexedMerkleTree,
-    pub(crate) block_tree: SqlIncrementalMerkleTree<Bytes32>,
-    pub(crate) deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
-    pub(crate) pool: DbPool,
+    pub config: ValidityProverConfig,
+    pub manager: Arc<TaskManager<TransitionProofTask, TransitionProofTaskResult>>,
+    pub validity_circuit: Arc<OnceLock<ValidityCircuit<F, C, D>>>,
+    pub observer_api: ObserverApi,
+    pub leader_election: LeaderElection,
+    pub rate_manager: RateManager,
+    pub account_tree: SqlIndexedMerkleTree,
+    pub block_tree: SqlIncrementalMerkleTree<Bytes32>,
+    pub deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
+    pub pool: DbPool,
 }
 
 impl ValidityProver {
@@ -76,6 +78,7 @@ impl ValidityProver {
         env: &EnvVar,
         observer_api: ObserverApi,
         leader_election: LeaderElection,
+        rate_manager: RateManager,
     ) -> Result<Self, ValidityProverError> {
         let config = ValidityProverConfig {
             is_sync_mode: env.is_sync_mode,
@@ -144,6 +147,7 @@ impl ValidityProver {
             validity_circuit: Arc::new(OnceLock::new()),
             observer_api,
             leader_election,
+            rate_manager,
             pool,
             account_tree,
             block_tree,
@@ -468,9 +472,6 @@ impl ValidityProver {
 
         // clear all tasks
         self.manager.clear_all().await?;
-
-        // // run observer job
-        // self.observer_api.start_all_jobs();
 
         let this = Arc::new(self.clone());
 
