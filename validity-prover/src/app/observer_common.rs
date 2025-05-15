@@ -5,7 +5,7 @@ use intmax2_zkp::common::witness::full_block::FullBlock;
 use server_common::db::DbPool;
 use tracing::instrument;
 
-use super::{check_point_store::EventType, error::ObserverError};
+use super::{check_point_store::EventType, error::ObserverError, rate_manager::RateManager};
 
 #[derive(Debug, Clone)]
 pub struct ObserverConfig {
@@ -21,6 +21,8 @@ pub struct ObserverConfig {
 #[async_trait::async_trait(?Send)]
 pub trait SyncEvent {
     fn config(&self) -> ObserverConfig;
+
+    fn rate_manager(&self) -> &RateManager;
 
     async fn sync_events(&self, event_type: EventType) -> Result<(), ObserverError>;
 }

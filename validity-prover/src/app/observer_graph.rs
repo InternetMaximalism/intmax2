@@ -213,6 +213,10 @@ impl SyncEvent for TheGraphObserver {
         self.config.clone()
     }
 
+    fn rate_manager(&self) -> &RateManager {
+        &self.rate_manager
+    }
+
     #[instrument(skip(self))]
     async fn sync_events(&self, event_type: EventType) -> Result<(), ObserverError> {
         // determine whether to sync or not
