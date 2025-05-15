@@ -426,6 +426,7 @@ impl SyncEvent for RPCObserver {
             "Synced events. Local next event id: {}, Onchain next event id: {}",
             local_next_event_id, onchain_next_event_id
         );
+
         Ok(())
     }
 }

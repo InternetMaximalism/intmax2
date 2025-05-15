@@ -98,19 +98,18 @@ async fn sync_events_inner_loop<O: SyncEvent>(
     loop {
         interval.tick().await;
 
-        let stop = observer
-            .rate_manager()
-            .get_stop_flag(&observer.name())
-            .await?;
+        let rate_manager = observer.rate_manager();
+        let stop = rate_manager.get_stop_flag(&observer.name()).await?;
         if stop {
             info!("Stopping sync events because of stop flag, {}", event_type);
             return Ok(());
         }
         observer.sync_events(event_type).await?;
-        observer
-            .rate_manager()
+
+        rate_manager
             .add(&sync_event_success_key(event_type))
             .await?;
+        rate_manager.cleanup().await?;
     }
 }
 
@@ -249,6 +248,9 @@ pub async fn run_and_switch_observers<P: SyncEvent + 'static, S: SyncEvent + 'st
             primary_observer.config().observer_restart_interval,
         ))
         .await;
+
+        warn!("Clearing rate manager");
+        primary_observer.rate_manager().reset().await?;
 
         if let Some(secondary_observer) = secondary_observer {
             warn!("Switching to secondary observer");

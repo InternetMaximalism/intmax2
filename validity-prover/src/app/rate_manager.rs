@@ -38,6 +38,26 @@ impl RateManager {
         }
     }
 
+    pub async fn reset(&self) -> Result<(), RateManagerError> {
+        let mut counts = timeout(self.timeout, self.counts.lock())
+            .await
+            .map_err(|_| RateManagerError::Timeout("Timeout while resetting keys".to_string()))?;
+        counts.clear();
+        drop(counts);
+
+        let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
+            .await
+            .map_err(|_| RateManagerError::Timeout("Timeout while resetting keys".to_string()))?;
+        last_timestamps.clear();
+        drop(last_timestamps);
+
+        let mut stop_flags = timeout(self.timeout, self.stop_flags.lock())
+            .await
+            .map_err(|_| RateManagerError::Timeout("Timeout while resetting keys".to_string()))?;
+        stop_flags.clear();
+        Ok(())
+    }
+
     pub async fn add(&self, key: &str) -> Result<(), RateManagerError> {
         let mut counts = timeout(self.timeout, self.counts.lock())
             .await
