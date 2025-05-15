@@ -26,3 +26,4 @@ redis = { workspace = true }
 tokio = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }
+url = "2.5.4"

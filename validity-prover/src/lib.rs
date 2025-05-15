@@ -25,8 +25,8 @@ pub struct EnvVar {
     pub observer_restart_interval: u64,
 
     // onchain settings
-    pub l1_rpc_url: String,
-    pub l2_rpc_url: String,
+    pub l1_rpc_urls: String,
+    pub l2_rpc_urls: String,
     pub rollup_contract_address: Address,
     pub rollup_contract_deployed_block_number: u64,
     pub liquidity_contract_address: Address,

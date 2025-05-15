@@ -26,7 +26,7 @@ use intmax2_zkp::common::{
 use std::{sync::Arc, time::Duration};
 use tracing::info;
 
-use server_common::redis::cache::RedisCache;
+use server_common::{parser::parse_urls, redis::cache::RedisCache};
 
 use crate::{
     app::{
@@ -58,8 +58,10 @@ pub struct State {
 
 impl State {
     pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
-        let l1_provider = get_provider_with_fallback(&[env.l1_rpc_url.clone()])?;
-        let l2_provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
+        let l1_rpc_urls = parse_urls(&env.l1_rpc_urls)?;
+        let l2_rpc_urls = parse_urls(&env.l2_rpc_urls)?;
+        let l1_provider = get_provider_with_fallback(l1_rpc_urls.as_ref())?;
+        let l2_provider = get_provider_with_fallback(l2_rpc_urls.as_ref())?;
         let rollup_contract = RollupContract::new(l2_provider, env.rollup_contract_address);
         let liquidity_contract =
             LiquidityContract::new(l1_provider, env.liquidity_contract_address);

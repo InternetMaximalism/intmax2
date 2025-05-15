@@ -48,7 +48,7 @@ impl TheGraphObserver {
             url: env.database_url.to_string(),
         })
         .await?;
-        if env.l1_rpc_url.is_empty() || env.l2_rpc_url.is_empty() {
+        if env.the_graph_l1_url.is_none() || env.the_graph_l2_url.is_none() {
             return Err(ObserverError::EnvError(
                 "L1 and L2 The Graph URLs must be provided".to_string(),
             ));
