@@ -286,6 +286,7 @@ impl From<WithdrawalInfo> for JsWithdrawalInfo {
 pub struct JsClaimInfo {
     pub status: String,
     pub claim: JsClaim,
+    pub submit_claim_proof_tx_hash: Option<String>,
     pub l1_tx_hash: Option<String>,
 }
 
@@ -294,6 +295,9 @@ impl From<ClaimInfo> for JsClaimInfo {
         Self {
             status: claim_info.status.to_string(),
             claim: claim_info.claim.into(),
+            submit_claim_proof_tx_hash: claim_info
+                .submit_claim_proof_tx_hash
+                .map(|hash| hash.to_hex()),
             l1_tx_hash: claim_info.l1_tx_hash.map(|hash| hash.to_hex()),
         }
     }

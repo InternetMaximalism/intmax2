@@ -422,6 +422,7 @@ impl WithdrawalServer {
             SELECT 
                 status as "status: SqlClaimStatus",
                 claim,
+                submit_claim_proof_tx_hash,
                 l1_tx_hash
             FROM claims
             WHERE pubkey = $1
@@ -438,6 +439,9 @@ impl WithdrawalServer {
             claim_infos.push(ClaimInfo {
                 status: record.status.into(),
                 claim,
+                submit_claim_proof_tx_hash: record
+                    .submit_claim_proof_tx_hash
+                    .map(|h| Bytes32::from_hex(&h).unwrap()),
                 l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
             });
         }

@@ -46,6 +46,7 @@ pub struct WithdrawalInfo {
 pub struct ClaimInfo {
     pub status: ClaimStatus,
     pub claim: Claim,
+    pub submit_claim_proof_tx_hash: Option<Bytes32>,
     pub l1_tx_hash: Option<Bytes32>,
 }
 
