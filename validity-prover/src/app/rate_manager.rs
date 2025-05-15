@@ -7,7 +7,7 @@ use std::{
 use tokio::{sync::Mutex, time::timeout};
 
 #[derive(Debug, thiserror::Error)]
-pub enum RateLimitError {
+pub enum RateManagerError {
     #[error("Timeout: {0}")]
     Timeout(String),
 }
@@ -34,10 +34,10 @@ impl RateManager {
         }
     }
 
-    pub async fn add(&self, key: &str) -> Result<(), RateLimitError> {
+    pub async fn add(&self, key: &str) -> Result<(), RateManagerError> {
         let mut counts = timeout(self.timeout, self.counts.lock())
             .await
-            .map_err(|_| RateLimitError::Timeout("Timeout while adding key".to_string()))?;
+            .map_err(|_| RateManagerError::Timeout("Timeout while adding key".to_string()))?;
         counts
             .entry(key.to_string())
             .or_insert_with(Vec::new)
@@ -47,18 +47,18 @@ impl RateManager {
         let current_time = Utc::now().timestamp_millis() as u64;
         let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
             .await
-            .map_err(|_| RateLimitError::Timeout("Timeout while adding key".to_string()))?;
+            .map_err(|_| RateManagerError::Timeout("Timeout while adding key".to_string()))?;
         last_timestamps
             .entry(key.to_string())
             .or_insert(current_time);
         Ok(())
     }
 
-    pub async fn last_timestamp(&self, key: &str) -> Result<Option<Instant>, RateLimitError> {
+    pub async fn last_timestamp(&self, key: &str) -> Result<Option<Instant>, RateManagerError> {
         let counts = timeout(self.timeout, self.counts.lock())
             .await
             .map_err(|_| {
-                RateLimitError::Timeout("Timeout while getting last timestamp".to_string())
+                RateManagerError::Timeout("Timeout while getting last timestamp".to_string())
             })?;
         let last_timestamp = counts
             .get(key)
@@ -73,10 +73,10 @@ impl RateManager {
         Ok(last_timestamp)
     }
 
-    pub async fn count(&self, key: &str) -> Result<usize, RateLimitError> {
+    pub async fn count(&self, key: &str) -> Result<usize, RateManagerError> {
         let counts = timeout(self.timeout, self.counts.lock())
             .await
-            .map_err(|_| RateLimitError::Timeout("Timeout while counting keys".to_string()))?;
+            .map_err(|_| RateManagerError::Timeout("Timeout while counting keys".to_string()))?;
         let count = counts
             .get(key)
             .map(|timestamps| {
@@ -89,10 +89,10 @@ impl RateManager {
         Ok(count)
     }
 
-    pub async fn cleanup(&self) -> Result<(), RateLimitError> {
+    pub async fn cleanup(&self) -> Result<(), RateManagerError> {
         let mut counts = timeout(self.timeout, self.counts.lock())
             .await
-            .map_err(|_| RateLimitError::Timeout("Timeout while cleaning up keys".to_string()))?;
+            .map_err(|_| RateManagerError::Timeout("Timeout while cleaning up keys".to_string()))?;
         for timestamps in counts.values_mut() {
             timestamps.retain(|&timestamp| timestamp.elapsed() <= self.window);
         }

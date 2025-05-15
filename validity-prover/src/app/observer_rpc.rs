@@ -37,14 +37,7 @@ impl RPCObserver {
         leader_election: LeaderElection,
         rate_manager: RateManager,
     ) -> Result<Self, ObserverError> {
-        let config = ObserverConfig {
-            observer_event_block_interval: env.observer_event_block_interval,
-            observer_max_query_times: env.observer_max_query_times,
-            observer_sync_interval: env.observer_sync_interval,
-            observer_restart_interval: env.observer_restart_interval,
-            rollup_contract_deployed_block_number: env.rollup_contract_deployed_block_number,
-            liquidity_contract_deployed_block_number: env.liquidity_contract_deployed_block_number,
-        };
+        let config = ObserverConfig::from_env(env);
         tracing::info!("Observer config: {:?}", config);
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,

@@ -1,4 +1,7 @@
-use super::{check_point_store::EventType, the_graph::error::GraphClientError};
+use super::{
+    check_point_store::EventType, rate_manager::RateManagerError,
+    the_graph::error::GraphClientError,
+};
 use crate::trees::merkle_tree::error::MerkleTreeError;
 use alloy::transports::{RpcError, TransportErrorKind};
 use intmax2_client_sdk::external_api::contract::error::BlockchainError;
@@ -13,6 +16,9 @@ pub enum ObserverError {
 
     #[error("Graph client error: {0}")]
     GraphClientError(#[from] GraphClientError),
+
+    #[error("Rate manager error: {0}")]
+    RateManagerError(#[from] RateManagerError),
 
     #[error("RPC error: {0}")]
     RPCError(#[from] RpcError<TransportErrorKind>),
@@ -49,6 +55,15 @@ pub enum ObserverError {
 
     #[error("Block number mismatch: {0} != {1}")]
     BlockNumberMismatch(u32, u32),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ObserverSyncError {
+    #[error("Rate manager error: {0}")]
+    RateManagerError(#[from] RateManagerError),
+
+    #[error("Error limit reached: {0}")]
+    ErrorLimitReached(String),
 }
 
 #[derive(Debug, thiserror::Error)]

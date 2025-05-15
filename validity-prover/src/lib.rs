@@ -53,6 +53,7 @@ pub struct EnvVar {
     pub static_cache_ttl: u64,
 
     // rate manager
+    pub observer_error_threshold: u64,
     pub rate_manager_window: u64,
     pub rate_manager_timeout: u64,
 }
