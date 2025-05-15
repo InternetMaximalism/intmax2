@@ -45,12 +45,6 @@ impl RateManager {
         counts.clear();
         drop(counts);
 
-        let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
-            .await
-            .map_err(|_| RateManagerError::Timeout("Timeout while resetting keys".to_string()))?;
-        last_timestamps.clear();
-        drop(last_timestamps);
-
         let mut stop_flags = timeout(self.timeout, self.stop_flags.lock())
             .await
             .map_err(|_| RateManagerError::Timeout("Timeout while resetting keys".to_string()))?;
@@ -134,7 +128,7 @@ impl RateManager {
         Ok(stop_flags.get(key).cloned().unwrap_or(false))
     }
 
-    pub async fn cleanup(&self) -> Result<(), RateManagerError> {
+    async fn cleanup(&self) -> Result<(), RateManagerError> {
         let mut counts = timeout(self.timeout, self.counts.lock())
             .await
             .map_err(|_| RateManagerError::Timeout("Timeout while cleaning up keys".to_string()))?;

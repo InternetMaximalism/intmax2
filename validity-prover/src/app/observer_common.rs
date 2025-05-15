@@ -13,8 +13,8 @@ use super::{
     rate_manager::RateManager,
 };
 
-pub fn sync_event_success_key(event_type: EventType) -> String {
-    format!("sync_events_success_{}", event_type)
+pub fn sync_event_key(event_type: EventType) -> String {
+    format!("sync_events_{}", event_type)
 }
 
 pub fn sync_event_fail_key(event_type: EventType) -> String {
@@ -104,12 +104,8 @@ async fn sync_events_inner_loop<O: SyncEvent>(
             info!("Stopping sync events because of stop flag, {}", event_type);
             return Ok(());
         }
+        rate_manager.add(&sync_event_key(event_type)).await?;
         observer.sync_events(event_type).await?;
-
-        rate_manager
-            .add(&sync_event_success_key(event_type))
-            .await?;
-        rate_manager.cleanup().await?;
     }
 }
 

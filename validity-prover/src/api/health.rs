@@ -2,7 +2,7 @@ use crate::{
     api::state::State,
     app::{
         check_point_store::EventType,
-        observer_common::sync_event_success_key,
+        observer_common::sync_event_key,
         validity_prover::{
             ADD_TASKS_KEY, CLEANUP_INACTIVE_TASKS_KEY, GENERATE_VALIDITY_PROOF_KEY,
             SYNC_VALIDITY_WITNESS_KEY,
@@ -33,7 +33,7 @@ pub async fn health_check(state: Data<State>) -> Result<Json<HealthCheckResponse
         EventType::BlockPosted,
     ]
     .iter()
-    .map(|event_type| sync_event_success_key(*event_type))
+    .map(|event_type| sync_event_key(*event_type))
     .collect::<Vec<_>>();
     keys.extend([
         SYNC_VALIDITY_WITNESS_KEY.to_string(),
