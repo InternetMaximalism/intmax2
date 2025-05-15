@@ -20,6 +20,9 @@ pub enum ObserverError {
     #[error("Rate manager error: {0}")]
     RateManagerError(#[from] RateManagerError),
 
+    #[error("Error limit reached: {0}")]
+    ErrorLimitReached(String),
+
     #[error("RPC error: {0}")]
     RPCError(#[from] RpcError<TransportErrorKind>),
 

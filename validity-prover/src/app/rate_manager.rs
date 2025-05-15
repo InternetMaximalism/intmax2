@@ -22,6 +22,9 @@ pub struct RateManager {
 
     // last timestamps without cleanup
     pub last_timestamps: Arc<Mutex<HashMap<String, u64>>>,
+
+    // stop flags
+    pub stop_flags: Arc<Mutex<HashMap<String, bool>>>,
 }
 
 impl RateManager {
@@ -31,6 +34,7 @@ impl RateManager {
             timeout,
             counts: Arc::new(Mutex::new(HashMap::new())),
             last_timestamps: Arc::new(Mutex::new(HashMap::new())),
+            stop_flags: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -87,6 +91,25 @@ impl RateManager {
             })
             .unwrap_or(0);
         Ok(count)
+    }
+
+    pub async fn set_stop_flag(&self, key: &str, flag: bool) -> Result<(), RateManagerError> {
+        let mut stop_flags = timeout(self.timeout, self.stop_flags.lock())
+            .await
+            .map_err(|_| {
+                RateManagerError::Timeout("Timeout while setting stop flag".to_string())
+            })?;
+        stop_flags.insert(key.to_string(), flag);
+        Ok(())
+    }
+
+    pub async fn get_stop_flag(&self, key: &str) -> Result<bool, RateManagerError> {
+        let stop_flags = timeout(self.timeout, self.stop_flags.lock())
+            .await
+            .map_err(|_| {
+                RateManagerError::Timeout("Timeout while getting stop flag".to_string())
+            })?;
+        Ok(stop_flags.get(key).cloned().unwrap_or(false))
     }
 
     pub async fn cleanup(&self) -> Result<(), RateManagerError> {

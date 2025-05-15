@@ -30,8 +30,8 @@ use server_common::redis::cache::RedisCache;
 use crate::{
     app::{
         leader_election::LeaderElection, observer_api::ObserverApi,
-        observer_common::start_observer_jobs, observer_graph::TheGraphObserver,
-        rate_manager::RateManager, validity_prover::ValidityProver,
+        observer_common::run_and_switch_observers, observer_graph::TheGraphObserver,
+        observer_rpc::RPCObserver, rate_manager::RateManager, validity_prover::ValidityProver,
     },
     EnvVar,
 };
@@ -75,12 +75,26 @@ impl State {
             static_ttl: Duration::from_secs(env.static_cache_ttl),
         };
 
-        let observer =
-            TheGraphObserver::new(env, observer_api, leader_election.clone(), rate_manager).await?;
+        let rpc_observer = RPCObserver::new(
+            env,
+            observer_api.clone(),
+            leader_election.clone(),
+            rate_manager.clone(),
+        )
+        .await?;
+        let graph_observer = if env.the_graph_l1_url.is_some() && env.the_graph_l2_url.is_some() {
+            log::info!("The Graph observer is enabled");
+            Some(Arc::new(
+                TheGraphObserver::new(env, observer_api, leader_election.clone(), rate_manager)
+                    .await?,
+            ))
+        } else {
+            None
+        };
 
         // start jos
         leader_election.start_job();
-        start_observer_jobs(Arc::new(observer));
+        run_and_switch_observers(Arc::new(rpc_observer), graph_observer).await;
         validity_prover.clone().start_all_jobs().await.unwrap();
 
         Ok(Self {

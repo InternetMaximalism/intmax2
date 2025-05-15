@@ -3,7 +3,7 @@ use std::sync::Arc;
 use intmax2_client_sdk::external_api::contract::rollup_contract::FullBlockWithMeta;
 use intmax2_zkp::common::witness::full_block::FullBlock;
 use server_common::db::DbPool;
-use tracing::instrument;
+use tracing::{error, info, instrument, warn};
 
 use crate::EnvVar;
 
@@ -49,6 +49,8 @@ impl ObserverConfig {
 
 #[async_trait::async_trait(?Send)]
 pub trait SyncEvent {
+    fn name(&self) -> String;
+
     fn config(&self) -> ObserverConfig;
 
     fn rate_manager(&self) -> &RateManager;
@@ -89,11 +91,21 @@ async fn sync_events_inner_loop<O: SyncEvent>(
     observer: Arc<O>,
     event_type: EventType,
 ) -> Result<(), ObserverError> {
+    let config = observer.config();
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
-        observer.config().observer_sync_interval,
+        config.observer_sync_interval,
     ));
     loop {
         interval.tick().await;
+
+        let stop = observer
+            .rate_manager()
+            .get_stop_flag(&observer.name())
+            .await?;
+        if stop {
+            info!("Stopping sync events because of stop flag, {}", event_type);
+            return Ok(());
+        }
         observer.sync_events(event_type).await?;
         observer
             .rate_manager()
@@ -108,19 +120,25 @@ async fn sync_events_job<O: SyncEvent + 'static>(
     event_type: EventType,
 ) -> Result<(), ObserverSyncError> {
     let observer_restart_interval = observer.config().observer_sync_interval;
-    let observer_error_threshold = observer.config().observer_error_threshold;
+    let observer_error_threshold = observer.config().observer_error_threshold as usize;
     let observer_clone = observer.clone();
     // auto restart loop
     loop {
-        let error_count = observer_clone
+        let fail_count = observer
             .rate_manager()
             .count(&sync_event_fail_key(event_type))
             .await?;
-        if error_count > observer_error_threshold as usize {
-            return Err(ObserverSyncError::ErrorLimitReached(format!(
-                "Sync events {} job failed too many times: {}",
-                event_type, error_count
-            )));
+        if fail_count >= observer_error_threshold {
+            // stop the job
+            observer
+                .rate_manager()
+                .set_stop_flag(&observer.name(), true)
+                .await?;
+            warn!(
+                "Stopping sync events job for {} because error limit reached",
+                event_type
+            );
+            return Ok(());
         }
 
         let observer_clone = observer_clone.clone();
@@ -129,13 +147,14 @@ async fn sync_events_job<O: SyncEvent + 'static>(
         });
         match handler.await {
             Ok(Ok(_)) => {
-                tracing::error!("Sync events job should never return Ok");
+                info!("Sync events {} job finished", event_type);
+                break;
             }
             Ok(Err(e)) => {
-                tracing::error!("Sync events {} job panic: {}", event_type, e);
+                error!("Sync events {} job panic: {}", event_type, e);
             }
             Err(e) => {
-                tracing::error!("Sync events {} job error: {}", event_type, e);
+                error!("Sync events {} job error: {}", event_type, e);
             }
         }
         observer
@@ -147,36 +166,97 @@ async fn sync_events_job<O: SyncEvent + 'static>(
         tokio::time::sleep(tokio::time::Duration::from_secs(observer_restart_interval)).await;
         log::info!("Restarting sync events job for {}", event_type);
     }
+    Ok(())
 }
 
 #[instrument(skip(observer))]
 pub async fn start_observer_jobs<O: SyncEvent + 'static>(
     observer: Arc<O>,
 ) -> Result<(), ObserverSyncError> {
-    let event_types = vec![
-        EventType::Deposited,
-        EventType::DepositLeafInserted,
-        EventType::BlockPosted,
-    ];
     let observer_clone = observer.clone();
-
-    let mut handlers = Vec::new();
-    for event_type in event_types {
-        let observer_clone = observer_clone.clone();
-        let handler = actix_web::rt::spawn(async move {
-            sync_events_job(observer_clone, event_type).await?;
-            Ok::<(), ObserverSyncError>(())
-        });
-        handlers.push(handler);
+    let deposited_handler = actix_web::rt::spawn(async move {
+        sync_events_job(observer_clone, EventType::Deposited).await?;
+        Ok::<(), ObserverSyncError>(())
+    });
+    let observer_clone = observer.clone();
+    let deposit_leaf_inserted_handler = actix_web::rt::spawn(async move {
+        sync_events_job(observer_clone, EventType::DepositLeafInserted).await?;
+        Ok::<(), ObserverSyncError>(())
+    });
+    let observer_clone = observer.clone();
+    let block_posted_handler = actix_web::rt::spawn(async move {
+        sync_events_job(observer_clone, EventType::BlockPosted).await?;
+        Ok::<(), ObserverSyncError>(())
+    });
+    tokio::select! {
+        result = deposited_handler => {
+            match result {
+                Ok(Ok(_)) => {
+                    log::info!("Sync events job for {:?} finished", EventType::Deposited);
+                }
+                Ok(Err(e)) => {
+                    log::error!("Sync events job for {:?} failed: {}", EventType::Deposited, e);
+                }
+                Err(e) => {
+                    log::error!("Sync events job for {:?} error: {}", EventType::Deposited, e);
+                }
+            }
+        }
+        result = deposit_leaf_inserted_handler => {
+            match result {
+                Ok(Ok(_)) => {
+                    log::info!("Sync events job for {:?} finished", EventType::DepositLeafInserted);
+                }
+                Ok(Err(e)) => {
+                    log::error!("Sync events job for {:?} failed: {}", EventType::DepositLeafInserted, e);
+                }
+                Err(e) => {
+                    log::error!("Sync events job for {:?} error: {}", EventType::DepositLeafInserted, e);
+                }
+            }
+        }
+        result = block_posted_handler => {
+            match result {
+                Ok(Ok(_)) => {
+                    log::info!("Sync events job for {:?} finished", EventType::BlockPosted);
+                }
+                Ok(Err(e)) => {
+                    log::error!("Sync events job for {:?} failed: {}", EventType::BlockPosted, e);
+                }
+                Err(e) => {
+                    log::error!("Sync events job for {:?} error: {}", EventType::BlockPosted, e);
+                }
+            }
+        }
     }
-
-    // tokio::select! {
-    //     _ = handlers[0] => {
-    //         log::error!("Sync events job for {:?} failed", event_types[0]);
-    //     }
-    // }
-
-    log::info!("Observer started all jobs");
-
     Ok(())
+}
+
+#[instrument(skip(primary_observer, secondary_observer))]
+pub async fn run_and_switch_observers<P: SyncEvent + 'static, S: SyncEvent + 'static>(
+    primary_observer: Arc<P>,
+    secondary_observer: Option<Arc<S>>,
+) {
+    let primary_observer_clone = primary_observer.clone();
+    actix_web::rt::spawn(async move {
+        start_observer_jobs(primary_observer_clone).await?;
+
+        error!(
+            "Primary observer job finished, sleeping {} seconds",
+            primary_observer.config().observer_restart_interval
+        );
+        tokio::time::sleep(tokio::time::Duration::from_secs(
+            primary_observer.config().observer_restart_interval,
+        ))
+        .await;
+
+        if let Some(secondary_observer) = secondary_observer {
+            warn!("Switching to secondary observer");
+            start_observer_jobs(secondary_observer).await?;
+        } else {
+            warn!("No secondary observer to switch to");
+        }
+        error!("Observer job finished, exiting");
+        Ok::<(), ObserverSyncError>(())
+    });
 }

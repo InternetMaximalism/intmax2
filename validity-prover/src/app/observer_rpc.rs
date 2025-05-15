@@ -379,6 +379,10 @@ impl RPCObserver {
 
 #[async_trait::async_trait(?Send)]
 impl SyncEvent for RPCObserver {
+    fn name(&self) -> String {
+        "RPCObserver".to_string()
+    }
+
     fn config(&self) -> ObserverConfig {
         self.config.clone()
     }

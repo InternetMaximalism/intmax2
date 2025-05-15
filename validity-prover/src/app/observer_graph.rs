@@ -202,6 +202,10 @@ impl TheGraphObserver {
 
 #[async_trait::async_trait(?Send)]
 impl SyncEvent for TheGraphObserver {
+    fn name(&self) -> String {
+        "TheGraphObserver".to_string()
+    }
+
     fn config(&self) -> ObserverConfig {
         self.config.clone()
     }
