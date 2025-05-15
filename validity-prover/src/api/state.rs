@@ -58,8 +58,8 @@ pub struct State {
 
 impl State {
     pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
-        let l1_rpc_urls = parse_urls(&env.l1_rpc_urls)?;
-        let l2_rpc_urls = parse_urls(&env.l2_rpc_urls)?;
+        let l1_rpc_urls = parse_urls(&env.l1_rpc_url)?;
+        let l2_rpc_urls = parse_urls(&env.l2_rpc_url)?;
         let l1_provider = get_provider_with_fallback(l1_rpc_urls.as_ref())?;
         let l2_provider = get_provider_with_fallback(l2_rpc_urls.as_ref())?;
         let rollup_contract = RollupContract::new(l2_provider, env.rollup_contract_address);

@@ -1,9 +1,7 @@
 use intmax2_client_sdk::external_api::contract::utils::get_provider_with_fallback;
+use server_common::parser::parse_urls;
 
-use crate::{
-    app::{block_builder::BlockBuilder, error::BlockBuilderError},
-    EnvVar,
-};
+use crate::{app::block_builder::BlockBuilder, EnvVar};
 
 #[derive(Clone)]
 pub struct State {
@@ -11,8 +9,9 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(env: &EnvVar) -> Result<Self, BlockBuilderError> {
-        let provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
+    pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
+        let l2_rpc_urls = parse_urls(&env.l2_rpc_url)?;
+        let provider = get_provider_with_fallback(l2_rpc_urls.as_ref())?;
         let block_builder = BlockBuilder::new(env, provider).await?;
         Ok(State { block_builder })
     }
