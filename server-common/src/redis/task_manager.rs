@@ -249,21 +249,20 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
     pub async fn cleanup_inactive_tasks(&self) -> Result<()> {
         let mut conn = self.get_connection().await?;
 
-        loop {
-            // get all running tasks
-            let task_ids: Vec<u32> = conn.smembers(&self.running_key).await?;
-            log::info!("running tasks: {:?}", task_ids);
+        // get all running tasks
+        let task_ids: Vec<u32> = conn.smembers(&self.running_key).await?;
+        log::info!("running tasks: {:?}", task_ids);
 
-            // wait heartbeat_ttl seconds for worker to submit heartbeat
-            tokio::time::sleep(tokio::time::Duration::from_secs(self.heartbeat_ttl as u64)).await;
+        // wait heartbeat_ttl seconds for worker to submit heartbeat
+        tokio::time::sleep(tokio::time::Duration::from_secs(self.heartbeat_ttl as u64)).await;
 
-            for task_id in task_ids {
-                let key = format!("{}:{}", self.heartbeat_prefix, task_id);
-                let worker_id: Option<String> = conn.get(&key).await?;
-                if worker_id.is_none() {
-                    // Check if task has result and move only if no result exists
-                    let script = redis::Script::new(
-                        r#"
+        for task_id in task_ids {
+            let key = format!("{}:{}", self.heartbeat_prefix, task_id);
+            let worker_id: Option<String> = conn.get(&key).await?;
+            if worker_id.is_none() {
+                // Check if task has result and move only if no result exists
+                let script = redis::Script::new(
+                    r#"
                         -- Check if result exists for this task
                         local has_result = redis.call('HEXISTS', KEYS[1], ARGV[1])
                         
@@ -276,19 +275,19 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
                             return 0
                         end
                         "#,
-                    );
-                    let moved: i32 = script
-                        .key(&self.results_key)
-                        .key(&self.running_key)
-                        .key(&self.pending_key)
-                        .arg(task_id)
-                        .invoke_async(&mut conn)
-                        .await?;
-                    if moved == 1 {
-                        log::warn!("task {} moved from running to pending", task_id);
-                    }
+                );
+                let moved: i32 = script
+                    .key(&self.results_key)
+                    .key(&self.running_key)
+                    .key(&self.pending_key)
+                    .arg(task_id)
+                    .invoke_async(&mut conn)
+                    .await?;
+                if moved == 1 {
+                    log::warn!("task {} moved from running to pending", task_id);
                 }
             }
         }
+        Ok(())
     }
 }
