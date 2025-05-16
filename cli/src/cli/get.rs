@@ -93,12 +93,15 @@ pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
     println!("Claim status:");
     for (i, claim_info) in claim_info.iter().enumerate() {
         let claim = claim_info.claim.clone();
+        let submit_proof_tx_hash = claim_info
+            .submit_claim_proof_tx_hash
+            .map_or("N/A".to_string(), |h| h.to_hex());
         let l1_tx_hash = claim_info
             .l1_tx_hash
             .map_or("N/A".to_string(), |h| h.to_hex());
         println!(
-            "#{}: recipient: {}, amount: {}, l1_tx_hash: {}, status: {}",
-            i, claim.recipient, claim.amount, l1_tx_hash, claim_info.status
+            "#{}: recipient: {}, amount: {}, submit_proof_tx_hash: {}, l1_tx_hash: {}, status: {}",
+            i, claim.recipient, claim.amount, submit_proof_tx_hash, l1_tx_hash, claim_info.status
         );
     }
     Ok(())

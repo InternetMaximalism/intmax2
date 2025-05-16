@@ -193,6 +193,7 @@ impl ValidityProver {
                 "sync_validity_witness: syncing block number {}",
                 block_number
             );
+            self.rate_manager.add(SYNC_VALIDITY_WITNESS_KEY).await?;
             let full_block_with_meta = self
                 .observer_api
                 .get_full_block_with_meta(block_number)
@@ -325,6 +326,7 @@ impl ValidityProver {
         }
 
         loop {
+            self.rate_manager.add(GENERATE_VALIDITY_PROOF_KEY).await?;
             last_validity_proof_block_number += 1;
 
             // get result from the task manager
@@ -402,6 +404,7 @@ impl ValidityProver {
             .to_validity_pis()
             .unwrap();
         for block_number in (last_validity_prover_block_number + 1)..=to_block_number {
+            self.rate_manager.add(ADD_TASKS_KEY).await?;
             if self.manager.check_task_exists(block_number).await? {
                 break;
             }
@@ -436,7 +439,6 @@ impl ValidityProver {
             tokio::time::interval(Duration::from_secs(self.config.witness_sync_interval));
         loop {
             interval.tick().await;
-            self.rate_manager.add(SYNC_VALIDITY_WITNESS_KEY).await?;
             self.sync_validity_witness().await?;
         }
     }
@@ -446,7 +448,6 @@ impl ValidityProver {
             tokio::time::interval(Duration::from_secs(self.config.validity_proof_interval));
         loop {
             interval.tick().await;
-            self.rate_manager.add(GENERATE_VALIDITY_PROOF_KEY).await?;
             self.generate_validity_proof().await?;
         }
     }
@@ -456,7 +457,6 @@ impl ValidityProver {
             tokio::time::interval(Duration::from_secs(self.config.add_tasks_interval));
         loop {
             interval.tick().await;
-            self.rate_manager.add(ADD_TASKS_KEY).await?;
             self.add_tasks().await?;
         }
     }

@@ -146,10 +146,10 @@ async fn sync_events_job<O: SyncEvent + 'static>(
                 break;
             }
             Ok(Err(e)) => {
-                error!("Sync events {} job panic: {}", event_type, e);
+                error!("Sync events {} job error: {}", event_type, e);
             }
             Err(e) => {
-                error!("Sync events {} job error: {}", event_type, e);
+                error!("Sync events {} job panic: {}", event_type, e);
             }
         }
         observer
