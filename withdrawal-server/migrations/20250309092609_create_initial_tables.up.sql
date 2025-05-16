@@ -49,5 +49,3 @@ CREATE TABLE IF NOT EXISTS used_payments (
 CREATE INDEX idx_withdrawals_pubkey ON withdrawals(pubkey);
 CREATE INDEX idx_withdrawals_recipient ON withdrawals(recipient);
 CREATE INDEX idx_withdrawals_withdrawal_hash ON withdrawals (withdrawal_hash);
-
-CREATE INDEX idx_claims_nullifier ON claims(nullifier);
