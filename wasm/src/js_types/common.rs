@@ -10,6 +10,7 @@ use intmax2_zkp::{
     },
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 use super::{
@@ -17,7 +18,7 @@ use super::{
     utils::{parse_address, parse_bytes32, parse_salt, parse_u256},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsGenericAddress {
     /// true if pubkey, false if ethereum address
@@ -68,7 +69,7 @@ impl JsGenericAddress {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTransfer {
     pub recipient: JsGenericAddress,

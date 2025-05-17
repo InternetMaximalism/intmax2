@@ -1,6 +1,6 @@
 use client::{get_client, Config};
 use intmax2_client_sdk::client::{
-    client::TransferFeeQuote,
+    client::{PaymentMemoEntry, TransferFeeQuote},
     key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key,
 };
 use intmax2_interfaces::data::deposit_data::TokenType;
@@ -22,7 +22,7 @@ use js_types::{
 };
 use num_bigint::BigUint;
 use utils::{parse_h256, str_privkey_to_keyset};
-use wasm_bindgen::{prelude::wasm_bindgen, JsError};
+use wasm_bindgen::{prelude::wasm_bindgen, JsError, JsValue};
 
 pub mod client;
 pub mod fee_payment;
@@ -122,16 +122,19 @@ pub async fn prepare_deposit(
 pub async fn await_tx_sendable(
     config: &Config,
     private_key: &str,
-    transfers: Vec<JsTransfer>,
-    fee_quote: JsTransferFeeQuote,
+    transfers: &JsValue, // same as Vec<JsTransfer> but use JsValue to avoid moving the ownership
+    fee_quote: &JsTransferFeeQuote, // same as Vec<JsPaymentMemoEntry> but use JsValue to avoid moving the ownership
 ) -> Result<(), JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
+    let transfers: Vec<JsTransfer> = serde_wasm_bindgen::from_value(transfers.clone())
+        .map_err(|e| JsError::new(&format!("failed to deserialize transfers: {}", e)))?;
     let transfers: Vec<Transfer> = transfers
         .iter()
         .map(|transfer| transfer.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
-    let fee_quote: TransferFeeQuote = fee_quote.try_into()?;
+
+    let key = str_privkey_to_keyset(private_key)?;
+    let fee_quote: TransferFeeQuote = fee_quote.clone().try_into()?;
     let client = get_client(config);
     client
         .await_tx_sendable(key, &transfers, &fee_quote)
@@ -141,27 +144,31 @@ pub async fn await_tx_sendable(
 
 /// Function to send a tx request to the block builder. The return value contains information to take a backup.
 #[wasm_bindgen]
-#[allow(clippy::too_many_arguments)]
 pub async fn send_tx_request(
     config: &Config,
     block_builder_url: &str,
     private_key: &str,
-    transfers: Vec<JsTransfer>,
-    payment_memos: Vec<JsPaymentMemoEntry>,
-    fee_quote: JsTransferFeeQuote,
+    transfers: &JsValue, // same as Vec<JsTransfer> but use JsValue to avoid moving the ownership
+    payment_memos: &JsValue, // same as Vec<JsPaymentMemoEntry> but use JsValue to avoid moving the ownership
+    fee_quote: &JsTransferFeeQuote,
 ) -> Result<JsTxRequestMemo, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
+    let transfers: Vec<JsTransfer> = serde_wasm_bindgen::from_value(transfers.clone())
+        .map_err(|e| JsError::new(&format!("failed to deserialize transfers: {}", e)))?;
     let transfers: Vec<Transfer> = transfers
         .iter()
         .map(|transfer| transfer.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
-    let fee_quote: TransferFeeQuote = fee_quote.try_into()?;
-    let payment_memos = payment_memos
+    let payment_memos: Vec<JsPaymentMemoEntry> =
+        serde_wasm_bindgen::from_value(payment_memos.clone())
+            .map_err(|e| JsError::new(&format!("failed to deserialize payment memos: {}", e)))?;
+    let payment_memos: Vec<PaymentMemoEntry> = payment_memos
         .iter()
         .map(|e| e.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
 
+    let fee_quote: TransferFeeQuote = fee_quote.clone().try_into()?;
     let client = get_client(config);
     let memo = client
         .send_tx_request(
