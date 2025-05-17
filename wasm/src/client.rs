@@ -47,12 +47,6 @@ pub struct Config {
 
     pub is_faster_mining: bool,
 
-    /// Interval between retries for tx requests
-    pub block_builder_request_interval: u64,
-
-    /// Maximum number of retries for tx requests,
-    pub block_builder_request_limit: u64,
-
     /// Initial wait time for tx query
     pub block_builder_query_wait_time: u64,
 
@@ -99,8 +93,6 @@ impl Config {
         tx_timeout: u64,
         is_faster_mining: bool,
 
-        block_builder_request_interval: u64,
-        block_builder_request_limit: u64,
         block_builder_query_wait_time: u64,
         block_builder_query_interval: u64,
         block_builder_query_limit: u64,
@@ -124,8 +116,6 @@ impl Config {
             deposit_timeout,
             tx_timeout,
             is_faster_mining,
-            block_builder_request_interval,
-            block_builder_request_limit,
             block_builder_query_wait_time,
             block_builder_query_interval,
             block_builder_query_limit,
@@ -168,8 +158,6 @@ pub fn get_client(config: &Config) -> Client {
         deposit_timeout: config.deposit_timeout,
         tx_timeout: config.tx_timeout,
         is_faster_mining: config.is_faster_mining,
-        block_builder_request_interval: config.block_builder_request_interval,
-        block_builder_request_limit: config.block_builder_request_limit,
         block_builder_query_wait_time: config.block_builder_query_wait_time,
         block_builder_query_interval: config.block_builder_query_interval,
         block_builder_query_limit: config.block_builder_query_limit,

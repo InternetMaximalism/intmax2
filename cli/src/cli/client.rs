@@ -101,8 +101,6 @@ pub fn get_client() -> Result<Client, CliError> {
     let config = ClientConfig {
         deposit_timeout: env.deposit_timeout,
         tx_timeout: env.tx_timeout,
-        block_builder_request_interval: env.block_builder_request_interval,
-        block_builder_request_limit: env.block_builder_request_limit,
         block_builder_query_wait_time: env.block_builder_query_wait_time,
         block_builder_query_interval: env.block_builder_query_interval,
         block_builder_query_limit: env.block_builder_query_limit,

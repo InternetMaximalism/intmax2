@@ -110,20 +110,30 @@ impl Balances {
         is_insufficient
     }
 
+    pub fn add_token(&mut self, token_index: u32, amount: U256) {
+        let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
+        let new_asset_leaf = prev_asset_leaf.add(amount);
+        self.0.insert(token_index, new_asset_leaf);
+    }
+
+    pub fn sub_token(&mut self, token_index: u32, amount: U256) -> bool {
+        let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
+        let new_asset_leaf = prev_asset_leaf.sub(amount);
+        self.0.insert(token_index, new_asset_leaf);
+        new_asset_leaf.is_insufficient
+    }
+
     /// Update the balance with the deposit data
     pub fn add_deposit(&mut self, deposit_data: &DepositData) {
         let token_index = deposit_data.token_index.unwrap();
-        let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
-        let new_asset_leaf = prev_asset_leaf.add(deposit_data.amount);
-        self.0.insert(token_index, new_asset_leaf);
+        let amount = deposit_data.amount;
+        self.add_token(token_index, amount);
     }
 
     /// Update the balance with the transfer data
     pub fn add_transfer(&mut self, transfer_data: &TransferData) {
-        let token_index = transfer_data.transfer.token_index;
-        let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
-        let new_asset_leaf = prev_asset_leaf.add(transfer_data.transfer.amount);
-        self.0.insert(token_index, new_asset_leaf);
+        let transfer = &transfer_data.transfer;
+        self.add_token(transfer.token_index, transfer.amount);
     }
 
     /// Update the balance with the tx data
@@ -138,11 +148,7 @@ impl Balances {
     }
 
     pub fn sub_transfer(&mut self, transfer: &Transfer) -> bool {
-        let token_index = transfer.token_index;
-        let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
-        let new_asset_leaf = prev_asset_leaf.sub(transfer.amount);
-        self.0.insert(token_index, new_asset_leaf);
-        new_asset_leaf.is_insufficient
+        self.sub_token(transfer.token_index, transfer.amount)
     }
 
     pub fn get(&self, token_index: u32) -> U256 {

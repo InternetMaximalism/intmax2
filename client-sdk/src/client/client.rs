@@ -214,6 +214,7 @@ impl Client {
         Ok(result)
     }
 
+    /// Check balance and await for both balance proof and validity proof synced
     pub async fn await_tx_sendable(
         &self,
         key: KeySet,
@@ -236,6 +237,48 @@ impl Client {
                 "fee_beneficiary is required".to_string(),
             ));
         }
+        // balance check
+        let mut transfer_amounts = transfers
+            .iter()
+            .map(|t| (t.token_index, t.amount))
+            .collect::<Vec<_>>();
+        if let Some(fee) = &fee_quote.fee {
+            transfer_amounts.push((fee.token_index, fee.amount));
+        }
+        let collateral_amounts = if let Some(collateral_fee) = &fee_quote.collateral_fee {
+            vec![(collateral_fee.token_index, collateral_fee.amount)]
+        } else {
+            vec![]
+        };
+        let mut user_data = self.get_user_data(key).await?;
+        let mut already_synced = false;
+
+        match balance_check(&user_data.balances(), &transfer_amounts) {
+            Ok(_) => {}
+            Err(_) => {
+                // if balance check failed, sync and retry
+                log::warn!("Balance for transfers is not enough, start to sync");
+                self.sync(key).await?;
+                already_synced = true;
+                user_data = self.get_user_data(key).await?;
+
+                // check again
+                balance_check(&user_data.balances(), &transfer_amounts)?;
+            }
+        }
+        match balance_check(&user_data.balances(), &collateral_amounts) {
+            Ok(_) => {}
+            Err(_) => {
+                // if balance check failed, sync and retry
+                if !already_synced {
+                    log::warn!("Balance for collateral transfer is not enough, start to sync");
+                    self.sync(key).await?;
+                    user_data = self.get_user_data(key).await?;
+                }
+                // check again
+                balance_check(&user_data.balances(), &transfer_amounts)?;
+            }
+        }
 
         // wait for sync
         let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
@@ -245,7 +288,7 @@ impl Client {
             onchain_block_number,
         )
         .await?;
-        let mut user_data = self.get_user_data(key).await?;
+
         let current_time = chrono::Utc::now().timestamp() as u64;
         let tx_info = fetch_all_unprocessed_tx_info(
             self.store_vault_server.as_ref(),
@@ -257,10 +300,14 @@ impl Client {
         )
         .await?;
         if !tx_info.settled.is_empty() || !tx_info.pending.is_empty() {
-            log::warn!("There are unprocessed transactions, start to sync");
+            if already_synced {
+                return Err(ClientError::UnexpectedError(
+                    "There are unsynced txs, but already synced".to_string(),
+                ));
+            }
+            // error here is there are pending txs
             self.sync(key).await?;
             user_data = self.get_user_data(key).await?;
-            log::info!("Sync finished");
         }
         Ok(user_data)
     }
@@ -327,15 +374,6 @@ impl Client {
 
         let balance_proof =
             get_balance_proof(&user_data)?.ok_or(ClientError::CannotSendTxByZeroBalanceAccount)?;
-
-        // balance check
-        let balances = user_data.balances();
-        balance_check(&balances, &transfers)?;
-
-        // balance check for collateral transfer
-        if let Some(collateral_transfer) = collateral_transfer.as_ref() {
-            balance_check(&balances, &[*collateral_transfer])?;
-        }
 
         // generate spent proof
         let tx_nonce = user_data.full_private_state.nonce;
@@ -880,15 +918,15 @@ impl Client {
     }
 }
 
-fn balance_check(balances: &Balances, transfers: &[Transfer]) -> Result<(), ClientError> {
+fn balance_check(balances: &Balances, amounts: &[(u32, U256)]) -> Result<(), ClientError> {
     let mut balances = balances.clone();
-    for transfer in transfers {
-        let prev_balance = balances.get(transfer.token_index);
-        let is_insufficient = balances.sub_transfer(transfer);
+    for (token_index, amount) in amounts {
+        let prev_balance = balances.get(*token_index);
+        let is_insufficient = balances.sub_token(*token_index, *amount);
         if is_insufficient {
             return Err(ClientError::BalanceError(format!(
                 "Insufficient balance: {} < {} for token #{}",
-                prev_balance, transfer.amount, transfer.token_index
+                prev_balance, amount, token_index
             )));
         }
     }
