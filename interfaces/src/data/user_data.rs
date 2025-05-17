@@ -110,12 +110,25 @@ impl Balances {
         is_insufficient
     }
 
+    /// Adds the specified `amount` to the balance of the given `token_index`.
+    ///
+    /// # Parameters
+    /// - `token_index`: The index of the token to update.
+    /// - `amount`: The amount to add to the token's balance.
     pub fn add_token(&mut self, token_index: u32, amount: U256) {
         let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
         let new_asset_leaf = prev_asset_leaf.add(amount);
         self.0.insert(token_index, new_asset_leaf);
     }
 
+    /// Subtracts the specified `amount` from the balance of the given `token_index`.
+    ///
+    /// # Parameters
+    /// - `token_index`: The index of the token to update.
+    /// - `amount`: The amount to subtract from the token's balance.
+    ///
+    /// # Returns
+    /// - `true` if the resulting balance is insufficient, `false` otherwise.
     pub fn sub_token(&mut self, token_index: u32, amount: U256) -> bool {
         let prev_asset_leaf = self.0.get(&token_index).cloned().unwrap_or_default();
         let new_asset_leaf = prev_asset_leaf.sub(amount);
