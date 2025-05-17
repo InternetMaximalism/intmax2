@@ -276,7 +276,7 @@ impl Client {
                     user_data = self.get_user_data(key).await?;
                 }
                 // check again
-                balance_check(&user_data.balances(), &transfer_amounts)?;
+                balance_check(&user_data.balances(), &collateral_amounts)?;
             }
         }
 
