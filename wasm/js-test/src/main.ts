@@ -24,7 +24,7 @@ async function main() {
   const tokenAddress = "0x0000000000000000000000000000000000000000";
   const tokenId = "0"; // Use "0" for fungible tokens
   const amount = "1000000000000000"; // in wei
-  // await depositWrapper(config, ethKey, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId);
+  await depositWrapper(config, ethKey, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId);
 
   // sync the account's balance proof 
   await syncBalanceProof(config, privateKey);
