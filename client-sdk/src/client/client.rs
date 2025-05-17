@@ -401,7 +401,7 @@ impl Client {
             BigUint::from(ephemeral_key.privkey).try_into().unwrap();
 
         let fee_proof = if let Some(fee_index) = fee_index {
-            let (fee_proof, collateral_spent_witness) = generate_fee_proof(
+            let fee_proof = generate_fee_proof(
                 self.store_vault_server.as_ref(),
                 self.balance_prover.as_ref(),
                 self.config.tx_timeout,
@@ -416,25 +416,6 @@ impl Client {
                 fee_quote.block_builder_address,
             )
             .await?;
-            // save tx data for collateral block
-            if let Some(collateral_block) = &fee_proof.collateral_block {
-                let transfer_data = &collateral_block.fee_transfer_data;
-                let tx_data = TxData {
-                    tx_index: transfer_data.tx_index,
-                    tx_merkle_proof: transfer_data.tx_merkle_proof.clone(),
-                    tx_tree_root: transfer_data.tx_tree_root,
-                    spent_witness: collateral_spent_witness.unwrap(),
-                    sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
-                };
-                let entry = SaveDataEntry {
-                    topic: DataType::Tx.to_topic(),
-                    pubkey: key.pubkey,
-                    data: tx_data.encrypt(key.pubkey, Some(key))?,
-                };
-                self.store_vault_server
-                    .save_data_batch(key, &[entry])
-                    .await?;
-            }
             Some(fee_proof)
         } else {
             None
