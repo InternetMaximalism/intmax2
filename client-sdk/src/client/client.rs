@@ -313,7 +313,6 @@ impl Client {
     }
 
     /// Send a transaction request to the block builder
-    #[allow(clippy::too_many_arguments)]
     pub async fn send_tx_request(
         &self,
         block_builder_url: &str,
