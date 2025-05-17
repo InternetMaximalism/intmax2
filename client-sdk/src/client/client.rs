@@ -35,7 +35,6 @@ use intmax2_zkp::{
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 
-use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -397,9 +396,7 @@ impl Client {
                 &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
             )
             .await?;
-        let sender_proof_set_ephemeral_key: U256 =
-            BigUint::from(ephemeral_key.privkey).try_into().unwrap();
-
+        let sender_proof_set_ephemeral_key: U256 = ephemeral_key.privkey;
         let fee_proof = if let Some(fee_index) = fee_index {
             let fee_proof = generate_fee_proof(
                 self.store_vault_server.as_ref(),
