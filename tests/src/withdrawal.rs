@@ -104,7 +104,7 @@ pub async fn single_withdrawal(
             client,
             key,
             &withdrawal_transfers.transfers,
-            payment_memos.clone(),
+            &payment_memos,
             fee_token_index,
         )
         .await;

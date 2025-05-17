@@ -111,7 +111,6 @@ pub async fn fetch_withdrawal_info(
             }
             None if meta.timestamp + tx_timeout < current_time => {
                 // Transfer has timed out
-                log::error!("Withdrawal {} is timeout", meta.digest);
                 timeout.push((meta, transfer_data));
             }
             None => {

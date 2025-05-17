@@ -61,11 +61,9 @@ pub async fn send_transfers(
         .send_tx_request(
             &block_builder_url,
             key,
-            transfers.to_vec(),
-            payment_memos,
-            fee_quote.beneficiary,
-            fee_quote.fee,
-            fee_quote.collateral_fee,
+            transfers,
+            &payment_memos,
+            &fee_quote,
         )
         .await?;
 

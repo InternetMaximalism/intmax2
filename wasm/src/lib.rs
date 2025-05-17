@@ -1,5 +1,8 @@
 use client::{get_client, Config};
-use intmax2_client_sdk::client::key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key;
+use intmax2_client_sdk::client::{
+    client::TransferFeeQuote,
+    key_from_eth::generate_intmax_account_from_eth_key as inner_generate_intmax_account_from_eth_key,
+};
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
     common::{deposit::Deposit, transfer::Transfer},
@@ -12,7 +15,7 @@ use js_types::{
         balances_to_token_balances, JsDepositResult, JsTransferData, JsTxResult, JsUserData,
         TokenBalance,
     },
-    fee::{JsFee, JsFeeQuote},
+    fee::{JsFeeQuote, JsTransferFeeQuote},
     payment_memo::JsPaymentMemoEntry,
     utils::{parse_address, parse_bytes32, parse_u256},
     wrapper::JsTxRequestMemo,
@@ -116,11 +119,23 @@ pub async fn prepare_deposit(
 
 /// Wait for the tx to be sendable. Wait for the sync of validity prover and balance proof.
 #[wasm_bindgen]
-pub async fn await_tx_sendable(config: &Config, private_key: &str) -> Result<(), JsError> {
+pub async fn await_tx_sendable(
+    config: &Config,
+    private_key: &str,
+    transfers: Vec<JsTransfer>,
+    fee_quote: JsTransferFeeQuote,
+) -> Result<(), JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
+    let transfers: Vec<Transfer> = transfers
+        .iter()
+        .map(|transfer| transfer.clone().try_into())
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let fee_quote: TransferFeeQuote = fee_quote.try_into()?;
     let client = get_client(config);
-    client.await_tx_sendable(key).await?;
+    client
+        .await_tx_sendable(key, &transfers, &fee_quote)
+        .await?;
     Ok(())
 }
 
@@ -133,9 +148,7 @@ pub async fn send_tx_request(
     private_key: &str,
     transfers: Vec<JsTransfer>,
     payment_memos: Vec<JsPaymentMemoEntry>,
-    beneficiary: Option<String>,
-    fee: Option<JsFee>,
-    collateral_fee: Option<JsFee>,
+    fee_quote: JsTransferFeeQuote,
 ) -> Result<JsTxRequestMemo, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
@@ -143,27 +156,20 @@ pub async fn send_tx_request(
         .iter()
         .map(|transfer| transfer.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
+    let fee_quote: TransferFeeQuote = fee_quote.try_into()?;
     let payment_memos = payment_memos
         .iter()
         .map(|e| e.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
-    let beneficiary: Option<U256> = beneficiary
-        .map(|b| parse_bytes32(&b))
-        .transpose()?
-        .map(|b| b.into());
-    let fee = fee.map(|f| f.try_into()).transpose()?;
-    let collateral_fee = collateral_fee.map(|f| f.try_into()).transpose()?;
 
     let client = get_client(config);
     let memo = client
         .send_tx_request(
             block_builder_url,
             key,
-            transfers,
-            payment_memos,
-            beneficiary,
-            fee,
-            collateral_fee,
+            &transfers,
+            &payment_memos,
+            &fee_quote,
         )
         .await
         .map_err(|e| JsError::new(&format!("failed to send tx request {}", e)))?;
@@ -333,7 +339,7 @@ pub async fn quote_transfer_fee(
     block_builder_url: &str,
     pubkey: &str,
     fee_token_index: u32,
-) -> Result<JsFeeQuote, JsError> {
+) -> Result<JsTransferFeeQuote, JsError> {
     init_logger();
     let pubkey = parse_bytes32(pubkey)?.into();
     let client = get_client(config);

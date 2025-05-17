@@ -1,6 +1,9 @@
-use intmax2_client_sdk::client::{client::FeeQuote, fee_payment::WithdrawalTransfers};
+use intmax2_client_sdk::client::{
+    client::{FeeQuote, TransferFeeQuote},
+    fee_payment::WithdrawalTransfers,
+};
 use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
-use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
+use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait as _};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 use super::{common::JsTransfer, utils::parse_u256};
@@ -41,6 +44,47 @@ impl From<Fee> for JsFee {
             amount: fee.amount.to_string(),
             token_index: fee.token_index,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct JsTransferFeeQuote {
+    pub beneficiary: Option<String>,
+    pub fee: Option<JsFee>,
+    pub collateral_fee: Option<JsFee>,
+    pub block_builder_address: String,
+}
+
+impl From<TransferFeeQuote> for JsTransferFeeQuote {
+    fn from(fee_quote: TransferFeeQuote) -> Self {
+        Self {
+            beneficiary: fee_quote.beneficiary.map(|b| b.to_hex()),
+            fee: fee_quote.fee.map(JsFee::from),
+            collateral_fee: fee_quote.collateral_fee.map(JsFee::from),
+            block_builder_address: fee_quote.block_builder_address.to_hex(),
+        }
+    }
+}
+
+impl TryFrom<JsTransferFeeQuote> for TransferFeeQuote {
+    type Error = JsError;
+
+    fn try_from(js_fee_quote: JsTransferFeeQuote) -> Result<Self, JsError> {
+        Ok(TransferFeeQuote {
+            beneficiary: js_fee_quote
+                .beneficiary
+                .map(|b| U256::from_hex(&b))
+                .transpose()
+                .map_err(|e| JsError::new(&format!("Invalid beneficiary address: {}", e)))?,
+            fee: js_fee_quote.fee.map(JsFee::try_into).transpose()?,
+            collateral_fee: js_fee_quote
+                .collateral_fee
+                .map(JsFee::try_into)
+                .transpose()?,
+            block_builder_address: Address::from_hex(&js_fee_quote.block_builder_address)
+                .map_err(|e| JsError::new(&format!("Invalid block builder address: {}", e)))?,
+        })
     }
 }
 

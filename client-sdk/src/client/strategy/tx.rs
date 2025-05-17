@@ -70,7 +70,6 @@ pub async fn fetch_tx_info(
             }
             None if meta.timestamp + tx_timeout < current_time => {
                 // Transaction has timed out
-                log::error!("Tx {} is timeout", meta.digest);
                 timeout.push((meta, tx_data));
             }
             None => {

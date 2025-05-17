@@ -41,7 +41,7 @@ pub async fn transfer_loop(
                     retries
                 ));
             }
-            let result = send_transfers(config, client, key, &[transfer], vec![], 0).await;
+            let result = send_transfers(config, client, key, &[transfer], &[], 0).await;
             match result {
                 Ok(_) => break,
                 Err(e) => {

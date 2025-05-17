@@ -125,7 +125,6 @@ pub async fn fetch_transfer_info(
             }
             None if meta.timestamp + tx_timeout < current_time => {
                 // Transfer has timed out
-                log::error!("Transfer {} is timeout", meta.digest);
                 timeout.push((meta, transfer_data));
             }
             None => {

@@ -17,32 +17,31 @@ pub async fn send_transfers(
     client: &Client,
     key: KeySet,
     transfers: &[Transfer],
-    payment_memos: Vec<PaymentMemoEntry>,
+    payment_memos: &[PaymentMemoEntry],
     fee_token_index: u32,
 ) -> anyhow::Result<()> {
+    // override block builder base url if it is set in the env
+    let block_builder_url = get_block_builder_url(&config.indexer_base_url).await?;
+    let fee_quote = client
+        .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
+        .await?;
+
     client
-        .await_tx_sendable(key)
+        .await_tx_sendable(key, transfers, &fee_quote)
         .await
         .context("Failed to get tx sendable")?;
 
     if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
         anyhow::bail!("Too many transfers: {}", transfers.len());
     }
-    // override block builder base url if it is set in the env
-    let block_builder_url = get_block_builder_url(&config.indexer_base_url).await?;
 
-    let fee_quote = client
-        .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
-        .await?;
     let memo = client
         .send_tx_request(
             &block_builder_url,
             key,
-            transfers.to_vec(),
+            transfers,
             payment_memos,
-            fee_quote.beneficiary,
-            fee_quote.fee,
-            fee_quote.collateral_fee,
+            &fee_quote,
         )
         .await?;
 

@@ -123,6 +123,15 @@ pub struct DepositResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TransferFeeQuote {
+    pub beneficiary: Option<U256>,
+    pub fee: Option<Fee>,
+    pub collateral_fee: Option<Fee>,
+    pub block_builder_address: Address,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FeeQuote {
     pub beneficiary: Option<U256>,
     pub fee: Option<Fee>,
@@ -205,7 +214,29 @@ impl Client {
         Ok(result)
     }
 
-    pub async fn await_tx_sendable(&self, key: KeySet) -> Result<UserData, ClientError> {
+    pub async fn await_tx_sendable(
+        &self,
+        key: KeySet,
+        transfers: &[Transfer],
+        fee_quote: &TransferFeeQuote,
+    ) -> Result<UserData, ClientError> {
+        // input validation
+        if transfers.is_empty() {
+            return Err(ClientError::TransferLenError(
+                "transfers is empty".to_string(),
+            ));
+        }
+        if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
+            return Err(ClientError::TransferLenError(
+                "transfers is too many".to_string(),
+            ));
+        }
+        if fee_quote.fee.is_some() && fee_quote.beneficiary.is_none() {
+            return Err(ClientError::BlockBuilderFeeError(
+                "fee_beneficiary is required".to_string(),
+            ));
+        }
+
         // wait for sync
         let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
         wait_till_validity_prover_synced(
@@ -240,75 +271,53 @@ impl Client {
         &self,
         block_builder_url: &str,
         key: KeySet,
-        transfers: Vec<Transfer>,
-        payment_memos: Vec<PaymentMemoEntry>,
-        fee_beneficiary: Option<U256>,
-        fee: Option<Fee>,
-        collateral_fee: Option<Fee>,
+        transfers: &[Transfer],
+        payment_memos: &[PaymentMemoEntry],
+        fee_quote: &TransferFeeQuote,
     ) -> Result<TxRequestMemo, ClientError> {
         log::info!(
-            "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {:?}, fee {:?}, collateral_fee {:?}",
+            "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
             key.pubkey.to_hex(),
             transfers.len(),
-            fee_beneficiary,
-            fee,
-            collateral_fee
+            fee_quote.beneficiary.map_or("N/A".to_string(), |b| b.to_hex()),
+            fee_quote.fee,
+            fee_quote.collateral_fee
         );
-
-        // input validation
-        if transfers.is_empty() {
-            return Err(ClientError::TransferLenError(
-                "transfers is empty".to_string(),
-            ));
-        }
-        if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
-            return Err(ClientError::TransferLenError(
-                "transfers is too many".to_string(),
-            ));
-        }
-        if fee.is_some() && fee_beneficiary.is_none() {
-            return Err(ClientError::BlockBuilderFeeError(
-                "fee_beneficiary is required".to_string(),
-            ));
-        }
-        for e in &payment_memos {
+        for e in payment_memos {
             if e.transfer_index as usize >= transfers.len() {
                 return Err(ClientError::PaymentMemoError(
                     "memo.transfer_index is out of range".to_string(),
                 ));
             }
         }
-
-        let user_data = self.await_tx_sendable(key).await?;
-
-        // get fee info
-        let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
+        let user_data = self.await_tx_sendable(key, transfers, fee_quote).await?;
 
         // fetch if this is first time tx
         let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
 
-        let fee_transfer = fee.map(|fee| Transfer {
-            recipient: fee_beneficiary.unwrap().into(),
+        let fee_transfer = fee_quote.fee.clone().map(|fee| Transfer {
+            recipient: fee_quote.beneficiary.unwrap().into(),
             amount: fee.amount,
             token_index: fee.token_index,
             salt: generate_salt(),
         });
-        let collateral_transfer = collateral_fee.map(|fee| Transfer {
-            recipient: fee_beneficiary.unwrap().into(),
+        let collateral_transfer = fee_quote.collateral_fee.clone().map(|fee| Transfer {
+            recipient: fee_quote.beneficiary.unwrap().into(),
             amount: fee.amount,
             token_index: fee.token_index,
             salt: generate_salt(),
         });
 
         // add fee transfer to the end
-        let transfers = if let Some(fee_transfer) = fee_transfer {
+        let transfers: Vec<Transfer> = if let Some(fee_transfer) = fee_transfer {
             transfers
-                .into_iter()
+                .iter()
+                .cloned()
                 .chain(std::iter::once(fee_transfer))
                 .collect()
         } else {
-            transfers
+            transfers.to_vec()
         };
         let fee_index = if fee_transfer.is_some() {
             Some(transfers.len() as u32 - 1)
@@ -367,7 +376,7 @@ impl Client {
                 &transfers,
                 collateral_transfer,
                 is_registration_block,
-                fee_info.block_builder_address,
+                fee_quote.block_builder_address,
             )
             .await?;
             // save tx data for collateral block
@@ -394,46 +403,25 @@ impl Client {
             None
         };
         // send tx request
-        let mut retries = 0;
-        let request_id = loop {
-            let result = self
-                .block_builder
-                .send_tx_request(
-                    block_builder_url,
-                    is_registration_block,
-                    key.pubkey,
-                    tx,
-                    fee_proof.clone(),
-                )
-                .await;
-            match result {
-                Ok(request_id) => break request_id,
-                Err(e) => {
-                    if retries >= self.config.block_builder_request_limit {
-                        return Err(ClientError::SendTxRequestError(format!(
-                            "failed to send tx request: {}",
-                            e
-                        )));
-                    }
-                    retries += 1;
-                    log::info!(
-                        "Failed to send tx request, retrying in {} seconds. error: {}",
-                        self.config.block_builder_request_interval,
-                        e
-                    );
-                    sleep_for(self.config.block_builder_request_interval).await;
-                }
-            }
-        };
+        let request_id = self
+            .block_builder
+            .send_tx_request(
+                block_builder_url,
+                is_registration_block,
+                key.pubkey,
+                tx,
+                fee_proof.clone(),
+            )
+            .await?;
         let memo = TxRequestMemo {
             request_id,
             is_registration_block,
             tx,
-            transfers,
+            transfers: transfers.to_vec(),
             spent_witness,
             sender_proof_set_ephemeral_key,
             fee_index,
-            payment_memos,
+            payment_memos: payment_memos.to_vec(),
         };
         Ok(memo)
     }
@@ -743,7 +731,7 @@ impl Client {
         block_builder_url: &str,
         pubkey: U256,
         fee_token_index: u32,
-    ) -> Result<FeeQuote, ClientError> {
+    ) -> Result<TransferFeeQuote, ClientError> {
         let account_info = self.validity_prover.get_account_info(pubkey).await?;
         let is_registration_block = account_info.account_id.is_none();
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
@@ -759,10 +747,11 @@ impl Client {
                 "collateral fee is required but fee is not found".to_string(),
             ));
         }
-        Ok(FeeQuote {
+        Ok(TransferFeeQuote {
             beneficiary: fee_info.beneficiary,
             fee,
             collateral_fee,
+            block_builder_address: fee_info.block_builder_address,
         })
     }
 
