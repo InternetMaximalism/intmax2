@@ -131,10 +131,10 @@ async function sendTx(config: Config, block_builder_base_url: string, publicKey:
   console.log("Collateral fee: ", fee_quote.collateral_fee?.amount);
 
   console.log("Waiting for tx sendable...");
-  await await_tx_sendable(config, privateKey);
+  await await_tx_sendable(config, privateKey, transfers, fee_quote);
   console.log("Tx sendable");
 
-  let memo: JsTxRequestMemo = await send_tx_request(config, block_builder_base_url, privateKey, transfers, payment_memos, fee_quote.beneficiary, fee_quote.fee, fee_quote.collateral_fee);
+  let memo: JsTxRequestMemo = await send_tx_request(config, block_builder_base_url, privateKey, transfers, payment_memos, fee_quote);
   console.log("Transfer root of tx: ", memo.tx().transfer_tree_root);
   // wait for the block builder to propose the block
   await sleep(env.BLOCK_BUILDER_QUERY_WAIT_TIME);

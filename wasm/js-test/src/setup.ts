@@ -23,8 +23,6 @@ export const env = cleanEnv(process.env, {
     IS_FASTER_MINING: bool(),
 
     // Block builder client configurations
-    BLOCK_BUILDER_REQUEST_INTERVAL: num(),
-    BLOCK_BUILDER_REQUEST_LIMIT: num(),
     BLOCK_BUILDER_QUERY_WAIT_TIME: num(),
     BLOCK_BUILDER_QUERY_INTERVAL: num(),
     BLOCK_BUILDER_QUERY_LIMIT: num(),
@@ -51,8 +49,6 @@ export const config = new Config(
     BigInt(env.DEPOSIT_TIMEOUT),
     BigInt(env.TX_TIMEOUT),
     env.IS_FASTER_MINING,
-    BigInt(env.BLOCK_BUILDER_REQUEST_INTERVAL),
-    BigInt(env.BLOCK_BUILDER_REQUEST_LIMIT),
     BigInt(env.BLOCK_BUILDER_QUERY_WAIT_TIME),
     BigInt(env.BLOCK_BUILDER_QUERY_INTERVAL),
     BigInt(env.BLOCK_BUILDER_QUERY_LIMIT),
