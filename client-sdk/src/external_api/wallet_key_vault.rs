@@ -30,6 +30,17 @@ pub struct WalletKeyVaultClient {
     pub base_url: String,
 }
 
+#[async_trait(?Send)]
+impl WalletKeyVaultClientInterface for WalletKeyVaultClient {
+    async fn derive_key_from_eth(&self, eth_private_key: B256) -> Result<KeySet, ServerError> {
+        let challenge_message = self
+            .get_challenge_message(get_address_from_private_key(eth_private_key))
+            .await?;
+        let hashed_signature = self.login(eth_private_key, &challenge_message).await?;
+        self.get_keyset(eth_private_key, hashed_signature).await
+    }
+}
+
 impl WalletKeyVaultClient {
     pub fn new(base_url: String) -> Self {
         Self { base_url }
@@ -63,7 +74,7 @@ impl WalletKeyVaultClient {
         Ok(response.message)
     }
 
-    pub async fn login(
+    async fn login(
         &self,
         private_key: B256,
         challenge_message: &str,
@@ -88,7 +99,7 @@ impl WalletKeyVaultClient {
         Ok(hashed_signature.try_into().unwrap())
     }
 
-    pub async fn get_keyset(
+    async fn get_keyset(
         &self,
         private_key: B256,
         hashed_signature: [u8; 32],
@@ -99,17 +110,6 @@ impl WalletKeyVaultClient {
         let mnemonic = Mnemonic::<English>::new_from_entropy(entropy);
         let signer = mnemonic_to_signer(&mnemonic)?;
         Ok(generate_intmax_account_from_eth_key(signer.to_bytes()))
-    }
-}
-
-#[async_trait(?Send)]
-impl WalletKeyVaultClientInterface for WalletKeyVaultClient {
-    async fn derive_key_from_eth(&self, eth_private_key: B256) -> Result<KeySet, ServerError> {
-        let challenge_message = self
-            .get_challenge_message(get_address_from_private_key(eth_private_key))
-            .await?;
-        let hashed_signature = self.login(eth_private_key, &challenge_message).await?;
-        self.get_keyset(eth_private_key, hashed_signature).await
     }
 }
 
