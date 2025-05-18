@@ -14,48 +14,16 @@ use alloy::{
         Signer,
     },
 };
-use intmax2_interfaces::api::error::ServerError;
+use async_trait::async_trait;
+use intmax2_interfaces::api::{
+    error::ServerError,
+    wallet_key_vault::{
+        interface::WalletKeyVaultClientInterface,
+        types::{ChallengeRequest, ChallengeResponse, LoginRequest, LoginResponse},
+    },
+};
 use intmax2_zkp::common::signature_content::key_set::KeySet;
-use serde::{Deserialize, Serialize};
-use serde_with::{base64::Base64, serde_as};
 use sha2::Digest;
-
-fn network_message(address: Address) -> String {
-    format!(
-        "\nThis signature on this message will be used to access the INTMAX network. \nYour address: {address}\nCaution: Please make sure that the domain you are connected to is correct."
-    )
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChallengeRequest {
-    pub address: String,
-    #[serde(rename = "type")]
-    pub request_type: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ChallengeResponse {
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginRequest {
-    pub address: Address,
-    pub challenge_signature: String,
-    pub security_seed: String,
-}
-
-#[serde_as]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginResponse {
-    #[serde_as(as = "Base64")]
-    pub hashed_signature: Vec<u8>,
-    pub nonce: u32,
-    pub encrypted_entropy: Option<String>,
-    pub access_token: Option<String>,
-}
 
 #[derive(Debug, Clone)]
 pub struct WalletKeyVaultClient {
@@ -132,17 +100,23 @@ impl WalletKeyVaultClient {
         let signer = mnemonic_to_signer(&mnemonic)?;
         Ok(generate_intmax_account_from_eth_key(signer.to_bytes()))
     }
+}
 
-    pub async fn generate_keyset_from_private_key(
-        &self,
-        private_key: B256,
-    ) -> Result<KeySet, ServerError> {
+#[async_trait(?Send)]
+impl WalletKeyVaultClientInterface for WalletKeyVaultClient {
+    async fn derive_key_from_eth(&self, eth_private_key: B256) -> Result<KeySet, ServerError> {
         let challenge_message = self
-            .get_challenge_message(get_address_from_private_key(private_key))
+            .get_challenge_message(get_address_from_private_key(eth_private_key))
             .await?;
-        let hashed_signature = self.login(private_key, &challenge_message).await?;
-        self.get_keyset(private_key, hashed_signature).await
+        let hashed_signature = self.login(eth_private_key, &challenge_message).await?;
+        self.get_keyset(eth_private_key, hashed_signature).await
     }
+}
+
+fn network_message(address: Address) -> String {
+    format!(
+        "\nThis signature on this message will be used to access the INTMAX network. \nYour address: {address}\nCaution: Please make sure that the domain you are connected to is correct."
+    )
 }
 
 fn encode_hex_with_prefix(data: &[u8]) -> String {
@@ -156,7 +130,6 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// Convert a mnemonic to a PrivateKeySigner
 fn mnemonic_to_signer(mnemonic: &Mnemonic<English>) -> Result<PrivateKeySigner, ServerError> {
     let derived_priv_key = mnemonic.derive_key("m/44'/60'/0'/0/0", None).unwrap();
     let key: &SigningKey = derived_priv_key.as_ref();
