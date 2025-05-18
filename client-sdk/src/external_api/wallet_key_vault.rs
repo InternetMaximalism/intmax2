@@ -1,3 +1,8 @@
+use super::utils::query::post_request;
+use crate::{
+    client::key_from_eth::generate_intmax_account_from_eth_key,
+    external_api::contract::utils::get_address_from_private_key,
+};
 use alloy::{
     primitives::{Address, B256},
     signers::{
@@ -13,13 +18,6 @@ use intmax2_zkp::common::signature_content::key_set::KeySet;
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 use sha2::Digest;
-
-use crate::{
-    client::key_from_eth::generate_intmax_account_from_eth_key,
-    external_api::contract::utils::get_address_from_private_key,
-};
-
-use super::utils::query::post_request;
 
 fn network_message(address: Address) -> String {
     format!(
@@ -68,7 +66,7 @@ impl WalletKeyVaultClient {
         Self { base_url }
     }
 
-    pub async fn get_challenge(&self, address: Address) -> Result<String, ServerError> {
+    pub async fn get_challenge_message(&self, address: Address) -> Result<String, ServerError> {
         let request = ChallengeRequest {
             address: address.to_string(),
             request_type: "login".to_string(),
@@ -87,12 +85,11 @@ impl WalletKeyVaultClient {
         Ok(signature.as_bytes().to_vec())
     }
 
-    async fn get_security_seed(&self, private_key: B256) -> Result<[u8; 32], ServerError> {
+    async fn security_seed(&self, private_key: B256) -> Result<[u8; 32], ServerError> {
         let address = get_address_from_private_key(private_key);
         let signed_network_message = self
             .sign_message(private_key, &network_message(address))
             .await?;
-        dbg!(&network_message(address));
         let security_seed = sha256(&signed_network_message);
         Ok(security_seed)
     }
@@ -102,19 +99,18 @@ impl WalletKeyVaultClient {
         private_key: B256,
         challenge_message: &str,
     ) -> Result<[u8; 32], ServerError> {
-        let address = get_address_from_private_key(private_key);
-
         let signed_challenge_message = self.sign_message(private_key, challenge_message).await?;
-        let security_seed = self.get_security_seed(private_key).await?;
+        let security_seed = self.security_seed(private_key).await?;
 
         let request = LoginRequest {
-            address,
-            security_seed: "0x".to_string() + &hex::encode(security_seed),
-            challenge_signature: "0x".to_string() + &hex::encode(signed_challenge_message),
+            address: get_address_from_private_key(private_key),
+            security_seed: encode_hex_with_prefix(&security_seed),
+            challenge_signature: encode_hex_with_prefix(&signed_challenge_message),
         };
         let response: LoginResponse =
             post_request(&self.base_url, "/wallet/login", Some(&request)).await?;
         let mut hashed_signature = response.hashed_signature.clone();
+        dbg!(&hashed_signature.len());
         if response.hashed_signature.len() > 32 {
             return Err(ServerError::InvalidResponse(
                 "Invalid hashed signature length".to_string(),
@@ -129,11 +125,10 @@ impl WalletKeyVaultClient {
         private_key: B256,
         hashed_signature: [u8; 32],
     ) -> Result<KeySet, ServerError> {
-        let security_seed = self.get_security_seed(private_key).await?;
+        let security_seed = self.security_seed(private_key).await?;
         let entropy = sha256(&[security_seed, hashed_signature].concat());
         let entropy: Entropy = entropy.into();
         let mnemonic = Mnemonic::<English>::new_from_entropy(entropy);
-        dbg!(mnemonic.to_phrase());
         let wallet = MnemonicBuilder::<English>::default()
             .phrase(mnemonic.to_phrase())
             .index(0)
@@ -143,6 +138,11 @@ impl WalletKeyVaultClient {
         let eth_private_key = wallet.to_bytes();
         Ok(generate_intmax_account_from_eth_key(eth_private_key))
     }
+}
+
+fn encode_hex_with_prefix(data: &[u8]) -> String {
+    let hex = hex::encode(data);
+    format!("0x{hex}")
 }
 
 fn sha256(data: &[u8]) -> [u8; 32] {
@@ -158,6 +158,8 @@ mod tests {
 
     use crate::external_api::contract::utils::get_address_from_private_key;
 
+    use super::encode_hex_with_prefix;
+
     fn get_client() -> super::WalletKeyVaultClient {
         let base_url = std::env::var("WALLET_KEY_VAULT_BASE_URL")
             .unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -170,7 +172,7 @@ mod tests {
         let address = "0x1234567890abcdef1234567890abcdef12345678"
             .parse()
             .unwrap();
-        let result = client.get_challenge(address).await.unwrap();
+        let result = client.get_challenge_message(address).await.unwrap();
         dbg!(result);
     }
 
@@ -180,7 +182,7 @@ mod tests {
         let private_key = B256::random();
 
         let address = get_address_from_private_key(private_key);
-        let challenge_message = client.get_challenge(address).await.unwrap();
+        let challenge_message = client.get_challenge_message(address).await.unwrap();
 
         let response = client.login(private_key, &challenge_message).await.unwrap();
         dbg!(response);
@@ -193,15 +195,20 @@ mod tests {
             "0x7397927abf5b7665c4667e8cb8b92e929e287625f79264564bb66c1fa2232b2c"
                 .parse()
                 .unwrap();
-
         let address = get_address_from_private_key(private_key);
-        let challenge_message = client.get_challenge(address).await.unwrap();
+        let security_seed = client.security_seed(private_key).await.unwrap();
+        println!("security_seed: {}", encode_hex_with_prefix(&security_seed));
+        let challenge_message = client.get_challenge_message(address).await.unwrap();
+        println!("challenge_message: {}", challenge_message);
         let hashed_signature = client.login(private_key, &challenge_message).await.unwrap();
+        println!(
+            "hashed_signature: {}",
+            encode_hex_with_prefix(&hashed_signature)
+        );
         let keyset = client
             .get_keyset(private_key, hashed_signature)
             .await
             .unwrap();
-
         assert_eq!(
             keyset.privkey.to_hex(),
             "0x2b9321ca673e7865bac8fafb81a1f23ff29693c2e9c3523bc0f6bbf7b4087bcd"
