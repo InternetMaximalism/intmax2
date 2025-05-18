@@ -18,6 +18,7 @@ pub struct EnvVar {
     pub use_private_zkp_server: Option<bool>,
     pub withdrawal_server_base_url: String,
     pub predicate_base_url: Option<String>,
+    pub wallet_key_vault_base_url: Option<String>,
     pub deposit_timeout: u64,
     pub tx_timeout: u64,
 

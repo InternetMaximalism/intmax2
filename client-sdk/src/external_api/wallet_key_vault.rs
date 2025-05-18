@@ -1,20 +1,29 @@
 use alloy::{
     primitives::{Address, B256},
-    signers::{local::PrivateKeySigner, Signer},
+    signers::{
+        local::{
+            coins_bip39::{English, Entropy, Mnemonic},
+            MnemonicBuilder, PrivateKeySigner,
+        },
+        Signer,
+    },
 };
 use intmax2_interfaces::api::error::ServerError;
 use intmax2_zkp::common::signature_content::key_set::KeySet;
 use serde::{Deserialize, Serialize};
+use serde_with::{base64::Base64, serde_as};
 use sha2::Digest;
 
-use crate::external_api::contract::utils::get_address_from_private_key;
+use crate::{
+    client::key_from_eth::generate_intmax_account_from_eth_key,
+    external_api::contract::utils::get_address_from_private_key,
+};
 
 use super::utils::query::post_request;
 
 fn network_message(address: Address) -> String {
     format!(
-        "\nThis signature on this message will be used to access the INTMAX network. \nYour address: {}\nCaution: Do not sign if requested on any domain other than intmax.io",
-        address
+        "\nThis signature on this message will be used to access the INTMAX network. \nYour address: {address}\nCaution: Please make sure that the domain you are connected to is correct."
     )
 }
 
@@ -38,10 +47,12 @@ pub struct LoginRequest {
     pub security_seed: String,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
-    pub hashed_signature: String,
+    #[serde_as(as = "Base64")]
+    pub hashed_signature: Vec<u8>,
     pub nonce: u32,
     pub encrypted_entropy: Option<String>,
     pub access_token: Option<String>,
@@ -57,7 +68,7 @@ impl WalletKeyVaultClient {
         Self { base_url }
     }
 
-    async fn get_challenge(&self, address: Address) -> Result<String, ServerError> {
+    pub async fn get_challenge(&self, address: Address) -> Result<String, ServerError> {
         let request = ChallengeRequest {
             address: address.to_string(),
             request_type: "login".to_string(),
@@ -85,11 +96,11 @@ impl WalletKeyVaultClient {
         Ok(security_seed)
     }
 
-    async fn login(
+    pub async fn login(
         &self,
         private_key: B256,
         challenge_message: &str,
-    ) -> Result<LoginResponse, ServerError> {
+    ) -> Result<[u8; 32], ServerError> {
         let address = get_address_from_private_key(private_key);
 
         let signed_challenge_message = self.sign_message(private_key, challenge_message).await?;
@@ -102,35 +113,52 @@ impl WalletKeyVaultClient {
         };
         let response: LoginResponse =
             post_request(&self.base_url, "/wallet/login", Some(&request)).await?;
-        Ok(response)
+        let mut hashed_signature = response.hashed_signature.clone();
+        if response.hashed_signature.len() > 32 {
+            return Err(ServerError::InvalidResponse(
+                "Invalid hashed signature length".to_string(),
+            ));
+        }
+        hashed_signature.resize(32, 0);
+        Ok(hashed_signature.try_into().unwrap())
     }
 
-    async fn get_keyset(
+    pub async fn get_keyset(
         &self,
         private_key: B256,
-        hashed_signature: &str,
+        hashed_signature: [u8; 32],
     ) -> Result<KeySet, ServerError> {
         let security_seed = self.get_security_seed(private_key).await?;
-        let entropy_pre_image = hex::encode(security_seed) + hashed_signature;
-
-        todo!()
+        let entropy = sha256(&[security_seed, hashed_signature].concat());
+        let entropy: Entropy = entropy.into();
+        let mnemonic = Mnemonic::<English>::new_from_entropy(entropy);
+        dbg!(mnemonic.to_phrase());
+        let wallet = MnemonicBuilder::<English>::default()
+            .phrase(mnemonic.to_phrase())
+            .index(0)
+            .unwrap()
+            .build()
+            .unwrap();
+        let eth_private_key = wallet.to_bytes();
+        Ok(generate_intmax_account_from_eth_key(eth_private_key))
     }
 }
 
 fn sha256(data: &[u8]) -> [u8; 32] {
     let mut hasher = sha2::Sha256::new();
     hasher.update(data);
-    hasher.finalize().try_into().unwrap()
+    hasher.finalize().into()
 }
 
 #[cfg(test)]
 mod tests {
     use alloy::primitives::B256;
+    use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
 
     use crate::external_api::contract::utils::get_address_from_private_key;
 
     fn get_client() -> super::WalletKeyVaultClient {
-        let base_url = std::env::var("KEY_VAULT_BASE_URL")
+        let base_url = std::env::var("WALLET_KEY_VAULT_BASE_URL")
             .unwrap_or_else(|_| "http://localhost:3000".to_string());
         super::WalletKeyVaultClient::new(base_url)
     }
@@ -155,5 +183,27 @@ mod tests {
 
         let response = client.login(private_key, &challenge_message).await.unwrap();
         dbg!(response);
+    }
+
+    #[tokio::test]
+    async fn test_get_key() {
+        let client = get_client();
+        let private_key: B256 =
+            "0x7397927abf5b7665c4667e8cb8b92e929e287625f79264564bb66c1fa2232b2c"
+                .parse()
+                .unwrap();
+
+        let address = get_address_from_private_key(private_key);
+        let challenge_message = client.get_challenge(address).await.unwrap();
+        let hashed_signature = client.login(private_key, &challenge_message).await.unwrap();
+        let keyset = client
+            .get_keyset(private_key, hashed_signature)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            keyset.privkey.to_hex(),
+            "0x2b9321ca673e7865bac8fafb81a1f23ff29693c2e9c3523bc0f6bbf7b4087bcd"
+        );
     }
 }
