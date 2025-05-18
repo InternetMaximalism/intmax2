@@ -20,7 +20,7 @@ pub struct RateManager {
     // counts with cleanup
     pub counts: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
 
-    // last timestamps without cleanup
+    // last timestamps
     pub last_timestamps: Arc<Mutex<HashMap<String, u64>>>,
 
     // stop flags
@@ -49,6 +49,11 @@ impl RateManager {
             .await
             .map_err(|_| RateManagerError::Timeout("Timeout while resetting keys".to_string()))?;
         stop_flags.clear();
+
+        let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
+            .await
+            .map_err(|_| RateManagerError::Timeout("Timeout while resetting keys".to_string()))?;
+        last_timestamps.clear();
         Ok(())
     }
 
@@ -64,32 +69,21 @@ impl RateManager {
             .push(Instant::now());
         drop(counts);
 
-        let current_time = Utc::now().timestamp_millis() as u64;
+        let current_time = Utc::now().timestamp() as u64;
         let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
             .await
             .map_err(|_| RateManagerError::Timeout("Timeout while adding key".to_string()))?;
-        last_timestamps
-            .entry(key.to_string())
-            .or_insert(current_time);
+        last_timestamps.insert(key.to_string(), current_time);
         Ok(())
     }
 
-    pub async fn last_timestamp(&self, key: &str) -> Result<Option<Instant>, RateManagerError> {
-        let counts = timeout(self.timeout, self.counts.lock())
+    pub async fn last_timestamp(&self, key: &str) -> Result<Option<u64>, RateManagerError> {
+        let last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
             .await
             .map_err(|_| {
                 RateManagerError::Timeout("Timeout while getting last timestamp".to_string())
             })?;
-        let last_timestamp = counts
-            .get(key)
-            .and_then(|timestamps| timestamps.last().cloned());
-        last_timestamp.map(|timestamp| {
-            if timestamp.elapsed() > self.window {
-                None
-            } else {
-                Some(timestamp)
-            }
-        });
+        let last_timestamp = last_timestamps.get(key).cloned();
         Ok(last_timestamp)
     }
 

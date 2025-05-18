@@ -104,7 +104,6 @@ async fn sync_events_inner_loop<O: SyncEvent>(
             info!("Stopping sync events because of stop flag, {}", event_type);
             return Ok(());
         }
-        rate_manager.add(&sync_event_key(event_type)).await?;
         observer.sync_events(event_type).await?;
     }
 }
