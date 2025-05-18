@@ -92,6 +92,7 @@ impl WalletKeyVaultClient {
         let signed_network_message = self
             .sign_message(private_key, &network_message(address))
             .await?;
+        dbg!(&network_message(address));
         let security_seed = sha256(&signed_network_message);
         Ok(security_seed)
     }
