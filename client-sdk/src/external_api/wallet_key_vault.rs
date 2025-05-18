@@ -37,7 +37,8 @@ impl WalletKeyVaultClientInterface for WalletKeyVaultClient {
             .get_challenge_message(get_address_from_private_key(eth_private_key))
             .await?;
         let hashed_signature = self.login(eth_private_key, &challenge_message).await?;
-        self.get_keyset(eth_private_key, hashed_signature).await
+        self.get_keyset(eth_private_key, hashed_signature, 0, 0)
+            .await
     }
 }
 
@@ -103,12 +104,14 @@ impl WalletKeyVaultClient {
         &self,
         private_key: B256,
         hashed_signature: [u8; 32],
+        redeposit_index: u32,
+        wallet_index: u32,
     ) -> Result<KeySet, ServerError> {
         let security_seed = self.security_seed(private_key).await?;
         let entropy = sha256(&[security_seed, hashed_signature].concat());
         let entropy: Entropy = entropy.into();
         let mnemonic = Mnemonic::<English>::new_from_entropy(entropy);
-        let signer = mnemonic_to_signer(&mnemonic)?;
+        let signer = mnemonic_to_signer(&mnemonic, redeposit_index, wallet_index)?;
         Ok(generate_intmax_account_from_eth_key(signer.to_bytes()))
     }
 }
@@ -130,8 +133,13 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-fn mnemonic_to_signer(mnemonic: &Mnemonic<English>) -> Result<PrivateKeySigner, ServerError> {
-    let derived_priv_key = mnemonic.derive_key("m/44'/60'/0'/0/0", None).unwrap();
+fn mnemonic_to_signer(
+    mnemonic: &Mnemonic<English>,
+    redeposit_index: u32,
+    wallet_index: u32,
+) -> Result<PrivateKeySigner, ServerError> {
+    let derive_path = format!("m/44'/60'/{redeposit_index}'/0/{wallet_index}");
+    let derived_priv_key = mnemonic.derive_key(derive_path.as_str(), None).unwrap();
     let key: &SigningKey = derived_priv_key.as_ref();
     let signing_key = PrivateKeySigner::from_signing_key(key.clone());
     Ok(signing_key)
@@ -165,7 +173,7 @@ mod tests {
         let challenge_message = client.get_challenge_message(address).await.unwrap();
         let hashed_signature = client.login(private_key, &challenge_message).await.unwrap();
         let keyset = client
-            .get_keyset(private_key, hashed_signature)
+            .get_keyset(private_key, hashed_signature, 0, 0)
             .await
             .unwrap();
         // dev environment
@@ -179,7 +187,7 @@ mod tests {
     fn test_mnemonic_to_private_key() {
         let mnemonic_phrase = "bar retreat common buffalo van night stage artefact ring evil finger pelican best trade update sugar pave fossil weird camp coconut army swear aerobic";
         let mnemonic = Mnemonic::<English>::new_from_phrase(mnemonic_phrase).unwrap();
-        let private_key = mnemonic_to_signer(&mnemonic).unwrap().to_bytes();
+        let private_key = mnemonic_to_signer(&mnemonic, 0, 0).unwrap().to_bytes();
 
         let wallet = MnemonicBuilder::<English>::default()
             .phrase(mnemonic_phrase)
