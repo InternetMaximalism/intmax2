@@ -4,7 +4,7 @@ use serde_with::{base64::Base64, serde_as};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChallengeRequest {
-    pub address: String,
+    pub address: Address,
     #[serde(rename = "type")]
     pub request_type: String,
 }

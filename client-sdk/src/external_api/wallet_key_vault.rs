@@ -66,7 +66,7 @@ impl WalletKeyVaultClient {
 
     async fn get_challenge_message(&self, address: Address) -> Result<String, ServerError> {
         let request = ChallengeRequest {
-            address: address.to_string(),
+            address,
             request_type: "login".to_string(),
         };
         let response: ChallengeResponse =
