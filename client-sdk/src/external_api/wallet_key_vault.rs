@@ -1,11 +1,9 @@
-use std::io::Read;
-
 use alloy::{
     primitives::{Address, B256},
     signers::{local::PrivateKeySigner, Signer},
 };
 use intmax2_interfaces::api::error::ServerError;
-use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
+use intmax2_zkp::common::signature_content::key_set::KeySet;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
