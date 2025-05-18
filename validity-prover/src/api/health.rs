@@ -57,7 +57,8 @@ pub async fn health_check(state: Data<State>) -> Result<Json<HealthCheckResponse
                 )));
             }
         };
-        let delta = last_timestamp.map(|last_timestamp| current_timestamp - last_timestamp);
+        let delta =
+            last_timestamp.map(|last_timestamp| current_timestamp.saturating_sub(last_timestamp));
         last_heartbeats.insert(key.clone(), delta);
     }
     tracing::info!(
