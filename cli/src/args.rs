@@ -160,8 +160,8 @@ pub enum Commands {
         #[clap(long)]
         eth_private_key: B256,
     },
-    // KeyFromEth {
-    //     #[clap(long)]
-    //     eth_private_key: B256,
-    // },
+    KeyFromBackupKey {
+        #[clap(long)]
+        backup_key: B256,
+    },
 }
