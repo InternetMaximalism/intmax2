@@ -9,6 +9,9 @@ pub enum ServerError {
     #[error("Network error: {0}")]
     NetworkError(String),
 
+    #[error("Signing error: {0}")]
+    SigningError(String),
+
     #[error("Server error status={0}, message={1}, url={2}, query={3}")]
     ServerError(u16, String, String, String),
 
