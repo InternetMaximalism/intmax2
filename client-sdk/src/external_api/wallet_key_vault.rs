@@ -78,6 +78,15 @@ impl WalletKeyVaultClient {
         Ok(signature.as_bytes().to_vec())
     }
 
+    async fn get_security_seed(&self, private_key: B256) -> Result<[u8; 32], ServerError> {
+        let address = get_address_from_private_key(private_key);
+        let signed_network_message = self
+            .sign_message(private_key, &network_message(address))
+            .await?;
+        let security_seed = sha256(&signed_network_message);
+        Ok(security_seed)
+    }
+
     async fn login(
         &self,
         private_key: B256,
@@ -86,12 +95,7 @@ impl WalletKeyVaultClient {
         let address = get_address_from_private_key(private_key);
 
         let signed_challenge_message = self.sign_message(private_key, challenge_message).await?;
-
-        // hash the signed network message to create a security seed
-        let signed_network_message = self
-            .sign_message(private_key, &network_message(address))
-            .await?;
-        let security_seed = sha256(&signed_network_message);
+        let security_seed = self.get_security_seed(private_key).await?;
 
         let request = LoginRequest {
             address,
@@ -108,12 +112,7 @@ impl WalletKeyVaultClient {
         private_key: B256,
         hashed_signature: &str,
     ) -> Result<KeySet, ServerError> {
-        let address = get_address_from_private_key(private_key);
-        let signed_network_message = self
-            .sign_message(private_key, &network_message(address))
-            .await?;
-        let security_seed = sha256(&signed_network_message);
-
+        let security_seed = self.get_security_seed(private_key).await?;
         let entropy_pre_image = hex::encode(security_seed) + hashed_signature;
 
         todo!()
