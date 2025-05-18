@@ -66,16 +66,6 @@ impl WalletKeyVaultClient {
         Self { base_url }
     }
 
-    pub async fn get_challenge_message(&self, address: Address) -> Result<String, ServerError> {
-        let request = ChallengeRequest {
-            address: address.to_string(),
-            request_type: "login".to_string(),
-        };
-        let response: ChallengeResponse =
-            post_request(&self.base_url, "/challenge", Some(&request)).await?;
-        Ok(response.message)
-    }
-
     async fn sign_message(&self, private_key: B256, message: &str) -> Result<Vec<u8>, ServerError> {
         let signer = PrivateKeySigner::from_bytes(&private_key).unwrap();
         let signature = signer
@@ -94,6 +84,16 @@ impl WalletKeyVaultClient {
         Ok(security_seed)
     }
 
+    async fn get_challenge_message(&self, address: Address) -> Result<String, ServerError> {
+        let request = ChallengeRequest {
+            address: address.to_string(),
+            request_type: "login".to_string(),
+        };
+        let response: ChallengeResponse =
+            post_request(&self.base_url, "/challenge", Some(&request)).await?;
+        Ok(response.message)
+    }
+
     pub async fn login(
         &self,
         private_key: B256,
@@ -110,7 +110,6 @@ impl WalletKeyVaultClient {
         let response: LoginResponse =
             post_request(&self.base_url, "/wallet/login", Some(&request)).await?;
         let mut hashed_signature = response.hashed_signature.clone();
-        dbg!(&hashed_signature.len());
         if response.hashed_signature.len() > 32 {
             return Err(ServerError::InvalidResponse(
                 "Invalid hashed signature length".to_string(),
@@ -137,6 +136,17 @@ impl WalletKeyVaultClient {
             .unwrap();
         let eth_private_key = wallet.to_bytes();
         Ok(generate_intmax_account_from_eth_key(eth_private_key))
+    }
+
+    pub async fn generate_keyset_from_private_key(
+        &self,
+        private_key: B256,
+    ) -> Result<KeySet, ServerError> {
+        let challenge_message = self
+            .get_challenge_message(get_address_from_private_key(private_key))
+            .await?;
+        let hashed_signature = self.login(private_key, &challenge_message).await?;
+        self.get_keyset(private_key, hashed_signature).await
     }
 }
 
