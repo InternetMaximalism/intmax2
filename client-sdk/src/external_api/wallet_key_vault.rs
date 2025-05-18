@@ -6,9 +6,10 @@ use crate::{
 use alloy::{
     primitives::{Address, B256},
     signers::{
+        k256::ecdsa::SigningKey,
         local::{
             coins_bip39::{English, Entropy, Mnemonic},
-            MnemonicBuilder, PrivateKeySigner,
+            PrivateKeySigner,
         },
         Signer,
     },
@@ -128,14 +129,8 @@ impl WalletKeyVaultClient {
         let entropy = sha256(&[security_seed, hashed_signature].concat());
         let entropy: Entropy = entropy.into();
         let mnemonic = Mnemonic::<English>::new_from_entropy(entropy);
-        let wallet = MnemonicBuilder::<English>::default()
-            .phrase(mnemonic.to_phrase())
-            .index(0)
-            .unwrap()
-            .build()
-            .unwrap();
-        let eth_private_key = wallet.to_bytes();
-        Ok(generate_intmax_account_from_eth_key(eth_private_key))
+        let signer = mnemonic_to_signer(&mnemonic)?;
+        Ok(generate_intmax_account_from_eth_key(signer.to_bytes()))
     }
 
     pub async fn generate_keyset_from_private_key(
@@ -161,14 +156,23 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
+/// Convert a mnemonic to a PrivateKeySigner
+fn mnemonic_to_signer(mnemonic: &Mnemonic<English>) -> Result<PrivateKeySigner, ServerError> {
+    let derived_priv_key = mnemonic.derive_key("m/44'/60'/0'/0/0", None).unwrap();
+    let key: &SigningKey = derived_priv_key.as_ref();
+    let signing_key = PrivateKeySigner::from_signing_key(key.clone());
+    Ok(signing_key)
+}
+
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::B256;
+    use alloy::{primitives::B256, signers::local::MnemonicBuilder};
+    use coins_bip39::{English, Mnemonic};
     use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
 
     use crate::external_api::contract::utils::get_address_from_private_key;
 
-    use super::encode_hex_with_prefix;
+    use super::mnemonic_to_signer;
 
     fn get_client() -> super::WalletKeyVaultClient {
         let base_url = std::env::var("WALLET_KEY_VAULT_BASE_URL")
@@ -177,28 +181,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_challenge() {
-        let client = get_client();
-        let address = "0x1234567890abcdef1234567890abcdef12345678"
-            .parse()
-            .unwrap();
-        let result = client.get_challenge_message(address).await.unwrap();
-        dbg!(result);
-    }
-
-    #[tokio::test]
-    async fn test_login() {
-        let client = get_client();
-        let private_key = B256::random();
-
-        let address = get_address_from_private_key(private_key);
-        let challenge_message = client.get_challenge_message(address).await.unwrap();
-
-        let response = client.login(private_key, &challenge_message).await.unwrap();
-        dbg!(response);
-    }
-
-    #[tokio::test]
+    #[ignore]
     async fn test_get_key() {
         let client = get_client();
         let private_key: B256 =
@@ -206,22 +189,32 @@ mod tests {
                 .parse()
                 .unwrap();
         let address = get_address_from_private_key(private_key);
-        let security_seed = client.security_seed(private_key).await.unwrap();
-        println!("security_seed: {}", encode_hex_with_prefix(&security_seed));
         let challenge_message = client.get_challenge_message(address).await.unwrap();
-        println!("challenge_message: {}", challenge_message);
         let hashed_signature = client.login(private_key, &challenge_message).await.unwrap();
-        println!(
-            "hashed_signature: {}",
-            encode_hex_with_prefix(&hashed_signature)
-        );
         let keyset = client
             .get_keyset(private_key, hashed_signature)
             .await
             .unwrap();
+        // dev environment
         assert_eq!(
             keyset.privkey.to_hex(),
-            "0x2b9321ca673e7865bac8fafb81a1f23ff29693c2e9c3523bc0f6bbf7b4087bcd"
+            "0x293a2f74cbb6abde09244bb88b1e32c98799b01cf55d251ecc50338bd3b5b343"
         );
+    }
+
+    #[test]
+    fn test_mnemonic_to_private_key() {
+        let mnemonic_phrase = "bar retreat common buffalo van night stage artefact ring evil finger pelican best trade update sugar pave fossil weird camp coconut army swear aerobic";
+        let mnemonic = Mnemonic::<English>::new_from_phrase(mnemonic_phrase).unwrap();
+        let private_key = mnemonic_to_signer(&mnemonic).unwrap().to_bytes();
+
+        let wallet = MnemonicBuilder::<English>::default()
+            .phrase(mnemonic_phrase)
+            .index(0)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        assert_eq!(private_key, wallet.to_bytes());
     }
 }
