@@ -22,7 +22,6 @@ use serde::Serialize;
 pub struct HealthCheckResponse {
     pub name: String,
     pub version: String,
-    pub last_heartbeats: HashMap<String, Option<u64>>,
 }
 
 #[get("/health-check")]
@@ -43,7 +42,6 @@ pub async fn health_check(state: Data<State>) -> Result<Json<HealthCheckResponse
         ADD_TASKS_KEY.to_string(),
         CLEANUP_INACTIVE_TASKS_KEY.to_string(),
     ]);
-    let mut too_old_heartbeat = Vec::new();
     let mut last_heartbeats = HashMap::new();
 
     let current_timestamp = chrono::Utc::now().timestamp() as u64;
@@ -53,22 +51,21 @@ pub async fn health_check(state: Data<State>) -> Result<Json<HealthCheckResponse
         })?;
         if let Some(last_timestamp) = last_timestamp {
             if last_timestamp + heartbeat_timeout < current_timestamp {
-                too_old_heartbeat.push(key.clone());
+                return Err(actix_web::error::ErrorInternalServerError(format!(
+                    "Heartbeat for {} is too old, last heartbeat: {}, current timestamp: {}",
+                    key, last_timestamp, current_timestamp
+                )));
             }
         };
         let delta = last_timestamp.map(|last_timestamp| current_timestamp - last_timestamp);
         last_heartbeats.insert(key.clone(), delta);
     }
-    if !too_old_heartbeat.is_empty() {
-        return Err(actix_web::error::ErrorInternalServerError(format!(
-            "Heartbeat for {} is too old",
-            too_old_heartbeat.join(", "),
-        )));
-    }
-
+    tracing::info!(
+        "Heartbeat check passed. Last heartbeats: {:?}",
+        last_heartbeats
+    );
     Ok(Json(HealthCheckResponse {
         name: env!("CARGO_PKG_NAME").to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        last_heartbeats,
     }))
 }
