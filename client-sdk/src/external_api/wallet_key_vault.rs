@@ -93,13 +93,12 @@ impl WalletKeyVaultClient {
         };
         let response: LoginResponse =
             post_request(&self.base_url, "/wallet/login", Some(&request)).await?;
-        let mut hashed_signature = response.hashed_signature.clone();
-        if response.hashed_signature.len() > 32 {
+        let hashed_signature = response.hashed_signature.clone();
+        if hashed_signature.len() != 32 {
             return Err(ServerError::InvalidResponse(
                 "Invalid hashed signature length".to_string(),
             ));
         }
-        hashed_signature.resize(32, 0);
         Ok(hashed_signature.try_into().unwrap())
     }
 
