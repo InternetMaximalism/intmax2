@@ -49,22 +49,23 @@ impl WalletKeyVaultClient {
         Self { base_url }
     }
 
-    async fn sign_message(&self, private_key: B256, message: &str) -> Result<Vec<u8>, ServerError> {
+    async fn sign_message(
+        &self,
+        private_key: B256,
+        message: &str,
+    ) -> Result<[u8; 65], ServerError> {
         let signer = PrivateKeySigner::from_bytes(&private_key).unwrap();
         let signature = signer
             .sign_message(message.as_bytes())
             .await
             .map_err(|e| ServerError::SigningError(format!("Failed to sign message: {}", e)))?;
-        Ok(signature.as_bytes().to_vec())
+        Ok(signature.as_bytes())
     }
 
-    async fn security_seed(&self, private_key: B256) -> Result<[u8; 32], ServerError> {
+    async fn signed_network_message(&self, private_key: B256) -> Result<[u8; 65], ServerError> {
         let address = get_address_from_private_key(private_key);
-        let signed_network_message = self
-            .sign_message(private_key, &network_message(address))
-            .await?;
-        let security_seed = sha256(&signed_network_message);
-        Ok(security_seed)
+        self.sign_message(private_key, &network_message(address))
+            .await
     }
 
     async fn get_challenge_message(&self, address: Address) -> Result<String, ServerError> {
@@ -83,7 +84,7 @@ impl WalletKeyVaultClient {
         challenge_message: &str,
     ) -> Result<[u8; 32], ServerError> {
         let signed_challenge_message = self.sign_message(private_key, challenge_message).await?;
-        let security_seed = self.security_seed(private_key).await?;
+        let security_seed = sha256(&self.signed_network_message(private_key).await?);
 
         let request = LoginRequest {
             address: get_address_from_private_key(private_key),
@@ -107,8 +108,9 @@ impl WalletKeyVaultClient {
         private_key: B256,
         hashed_signature: [u8; 32],
     ) -> Result<Mnemonic<English>, ServerError> {
-        let security_seed = self.security_seed(private_key).await?;
-        let entropy = sha256(&[security_seed, hashed_signature].concat());
+        let signed_network_message = self.signed_network_message(private_key).await?;
+        let entropy =
+            sha256(&[signed_network_message.to_vec(), hashed_signature.to_vec()].concat());
         let entropy: Entropy = entropy.into();
         let mnemonic = Mnemonic::<English>::new_from_entropy(entropy);
         Ok(mnemonic)
@@ -179,7 +181,7 @@ mod tests {
         // dev environment
         assert_eq!(
             keyset.privkey.to_hex(),
-            "0x293a2f74cbb6abde09244bb88b1e32c98799b01cf55d251ecc50338bd3b5b343"
+            "0x03d97b592378ca1f7877087494f08fea97eeaea0a5ae65b3ea52c563370cb550"
         );
     }
 }
