@@ -151,7 +151,7 @@ mod tests {
     use super::*;
 
     fn create_client() -> TheGraphQueryClient {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
         let l1_url = env::var("THE_GRAPH_L1_URL").unwrap_or_else(|_| {
             "http://localhost:8000/subgraphs/name/liquidity-subgraph".to_string()
         });

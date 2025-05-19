@@ -17,7 +17,7 @@ sqlx = { workspace = true }
 chrono = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }
-dotenv = { workspace = true }
+dotenvy = { workspace = true }
 envy = { workspace = true }
 bincode = { workspace = true }
 thiserror = { workspace = true }

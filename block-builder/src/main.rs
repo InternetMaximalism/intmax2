@@ -16,7 +16,7 @@ async fn main() -> std::io::Result<()> {
     set_name_and_version(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     logger::init_logger().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let env = envy::from_env::<EnvVar>()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("env error: {}", e)))?;
     let state = State::new(&env)

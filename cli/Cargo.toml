@@ -23,7 +23,7 @@ log = "0.4.27"
 hex = "0.4.3"
 envy = "0.4.2"
 url = { version = "2.5.4", features = ["serde"] }
-dotenv = "0.15.0"
+dotenvy = "0.15.0"
 thiserror = "2.0.12"
 serde_qs = "0.15.0"
 colored = "3.0.0"

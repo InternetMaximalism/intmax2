@@ -9,7 +9,7 @@ pub mod update;
 pub mod utils;
 
 pub fn setup_test() -> String {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()

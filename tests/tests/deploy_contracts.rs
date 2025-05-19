@@ -20,7 +20,7 @@ struct EnvVar {
 #[tokio::test]
 #[ignore]
 async fn deploy_contracts() -> anyhow::Result<()> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let config = envy::from_env::<EnvVar>().unwrap();
 
     let provider = get_provider_with_fallback(&[config.rpc_url.clone()]).unwrap();

@@ -31,7 +31,7 @@ pub fn init_logger() -> Result<(), InitLoggerError> {
     // Get package info for log file naming
     let (name, version) = load_name_and_version();
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let env = envy::from_env::<Env>().expect("Failed to load environment variables");
     let env_filter = EnvFilter::new(env.app_log);
 

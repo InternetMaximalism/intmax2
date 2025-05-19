@@ -13,7 +13,7 @@ use validity_prover::{
 async fn main() -> std::io::Result<()> {
     logger::init_logger().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let env: EnvVar = envy::from_env().map_err(|e| {
         io::Error::new(
             io::ErrorKind::Other,

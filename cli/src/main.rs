@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let args = Args::parse();
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     match main_process(args.command).await {
         Ok(_) => {}

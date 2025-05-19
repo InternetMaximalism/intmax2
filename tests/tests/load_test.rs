@@ -42,7 +42,7 @@ async fn load_test() -> anyhow::Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let env = envy::from_env::<EnvVar>()?;
     let provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;

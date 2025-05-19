@@ -669,7 +669,7 @@ mod tests {
     };
 
     fn setup_test() -> String {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
         std::env::var("DATABASE_URL").unwrap()
     }
 

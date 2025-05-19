@@ -23,7 +23,7 @@ hashbrown = "0.15.2"
 log = "0.4.27"
 rand = "0.8.5"
 envy = "0.4.2"
-dotenv = "0.15.0"
+dotenvy = "0.15.0"
 num-bigint = "0.4.6"
 futures = "0.3.31"
 clap = { version = "4.5.38", features = ["derive"] }

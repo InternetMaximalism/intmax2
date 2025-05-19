@@ -556,7 +556,7 @@ mod tests {
     #[ignore]
     async fn update_snapshot_test() {
         let _ = env_logger::builder().is_test(true).try_init();
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let env = envy::from_env::<crate::EnvVar>().unwrap();
         let s3_store_vault = S3StoreVault::new(&env).await.unwrap();

@@ -20,7 +20,7 @@ async fn main() -> std::io::Result<()> {
     set_name_and_version(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     logger::init_logger().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let env: EnvVar = envy::from_env().map_err(|e| {
         io::Error::new(
