@@ -104,6 +104,10 @@ async fn sync_events_inner_loop<O: SyncEvent>(
             info!("Stopping sync events because of stop flag, {}", event_type);
             return Ok(());
         }
+        observer
+            .rate_manager()
+            .emit_heartbeat(&sync_event_key(event_type))
+            .await?;
         observer.sync_events(event_type).await?;
     }
 }
