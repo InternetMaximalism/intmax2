@@ -92,8 +92,8 @@ impl S3Client {
             .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to parse utf8: {}", e)))?;
 
         let options = cloudfront_sign::SignedOptions {
-            key_pair_id: self.config.cloudfront_key_pair_id.clone(),
-            private_key,
+            key_pair_id: self.config.cloudfront_key_pair_id.clone().into(),
+            private_key: private_key.into(),
             date_less_than: chrono::Utc::now().timestamp() as u64 + expiration.as_secs(),
             ..Default::default()
         };
