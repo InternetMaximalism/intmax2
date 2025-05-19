@@ -32,13 +32,15 @@ pub struct WalletKeyVaultClient {
 
 #[async_trait(?Send)]
 impl WalletKeyVaultClientInterface for WalletKeyVaultClient {
-    async fn derive_key_from_eth(&self, eth_private_key: B256) -> Result<KeySet, ServerError> {
+    async fn derive_mnemonic(
+        &self,
+        eth_private_key: B256,
+    ) -> Result<Mnemonic<English>, ServerError> {
         let challenge_message = self
             .get_challenge_message(get_address_from_private_key(eth_private_key))
             .await?;
         let hashed_signature = self.login(eth_private_key, &challenge_message).await?;
-        self.get_keyset(eth_private_key, hashed_signature, 0, 0)
-            .await
+        self.get_mnemonic(eth_private_key, hashed_signature).await
     }
 }
 
@@ -100,19 +102,16 @@ impl WalletKeyVaultClient {
         Ok(hashed_signature.try_into().unwrap())
     }
 
-    async fn get_keyset(
+    async fn get_mnemonic(
         &self,
         private_key: B256,
         hashed_signature: [u8; 32],
-        redeposit_index: u32,
-        wallet_index: u32,
-    ) -> Result<KeySet, ServerError> {
+    ) -> Result<Mnemonic<English>, ServerError> {
         let security_seed = self.security_seed(private_key).await?;
         let entropy = sha256(&[security_seed, hashed_signature].concat());
         let entropy: Entropy = entropy.into();
         let mnemonic = Mnemonic::<English>::new_from_entropy(entropy);
-        let signer = mnemonic_to_signer(&mnemonic, redeposit_index, wallet_index)?;
-        Ok(generate_intmax_account_from_eth_key(signer.to_bytes()))
+        Ok(mnemonic)
     }
 }
 
@@ -133,27 +132,27 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-fn mnemonic_to_signer(
+pub fn mnemonic_to_keyset(
     mnemonic: &Mnemonic<English>,
     redeposit_index: u32,
     wallet_index: u32,
-) -> Result<PrivateKeySigner, ServerError> {
+) -> KeySet {
     let derive_path = format!("m/44'/60'/{redeposit_index}'/0/{wallet_index}");
     let derived_priv_key = mnemonic.derive_key(derive_path.as_str(), None).unwrap();
     let key: &SigningKey = derived_priv_key.as_ref();
     let signing_key = PrivateKeySigner::from_signing_key(key.clone());
-    Ok(signing_key)
+    generate_intmax_account_from_eth_key(signing_key.to_bytes())
 }
 
 #[cfg(test)]
 mod tests {
-    use alloy::{primitives::B256, signers::local::MnemonicBuilder};
-    use coins_bip39::{English, Mnemonic};
-    use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
 
-    use crate::external_api::contract::utils::get_address_from_private_key;
+    use alloy::primitives::B256;
+    use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
 
-    use super::mnemonic_to_signer;
+    use crate::external_api::{
+        contract::utils::get_address_from_private_key, wallet_key_vault::mnemonic_to_keyset,
+    };
 
     fn get_client() -> super::WalletKeyVaultClient {
         let base_url = std::env::var("WALLET_KEY_VAULT_BASE_URL")
@@ -172,30 +171,15 @@ mod tests {
         let address = get_address_from_private_key(private_key);
         let challenge_message = client.get_challenge_message(address).await.unwrap();
         let hashed_signature = client.login(private_key, &challenge_message).await.unwrap();
-        let keyset = client
-            .get_keyset(private_key, hashed_signature, 0, 0)
+        let mnemonic = client
+            .get_mnemonic(private_key, hashed_signature)
             .await
             .unwrap();
+        let keyset = mnemonic_to_keyset(&mnemonic, 0, 0);
         // dev environment
         assert_eq!(
             keyset.privkey.to_hex(),
             "0x293a2f74cbb6abde09244bb88b1e32c98799b01cf55d251ecc50338bd3b5b343"
         );
-    }
-
-    #[test]
-    fn test_mnemonic_to_private_key() {
-        let mnemonic_phrase = "bar retreat common buffalo van night stage artefact ring evil finger pelican best trade update sugar pave fossil weird camp coconut army swear aerobic";
-        let mnemonic = Mnemonic::<English>::new_from_phrase(mnemonic_phrase).unwrap();
-        let private_key = mnemonic_to_signer(&mnemonic, 0, 0).unwrap().to_bytes();
-
-        let wallet = MnemonicBuilder::<English>::default()
-            .phrase(mnemonic_phrase)
-            .index(0)
-            .unwrap()
-            .build()
-            .unwrap();
-
-        assert_eq!(private_key, wallet.to_bytes());
     }
 }

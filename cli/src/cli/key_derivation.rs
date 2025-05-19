@@ -1,5 +1,7 @@
 use alloy::primitives::B256;
-use intmax2_client_sdk::external_api::wallet_key_vault::WalletKeyVaultClient;
+use intmax2_client_sdk::external_api::wallet_key_vault::{
+    mnemonic_to_keyset, WalletKeyVaultClient,
+};
 use intmax2_interfaces::api::wallet_key_vault::interface::WalletKeyVaultClientInterface;
 use intmax2_zkp::common::signature_content::key_set::KeySet;
 
@@ -15,6 +17,7 @@ pub async fn derive_key_from_eth(eth_private_key: B256) -> Result<KeySet, CliErr
         ));
     }
     let client = WalletKeyVaultClient::new(env.wallet_key_vault_base_url.unwrap());
-    let key = client.derive_key_from_eth(eth_private_key).await?;
+    let mnemonic = client.derive_mnemonic(eth_private_key).await?;
+    let key = mnemonic_to_keyset(&mnemonic, 0, 0);
     Ok(key)
 }
