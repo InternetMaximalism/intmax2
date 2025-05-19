@@ -241,7 +241,9 @@ impl SyncEvent for TheGraphObserver {
         );
         // continue to sync until local_next_event_id >= onchain_next_event_id with max_query_times
         for _ in 0..self.config.observer_max_query_times {
-            self.rate_manager().add(&sync_event_key(event_type)).await?;
+            self.rate_manager()
+                .emit_heartbeat(&sync_event_key(event_type))
+                .await?;
             self.leader_election.wait_for_leadership().await?;
             local_next_event_id = match event_type {
                 EventType::DepositLeafInserted => {

@@ -69,22 +69,8 @@ impl RateManager {
             .push(Instant::now());
         drop(counts);
 
-        let current_time = Utc::now().timestamp() as u64;
-        let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
-            .await
-            .map_err(|_| RateManagerError::Timeout("Timeout while adding key".to_string()))?;
-        last_timestamps.insert(key.to_string(), current_time);
+        self.emit_heartbeat(key).await?;
         Ok(())
-    }
-
-    pub async fn last_timestamp(&self, key: &str) -> Result<Option<u64>, RateManagerError> {
-        let last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
-            .await
-            .map_err(|_| {
-                RateManagerError::Timeout("Timeout while getting last timestamp".to_string())
-            })?;
-        let last_timestamp = last_timestamps.get(key).cloned();
-        Ok(last_timestamp)
     }
 
     pub async fn count(&self, key: &str) -> Result<usize, RateManagerError> {
@@ -101,6 +87,27 @@ impl RateManager {
             })
             .unwrap_or(0);
         Ok(count)
+    }
+
+    /// Emit a heartbeat for thread health check
+    pub async fn emit_heartbeat(&self, key: &str) -> Result<(), RateManagerError> {
+        let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
+            .await
+            .map_err(|_| {
+                RateManagerError::Timeout("Timeout while emitting heartbeat".to_string())
+            })?;
+        last_timestamps.insert(key.to_string(), Utc::now().timestamp() as u64);
+        Ok(())
+    }
+
+    pub async fn get_last_heartbeat(&self, key: &str) -> Result<Option<u64>, RateManagerError> {
+        let last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
+            .await
+            .map_err(|_| {
+                RateManagerError::Timeout("Timeout while getting last heartbeat".to_string())
+            })?;
+        let last_timestamp = last_timestamps.get(key).cloned();
+        Ok(last_timestamp)
     }
 
     pub async fn set_stop_flag(&self, key: &str, flag: bool) -> Result<(), RateManagerError> {

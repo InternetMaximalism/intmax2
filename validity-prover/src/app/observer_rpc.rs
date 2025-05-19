@@ -418,7 +418,9 @@ impl SyncEvent for RPCObserver {
         );
         // continue to sync until local_next_event_id >= onchain_next_event_id with max_query_times
         for _ in 0..self.config.observer_max_query_times {
-            self.rate_manager().add(&sync_event_key(event_type)).await?;
+            self.rate_manager()
+                .emit_heartbeat(&sync_event_key(event_type))
+                .await?;
             local_next_event_id = self
                 .sync_and_save_checkpoint(event_type, onchain_next_event_id, local_next_event_id)
                 .await?;

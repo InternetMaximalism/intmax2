@@ -46,9 +46,13 @@ pub async fn health_check(state: Data<State>) -> Result<Json<HealthCheckResponse
 
     let current_timestamp = chrono::Utc::now().timestamp() as u64;
     for key in keys.iter() {
-        let last_timestamp = state.rate_manager.last_timestamp(key).await.map_err(|_| {
-            actix_web::error::ErrorInternalServerError("Failed to get last timestamp")
-        })?;
+        let last_timestamp = state
+            .rate_manager
+            .get_last_heartbeat(key)
+            .await
+            .map_err(|_| {
+                actix_web::error::ErrorInternalServerError("Failed to get last heartbeat")
+            })?;
         if let Some(last_timestamp) = last_timestamp {
             if last_timestamp + heartbeat_timeout < current_timestamp {
                 return Err(actix_web::error::ErrorInternalServerError(format!(
