@@ -89,6 +89,7 @@ impl RateManager {
         Ok(count)
     }
 
+    /// Emit a heartbeat for thread health check
     pub async fn emit_heartbeat(&self, key: &str) -> Result<(), RateManagerError> {
         let mut last_timestamps = timeout(self.timeout, self.last_timestamps.lock())
             .await

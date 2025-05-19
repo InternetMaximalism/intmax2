@@ -51,7 +51,7 @@ pub async fn health_check(state: Data<State>) -> Result<Json<HealthCheckResponse
             .get_last_heartbeat(key)
             .await
             .map_err(|_| {
-                actix_web::error::ErrorInternalServerError("Failed to get last timestamp")
+                actix_web::error::ErrorInternalServerError("Failed to get last heartbeat")
             })?;
         if let Some(last_timestamp) = last_timestamp {
             if last_timestamp + heartbeat_timeout < current_timestamp {
