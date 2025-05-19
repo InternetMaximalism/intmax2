@@ -108,6 +108,11 @@ Derive an Intmax2 key from an Ethereum private key:
 cargo run -r -- key-from-eth --eth-private-key 0x...
 ```
 
+With custom redeposit and wallet indices:
+```bash
+cargo run -r -- key-from-eth --eth-private-key 0x... --redeposit-index 1 --wallet-index 2
+```
+
 Derive an Intmax2 key from a backup key:
 ```bash
 cargo run -r -- key-from-backup-key --backup-key 0x...

@@ -255,8 +255,17 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             println!("Private key: {}", key.privkey.to_hex());
             println!("Public key: {}", key.pubkey.to_hex());
         }
-        Commands::KeyFromEth { eth_private_key } => {
-            let key = derive_key_from_eth(eth_private_key).await?;
+        Commands::KeyFromEth {
+            eth_private_key,
+            redeposit_index,
+            wallet_index,
+        } => {
+            let key = derive_key_from_eth(
+                eth_private_key,
+                redeposit_index.unwrap_or_default(),
+                wallet_index.unwrap_or_default(),
+            )
+            .await?;
             println!("Private key: {}", key.privkey.to_hex());
             println!("Public key: {}", key.pubkey.to_hex());
         }

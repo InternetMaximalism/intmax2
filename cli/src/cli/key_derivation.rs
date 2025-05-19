@@ -9,7 +9,11 @@ use crate::env_var::EnvVar;
 
 use super::error::CliError;
 
-pub async fn derive_key_from_eth(eth_private_key: B256) -> Result<KeySet, CliError> {
+pub async fn derive_key_from_eth(
+    eth_private_key: B256,
+    redeposit_index: u32,
+    wallet_index: u32,
+) -> Result<KeySet, CliError> {
     let env = envy::from_env::<EnvVar>()?;
     if env.wallet_key_vault_base_url.is_none() {
         return Err(CliError::EnvError(
@@ -18,6 +22,6 @@ pub async fn derive_key_from_eth(eth_private_key: B256) -> Result<KeySet, CliErr
     }
     let client = WalletKeyVaultClient::new(env.wallet_key_vault_base_url.unwrap());
     let mnemonic = client.derive_mnemonic(eth_private_key).await?;
-    let key = mnemonic_to_keyset(&mnemonic, 0, 0);
+    let key = mnemonic_to_keyset(&mnemonic, redeposit_index, wallet_index);
     Ok(key)
 }
