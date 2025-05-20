@@ -56,7 +56,7 @@ pub async fn validate_transfer_receipt(
         client.store_vault_server.as_ref(),
         client.validity_prover.as_ref(),
         key.pubkey,
-        &transfer_receipt.meta,
+        transfer_receipt.meta.timestamp,
         &transfer_receipt.data,
     )
     .await?;

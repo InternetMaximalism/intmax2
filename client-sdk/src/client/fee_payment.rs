@@ -285,7 +285,7 @@ pub async fn select_unused_fees(
             store_vault_server,
             validity_prover,
             memo.transfer_data.transfer.recipient.to_pubkey().unwrap(),
-            &memo.meta,
+            memo.meta.timestamp,
             &memo.transfer_data,
         )
         .await

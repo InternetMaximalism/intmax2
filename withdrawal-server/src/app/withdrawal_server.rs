@@ -528,7 +528,7 @@ impl WithdrawalServer {
                 self.store_vault_server.as_ref(),
                 &self.validity_prover,
                 key.pubkey,
-                &meta,
+                meta.timestamp,
                 &transfer_data,
             )
             .await
