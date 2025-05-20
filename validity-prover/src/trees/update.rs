@@ -19,9 +19,10 @@ use log::warn;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 use tokio::sync::Semaphore;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
 
@@ -39,6 +40,7 @@ pub async fn to_block_witness<
     account_tree: &HistoricalAccountTree,
     block_tree: &HistoricalBlockHashTree,
 ) -> anyhow::Result<BlockWitness> {
+    let instant = Instant::now();
     ensure!(
         full_block.block.block_number != 0,
         "genesis block is not allowed"
@@ -76,6 +78,11 @@ pub async fn to_block_witness<
         account_merkle_proofs,
         account_membership_proofs,
     };
+    info!(
+        "block_witness generated : block_number:{}, took: {:?}",
+        block_witness.block.block_number,
+        instant.elapsed()
+    );
     Ok(block_witness)
 }
 
@@ -195,6 +202,7 @@ pub async fn update_trees<
     account_tree: &HistoricalAccountTree,
     block_tree: &HistoricalBlockHashTree,
 ) -> anyhow::Result<ValidityWitness> {
+    let instant = Instant::now();
     let block_pis = block_witness.to_main_validation_pis().map_err(|e| {
         anyhow::anyhow!("failed to convert to main validation public inputs: {}", e)
     })?;
@@ -298,6 +306,12 @@ pub async fn update_trees<
                 .is_registration_block
         );
     }
+
+    info!(
+        "validity_witness generated : block_number:{}, took: {:?}",
+        block_witness.block.block_number,
+        instant.elapsed()
+    );
 
     Ok(validity_witness)
 }

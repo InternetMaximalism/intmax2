@@ -24,7 +24,7 @@ use intmax2_zkp::common::{
     witness::validity_witness::ValidityWitness,
 };
 use std::{sync::Arc, time::Duration};
-use tracing::{info, instrument};
+use tracing::info;
 
 use server_common::{parser::parse_urls, redis::cache::RedisCache};
 
@@ -57,7 +57,6 @@ pub struct State {
 }
 
 impl State {
-    #[instrument(skip(env))]
     pub async fn new(env: &EnvVar) -> anyhow::Result<Self> {
         let l1_rpc_urls = parse_urls(&env.l1_rpc_url)?;
         let l2_rpc_urls = parse_urls(&env.l2_rpc_url)?;
