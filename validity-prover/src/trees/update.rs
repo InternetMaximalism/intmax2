@@ -289,7 +289,8 @@ pub async fn update_trees<
         .to_validity_pis()
         .map_err(|e| anyhow::anyhow!("failed to convert to validity public inputs: {}", e))?;
 
-    if !pis.is_valid_block {
+    if !pis.is_valid_block && pis.tx_tree_root != Bytes32::default() {
+        // tx_tree_root == 0x is empty block for deposit sync
         warn!(
             "block:{}, is_registration:{} is not valid",
             pis.public_state.block_number,
