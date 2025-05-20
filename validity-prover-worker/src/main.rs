@@ -6,7 +6,7 @@ use validity_prover_worker::{app::worker::Worker, EnvVar};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     init_logger()?;
 
     let env = envy::from_env::<EnvVar>().unwrap();

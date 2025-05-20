@@ -35,7 +35,7 @@ pub enum Commands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let args = Args::parse();
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)

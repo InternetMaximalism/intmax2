@@ -5,6 +5,7 @@ pub mod deposit;
 pub mod error;
 pub mod get;
 pub mod history;
+pub mod key_derivation;
 pub mod send;
 pub mod sync;
 pub mod utils;

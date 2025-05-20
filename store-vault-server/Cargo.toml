@@ -19,7 +19,7 @@ sqlx = { workspace = true }
 chrono = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }
-dotenv = { workspace = true }
+dotenvy = { workspace = true }
 envy = { workspace = true }
 env_logger = { workspace = true }
 bincode = { workspace = true }
@@ -28,8 +28,8 @@ hashbrown = { workspace = true }
 actix-web = { workspace = true }
 actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
-aws-config = "0.55.3"
-aws-sdk-s3 = "0.28.0"
-cloudfront_sign = "0.1.0"
+aws-config = "1.6.3"
+aws-sdk-s3 = "1.86.0"
+cloudfront_sign = "0.4.0"
 base64 = "0.22.1"
 mockall = "0.13.1"

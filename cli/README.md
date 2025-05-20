@@ -10,6 +10,8 @@ This CLI tool allows you to interact with the Intmax2 network. It provides a com
 - **Batch Operations**: Process multiple transfers in a single transaction
 - **Withdrawal Management**: Sync, claim, and check status of withdrawals
 - **Mining Operations**: View mining status and manage mining rewards
+- **Key Derivation**: Generate Intmax2 keys from Ethereum private keys or backup keys
+- **Backup & Restore**: Create and incorporate account history backups
 
 ## Prerequisites
 
@@ -33,6 +35,7 @@ cp .env.example .env
 - `BALANCE_PROVER_BASE_URL`: URL for the balance prover service
 - `VALIDITY_PROVER_BASE_URL`: URL for the validity prover service
 - `WITHDRAWAL_SERVER_BASE_URL`: URL for the withdrawal server
+- `WALLET_KEY_VAULT_BASE_URL`: URL for the wallet key vault service
 
 The `.env.example` file contains default configurations for both staging testnet and local development environments.
 
@@ -62,19 +65,27 @@ cargo run -r -- --help
 
 - `generate-key`: Generate a new key pair
 - `public-key`: Get a public key from a private key
+- `key-from-eth`: Derive an Intmax2 key from an Ethereum private key
+- `key-from-backup-key`: Derive an Intmax2 key from a backup key
 - `transfer`: Send a single transfer transaction
 - `batch-transfer`: Process multiple transfers from a CSV file
 - `deposit`: Deposit assets into the rollup
 - `withdrawal`: Initiate a withdrawal from the rollup
 - `balance`: Check account balance
+- `user-data`: Get user data for an account
 - `history`: View transaction history
 - `withdrawal-status`: Check withdrawal status
 - `mining-list`: View mining status and rewards
 - `claim-status`: Check claim status
 - `claim-withdrawals`: Claim processed withdrawals
+- `claim-builder-reward`: Claim block builder rewards
 - `sync-withdrawals`: Synchronize withdrawal data
 - `sync-claims`: Synchronize claim data
 - `resync`: Resynchronize account data
+- `payment-memos`: Get payment memos by name
+- `make-backup`: Create a backup of account history
+- `incorporate-backup`: Incorporate a backup into the local store
+- `check-validity-prover`: Check the status of the validity prover
 
 ## Usage Examples
 
@@ -92,10 +103,36 @@ Get a public key from a private key:
 cargo run -r -- public-key --private-key 0x...
 ```
 
+Derive an Intmax2 key from an Ethereum private key:
+```bash
+cargo run -r -- key-from-eth --eth-private-key 0x...
+```
+
+With custom redeposit and wallet indices:
+```bash
+cargo run -r -- key-from-eth --eth-private-key 0x... --redeposit-index 1 --wallet-index 2
+```
+
+Derive an Intmax2 key from a backup key:
+```bash
+cargo run -r -- key-from-backup-key --backup-key 0x...
+```
+
 #### Check Balance
 
 ```bash
 cargo run -r -- balance --private-key 0x...
+```
+
+Without syncing:
+```bash
+cargo run -r -- balance --private-key 0x... --without-sync 
+```
+
+#### Get User Data
+
+```bash
+cargo run -r -- user-data --private-key 0x...
 ```
 
 #### View Transaction History
@@ -277,6 +314,12 @@ cargo run -r -- sync-claims \
   --fee-token-index 0
 ```
 
+#### Claim Builder Reward
+
+```bash
+cargo run -r -- claim-builder-reward --eth-private-key 0x...
+```
+
 ### Account Synchronization
 
 Resync account data:
@@ -289,9 +332,34 @@ Deep resync (regenerate all balance proofs):
 cargo run -r -- resync --private-key 0x... --deep true
 ```
 
+### Payment Memos
+
+Get payment memos by name:
+```bash
+cargo run -r -- payment-memos --private-key 0x... --name "memo-name"
+```
+
+### Backup and Restore
+
+Create a backup of account history:
+```bash
+cargo run -r -- make-backup --private-key 0x...
+```
+
+With custom directory and starting point:
+```bash
+cargo run -r -- make-backup --private-key 0x... --dir "/path/to/backup" --from 1712345678
+```
+
+Incorporate a backup into the local store:
+```bash
+cargo run -r -- incorporate-backup --path "/path/to/backup/file"
+```
+
 ## Notes
 
 - For all commands that require private keys, ensure you're using the correct format (0x-prefixed hexadecimal).
 - When using the `wait` flag, the command will wait for the transaction to be processed before returning.
 - The `fee-token-index` parameter is optional for most commands. If not specified, the default token will be used for fees.
 - For security reasons, avoid storing private keys in plaintext files or environment variables in production environments.
+- The wallet key vault service is used for deriving Intmax2 keys from Ethereum private keys. Make sure the `WALLET_KEY_VAULT_BASE_URL` is properly configured in your `.env` file to use this feature.

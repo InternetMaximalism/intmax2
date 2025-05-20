@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use super::{error::StoreVaultError, s3::S3Config};
 use crate::EnvVar;
+use aws_config::BehaviorVersion;
 use intmax2_interfaces::{
     api::{
         s3_store_vault::types::{PresignedUrlWithMetaData, S3SaveDataEntry},
@@ -49,7 +50,7 @@ impl S3StoreVault {
             url: env.database_url.clone(),
         })
         .await?;
-        let aws_config = aws_config::load_from_env().await;
+        let aws_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
         let s3_config = S3Config {
             bucket_name: env.bucket_name.clone(),
             cloudfront_domain: env.cloudfront_domain.clone(),
@@ -555,7 +556,7 @@ mod tests {
     #[ignore]
     async fn update_snapshot_test() {
         let _ = env_logger::builder().is_test(true).try_init();
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let env = envy::from_env::<crate::EnvVar>().unwrap();
         let s3_store_vault = S3StoreVault::new(&env).await.unwrap();

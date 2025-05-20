@@ -1,5 +1,5 @@
 use config::Config;
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use once_cell::sync::Lazy;
 
 pub static CONFIG: Lazy<Config> = Lazy::new(|| {
