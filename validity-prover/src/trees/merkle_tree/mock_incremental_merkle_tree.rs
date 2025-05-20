@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use intmax2_zkp::utils::{
     leafable::Leafable,
     leafable_hasher::LeafableHasher,
-    trees::{incremental_merkle_tree::IncrementalMerkleProof, merkle_tree::MerkleProof},
+    trees::{
+        bit_path::BitPath, incremental_merkle_tree::IncrementalMerkleProof,
+        merkle_tree::MerkleProof,
+    },
 };
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::RwLock;
-
-use crate::trees::utils::bit_path::BitPath;
 
 use super::{error::MerkleTreeError, HashOut, Hasher, IncrementalMerkleTreeClient, MTResult};
 

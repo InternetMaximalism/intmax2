@@ -1,11 +1,10 @@
 use intmax2_zkp::utils::{
-    leafable::Leafable, leafable_hasher::LeafableHasher,
-    trees::incremental_merkle_tree::IncrementalMerkleProof,
+    leafable::Leafable,
+    leafable_hasher::LeafableHasher,
+    trees::{bit_path::BitPath, incremental_merkle_tree::IncrementalMerkleProof},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sqlx::{Pool, Postgres};
-
-use crate::trees::utils::bit_path::BitPath;
 
 use super::{sql_node_hash::SqlNodeHashes, HashOut, Hasher, IncrementalMerkleTreeClient, MTResult};
 

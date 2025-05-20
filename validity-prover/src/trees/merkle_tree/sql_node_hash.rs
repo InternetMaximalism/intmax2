@@ -1,7 +1,8 @@
 use super::{error::MerkleTreeError, HashOut, Hasher, MTResult};
-use crate::trees::utils::bit_path::BitPath;
 use intmax2_zkp::utils::{
-    leafable::Leafable, leafable_hasher::LeafableHasher, trees::merkle_tree::MerkleProof,
+    leafable::Leafable,
+    leafable_hasher::LeafableHasher,
+    trees::{bit_path::BitPath, merkle_tree::MerkleProof},
 };
 
 use serde::{de::DeserializeOwned, Serialize};
@@ -225,7 +226,6 @@ mod tests {
     use sqlx::postgres::PgPoolOptions;
 
     use super::{BitPath, SqlNodeHashes};
-    use crate::trees::utils::bit_path::BitPath as BitPathOrig;
     use intmax2_zkp::utils::leafable::Leafable;
 
     type TestValue = u32;
@@ -313,7 +313,7 @@ mod tests {
         let mut expected_hashes = Vec::new();
 
         for i in 0..num_entries {
-            let bit_path = BitPathOrig::new(height as u32, i);
+            let bit_path = BitPath::new(height as u32, i);
             let hash_value = TestValue::empty_leaf().hash();
             expected_hashes.push((bit_path, hash_value)); // store expected values
             node_hashes
@@ -375,7 +375,7 @@ mod tests {
         let hash_value = TestValue::empty_leaf().hash();
 
         for &i in &sparse_indices {
-            let bit_path = BitPathOrig::new(height as u32, i);
+            let bit_path = BitPath::new(height as u32, i);
             node_hashes
                 .save_node(&mut tx, timestamp, bit_path, hash_value)
                 .await?;
@@ -417,7 +417,7 @@ mod tests {
         let hash_value = TestValue::empty_leaf().hash();
 
         for &i in &boundary_indices {
-            let bit_path = BitPathOrig::new(height as u32, i);
+            let bit_path = BitPath::new(height as u32, i);
             node_hashes
                 .save_node(&mut tx, timestamp, bit_path, hash_value)
                 .await?;
@@ -460,7 +460,7 @@ mod tests {
         let hash_value = TestValue::empty_leaf().hash();
 
         for &ts in &timestamps {
-            let bit_path = BitPathOrig::new(height as u32, test_index);
+            let bit_path = BitPath::new(height as u32, test_index);
             node_hashes
                 .save_node(&mut tx, ts, bit_path, hash_value)
                 .await?;

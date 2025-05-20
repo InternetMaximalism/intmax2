@@ -8,6 +8,7 @@ use intmax2_zkp::{
         leafable::Leafable,
         leafable_hasher::LeafableHasher,
         trees::{
+            bit_path::BitPath,
             incremental_merkle_tree::IncrementalMerkleProof,
             indexed_merkle_tree::{
                 insertion::IndexedInsertionProof, leaf::IndexedMerkleLeaf,
@@ -17,8 +18,6 @@ use intmax2_zkp::{
     },
 };
 use sqlx::{Pool, Postgres};
-
-use crate::trees::utils::bit_path::BitPath;
 
 use super::{
     error::MerkleTreeError, sql_node_hash::SqlNodeHashes, HashOut, Hasher, IndexedMerkleTreeClient,

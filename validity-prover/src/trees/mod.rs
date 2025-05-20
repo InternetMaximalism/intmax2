@@ -6,7 +6,6 @@ use tracing_subscriber::{
 pub mod deposit_hash;
 pub mod merkle_tree;
 pub mod update;
-pub mod utils;
 
 pub fn setup_test() -> String {
     dotenvy::dotenv().ok();
