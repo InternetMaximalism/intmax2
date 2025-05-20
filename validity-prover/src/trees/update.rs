@@ -22,7 +22,7 @@ use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
 
 use super::merkle_tree::IndexedMerkleTreeClient;
 
-#[instrument(skip_all)]
+#[instrument(skip_all, fields(timestamp = timestamp))]
 pub async fn to_block_witness<
     HistoricalAccountTree: IndexedMerkleTreeClient,
     HistoricalBlockHashTree: IncrementalMerkleTreeClient<Bytes32>,
@@ -72,7 +72,7 @@ pub async fn to_block_witness<
     Ok(block_witness)
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, fields(timestamp = timestamp))]
 async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkleTreeClient>(
     account_tree: &HistoricalAccountTree,
     full_block: &FullBlock,
@@ -103,7 +103,7 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
     Ok((pubkeys, account_membership_proofs))
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, fields(timestamp = timestamp))]
 async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTreeClient>(
     account_tree: &HistoricalAccountTree,
     full_block: &FullBlock,
@@ -128,7 +128,7 @@ async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTree
     Ok((pubkeys, account_id_packed, account_merkle_proofs))
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, fields(timestamp = timestamp))]
 pub async fn update_trees<
     HistoricalAccountTree: IndexedMerkleTreeClient,
     HistoricalBlockHashTree: IncrementalMerkleTreeClient<Bytes32>,
@@ -144,7 +144,9 @@ pub async fn update_trees<
     let block_tree_len = block_tree.len(timestamp).await?;
     ensure!(
         block_pis.block_number == block_tree_len as u32,
-        "block number mismatch"
+        "block number mismatch: witness {} != block tree len {}",
+        block_pis.block_number,
+        block_tree_len
     );
 
     // Update block tree

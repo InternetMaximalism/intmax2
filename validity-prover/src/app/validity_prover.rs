@@ -438,6 +438,7 @@ impl ValidityProver {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn sync_validity_witness_loop(&self) -> Result<(), ValidityProverError> {
         let mut interval =
             tokio::time::interval(Duration::from_secs(self.config.witness_sync_interval));
@@ -450,6 +451,7 @@ impl ValidityProver {
         }
     }
 
+    #[instrument(skip(self))]
     async fn generate_validity_proof_loop(&self) -> Result<(), ValidityProverError> {
         let mut interval =
             tokio::time::interval(Duration::from_secs(self.config.validity_proof_interval));
@@ -462,6 +464,7 @@ impl ValidityProver {
         }
     }
 
+    #[instrument(skip(self))]
     async fn add_tasks_loop(&self) -> Result<(), ValidityProverError> {
         let mut interval =
             tokio::time::interval(Duration::from_secs(self.config.add_tasks_interval));
@@ -472,6 +475,7 @@ impl ValidityProver {
         }
     }
 
+    #[instrument(skip(self))]
     async fn cleanup_inactive_tasks_loop(&self) -> Result<(), ValidityProverError> {
         let mut interval = tokio::time::interval(Duration::from_secs(
             self.config.cleanup_inactive_tasks_interval,
