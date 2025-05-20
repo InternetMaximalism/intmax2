@@ -15,6 +15,7 @@ use intmax2_zkp::{
     ethereum_types::{account_id::AccountIdPacked, bytes32::Bytes32, u256::U256},
     utils::trees::indexed_merkle_tree::membership::MembershipProof,
 };
+use log::warn;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -99,14 +100,6 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
             let semaphore = semaphore.clone();
             async move {
                 let _permit = semaphore.acquire_owned().await?;
-                if !pubkey.is_dummy_pubkey()
-                    && account_tree.index(timestamp, pubkey).await?.is_some()
-                {
-                    log::warn!(
-                        "Invalid block {}: account already exists",
-                        full_block.block.block_number
-                    );
-                }
                 let proof = account_tree.prove_membership(timestamp, pubkey).await?;
                 anyhow::Ok((pubkey, proof))
             }
@@ -291,9 +284,20 @@ pub async fn update_trees<
         block_witness: block_witness.clone(),
     };
 
-    validity_witness
+    let pis = validity_witness
         .to_validity_pis()
         .map_err(|e| anyhow::anyhow!("failed to convert to validity public inputs: {}", e))?;
+
+    if !pis.is_valid_block {
+        warn!(
+            "block:{}, is_registration:{} is not valid",
+            pis.public_state.block_number,
+            block_witness
+                .signature
+                .block_sign_payload
+                .is_registration_block
+        );
+    }
 
     Ok(validity_witness)
 }
