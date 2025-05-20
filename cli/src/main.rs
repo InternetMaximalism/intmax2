@@ -12,6 +12,7 @@ use intmax2_cli::{
             mining_list, withdrawal_status,
         },
         history::history,
+        key_derivation::derive_key_from_eth,
         send::send_transfers,
         sync::{resync, sync_claims, sync_withdrawals},
         withdrawal::send_withdrawal,
@@ -249,8 +250,22 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             let key = KeySet::new(private_key.into());
             println!("Public key: {}", key.pubkey.to_hex());
         }
-        Commands::KeyFromEth { eth_private_key } => {
-            let key = generate_intmax_account_from_eth_key(eth_private_key);
+        Commands::KeyFromBackupKey { backup_key } => {
+            let key = generate_intmax_account_from_eth_key(backup_key);
+            println!("Private key: {}", key.privkey.to_hex());
+            println!("Public key: {}", key.pubkey.to_hex());
+        }
+        Commands::KeyFromEth {
+            eth_private_key,
+            redeposit_index,
+            wallet_index,
+        } => {
+            let key = derive_key_from_eth(
+                eth_private_key,
+                redeposit_index.unwrap_or_default(),
+                wallet_index.unwrap_or_default(),
+            )
+            .await?;
             println!("Private key: {}", key.privkey.to_hex());
             println!("Public key: {}", key.pubkey.to_hex());
         }

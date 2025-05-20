@@ -9,4 +9,5 @@ pub mod s3_store_vault;
 pub mod store_vault_server;
 pub mod utils;
 pub mod validity_prover;
+pub mod wallet_key_vault;
 pub mod withdrawal_server;

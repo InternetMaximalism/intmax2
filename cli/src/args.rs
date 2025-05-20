@@ -159,5 +159,13 @@ pub enum Commands {
     KeyFromEth {
         #[clap(long)]
         eth_private_key: B256,
+        #[clap(long)]
+        redeposit_index: Option<u32>,
+        #[clap(long)]
+        wallet_index: Option<u32>,
+    },
+    KeyFromBackupKey {
+        #[clap(long)]
+        backup_key: B256,
     },
 }
