@@ -1,5 +1,4 @@
 use anyhow::ensure;
-use hashbrown::HashMap;
 use intmax2_zkp::{
     common::{
         trees::{
@@ -16,6 +15,8 @@ use intmax2_zkp::{
     ethereum_types::{account_id::AccountIdPacked, bytes32::Bytes32, u256::U256},
     utils::trees::indexed_merkle_tree::membership::MembershipProof,
 };
+use std::{collections::HashSet, sync::Arc};
+use tokio::sync::Semaphore;
 use tracing::instrument;
 
 use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
@@ -82,24 +83,53 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
         "pubkeys is not given while it is registration block"
     ))?;
     pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
-    let mut account_membership_proofs = Vec::new();
-    let mut cached_proofs: HashMap<U256, MembershipProof> = HashMap::new();
-    for pubkey in pubkeys.iter() {
-        if cached_proofs.contains_key(pubkey) {
-            account_membership_proofs.push(cached_proofs[pubkey].clone());
-            continue;
-        }
-        let is_dummy = pubkey.is_dummy_pubkey();
-        if !(account_tree.index(timestamp, *pubkey).await?.is_none() || is_dummy) {
-            log::warn!(
-                "Invalid block {}: account already exists",
-                full_block.block.block_number
-            );
-        }
-        let proof = account_tree.prove_membership(timestamp, *pubkey).await?;
-        account_membership_proofs.push(proof.clone());
-        cached_proofs.insert(*pubkey, proof);
+
+    let semaphore = Arc::new(Semaphore::new(3));
+    let unique_pubkeys = pubkeys.iter().cloned().collect::<HashSet<_>>();
+    let mut futures = Vec::new();
+    for pubkey in unique_pubkeys.iter() {
+        let semaphore = semaphore.clone();
+        futures.push(async move {
+            let _ = semaphore.clone().acquire_owned().await?;
+            let is_dummy = pubkey.is_dummy_pubkey();
+            if !(account_tree.index(timestamp, *pubkey).await?.is_none() || is_dummy) {
+                log::warn!(
+                    "Invalid block {}: account already exists",
+                    full_block.block.block_number
+                );
+            }
+            let proof = account_tree.prove_membership(timestamp, *pubkey).await?;
+            anyhow::Ok((*pubkey, proof))
+        });
     }
+    let results = futures::future::join_all(futures).await;
+
+    // sort the proofs according to the pubkeys
+    let mut account_membership_proofs = vec![None; NUM_SENDERS_IN_BLOCK];
+    for result in results {
+        match result {
+            Ok((pubkey, proof)) => {
+                for i in 0..NUM_SENDERS_IN_BLOCK {
+                    if pubkeys[i] == pubkey {
+                        account_membership_proofs[i] = Some(proof.clone());
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to generate membership proof: {}", e);
+            }
+        }
+    }
+    let account_membership_proofs = account_membership_proofs
+        .into_iter()
+        .enumerate()
+        .map(|(i, proof)| {
+            proof.ok_or(anyhow::anyhow!(
+                "Failed to generate membership proof for pubkey {}",
+                pubkeys[i]
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     Ok((pubkeys, account_membership_proofs))
 }
 
