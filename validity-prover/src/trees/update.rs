@@ -1,4 +1,7 @@
+use super::merkle_tree::IndexedMerkleTreeClient;
+use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
 use anyhow::ensure;
+use futures::StreamExt as _;
 use intmax2_zkp::{
     common::{
         trees::{
@@ -18,15 +21,9 @@ use intmax2_zkp::{
 use log::warn;
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
     time::Instant,
 };
-use tokio::sync::Semaphore;
 use tracing::{info, instrument};
-
-use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
-
-use super::merkle_tree::IndexedMerkleTreeClient;
 
 const PARALLELISM_LIMIT: usize = 10;
 
@@ -97,21 +94,19 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
     ))?;
     pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
 
-    let semaphore = Arc::new(Semaphore::new(PARALLELISM_LIMIT));
     let futures = pubkeys
         .iter()
         .cloned()
         .collect::<HashSet<_>>()
         .into_iter()
-        .map(|pubkey| {
-            let semaphore = semaphore.clone();
-            async move {
-                let _permit = semaphore.acquire_owned().await?;
-                let proof = account_tree.prove_membership(timestamp, pubkey).await?;
-                anyhow::Ok((pubkey, proof))
-            }
+        .map(|pubkey| async move {
+            let proof = account_tree.prove_membership(timestamp, pubkey).await?;
+            anyhow::Ok((pubkey, proof))
         });
-    let results = futures::future::join_all(futures).await;
+    let results = futures::stream::iter(futures)
+        .buffer_unordered(PARALLELISM_LIMIT)
+        .collect::<Vec<_>>()
+        .await;
 
     let mut proofs_map = HashMap::with_capacity(pubkeys.len());
     for result in results {
@@ -148,24 +143,22 @@ async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTree
         .map_err(|e| anyhow::anyhow!("error while recovering packed account ids {}", e))?;
     let account_ids = account_id_packed.unpack();
 
-    let semaphore = Arc::new(Semaphore::new(PARALLELISM_LIMIT));
     let futures = account_ids
         .iter()
         .cloned()
         .collect::<HashSet<_>>()
         .into_iter()
-        .map(|account_id| {
-            let semaphore = semaphore.clone();
-            async move {
-                let _permit = semaphore.acquire_owned().await?;
-                let pubkey = account_tree.key(timestamp, account_id.0).await?;
-                let proof = account_tree
-                    .prove_inclusion(timestamp, account_id.0)
-                    .await?;
-                anyhow::Ok((account_id, pubkey, proof))
-            }
+        .map(|account_id| async move {
+            let pubkey = account_tree.key(timestamp, account_id.0).await?;
+            let proof = account_tree
+                .prove_inclusion(timestamp, account_id.0)
+                .await?;
+            anyhow::Ok((account_id, pubkey, proof))
         });
-    let results = futures::future::join_all(futures).await;
+    let results = futures::stream::iter(futures)
+        .buffer_unordered(PARALLELISM_LIMIT)
+        .collect::<Vec<_>>()
+        .await;
     let mut proofs_map = HashMap::with_capacity(account_ids.len());
     for result in results {
         let (account_id, pubkey, proof) = result
