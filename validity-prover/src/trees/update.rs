@@ -115,12 +115,9 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
 
     let mut proofs_map = HashMap::with_capacity(pubkeys.len());
     for result in results {
-        if let Ok((pubkey, proof)) = result {
-            proofs_map.insert(pubkey, proof);
-        } else if let Err(e) = result {
-            log::error!("Failed to generate membership proof: {}", e);
-            return Err(anyhow::anyhow!("Failed to generate membership proofs"));
-        }
+        let (pubkey, proof) =
+            result.map_err(|e| anyhow::anyhow!("Failed to generate membership proof: {}", e))?;
+        proofs_map.insert(pubkey, proof);
     }
 
     let account_membership_proofs = pubkeys
@@ -150,16 +147,48 @@ async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTree
     let account_id_packed = AccountIdPacked::from_trimmed_bytes(&account_id_trimmed_bytes)
         .map_err(|e| anyhow::anyhow!("error while recovering packed account ids {}", e))?;
     let account_ids = account_id_packed.unpack();
-    let mut account_merkle_proofs = Vec::new();
-    let mut pubkeys = Vec::new();
+
+    let semaphore = Arc::new(Semaphore::new(PARALLELISM_LIMIT));
+    let futures = account_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .map(|account_id| {
+            let semaphore = semaphore.clone();
+            async move {
+                let _permit = semaphore.acquire_owned().await?;
+                let pubkey = account_tree.key(timestamp, account_id.0).await?;
+                let proof = account_tree
+                    .prove_inclusion(timestamp, account_id.0)
+                    .await?;
+                anyhow::Ok((account_id, pubkey, proof))
+            }
+        });
+    let results = futures::future::join_all(futures).await;
+    let mut proofs_map = HashMap::with_capacity(account_ids.len());
+    for result in results {
+        let (account_id, pubkey, proof) = result
+            .map_err(|e| anyhow::anyhow!("Failed to generate account merkle proof: {}", e))?;
+        proofs_map.insert(account_id, (pubkey, proof));
+    }
+
+    let mut pubkeys = Vec::with_capacity(account_ids.len());
+    let mut account_merkle_proofs = Vec::with_capacity(account_ids.len());
     for account_id in account_ids {
-        let pubkey = account_tree.key(timestamp, account_id.0).await?;
-        let proof = account_tree
-            .prove_inclusion(timestamp, account_id.0)
-            .await?;
+        let (pubkey, proof) = proofs_map
+            .get(&account_id)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Failed to generate account merkle proof for account id {}",
+                    account_id.0
+                )
+            })?
+            .clone();
         pubkeys.push(pubkey);
         account_merkle_proofs.push(proof);
     }
+
     Ok((pubkeys, account_id_packed, account_merkle_proofs))
 }
 
