@@ -15,13 +15,18 @@ use intmax2_zkp::{
     ethereum_types::{account_id::AccountIdPacked, bytes32::Bytes32, u256::U256},
     utils::trees::indexed_merkle_tree::membership::MembershipProof,
 };
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tokio::sync::Semaphore;
 use tracing::instrument;
 
 use crate::trees::merkle_tree::IncrementalMerkleTreeClient;
 
 use super::merkle_tree::IndexedMerkleTreeClient;
+
+const PARALLELISM_LIMIT: usize = 10;
 
 #[instrument(skip_all, fields(timestamp = timestamp))]
 pub async fn to_block_witness<
@@ -84,52 +89,52 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
     ))?;
     pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
 
-    let semaphore = Arc::new(Semaphore::new(3));
-    let unique_pubkeys = pubkeys.iter().cloned().collect::<HashSet<_>>();
-    let mut futures = Vec::new();
-    for pubkey in unique_pubkeys.iter() {
-        let semaphore = semaphore.clone();
-        futures.push(async move {
-            let _ = semaphore.clone().acquire_owned().await?;
-            let is_dummy = pubkey.is_dummy_pubkey();
-            if !(account_tree.index(timestamp, *pubkey).await?.is_none() || is_dummy) {
-                log::warn!(
-                    "Invalid block {}: account already exists",
-                    full_block.block.block_number
-                );
+    let semaphore = Arc::new(Semaphore::new(PARALLELISM_LIMIT));
+    let futures = pubkeys
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .map(|pubkey| {
+            let semaphore = semaphore.clone();
+            async move {
+                let _permit = semaphore.acquire_owned().await?;
+                if !pubkey.is_dummy_pubkey()
+                    && account_tree.index(timestamp, pubkey).await?.is_some()
+                {
+                    log::warn!(
+                        "Invalid block {}: account already exists",
+                        full_block.block.block_number
+                    );
+                }
+                let proof = account_tree.prove_membership(timestamp, pubkey).await?;
+                anyhow::Ok((pubkey, proof))
             }
-            let proof = account_tree.prove_membership(timestamp, *pubkey).await?;
-            anyhow::Ok((*pubkey, proof))
         });
-    }
     let results = futures::future::join_all(futures).await;
 
-    // sort the proofs according to the pubkeys
-    let mut account_membership_proofs = vec![None; NUM_SENDERS_IN_BLOCK];
+    let mut proofs_map = HashMap::with_capacity(pubkeys.len());
     for result in results {
-        match result {
-            Ok((pubkey, proof)) => {
-                for i in 0..NUM_SENDERS_IN_BLOCK {
-                    if pubkeys[i] == pubkey {
-                        account_membership_proofs[i] = Some(proof.clone());
-                    }
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to generate membership proof: {}", e);
-            }
+        if let Ok((pubkey, proof)) = result {
+            proofs_map.insert(pubkey, proof);
+        } else if let Err(e) = result {
+            log::error!("Failed to generate membership proof: {}", e);
+            return Err(anyhow::anyhow!("Failed to generate membership proofs"));
         }
     }
-    let account_membership_proofs = account_membership_proofs
-        .into_iter()
-        .enumerate()
-        .map(|(i, proof)| {
-            proof.ok_or(anyhow::anyhow!(
-                "Failed to generate membership proof for pubkey {}",
-                pubkeys[i]
-            ))
+
+    let account_membership_proofs = pubkeys
+        .iter()
+        .map(|pubkey| {
+            proofs_map
+                .get(pubkey)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Failed to generate membership proof for pubkey {}", pubkey)
+                })
+                .cloned()
         })
         .collect::<Result<Vec<_>, _>>()?;
+
     Ok((pubkeys, account_membership_proofs))
 }
 
@@ -251,8 +256,15 @@ pub async fn update_trees<
         account_registration_proofs,
         account_update_proofs,
     };
-    Ok(ValidityWitness {
+
+    let validity_witness = ValidityWitness {
         validity_transition_witness,
         block_witness: block_witness.clone(),
-    })
+    };
+
+    validity_witness
+        .to_validity_pis()
+        .map_err(|e| anyhow::anyhow!("failed to convert to validity public inputs: {}", e))?;
+
+    Ok(validity_witness)
 }
