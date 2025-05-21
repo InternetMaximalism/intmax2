@@ -1,12 +1,8 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use intmax2_interfaces::data::{
-    data_type::DataType, encryption::BlsEncryption, meta_data::MetaData,
-    transfer_data::TransferData,
+    data_type::DataType, encryption::BlsEncryption, transfer_data::TransferData, tx_data::TxData,
 };
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u256::U256},
-};
+use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use serde::{Deserialize, Serialize};
 
 use crate::client::receive_validation::validate_receive;
@@ -17,7 +13,7 @@ use super::{client::Client, error::ClientError, strategy::common::fetch_single_d
 #[serde(rename_all = "camelCase")]
 pub struct TransferReceipt {
     pub data: TransferData,
-    pub meta: MetaData,
+    pub timestamp: u64,
 }
 
 impl BlsEncryption for TransferReceipt {}
@@ -25,17 +21,28 @@ impl BlsEncryption for TransferReceipt {}
 pub async fn generate_transfer_receipt(
     client: &Client,
     key: KeySet,
-    transfer_digest: Bytes32,
-    receiver: U256,
+    tx_digest: Bytes32,
+    transfer_index: u32,
 ) -> Result<String, ClientError> {
-    let (meta, data) = fetch_single_data(
+    let (meta, tx_data) = fetch_single_data::<TxData>(
         client.store_vault_server.as_ref(),
         key,
-        DataType::Transfer,
-        transfer_digest,
+        DataType::Tx,
+        tx_digest,
     )
     .await?;
-    let encrypted_data = TransferReceipt { data, meta }.encrypt(receiver, None)?;
+    let data = tx_data.get_transfer_data(key.pubkey, transfer_index)?;
+    if !data.transfer.recipient.is_pubkey {
+        return Err(ClientError::GeneralError(
+            "Recipient is not a pubkey address".to_string(),
+        ));
+    }
+    let receiver = data.transfer.recipient.to_pubkey()?;
+    let encrypted_data = TransferReceipt {
+        data,
+        timestamp: meta.timestamp,
+    }
+    .encrypt(receiver, None)?;
     let encrypted_data_base64 = BASE64_STANDARD.encode(&encrypted_data);
     Ok(encrypted_data_base64)
 }
@@ -56,7 +63,7 @@ pub async fn validate_transfer_receipt(
         client.store_vault_server.as_ref(),
         client.validity_prover.as_ref(),
         key.pubkey,
-        &transfer_receipt.meta,
+        transfer_receipt.timestamp,
         &transfer_receipt.data,
     )
     .await?;

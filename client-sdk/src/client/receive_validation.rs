@@ -4,9 +4,8 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
-        encryption::errors::BlsEncryptionError, meta_data::MetaData,
-        proof_compression::ProofCompressionError, transfer_data::TransferData,
-        validation::Validation as _,
+        encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError,
+        transfer_data::TransferData, validation::Validation as _,
     },
 };
 use intmax2_zkp::{
@@ -46,7 +45,7 @@ pub async fn validate_receive(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     recipient_pubkey: U256,
-    meta: &MetaData,
+    transfer_timestamp: u64,
     transfer_data: &TransferData,
 ) -> Result<Transfer, ReceiveValidationError> {
     transfer_data
@@ -64,7 +63,7 @@ pub async fn validate_receive(
         .get_block_number_by_tx_tree_root(transfer_data.tx_tree_root)
         .await?;
     if block_number.is_none() {
-        return Err(ReceiveValidationError::TxIsNotSettled(meta.timestamp));
+        return Err(ReceiveValidationError::TxIsNotSettled(transfer_timestamp));
     }
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server,

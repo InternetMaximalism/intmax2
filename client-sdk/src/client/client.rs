@@ -829,10 +829,10 @@ impl Client {
     pub async fn generate_transfer_receipt(
         &self,
         key: KeySet,
-        transfer_digest: Bytes32,
-        receiver: U256,
+        tx_digest: Bytes32,
+        transfer_index: u32,
     ) -> Result<String, ClientError> {
-        generate_transfer_receipt(self, key, transfer_digest, receiver).await
+        generate_transfer_receipt(self, key, tx_digest, transfer_index).await
     }
 
     pub async fn validate_transfer_receipt(

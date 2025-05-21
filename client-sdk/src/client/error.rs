@@ -2,6 +2,7 @@ use intmax2_interfaces::{
     api::error::ServerError,
     data::{encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError},
 };
+use intmax2_zkp::common::error::CommonError;
 
 use crate::external_api::contract::error::BlockchainError;
 
@@ -23,6 +24,12 @@ pub enum ClientError {
 
     #[error(transparent)]
     SyncError(#[from] SyncError),
+
+    #[error(transparent)]
+    CommonError(#[from] CommonError),
+
+    #[error("General error: {0}")]
+    GeneralError(String),
 
     #[error(transparent)]
     ReceiveValidationError(#[from] ReceiveValidationError),

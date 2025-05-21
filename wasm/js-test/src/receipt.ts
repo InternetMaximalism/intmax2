@@ -1,4 +1,4 @@
-import { fetch_transfer_history, generate_intmax_account_from_eth_key, generate_transfer_receipt, get_derive_path_list, JsDerive, JsMetaDataCursor, save_derive_path, validate_transfer_receipt, } from '../pkg';
+import { generate_intmax_account_from_eth_key, generate_transfer_receipt, validate_transfer_receipt, } from '../pkg';
 import { env, config } from './setup';
 
 async function main() {
@@ -8,26 +8,17 @@ async function main() {
     console.log(`privkey`, privkey);
     console.log(`pubkey`, key.pubkey);
 
-    const cursor = new JsMetaDataCursor(null, "asc", null);
-    const transfer_history = await fetch_transfer_history(config, key.privkey, cursor);
-    if (transfer_history.history.length === 0) {
-        console.log("No transfer history found");
-        return;
-    }
-    const transfer_data = transfer_history.history[0].data;
-    const transfer_digest = transfer_history.history[0].meta.digest;
-    const recipient = transfer_data.transfer.recipient.data;
-    console.log(`transfer_digest: ${transfer_digest}`);
-    console.log(`recipient: ${recipient}`);
+    const tx_digest = "0xd1e845b5c4ad76ed15b75606f280ec1b3cb24c153f12da01a4c0e08490a6b9b9"; // self transfer tx digest in dev env
+    const transfer_index = 0; // the first transfer
+    console.log(`tx_digest: ${tx_digest}`);
 
-    const receipt = await generate_transfer_receipt(config, key.privkey, transfer_digest, recipient);
+    const receipt = await generate_transfer_receipt(config, key.privkey, tx_digest, transfer_index);
     console.log(`size of receipt: ${receipt.length}`);
 
     // verify the receipt
     const recovered_transfer_data = await validate_transfer_receipt(config, key.privkey, receipt)
     console.log(`recovered transfer amount: ${recovered_transfer_data.transfer.amount}`);
 }
-
 
 main().then(() => {
     process.exit(0);
