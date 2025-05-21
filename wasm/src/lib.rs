@@ -398,16 +398,15 @@ pub async fn make_history_backup(
 pub async fn generate_transfer_receipt(
     config: &Config,
     private_key: &str,
-    transfer_digest: &str,
-    receiver: &str,
+    tx_digest: &str,
+    transfer_index: u32,
 ) -> Result<String, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
-    let transfer_digest = parse_bytes32(transfer_digest)?;
-    let receiver = parse_bytes32(receiver)?.into();
+    let transfer_digest = parse_bytes32(tx_digest)?;
     let client = get_client(config);
     let receipt = client
-        .generate_transfer_receipt(key, transfer_digest, receiver)
+        .generate_transfer_receipt(key, transfer_digest, transfer_index)
         .await?;
     Ok(receipt)
 }
