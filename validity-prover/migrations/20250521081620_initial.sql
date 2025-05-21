@@ -1,28 +1,40 @@
-CREATE TABLE IF NOT EXISTS observer_block_sync_eth_block_num (
+-- settings tables
+CREATE TABLE IF NOT EXISTS settings (
     singleton_key BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton_key),
-    block_sync_eth_block_num BIGINT NOT NULL
+    rollup_contract_address VARCHAR(42) NOT NULL,
+    liquidity_contract_address VARCHAR(42) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS observer_deposit_sync_eth_block_num (
-   singleton_key BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton_key),
-   deposit_sync_eth_block_num BIGINT NOT NULL
+CREATE TABLE IF NOT EXISTS event_sync_eth_block (
+    event_type TEXT PRIMARY KEY,
+    eth_block_number BIGINT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS observer_l1_deposit_sync_eth_block_num (
-   singleton_key BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton_key),
-   l1_deposit_sync_eth_block_num BIGINT NOT NULL
+-- event tables
+CREATE TABLE IF NOT EXISTS deposit_leaf_events (
+    deposit_index INTEGER PRIMARY KEY,
+    deposit_hash BYTEA NOT NULL,
+    eth_block_number BIGINT NOT NULL,
+    eth_tx_index BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS deposited_events (
+    deposit_id BIGINT PRIMARY KEY,
+    depositor VARCHAR(42) NOT NULL,
+    pubkey_salt_hash VARCHAR(66) NOT NULL,
+    token_index BIGINT NOT NULL,
+    amount VARCHAR(66) NOT NULL,
+    is_eligible BOOLEAN NOT NULL,
+    deposited_at BIGINT NOT NULL,
+    deposit_hash VARCHAR(66) NOT NULL,
+    tx_hash VARCHAR(66) NOT NULL,
+    eth_block_number BIGINT NOT NULL,
+    eth_tx_index BIGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS full_blocks (
     block_number INTEGER PRIMARY KEY,
-    eth_block_number BIGINT NOT NULL,
-    eth_tx_index BIGINT NOT NULL,
-    full_block BYTEA NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS deposit_leaf_events (
-    deposit_index INTEGER PRIMARY KEY,
-    deposit_hash BYTEA NOT NULL,
+    full_block BYTEA NOT NULL,
     eth_block_number BIGINT NOT NULL,
     eth_tx_index BIGINT NOT NULL
 );
@@ -33,25 +45,14 @@ CREATE TABLE IF NOT EXISTS validity_state (
    validity_witness BYTEA NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS tx_tree_roots (
-    tx_tree_root BYTEA PRIMARY KEY,
-    block_number INTEGER NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS validity_proofs (
     block_number INTEGER PRIMARY KEY,
     proof BYTEA NOT NULL
 );
 
--- Prover coordinator tables
-CREATE TABLE IF NOT EXISTS prover_tasks (
-    block_number INTEGER PRIMARY KEY,
-    assigned BOOLEAN NOT NULL,
-    assigned_at TIMESTAMP,
-    last_heartbeat TIMESTAMP,
-    completed BOOLEAN NOT NULL,
-    completed_at TIMESTAMP,
-    transition_proof BYTEA 
+CREATE TABLE IF NOT EXISTS tx_tree_roots (
+    tx_tree_root BYTEA PRIMARY KEY,
+    block_number INTEGER NOT NULL
 );
 
 --- Merkle tree tables
@@ -91,27 +92,6 @@ CREATE TABLE IF NOT EXISTS indexed_leaves (
     PRIMARY KEY (tag, position, timestamp_value)
 );
 
--- L1 Deposit and Settings tables
-CREATE TABLE IF NOT EXISTS settings (
-    singleton_key BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton_key),
-    rollup_contract_address VARCHAR(42) NOT NULL,
-    liquidity_contract_address VARCHAR(42) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS deposited_events (
-    deposit_id BIGINT PRIMARY KEY,
-    depositor VARCHAR(42) NOT NULL,
-    pubkey_salt_hash VARCHAR(66) NOT NULL,
-    token_index BIGINT NOT NULL,
-    amount VARCHAR(66) NOT NULL,
-    is_eligible BOOLEAN NOT NULL,
-    deposited_at BIGINT NOT NULL,
-    deposit_hash VARCHAR(66) NOT NULL,
-    tx_hash VARCHAR(66) NOT NULL,
-    eth_block_number BIGINT NOT NULL,
-    eth_tx_index BIGINT NOT NULL
-);
-
 --- Indexes
 CREATE INDEX idx_deposit_leaf_events_deposit_hash ON deposit_leaf_events(deposit_hash);
 CREATE INDEX idx_deposit_leaf_events_block_tx ON deposit_leaf_events(eth_block_number, eth_tx_index);
@@ -119,9 +99,7 @@ CREATE INDEX idx_deposited_events_pubkey_salt_hash ON deposited_events(pubkey_sa
 CREATE INDEX idx_full_blocks_block_tx ON full_blocks(eth_block_number, eth_tx_index);
 CREATE INDEX idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, timestamp_value DESC);
 CREATE INDEX idx_leaves_len_lookup ON leaves_len (tag, timestamp_value DESC);
-CREATE INDEX idx_prover_tasks_assigned_status ON prover_tasks (assigned, completed);
 CREATE INDEX idx_tx_tree_roots_block_number ON tx_tree_roots (block_number);
-
 
 -- Indexes for Indexed Leaves
 CREATE INDEX idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (tag, position, timestamp_value DESC);

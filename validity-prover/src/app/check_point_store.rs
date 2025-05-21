@@ -46,27 +46,16 @@ impl CheckPointStore {
     }
 
     pub async fn get_check_point(&self, event_type: EventType) -> Result<Option<u64>, sqlx::Error> {
-        let eth_block_number = match event_type {
-            EventType::Deposited => {
-                sqlx::query!("SELECT l1_deposit_sync_eth_block_num FROM observer_l1_deposit_sync_eth_block_num WHERE singleton_key = TRUE")
-                    .fetch_optional(&self.pool)
-                    .await?
-                    .map(|row| row.l1_deposit_sync_eth_block_num)
-            }
-            EventType::DepositLeafInserted => {
-                sqlx::query!("SELECT deposit_sync_eth_block_num FROM observer_deposit_sync_eth_block_num WHERE singleton_key = TRUE")
-                    .fetch_optional(&self.pool)
-                    .await?
-                    .map(|row| row.deposit_sync_eth_block_num)
-            }
-            EventType::BlockPosted => {
-                sqlx::query!("SELECT block_sync_eth_block_num FROM observer_block_sync_eth_block_num WHERE singleton_key = TRUE")
-                    .fetch_optional(&self.pool)
-                    .await?
-                    .map(|row| row.block_sync_eth_block_num)
-            }
-        };
-        Ok(eth_block_number.map(|num| num as u64))
+        let row = sqlx::query!(
+            r#"
+            SELECT eth_block_number FROM event_sync_eth_block WHERE event_type = $1
+            "#,
+            event_type.to_string()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        let eth_block_number = row.map(|row| row.eth_block_number as u64);
+        Ok(eth_block_number)
     }
 
     pub async fn set_check_point(
@@ -74,47 +63,18 @@ impl CheckPointStore {
         event_type: EventType,
         eth_block_number: u64,
     ) -> Result<(), sqlx::Error> {
-        match event_type {
-            EventType::Deposited => {
-                sqlx::query!(
-                    r#"
-                    INSERT INTO observer_l1_deposit_sync_eth_block_num (singleton_key, l1_deposit_sync_eth_block_num)
-                    VALUES (TRUE, $1)
-                    ON CONFLICT (singleton_key) 
-                    DO UPDATE SET l1_deposit_sync_eth_block_num = $1
-                    "#,
-                    eth_block_number as i64
-                )
-                .execute(&self.pool)
-                .await?;
-            }
-            EventType::DepositLeafInserted => {
-                sqlx::query!(
-                    r#"
-                    INSERT INTO observer_deposit_sync_eth_block_num (singleton_key, deposit_sync_eth_block_num)
-                    VALUES (TRUE, $1)
-                    ON CONFLICT (singleton_key) 
-                    DO UPDATE SET deposit_sync_eth_block_num = $1
-                    "#,
-                    eth_block_number as i64
-                )
-                .execute(&self.pool)
-                .await?;
-            }
-            EventType::BlockPosted => {
-                sqlx::query!(
-                    r#"
-                    INSERT INTO observer_block_sync_eth_block_num (singleton_key, block_sync_eth_block_num)
-                    VALUES (TRUE, $1)
-                    ON CONFLICT (singleton_key) 
-                    DO UPDATE SET block_sync_eth_block_num = $1
-                    "#,
-                    eth_block_number as i64
-                )
-                .execute(&self.pool)
-                .await?;
-            }
-        }
+        sqlx::query!(
+            r#"
+            INSERT INTO event_sync_eth_block (event_type, eth_block_number)
+            VALUES ($1, $2)
+            ON CONFLICT (event_type) 
+            DO UPDATE SET eth_block_number = EXCLUDED.eth_block_number;
+            "#,
+            event_type.to_string(),
+            eth_block_number as i64
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }
