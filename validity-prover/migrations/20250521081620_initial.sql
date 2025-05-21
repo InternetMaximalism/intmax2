@@ -57,39 +57,38 @@ CREATE TABLE IF NOT EXISTS tx_tree_roots (
 
 --- Merkle tree tables
 CREATE TABLE IF NOT EXISTS hash_nodes (
-    timestamp bigint NOT NULL,
     tag int NOT NULL,
+    timestamp bigint NOT NULL,
     bit_path bytea NOT NULL,
     hash_value bytea NOT NULL,
-    PRIMARY KEY (timestamp, tag, bit_path)
+    PRIMARY KEY (timestamp, bit_path, tag)
 );
 
 CREATE TABLE IF NOT EXISTS leaves (
-    timestamp bigint NOT NULL,
     tag int NOT NULL,
+    timestamp bigint NOT NULL,
     position bigint NOT NULL,
     leaf_hash bytea NOT NULL,
     leaf bytea NOT NULL,
-    PRIMARY KEY (timestamp, tag, position)
+    PRIMARY KEY (timestamp, position, tag)
 );
 
 CREATE TABLE IF NOT EXISTS leaves_len (
-    timestamp bigint NOT NULL,
     tag int NOT NULL,
+    timestamp bigint NOT NULL,
     len int NOT NULL,
     PRIMARY KEY (timestamp, tag)
 );
 
 CREATE TABLE IF NOT EXISTS indexed_leaves (
     timestamp bigint NOT NULL,
-    tag int NOT NULL,
     position bigint NOT NULL,
     leaf_hash bytea NOT NULL,
     next_index bigint NOT NULL,
     key NUMERIC(78, 0) NOT NULL,
     next_key NUMERIC(78, 0) NOT NULL,
     value bigint NOT NULL,
-    PRIMARY KEY (tag, position, timestamp)
+    PRIMARY KEY (position, timestamp)
 );
 
 --- Indexes for event tables
@@ -107,6 +106,6 @@ CREATE INDEX IF NOT EXISTS idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, t
 CREATE INDEX IF NOT EXISTS idx_leaves_len_lookup ON leaves_len (tag, timestamp DESC);
 
 -- Indexes for Indexed Leaves
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (tag, position, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (tag, key, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (tag, key, next_key, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (position, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (key, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (key, next_key, timestamp DESC);
