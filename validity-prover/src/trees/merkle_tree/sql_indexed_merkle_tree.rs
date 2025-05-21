@@ -84,9 +84,9 @@ impl SqlIndexedMerkleTree {
         let next_key = BigDecimal::from_str(&leaf.next_key.to_string()).unwrap();
         sqlx::query!(
             r#"
-            INSERT INTO indexed_leaves (timestamp_value, tag, position, leaf_hash, next_index, key, next_key, value)
+            INSERT INTO indexed_leaves (timestamp, tag, position, leaf_hash, next_index, key, next_key, value)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (tag, position, timestamp_value)
+            ON CONFLICT (tag, position, timestamp)
             DO UPDATE SET leaf_hash = $4, next_index = $5, key = $6, next_key = $7, value = $8
             "#,
             timestamp as i64,
@@ -102,9 +102,9 @@ impl SqlIndexedMerkleTree {
         .await?;
         sqlx::query!(
             r#"
-            INSERT INTO leaves_len (timestamp_value, tag, len)
+            INSERT INTO leaves_len (timestamp, tag, len)
             VALUES ($1, $2, $3)
-            ON CONFLICT (timestamp_value, tag)
+            ON CONFLICT (timestamp, tag)
             DO UPDATE SET len = $3
             "#,
             timestamp as i64,
@@ -129,8 +129,8 @@ impl SqlIndexedMerkleTree {
         FROM indexed_leaves
         WHERE  tag = $1
           AND position = $2
-          AND timestamp_value <= $3
-        ORDER BY timestamp_value DESC 
+          AND timestamp <= $3
+        ORDER BY timestamp DESC 
         LIMIT 1
         "#,
             self.tag() as i32,
@@ -216,9 +216,9 @@ impl SqlIndexedMerkleTree {
             r#"
             SELECT len
             FROM leaves_len
-            WHERE timestamp_value <= $1
+            WHERE timestamp <= $1
               AND tag = $2
-            ORDER BY timestamp_value DESC
+            ORDER BY timestamp DESC
             LIMIT 1
             "#,
             timestamp as i64,
@@ -256,7 +256,7 @@ impl SqlIndexedMerkleTree {
         sqlx::query!(
             r#"
             DELETE FROM indexed_leaves
-            WHERE tag = $1 AND timestamp_value >= $2
+            WHERE tag = $1 AND timestamp >= $2
             "#,
             self.tag() as i32,
             timestamp as i64
@@ -266,7 +266,7 @@ impl SqlIndexedMerkleTree {
         sqlx::query!(
             r#"
             DELETE FROM leaves_len
-            WHERE tag = $1 AND timestamp_value >= $2
+            WHERE tag = $1 AND timestamp >= $2
             "#,
             self.tag() as i32,
             timestamp as i64
@@ -280,10 +280,10 @@ impl SqlIndexedMerkleTree {
     async fn get_last_timestamp(&self, tx: &mut sqlx::Transaction<'_, Postgres>) -> u64 {
         let record = sqlx::query!(
             r#"
-            SELECT timestamp_value
+            SELECT timestamp
             FROM indexed_leaves
             WHERE tag = $1
-            ORDER BY timestamp_value DESC
+            ORDER BY timestamp DESC
             LIMIT 1
             "#,
             self.tag() as i32
@@ -292,7 +292,7 @@ impl SqlIndexedMerkleTree {
         .await
         .unwrap();
         match record {
-            Some(row) => row.timestamp_value as u64,
+            Some(row) => row.timestamp as u64,
             None => 0,
         }
     }
@@ -311,8 +311,8 @@ impl SqlIndexedMerkleTree {
             FROM indexed_leaves
             WHERE tag = $1
                   AND key = $2
-                  AND timestamp_value <= $3
-            ORDER BY timestamp_value DESC
+                  AND timestamp <= $3
+            ORDER BY timestamp DESC
             LIMIT 1
             "#,
             self.tag() as i32,
@@ -342,13 +342,13 @@ impl SqlIndexedMerkleTree {
         let key_decimal = BigDecimal::from_str(&key.to_string()).unwrap();
         let candidate_not_on_edge = sqlx::query!(
             r#"
-            SELECT position, timestamp_value
+            SELECT position, timestamp
             FROM indexed_leaves
             WHERE tag = $1
                 AND key < $2
                 AND next_key > $2
-                AND timestamp_value <= $3
-            ORDER BY timestamp_value DESC
+                AND timestamp <= $3
+            ORDER BY timestamp DESC
             LIMIT 1
             "#,
             self.tag() as i32,
@@ -360,13 +360,13 @@ impl SqlIndexedMerkleTree {
 
         let candidate_on_edge = sqlx::query!(
             r#"
-            SELECT position, timestamp_value
+            SELECT position, timestamp
             FROM indexed_leaves
             WHERE tag = $1
                 AND key < $2
                 AND next_key = '0'::numeric
-                AND timestamp_value <= $3
-            ORDER BY timestamp_value DESC
+                AND timestamp <= $3
+            ORDER BY timestamp DESC
             LIMIT 1
             "#,
             self.tag() as i32,
@@ -385,10 +385,10 @@ impl SqlIndexedMerkleTree {
         // choose the candidate which has the latest timestamp
         let mut candidates = Vec::new();
         if let Some(row) = candidate_not_on_edge {
-            candidates.push((row.position, row.timestamp_value));
+            candidates.push((row.position, row.timestamp));
         }
         if let Some(row) = candidate_on_edge {
-            candidates.push((row.position, row.timestamp_value));
+            candidates.push((row.position, row.timestamp));
         }
         // sort descending by timestamp
         candidates.sort_by(|a, b| b.1.cmp(&a.1));
@@ -407,8 +407,8 @@ impl SqlIndexedMerkleTree {
             FROM indexed_leaves
             WHERE tag = $1 
                 AND position = $2
-                AND timestamp_value <= $3
-            ORDER BY timestamp_value DESC
+                AND timestamp <= $3
+            ORDER BY timestamp DESC
             LIMIT 1
             "#,
             self.tag() as i32,

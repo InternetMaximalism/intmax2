@@ -16,14 +16,14 @@ use super::{error::MerkleTreeError, HashOut, Hasher, IncrementalMerkleTreeClient
 
 #[derive(Debug, Clone)]
 pub struct HashNode<V: Leafable> {
-    pub timestamp_value: u64,
+    pub timestamp: u64,
     pub bit_path: BitPath,
     pub hash: HashOut<V>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Leaf<V: Leafable> {
-    pub timestamp_value: u64,
+    pub timestamp: u64,
     pub position: u64,
     pub leaf_hash: HashOut<V>,
     pub leaf: V,
@@ -65,7 +65,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
         hash: HashOut<V>,
     ) -> super::MTResult<()> {
         let node = HashNode {
-            timestamp_value: timestamp,
+            timestamp,
             bit_path,
             hash,
         };
@@ -80,7 +80,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
             .iter()
             .enumerate()
             .find(|(_, hash_node)| {
-                hash_node.timestamp_value == timestamp && hash_node.bit_path == bit_path
+                hash_node.timestamp == timestamp && hash_node.bit_path == bit_path
             })
             .map(|(i, _)| i);
         if conflicting_index.is_some() {
@@ -108,8 +108,8 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
         // Get the latest one that exists at that time
         let node_hash = hash_nodes
             .iter()
-            .filter(|hash_node| hash_node.timestamp_value <= timestamp)
-            .max_by_key(|hash_node| hash_node.timestamp_value)
+            .filter(|hash_node| hash_node.timestamp <= timestamp)
+            .max_by_key(|hash_node| hash_node.timestamp)
             .map(|hash_node| hash_node.hash)
             .unwrap_or(self.zero_hashes[bit_path.len() as usize]);
         Ok(node_hash)
@@ -117,7 +117,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
 
     async fn save_leaf(&self, timestamp: u64, position: u64, leaf: V) -> super::MTResult<()> {
         let leaf = Leaf {
-            timestamp_value: timestamp,
+            timestamp,
             position,
             leaf_hash: leaf.hash(),
             leaf,
@@ -150,8 +150,8 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
         // Get the latest one that exists at that time
         let leaf = leaves
             .iter()
-            .filter(|leaf| leaf.timestamp_value <= timestamp)
-            .max_by_key(|leaf| leaf.timestamp_value)
+            .filter(|leaf| leaf.timestamp <= timestamp)
+            .max_by_key(|leaf| leaf.timestamp)
             .map(|leaf| leaf.leaf.clone())
             .unwrap_or(V::empty_leaf());
 
@@ -230,11 +230,11 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
     pub async fn reset(&self, timestamp: u64) -> MTResult<()> {
         // delete everything that has a timestamp greater than or equal to the given timestamp
         self.hash_nodes.write().await.retain(|_, hash_nodes| {
-            hash_nodes.retain(|hash_node| hash_node.timestamp_value < timestamp);
+            hash_nodes.retain(|hash_node| hash_node.timestamp < timestamp);
             !hash_nodes.is_empty()
         });
         self.leaves.write().await.retain(|_, leaves| {
-            leaves.retain(|leaf| leaf.timestamp_value < timestamp);
+            leaves.retain(|leaf| leaf.timestamp < timestamp);
             !leaves.is_empty()
         });
         self.leaves_len
@@ -249,13 +249,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
         let leaves = self.leaves.read().await.clone();
         let last_timestamp = leaves
             .values()
-            .map(|leaves| {
-                leaves
-                    .iter()
-                    .map(|leaf| leaf.timestamp_value)
-                    .max()
-                    .unwrap_or(0)
-            })
+            .map(|leaves| leaves.iter().map(|leaf| leaf.timestamp).max().unwrap_or(0))
             .max()
             .unwrap_or(0);
         last_timestamp

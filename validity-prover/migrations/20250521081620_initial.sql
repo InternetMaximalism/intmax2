@@ -57,31 +57,31 @@ CREATE TABLE IF NOT EXISTS tx_tree_roots (
 
 --- Merkle tree tables
 CREATE TABLE IF NOT EXISTS hash_nodes (
-    timestamp_value bigint NOT NULL,
+    timestamp bigint NOT NULL,
     tag int NOT NULL,
     bit_path bytea NOT NULL,
     hash_value bytea NOT NULL,
-    PRIMARY KEY (timestamp_value, tag, bit_path)
+    PRIMARY KEY (timestamp, tag, bit_path)
 );
 
 CREATE TABLE IF NOT EXISTS leaves (
-    timestamp_value bigint NOT NULL,
+    timestamp bigint NOT NULL,
     tag int NOT NULL,
     position bigint NOT NULL,
     leaf_hash bytea NOT NULL,
     leaf bytea NOT NULL,
-    PRIMARY KEY (timestamp_value, tag, position)
+    PRIMARY KEY (timestamp, tag, position)
 );
 
 CREATE TABLE IF NOT EXISTS leaves_len (
-    timestamp_value bigint NOT NULL,
+    timestamp bigint NOT NULL,
     tag int NOT NULL,
     len int NOT NULL,
-    PRIMARY KEY (timestamp_value, tag)
+    PRIMARY KEY (timestamp, tag)
 );
 
 CREATE TABLE IF NOT EXISTS indexed_leaves (
-    timestamp_value bigint NOT NULL,
+    timestamp bigint NOT NULL,
     tag int NOT NULL,
     position bigint NOT NULL,
     leaf_hash bytea NOT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS indexed_leaves (
     key NUMERIC(78, 0) NOT NULL,
     next_key NUMERIC(78, 0) NOT NULL,
     value bigint NOT NULL,
-    PRIMARY KEY (tag, position, timestamp_value)
+    PRIMARY KEY (tag, position, timestamp)
 );
 
 --- Indexes for event tables
@@ -99,11 +99,11 @@ CREATE INDEX IF NOT EXISTS idx_deposited_events_pubkey_salt_hash ON deposited_ev
 CREATE INDEX IF NOT EXISTS idx_deposited_events_sync ON deposited_events(eth_block_number, eth_tx_index);
 CREATE INDEX IF NOT EXISTS idx_full_blocks_sync ON full_blocks(eth_block_number, eth_tx_index);
 
-CREATE INDEX IF NOT EXISTS idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, timestamp_value DESC);
-CREATE INDEX IF NOT EXISTS idx_leaves_len_lookup ON leaves_len (tag, timestamp_value DESC);
+CREATE INDEX IF NOT EXISTS idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_leaves_len_lookup ON leaves_len (tag, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_tx_tree_roots_block_number ON tx_tree_roots (block_number);
 
 -- Indexes for Indexed Leaves
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (tag, position, timestamp_value DESC);
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (tag, key, timestamp_value DESC);
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (tag, key, next_key, timestamp_value DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (tag, position, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (tag, key, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (tag, key, next_key, timestamp DESC);

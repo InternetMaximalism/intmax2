@@ -58,9 +58,9 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
         let hash = bincode::serialize(&hash).unwrap();
         sqlx::query!(
             r#"
-            INSERT INTO hash_nodes (timestamp_value, tag, bit_path, hash_value)
+            INSERT INTO hash_nodes (timestamp, tag, bit_path, hash_value)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (timestamp_value, tag, bit_path)
+            ON CONFLICT (timestamp, tag, bit_path)
             DO UPDATE SET hash_value = $4
             "#,
             timestamp as i64,
@@ -85,9 +85,9 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
         SELECT hash_value 
         FROM hash_nodes 
         WHERE bit_path = $1 
-          AND timestamp_value <= $2 
+          AND timestamp <= $2 
           AND tag = $3 
-        ORDER BY timestamp_value DESC 
+        ORDER BY timestamp DESC 
         LIMIT 1
         "#,
             bit_path_serialized,
@@ -140,9 +140,9 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
             SELECT bit_path, hash_value
             FROM hash_nodes
             WHERE bit_path = ANY($1)
-              AND timestamp_value <= $2
+              AND timestamp <= $2
               AND tag = $3
-            ORDER BY bit_path, timestamp_value DESC
+            ORDER BY bit_path, timestamp DESC
             "#,
             &serialized_paths[..],
             timestamp as i64,
@@ -208,7 +208,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
         sqlx::query!(
             r#"
             DELETE FROM hash_nodes
-            WHERE tag = $1 AND timestamp_value >= $2
+            WHERE tag = $1 AND timestamp >= $2
             "#,
             self.tag as i32,
             timestamp as i64
