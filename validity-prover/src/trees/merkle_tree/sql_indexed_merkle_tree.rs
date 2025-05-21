@@ -86,7 +86,7 @@ impl SqlIndexedMerkleTree {
             r#"
             INSERT INTO indexed_leaves (timestamp_value, tag, position, leaf_hash, next_index, key, next_key, value)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (timestamp_value, tag, position)
+            ON CONFLICT (tag, position, timestamp_value)
             DO UPDATE SET leaf_hash = $4, next_index = $5, key = $6, next_key = $7, value = $8
             "#,
             timestamp as i64,
@@ -127,15 +127,15 @@ impl SqlIndexedMerkleTree {
             r#"
         SELECT next_index, key, next_key, value
         FROM indexed_leaves
-        WHERE position = $1 
-          AND timestamp_value <= $2 
-          AND tag = $3 
+        WHERE  tag = $1
+          AND position = $2
+          AND timestamp_value <= $3
         ORDER BY timestamp_value DESC 
         LIMIT 1
         "#,
+            self.tag() as i32,
             position as i64,
-            timestamp as i64,
-            self.tag() as i32
+            timestamp as i64
         )
         .fetch_optional(tx.as_mut())
         .await?;
@@ -297,45 +297,6 @@ impl SqlIndexedMerkleTree {
         }
     }
 
-    async fn low_index(
-        &self,
-        tx: &mut sqlx::Transaction<'_, Postgres>,
-        timestamp: u64,
-        key: U256,
-    ) -> MTResult<u64> {
-        let key_decimal = BigDecimal::from_str(&key.to_string()).unwrap();
-        let rows = sqlx::query!(
-            r#"
-            WITH latest_leaves AS (
-                SELECT DISTINCT ON (position) position, key, next_key
-                FROM indexed_leaves
-                WHERE timestamp_value <= $1 AND tag = $2
-                ORDER BY position, timestamp_value DESC
-            )
-            SELECT position
-            FROM latest_leaves
-            WHERE key < $3 AND ($3 < next_key OR next_key = '0'::numeric)
-            "#,
-            timestamp as i64,
-            self.tag() as i32,
-            key_decimal
-        )
-        .fetch_all(tx.as_mut())
-        .await?;
-
-        if rows.is_empty() {
-            return Err(MerkleTreeError::InternalError(
-                "key already exists".to_string(),
-            ));
-        }
-        if rows.len() > 1 {
-            return Err(MerkleTreeError::InternalError(
-                "low_index: too many candidates".to_string(),
-            ));
-        }
-        Ok(rows[0].position as u64)
-    }
-
     async fn index(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
@@ -346,19 +307,17 @@ impl SqlIndexedMerkleTree {
             .map_err(|e| MerkleTreeError::InternalError(e.to_string()))?;
         let rows = sqlx::query!(
             r#"
-            WITH latest_leaves AS (
-                SELECT DISTINCT ON (position) position, key
-                FROM indexed_leaves
-                WHERE timestamp_value <= $1 AND tag = $2
-                ORDER BY position, timestamp_value DESC
-            )
             SELECT position
-            FROM latest_leaves
-            WHERE key = $3
+            FROM indexed_leaves
+            WHERE tag = $1
+                  AND key = $2
+                  AND timestamp_value <= $3
+            ORDER BY timestamp_value DESC
+            LIMIT 1
             "#,
-            timestamp as i64,
             self.tag() as i32,
-            key_decimal
+            key_decimal,
+            timestamp as i64
         )
         .fetch_all(tx.as_mut())
         .await?;
@@ -374,31 +333,92 @@ impl SqlIndexedMerkleTree {
         }
     }
 
+    async fn low_index(
+        &self,
+        tx: &mut sqlx::Transaction<'_, Postgres>,
+        timestamp: u64,
+        key: U256,
+    ) -> MTResult<u64> {
+        let key_decimal = BigDecimal::from_str(&key.to_string()).unwrap();
+        let candidate_not_on_edge = sqlx::query!(
+            r#"
+            SELECT position, timestamp_value
+            FROM indexed_leaves
+            WHERE tag = $1
+                AND key < $2
+                AND next_key > $2
+                AND timestamp_value <= $3
+            ORDER BY timestamp_value DESC
+            LIMIT 1
+            "#,
+            self.tag() as i32,
+            key_decimal,
+            timestamp as i64
+        )
+        .fetch_optional(tx.as_mut())
+        .await?;
+
+        let candidate_on_edge = sqlx::query!(
+            r#"
+            SELECT position, timestamp_value
+            FROM indexed_leaves
+            WHERE tag = $1
+                AND key < $2
+                AND next_key = '0'::numeric
+                AND timestamp_value <= $3
+            ORDER BY timestamp_value DESC
+            LIMIT 1
+            "#,
+            self.tag() as i32,
+            key_decimal,
+            timestamp as i64
+        )
+        .fetch_optional(tx.as_mut())
+        .await?;
+
+        if candidate_not_on_edge.is_none() && candidate_on_edge.is_none() {
+            return Err(MerkleTreeError::InternalError(
+                "key already exists".to_string(),
+            ));
+        }
+
+        // choose the candidate which has the latest timestamp
+        let mut candidates = Vec::new();
+        if let Some(row) = candidate_not_on_edge {
+            candidates.push((row.position, row.timestamp_value));
+        }
+        if let Some(row) = candidate_on_edge {
+            candidates.push((row.position, row.timestamp_value));
+        }
+        // sort descending by timestamp
+        candidates.sort_by(|a, b| b.1.cmp(&a.1));
+        Ok(candidates[0].0 as u64)
+    }
+
     async fn key(
         &self,
         tx: &mut sqlx::Transaction<'_, Postgres>,
         timestamp: u64,
         index: u64,
     ) -> MTResult<U256> {
-        let rec = sqlx::query!(
+        let rows = sqlx::query!(
             r#"
-            WITH latest_leaves AS (
-                SELECT DISTINCT ON (position) position, key
-                FROM indexed_leaves
-                WHERE timestamp_value <= $1 AND tag = $2
-                ORDER BY position, timestamp_value DESC
-            )
             SELECT key
-            FROM latest_leaves
-            WHERE position = $3
+            FROM indexed_leaves
+            WHERE tag = $1 
+                AND position = $2
+                AND timestamp_value <= $3
+            ORDER BY timestamp_value DESC
+            LIMIT 1
             "#,
-            timestamp as i64,
             self.tag() as i32,
-            index as i64
+            index as i64,
+            timestamp as i64
         )
         .fetch_optional(tx.as_mut())
         .await?;
-        if let Some(row) = rec {
+
+        if let Some(row) = rows {
             Ok(from_str_to_u256(&row.key.to_string()))
         } else {
             Ok(U256::default())

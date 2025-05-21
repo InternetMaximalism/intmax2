@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS indexed_leaves (
     key NUMERIC(78, 0) NOT NULL,
     next_key NUMERIC(78, 0) NOT NULL,
     value bigint NOT NULL,
-    PRIMARY KEY (timestamp_value, tag, position)
+    PRIMARY KEY (tag, position, timestamp_value)
 );
 
 -- L1 Deposit and Settings tables
@@ -119,7 +119,11 @@ CREATE INDEX idx_deposited_events_pubkey_salt_hash ON deposited_events(pubkey_sa
 CREATE INDEX idx_full_blocks_block_tx ON full_blocks(eth_block_number, eth_tx_index);
 CREATE INDEX idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, timestamp_value DESC);
 CREATE INDEX idx_leaves_len_lookup ON leaves_len (tag, timestamp_value DESC);
-CREATE INDEX idx_indexed_leaves_lookup ON indexed_leaves (position, tag, timestamp_value DESC);
-CREATE INDEX idx_indexed_leaves_timestamp ON indexed_leaves (timestamp_value DESC, tag);
 CREATE INDEX idx_prover_tasks_assigned_status ON prover_tasks (assigned, completed);
 CREATE INDEX idx_tx_tree_roots_block_number ON tx_tree_roots (block_number);
+
+
+-- Indexes for Indexed Leaves
+CREATE INDEX idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (tag, position, timestamp_value DESC);
+CREATE INDEX idx_indexed_leaves_index ON indexed_leaves (tag, key, timestamp_value DESC);
+CREATE INDEX idx_indexed_leaves_low_index ON indexed_leaves (tag, key, next_key, timestamp_value DESC);
