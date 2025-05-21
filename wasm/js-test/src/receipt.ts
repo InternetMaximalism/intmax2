@@ -1,4 +1,4 @@
-import { fetch_tx_history, generate_intmax_account_from_eth_key, generate_transfer_receipt, JsMetaDataCursor, validate_transfer_receipt, } from '../pkg';
+import { generate_intmax_account_from_eth_key, generate_transfer_receipt, validate_transfer_receipt, } from '../pkg';
 import { env, config } from './setup';
 
 async function main() {
@@ -8,14 +8,7 @@ async function main() {
     console.log(`privkey`, privkey);
     console.log(`pubkey`, key.pubkey);
 
-    const cursor = new JsMetaDataCursor(null, "asc", null);
-    const tx_history = await fetch_tx_history(config, key.privkey, cursor);
-    if (tx_history.history.length === 0) {
-        console.log("No transfer history found");
-        return;
-    }
-    const tx_data = tx_history.history[0];
-    const tx_digest = tx_data.meta.digest;
+    const tx_digest = "0xd1e845b5c4ad76ed15b75606f280ec1b3cb24c153f12da01a4c0e08490a6b9b9"; // self transfer tx digest in dev env
     const transfer_index = 0; // the first transfer
     console.log(`tx_digest: ${tx_digest}`);
 
