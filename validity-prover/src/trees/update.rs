@@ -25,8 +25,6 @@ use std::{
 };
 use tracing::{info, instrument};
 
-const PARALLELISM_LIMIT: usize = 10;
-
 #[instrument(skip_all, fields(timestamp = timestamp))]
 pub async fn to_block_witness<
     HistoricalAccountTree: IndexedMerkleTreeClient,
@@ -104,7 +102,7 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
             anyhow::Ok((pubkey, proof))
         });
     let results = futures::stream::iter(futures)
-        .buffer_unordered(PARALLELISM_LIMIT)
+        .buffer_unordered(get_parallelism_limit())
         .collect::<Vec<_>>()
         .await;
 
@@ -156,7 +154,7 @@ async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTree
             anyhow::Ok((account_id, pubkey, proof))
         });
     let results = futures::stream::iter(futures)
-        .buffer_unordered(PARALLELISM_LIMIT)
+        .buffer_unordered(get_parallelism_limit())
         .collect::<Vec<_>>()
         .await;
     let mut proofs_map = HashMap::with_capacity(account_ids.len());
@@ -183,6 +181,13 @@ async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTree
     }
 
     Ok((pubkeys, account_id_packed, account_merkle_proofs))
+}
+
+fn get_parallelism_limit() -> usize {
+    std::env::var("PARALLELISM_LIMIT")
+        .unwrap_or_else(|_| "10".to_string())
+        .parse::<usize>()
+        .unwrap_or(10)
 }
 
 #[instrument(skip_all, fields(timestamp = timestamp))]

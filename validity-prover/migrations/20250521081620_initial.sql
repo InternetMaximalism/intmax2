@@ -99,9 +99,12 @@ CREATE INDEX IF NOT EXISTS idx_deposited_events_pubkey_salt_hash ON deposited_ev
 CREATE INDEX IF NOT EXISTS idx_deposited_events_sync ON deposited_events(eth_block_number, eth_tx_index);
 CREATE INDEX IF NOT EXISTS idx_full_blocks_sync ON full_blocks(eth_block_number, eth_tx_index);
 
+--- Indexes for validity prover tables
+CREATE INDEX IF NOT EXISTS idx_tx_tree_roots_block_number ON tx_tree_roots (block_number);
+
+-- Indexes for Merkle tree tables
 CREATE INDEX IF NOT EXISTS idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_leaves_len_lookup ON leaves_len (tag, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_tx_tree_roots_block_number ON tx_tree_roots (block_number);
 
 -- Indexes for Indexed Leaves
 CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (tag, position, timestamp DESC);
