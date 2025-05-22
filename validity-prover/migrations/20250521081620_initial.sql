@@ -108,4 +108,4 @@ CREATE INDEX IF NOT EXISTS idx_leaves_len_lookup ON leaves_len (tag, timestamp D
 -- Indexes for Indexed Leaves
 CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (position, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (key, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (key, next_key, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (next_key, key, timestamp DESC);

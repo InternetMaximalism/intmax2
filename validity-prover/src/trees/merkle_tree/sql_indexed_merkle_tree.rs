@@ -258,8 +258,10 @@ impl SqlIndexedMerkleTree {
             r#"
             DELETE FROM leaves_len
             WHERE timestamp >= $1
+            AND tag = $2
             "#,
-            timestamp as i64
+            timestamp as i64,
+            self.tag() as i32
         )
         .execute(tx.as_mut())
         .await?;
@@ -330,8 +332,8 @@ impl SqlIndexedMerkleTree {
             r#"
             SELECT position, timestamp
             FROM indexed_leaves
-            WHERE key < $1
-                  AND next_key > $1
+            WHERE next_key > $1
+                  AND key < $1
                   AND timestamp <= $2
             ORDER BY timestamp DESC
             LIMIT 1
@@ -346,8 +348,8 @@ impl SqlIndexedMerkleTree {
             r#"
             SELECT position, timestamp
             FROM indexed_leaves
-            WHERE key < $1
-                  AND next_key = '0'::numeric
+            WHERE next_key = '0'::numeric 
+                  AND key < $1
                   AND timestamp <= $2
             ORDER BY timestamp DESC
             LIMIT 1
@@ -676,7 +678,7 @@ mod tests {
     async fn test_account_tree() -> anyhow::Result<()> {
         let database_url = setup_test();
 
-        let tag = 3;
+        let tag = rand::random::<u32>();
         let pool = sqlx::Pool::connect(&database_url).await?;
         let tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
         <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&tree, 0).await?;
@@ -707,13 +709,17 @@ mod tests {
         let result = proof.verify(old_root, AccountId(account_id), (account_id as u32).into());
         assert!(result);
 
+        let mut tx = tree.pool().begin().await?;
+        tree.reset(&mut tx, 0).await?;
+        tx.commit().await?;
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_comparison_account_tree() -> anyhow::Result<()> {
         let database_url = setup_test();
-        let tag = 4;
+        let tag = rand::random::<u32>();
         let pool = sqlx::Pool::connect(&database_url).await?;
         let db_tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
         <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&db_tree, 0).await?;
@@ -721,6 +727,8 @@ mod tests {
         db_tree.initialize().await?;
 
         let mut tx = db_tree.pool().begin().await?;
+        let initial_db_root = db_tree.sql_node_hashes.get_root(&mut tx, 0).await?;
+
         let timestamp = db_tree.get_last_timestamp(&mut tx).await;
         for i in 2..10 {
             db_tree
@@ -730,6 +738,8 @@ mod tests {
         let db_root = db_tree.sql_node_hashes.get_root(&mut tx, timestamp).await?;
 
         let mut tree = AccountTree::initialize();
+        let initial_tree_root = tree.get_root();
+        assert_eq!(initial_db_root, initial_tree_root);
         for i in 2..10 {
             tree.insert(i.into(), i.into())?;
         }
@@ -817,6 +827,10 @@ mod tests {
 
             tx.rollback().await?;
         }
+
+        let mut tx = tree.pool().begin().await?;
+        tree.reset(&mut tx, 0).await?;
+        tx.commit().await?;
 
         Ok(())
     }
