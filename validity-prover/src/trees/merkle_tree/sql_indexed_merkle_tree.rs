@@ -209,10 +209,12 @@ impl SqlIndexedMerkleTree {
             SELECT len
             FROM leaves_len
             WHERE timestamp <= $1
+              AND tag = $2
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
             timestamp as i64,
+            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;
