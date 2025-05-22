@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM leaves\n            WHERE tag = $1 AND timestamp >= $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7dd27b722c8f72a9dbd7553d7fadd405b277594b2488ccf94476c2fa52e7a1ac"
+}

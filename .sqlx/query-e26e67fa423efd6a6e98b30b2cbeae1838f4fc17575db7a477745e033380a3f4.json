@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO leaves_len (timestamp, tag, len)\n            VALUES ($1, $2, $3)\n            ON CONFLICT (timestamp, tag)\n            DO UPDATE SET len = $3\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e26e67fa423efd6a6e98b30b2cbeae1838f4fc17575db7a477745e033380a3f4"
+}

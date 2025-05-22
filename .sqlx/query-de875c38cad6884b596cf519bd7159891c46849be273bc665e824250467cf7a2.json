@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO leaves (timestamp, tag, position, leaf_hash, leaf)\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (timestamp, tag, position)\n            DO UPDATE SET leaf_hash = $4, leaf = $5\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Int8",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de875c38cad6884b596cf519bd7159891c46849be273bc665e824250467cf7a2"
+}

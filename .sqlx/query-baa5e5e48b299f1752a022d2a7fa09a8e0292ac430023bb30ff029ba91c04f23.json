@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM leaves_len\n            WHERE timestamp >= $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "baa5e5e48b299f1752a022d2a7fa09a8e0292ac430023bb30ff029ba91c04f23"
+}

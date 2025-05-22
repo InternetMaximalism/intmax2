@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO event_sync_eth_block (event_type, eth_block_number)\n            VALUES ($1, $2)\n            ON CONFLICT (event_type) \n            DO UPDATE SET eth_block_number = EXCLUDED.eth_block_number;\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d4367ef763691f677594e3e04d87b9d7b97c2ff187bc72b16b7013e33970b274"
+}
