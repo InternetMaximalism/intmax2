@@ -61,8 +61,8 @@ CREATE TABLE IF NOT EXISTS hash_nodes (
     timestamp bigint NOT NULL,
     bit_path bytea NOT NULL,
     hash_value bytea NOT NULL,
-    PRIMARY KEY (timestamp, bit_path, tag)
-);
+    PRIMARY KEY (tag, timestamp, bit_path)
+) PARTITION BY LIST (tag);
 
 CREATE TABLE IF NOT EXISTS leaves (
     tag int NOT NULL,
@@ -70,15 +70,15 @@ CREATE TABLE IF NOT EXISTS leaves (
     position bigint NOT NULL,
     leaf_hash bytea NOT NULL,
     leaf bytea NOT NULL,
-    PRIMARY KEY (timestamp, position, tag)
-);
+    PRIMARY KEY (tag, timestamp, position)
+) PARTITION BY LIST (tag);
 
 CREATE TABLE IF NOT EXISTS leaves_len (
     tag int NOT NULL,
     timestamp bigint NOT NULL,
     len int NOT NULL,
-    PRIMARY KEY (timestamp, tag)
-);
+    PRIMARY KEY (tag, timestamp)
+) PARTITION BY LIST (tag);
 
 CREATE TABLE IF NOT EXISTS indexed_leaves (
     timestamp bigint NOT NULL,
@@ -91,6 +91,24 @@ CREATE TABLE IF NOT EXISTS indexed_leaves (
     PRIMARY KEY (position, timestamp)
 );
 
+
+-- Partition tables for Merkle tree tables
+CREATE TABLE IF NOT EXISTS hash_nodes_tag1 PARTITION OF hash_nodes FOR VALUES IN (1);
+CREATE TABLE IF NOT EXISTS hash_nodes_tag2 PARTITION OF hash_nodes FOR VALUES IN (2);
+CREATE TABLE IF NOT EXISTS hash_nodes_tag3 PARTITION OF hash_nodes FOR VALUES IN (3);
+CREATE TABLE  IF NOT EXISTS leaves_tag1 PARTITION OF leaves
+    FOR VALUES IN (1);
+CREATE TABLE  IF NOT EXISTS leaves_tag2 PARTITION OF leaves
+    FOR VALUES IN (2);
+CREATE TABLE  IF NOT EXISTS leaves_tag3 PARTITION OF leaves
+    FOR VALUES IN (3);
+CREATE TABLE  IF NOT EXISTS leaves_len_tag1 PARTITION OF leaves_len
+    FOR VALUES IN (1);
+CREATE TABLE  IF NOT EXISTS leaves_len_tag2 PARTITION OF leaves_len
+    FOR VALUES IN (2);
+CREATE TABLE  IF NOT EXISTS leaves_len_tag3 PARTITION OF leaves_len
+    FOR VALUES IN (3);
+
 --- Indexes for event tables
 CREATE INDEX IF NOT EXISTS idx_deposit_leaf_events_deposit_hash ON deposit_leaf_events(deposit_hash);
 CREATE INDEX IF NOT EXISTS idx_deposit_leaf_events_sync ON deposit_leaf_events(eth_block_number, eth_tx_index);
@@ -102,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_full_blocks_sync ON full_blocks(eth_block_number,
 CREATE INDEX IF NOT EXISTS idx_tx_tree_roots_block_number ON tx_tree_roots (block_number);
 
 -- Indexes for Merkle tree tables
-CREATE INDEX IF NOT EXISTS idx_hash_nodes_lookup ON hash_nodes (bit_path, tag, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_hash_nodes_lookup ON hash_nodes (tag, bit_path, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_leaves_len_lookup ON leaves_len (tag, timestamp DESC);
 
 -- Indexes for Indexed Leaves
