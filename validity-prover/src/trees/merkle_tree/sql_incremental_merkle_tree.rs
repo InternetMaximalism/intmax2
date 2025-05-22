@@ -48,7 +48,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
             r#"
             INSERT INTO leaves (timestamp, tag, position, leaf_hash, leaf)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (timestamp, tag, position)
+            ON CONFLICT (tag, timestamp, position)
             DO UPDATE SET leaf_hash = $4, leaf = $5
             "#,
             timestamp as i64,
@@ -63,7 +63,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
             r#"
             INSERT INTO leaves_len (timestamp, tag, len)
             VALUES ($1, $2, $3)
-            ON CONFLICT (timestamp, tag)
+            ON CONFLICT (tag, timestamp)
             DO UPDATE SET len = $3
             "#,
             timestamp as i64,
@@ -84,14 +84,15 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
     ) -> super::MTResult<V> {
         let record = sqlx::query!(
             r#"
-        SELECT leaf 
-        FROM leaves 
-        WHERE position = $1 
-          AND timestamp <= $2 
-          AND tag = $3 
-        ORDER BY timestamp DESC 
-        LIMIT 1
-        "#,
+            SELECT leaf 
+            FROM leaves 
+            WHERE 
+            tag = $3
+            AND position = $1 
+            AND timestamp <= $2 
+            ORDER BY timestamp DESC 
+            LIMIT 1
+            "#,
             position as i64,
             timestamp as i64,
             self.tag() as i32
@@ -150,8 +151,9 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
             r#"
             SELECT len
             FROM leaves_len
-            WHERE timestamp <= $1
-              AND tag = $2
+            WHERE 
+              tag = $2
+              AND timestamp <= $1
             ORDER BY timestamp DESC
             LIMIT 1
             "#,

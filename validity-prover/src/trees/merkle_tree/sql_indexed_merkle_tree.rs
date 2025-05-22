@@ -208,8 +208,9 @@ impl SqlIndexedMerkleTree {
             r#"
             SELECT len
             FROM leaves_len
-            WHERE timestamp <= $1
-              AND tag = $2
+            WHERE 
+              tag = $2
+              AND timestamp <= $1
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
@@ -257,8 +258,9 @@ impl SqlIndexedMerkleTree {
         sqlx::query!(
             r#"
             DELETE FROM leaves_len
-            WHERE timestamp >= $1
-            AND tag = $2
+            WHERE 
+              tag = $2
+              AND timestamp >= $1
             "#,
             timestamp as i64,
             self.tag() as i32

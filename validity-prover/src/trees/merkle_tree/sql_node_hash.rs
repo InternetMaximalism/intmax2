@@ -60,7 +60,7 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
             r#"
             INSERT INTO hash_nodes (timestamp, tag, bit_path, hash_value)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (timestamp, tag, bit_path)
+            ON CONFLICT (tag, timestamp, bit_path)
             DO UPDATE SET hash_value = $4
             "#,
             timestamp as i64,
@@ -84,9 +84,10 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
             r#"
         SELECT hash_value 
         FROM hash_nodes 
-        WHERE bit_path = $1 
-          AND timestamp <= $2 
-          AND tag = $3 
+        WHERE 
+          tag = $3
+          AND bit_path = $1 
+          AND timestamp <= $2
         ORDER BY timestamp DESC 
         LIMIT 1
         "#,
@@ -139,9 +140,10 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
             r#"
             SELECT bit_path, hash_value
             FROM hash_nodes
-            WHERE bit_path = ANY($1)
+            WHERE 
+              tag = $3
+              AND bit_path = ANY($1)
               AND timestamp <= $2
-              AND tag = $3
             ORDER BY bit_path, timestamp DESC
             "#,
             &serialized_paths[..],

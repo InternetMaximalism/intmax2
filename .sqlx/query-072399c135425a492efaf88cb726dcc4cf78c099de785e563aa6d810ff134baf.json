@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT bit_path, hash_value\n            FROM hash_nodes\n            WHERE bit_path = ANY($1)\n              AND timestamp <= $2\n              AND tag = $3\n            ORDER BY bit_path, timestamp DESC\n            ",
+  "query": "\n            SELECT bit_path, hash_value\n            FROM hash_nodes\n            WHERE \n              tag = $3\n              AND bit_path = ANY($1)\n              AND timestamp <= $2\n            ORDER BY bit_path, timestamp DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -26,5 +26,5 @@
       false
     ]
   },
-  "hash": "a44f8c12563470375a211a4a5b1de2e107d7dbd35886cc80e0d905aebcd6810b"
+  "hash": "072399c135425a492efaf88cb726dcc4cf78c099de785e563aa6d810ff134baf"
 }
