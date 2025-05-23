@@ -692,10 +692,8 @@ mod tests {
         ethereum_types::{account_id::AccountId, u256::U256},
         utils::trees::indexed_merkle_tree::leaf::IndexedMerkleLeaf,
     };
-    use serial_test::serial;
 
     #[tokio::test]
-    #[serial]
     async fn test_account_tree() -> anyhow::Result<()> {
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -738,7 +736,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_comparison_account_tree() -> anyhow::Result<()> {
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -772,7 +769,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_update_leaf_consistency() -> anyhow::Result<()> {
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
@@ -861,7 +857,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_update_leaf_edge_cases() -> anyhow::Result<()> {
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;

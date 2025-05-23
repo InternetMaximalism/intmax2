@@ -81,7 +81,6 @@ pub trait IndexedMerkleTreeClient: std::fmt::Debug {
 mod tests {
     use intmax2_interfaces::utils::random::default_rng;
     use intmax2_zkp::ethereum_types::u256::U256;
-    use serial_test::serial;
 
     use crate::trees::{
         create_partitions_for_test, generate_random_tag,
@@ -246,7 +245,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     #[ignore]
     async fn test_speed_indexed_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
@@ -284,7 +282,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     #[ignore]
     async fn test_speed_prove_and_update() -> anyhow::Result<()> {
         let height = 32;
