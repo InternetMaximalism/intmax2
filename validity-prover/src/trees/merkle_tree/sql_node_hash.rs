@@ -237,6 +237,19 @@ mod tests {
         std::env::var("DATABASE_URL").unwrap()
     }
 
+    fn generate_random_tag() -> u32 {
+        let mut rng = default_rng();
+        rng.gen_range(0..1 << 24)
+    }
+
+    async fn create_partitions(pool: &sqlx::Pool<sqlx::Postgres>, tag: u32) -> anyhow::Result<()> {
+        let query = format!(
+            "CREATE TABLE hash_nodes_tag_{tag} PARTITION OF hash_nodes FOR VALUES IN ({tag})",
+        );
+        sqlx::query(&query).execute(pool).await?;
+        Ok(())
+    }
+
     // helper func
     fn collect_paths(path: &BitPath) -> Vec<BitPath> {
         let mut paths = vec![];
@@ -256,8 +269,10 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = default_rng();
-        let tag = rng.gen();
+        let tag = generate_random_tag();
+
+        create_partitions(&pool, tag).await?;
+
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
 
@@ -303,8 +318,10 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = default_rng();
-        let tag = rng.gen();
+        let tag = generate_random_tag();
+
+        create_partitions(&pool, tag).await?;
+
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
 
@@ -365,8 +382,10 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = default_rng();
-        let tag = rng.gen();
+        let tag = generate_random_tag();
+
+        create_partitions(&pool, tag).await?;
+
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
 
@@ -407,8 +426,10 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = default_rng();
-        let tag = rng.gen();
+        let tag = generate_random_tag();
+
+        create_partitions(&pool, tag).await?;
+
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
 
@@ -450,8 +471,10 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = default_rng();
-        let tag = rng.gen();
+        let tag = generate_random_tag();
+
+        create_partitions(&pool, tag).await?;
+
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
 
@@ -492,8 +515,10 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = default_rng();
-        let tag = rng.gen();
+        let tag = generate_random_tag();
+
+        create_partitions(&pool, tag).await?;
+
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
 
@@ -536,8 +561,10 @@ mod tests {
             .connect(&database_url)
             .await?;
 
-        let mut rng = default_rng();
-        let tag = rng.gen();
+        let tag = generate_random_tag();
+
+        create_partitions(&pool, tag).await?;
+
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
 
