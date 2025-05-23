@@ -858,11 +858,7 @@ mod tests {
         let server = server.unwrap();
 
         // Create needed SQL tables
-        create_tables(
-            &server.pool,
-            "./migrations/20250309092609_create_initial_tables.up.sql",
-        )
-        .await;
+        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
 
         // Test get_claim_fee and get_withdrawal_fee
         {
