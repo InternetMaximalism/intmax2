@@ -223,32 +223,14 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
 
 #[cfg(test)]
 mod tests {
-    use intmax2_interfaces::utils::random::default_rng;
-    use rand::Rng;
     use sqlx::postgres::PgPoolOptions;
+
+    use crate::trees::{create_partitions_for_test, generate_random_tag, setup_test};
 
     use super::{BitPath, SqlNodeHashes};
     use intmax2_zkp::utils::leafable::Leafable;
 
     type TestValue = u32;
-
-    fn setup_test() -> String {
-        dotenvy::dotenv().ok();
-        std::env::var("DATABASE_URL").unwrap()
-    }
-
-    fn generate_random_tag() -> u32 {
-        let mut rng = default_rng();
-        rng.gen_range(0..1 << 24)
-    }
-
-    async fn create_partitions(pool: &sqlx::Pool<sqlx::Postgres>, tag: u32) -> anyhow::Result<()> {
-        let query = format!(
-            "CREATE TABLE hash_nodes_tag_{tag} PARTITION OF hash_nodes FOR VALUES IN ({tag})",
-        );
-        sqlx::query(&query).execute(pool).await?;
-        Ok(())
-    }
 
     // helper func
     fn collect_paths(path: &BitPath) -> Vec<BitPath> {
@@ -271,7 +253,7 @@ mod tests {
 
         let tag = generate_random_tag();
 
-        create_partitions(&pool, tag).await?;
+        create_partitions_for_test(&pool, tag).await?;
 
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -320,7 +302,7 @@ mod tests {
 
         let tag = generate_random_tag();
 
-        create_partitions(&pool, tag).await?;
+        create_partitions_for_test(&pool, tag).await?;
 
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -384,7 +366,7 @@ mod tests {
 
         let tag = generate_random_tag();
 
-        create_partitions(&pool, tag).await?;
+        create_partitions_for_test(&pool, tag).await?;
 
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -428,7 +410,7 @@ mod tests {
 
         let tag = generate_random_tag();
 
-        create_partitions(&pool, tag).await?;
+        create_partitions_for_test(&pool, tag).await?;
 
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -473,7 +455,7 @@ mod tests {
 
         let tag = generate_random_tag();
 
-        create_partitions(&pool, tag).await?;
+        create_partitions_for_test(&pool, tag).await?;
 
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -517,7 +499,7 @@ mod tests {
 
         let tag = generate_random_tag();
 
-        create_partitions(&pool, tag).await?;
+        create_partitions_for_test(&pool, tag).await?;
 
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);
@@ -563,7 +545,7 @@ mod tests {
 
         let tag = generate_random_tag();
 
-        create_partitions(&pool, tag).await?;
+        create_partitions_for_test(&pool, tag).await?;
 
         let height = 10;
         let node_hashes = SqlNodeHashes::<TestValue>::new(pool.clone(), tag, height);

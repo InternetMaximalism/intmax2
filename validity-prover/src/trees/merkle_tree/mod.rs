@@ -81,9 +81,10 @@ pub trait IndexedMerkleTreeClient: std::fmt::Debug {
 mod tests {
     use intmax2_interfaces::utils::random::default_rng;
     use intmax2_zkp::ethereum_types::u256::U256;
-    use rand::Rng;
+    use serial_test::serial;
 
     use crate::trees::{
+        create_partitions_for_test, generate_random_tag,
         merkle_tree::{
             sql_incremental_merkle_tree::SqlIncrementalMerkleTree,
             sql_indexed_merkle_tree::SqlIndexedMerkleTree, IncrementalMerkleTreeClient,
@@ -99,12 +100,13 @@ mod tests {
     async fn test_speed_incremental_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
         let n = 1 << 8;
-        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
 
-        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, tag, height);
         tree.reset(0).await?;
 
         let timestamp = 0;
@@ -127,12 +129,13 @@ mod tests {
     async fn test_speed_incremental_merkle_tree_with_select() -> anyhow::Result<()> {
         let height = 32;
         let n = 1000;
-        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
 
-        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, tag, height);
         tree.reset(0).await?;
 
         let time = std::time::Instant::now();
@@ -181,12 +184,14 @@ mod tests {
     async fn test_speed_incremental_merkle_tree_prove() -> anyhow::Result<()> {
         let height = 32;
         let n = 5000;
-        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
 
-        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
+
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, tag, height);
         tree.reset(0).await?;
 
         let time = std::time::Instant::now();
@@ -209,12 +214,13 @@ mod tests {
     async fn test_speed_incremental_merkle_tree_reset() -> anyhow::Result<()> {
         let height = 32;
         let n = 1000;
-        let mut rng = default_rng();
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
 
-        let tree = SqlIncrementalMerkleTree::<V>::new(pool, rng.gen(), height);
+        let tree = SqlIncrementalMerkleTree::<V>::new(pool, tag, height);
         tree.reset(0).await?;
 
         for h in 0..5 {
@@ -240,16 +246,18 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     #[ignore]
     async fn test_speed_indexed_merkle_tree() -> anyhow::Result<()> {
         let height = 32;
         let n = 1 << 10;
         let mut rng = default_rng();
-
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
 
-        let tree = SqlIndexedMerkleTree::new(pool, rng.gen(), height);
+        let tree = SqlIndexedMerkleTree::new(pool, tag, height);
         tree.reset(0).await?;
         tree.initialize().await?;
 
@@ -276,6 +284,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     #[ignore]
     async fn test_speed_prove_and_update() -> anyhow::Result<()> {
         let height = 32;
@@ -284,8 +293,10 @@ mod tests {
 
         let database_url = setup_test();
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
 
-        let tree = SqlIndexedMerkleTree::new(pool, rng.gen(), height);
+        let tree = SqlIndexedMerkleTree::new(pool, tag, height);
         tree.reset(0).await?;
         tree.initialize().await?;
 

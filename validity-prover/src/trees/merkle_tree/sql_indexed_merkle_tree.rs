@@ -661,8 +661,10 @@ impl IndexedMerkleTreeClient for SqlIndexedMerkleTree {
 #[cfg(test)]
 mod tests {
     use super::IndexedMerkleTreeClient;
-    use crate::trees::merkle_tree::sql_indexed_merkle_tree::{
-        from_str_to_u256, SqlIndexedMerkleTree,
+    use crate::trees::{
+        create_partitions_for_test, generate_random_tag,
+        merkle_tree::sql_indexed_merkle_tree::{from_str_to_u256, SqlIndexedMerkleTree},
+        setup_test,
     };
     use intmax2_zkp::{
         common::trees::account_tree::AccountTree,
@@ -670,18 +672,15 @@ mod tests {
         ethereum_types::{account_id::AccountId, u256::U256},
         utils::trees::indexed_merkle_tree::leaf::IndexedMerkleLeaf,
     };
-
-    fn setup_test() -> String {
-        dotenvy::dotenv().ok();
-        std::env::var("DATABASE_URL").unwrap()
-    }
+    use serial_test::serial;
 
     #[tokio::test]
+    #[serial]
     async fn test_account_tree() -> anyhow::Result<()> {
         let database_url = setup_test();
-
-        let tag = rand::random::<u32>();
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
         let tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
         <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&tree, 0).await?;
 
@@ -719,10 +718,12 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_comparison_account_tree() -> anyhow::Result<()> {
         let database_url = setup_test();
-        let tag = rand::random::<u32>();
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
         let db_tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
         <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&db_tree, 0).await?;
 
@@ -751,10 +752,12 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_update_leaf_consistency() -> anyhow::Result<()> {
         let database_url = setup_test();
-        let tag = 1000;
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
         let tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
         <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&tree, 0).await?;
 
@@ -838,10 +841,12 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_update_leaf_edge_cases() -> anyhow::Result<()> {
         let database_url = setup_test();
-        let tag = 2000;
         let pool = sqlx::Pool::connect(&database_url).await?;
+        let tag = generate_random_tag();
+        create_partitions_for_test(&pool, tag).await?;
         let tree = SqlIndexedMerkleTree::new(pool, tag, ACCOUNT_TREE_HEIGHT);
         <SqlIndexedMerkleTree as IndexedMerkleTreeClient>::reset(&tree, 0).await?;
 
