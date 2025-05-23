@@ -102,7 +102,7 @@ async fn generate_account_membership_proofs<HistoricalAccountTree: IndexedMerkle
             anyhow::Ok((pubkey, proof))
         });
     let results = futures::stream::iter(futures)
-        .buffer_unordered(get_parallelism_limit())
+        .buffer_unordered(get_parallelism_limit()?)
         .collect::<Vec<_>>()
         .await;
 
@@ -154,7 +154,7 @@ async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTree
             anyhow::Ok((account_id, pubkey, proof))
         });
     let results = futures::stream::iter(futures)
-        .buffer_unordered(get_parallelism_limit())
+        .buffer_unordered(get_parallelism_limit()?)
         .collect::<Vec<_>>()
         .await;
     let mut proofs_map = HashMap::with_capacity(account_ids.len());
@@ -183,11 +183,11 @@ async fn generate_account_merkle_proofs<HistoricalAccountTree: IndexedMerkleTree
     Ok((pubkeys, account_id_packed, account_merkle_proofs))
 }
 
-fn get_parallelism_limit() -> usize {
-    std::env::var("PARALLELISM_LIMIT")
+fn get_parallelism_limit() -> anyhow::Result<usize> {
+    std::env::var("MAX_PARALLEL_UPDATE_TREES")
         .unwrap_or_else(|_| "10".to_string())
         .parse::<usize>()
-        .unwrap_or(10)
+        .map_err(|e| anyhow::anyhow!("Failed to parse MAX_PARALLEL_UPDATE_TREES: {}", e))
 }
 
 #[instrument(skip_all, fields(timestamp = timestamp))]

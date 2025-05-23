@@ -333,6 +333,7 @@ impl RPCObserver {
             to_eth_block_number >= from_eth_block_number,
             "to_eth_block_number should be greater than or equal to from_eth_block_number"
         );
+        generate_error_for_test()?;
         let next_event_id = match event_type {
             EventType::DepositLeafInserted => {
                 self.fetch_and_write_deposit_leaf_inserted_events(
@@ -480,4 +481,32 @@ impl SyncEvent for RPCObserver {
 
         Ok(())
     }
+}
+
+// This function is used to generate an error for trigging RPC error for testing purposes.
+pub fn generate_error_for_test() -> Result<(), ObserverError> {
+    let error_timestamps = match std::env::var("ERROR_TIMESTAMPS") {
+        Ok(val) => val,
+        Err(_) => return Ok(()), // No error if env var not set
+    };
+
+    let now = chrono::Utc::now().timestamp() as u64;
+
+    // Parse comma-separated list of timestamps
+    let timestamps: Vec<u64> = error_timestamps
+        .split(',')
+        .filter_map(|s| s.trim().parse::<u64>().ok())
+        .collect();
+
+    // Check if any timestamp is within 100 seconds of current time
+    for timestamp in timestamps {
+        if timestamp > now.saturating_sub(100) && timestamp < now.saturating_add(100) {
+            return Err(ObserverError::EnvError(format!(
+                "Error triggered by ERROR_TIMESTAMPS at time {}",
+                now
+            )));
+        }
+    }
+
+    Ok(())
 }
