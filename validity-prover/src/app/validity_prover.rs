@@ -396,7 +396,9 @@ impl ValidityProver {
         let last_validity_prover_block_number =
             self.get_latest_validity_proof_block_number().await?;
         let last_block_number = self.get_last_block_number().await?;
-        if last_validity_prover_block_number == last_block_number {
+        // last_validity_prover_block_number > last_block_number happens when the validity proofs are
+        // inserted into the database from backup.
+        if last_validity_prover_block_number >= last_block_number {
             // early return
             return Ok(());
         }
