@@ -19,9 +19,6 @@ DROP INDEX IF EXISTS idx_deposited_events_pubkey_salt_hash;
 DROP INDEX IF EXISTS idx_deposit_leaf_events_sync;
 DROP INDEX IF EXISTS idx_deposit_leaf_events_deposit_hash;
 
--- Drop Partition tables for Merkle tree tables
--- NOTE: Dropping the parent table automatically drops its partitions.
-
 --- Merkle tree tables
 DROP TABLE IF EXISTS indexed_leaves;
 DROP TABLE IF EXISTS leaves_len;
