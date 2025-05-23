@@ -146,10 +146,8 @@ pub struct FeeQuote {
 pub struct TxResult {
     pub tx_tree_root: Bytes32,
     pub tx_digest: Bytes32,
-    pub transfer_digests: Vec<Bytes32>,
-    pub withdrawal_digests: Vec<Bytes32>,
+    pub tx_data: TxData,
     pub transfer_data_vec: Vec<TransferData>,
-    pub withdrawal_data_vec: Vec<TransferData>,
     pub backup_csv: String,
 }
 
@@ -511,14 +509,8 @@ impl Client {
             transfer_tree.push(*transfer);
         }
 
-        let mut transfer_data_vec = Vec::new();
-        let mut withdrawal_data_vec = Vec::new();
-        let mut entries = vec![];
+        let mut transfer_data_and_encrypted_data = Vec::new();
         for (i, transfer) in memo.transfers.iter().enumerate() {
-            if Some(i as u32) == memo.fee_index {
-                // ignore fee transfer because it will be saved on block builder side
-                continue;
-            }
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
             let transfer_data = TransferData {
                 sender: key.pubkey,
@@ -537,11 +529,9 @@ impl Client {
             } else {
                 DataType::Withdrawal
             };
-            let pubkey = if transfer.recipient.is_pubkey {
-                transfer_data_vec.push(transfer_data.clone());
+            let receiver = if transfer.recipient.is_pubkey {
                 transfer.recipient.to_pubkey().unwrap()
             } else {
-                withdrawal_data_vec.push(transfer_data.clone());
                 key.pubkey
             };
             let sender_key = if data_type == DataType::Withdrawal {
@@ -549,24 +539,35 @@ impl Client {
             } else {
                 None
             };
-            entries.push(SaveDataEntry {
-                topic: data_type.to_topic(),
-                pubkey,
-                data: transfer_data.encrypt(pubkey, sender_key)?,
-            });
+            let encrypted_data = transfer_data.encrypt(receiver, sender_key)?;
+            let digest = get_digest(&encrypted_data);
+            transfer_data_and_encrypted_data.push((
+                data_type,
+                receiver,
+                transfer_data,
+                encrypted_data,
+                digest,
+            ));
         }
 
-        let transfer_digests = entries
+        let transfer_digests = transfer_data_and_encrypted_data
             .iter()
-            .map(|entry| get_digest(&entry.data))
+            .map(|(_, _, _, _, digest)| *digest)
             .collect::<Vec<_>>();
-        let mut transfer_types = entries
+        let transfer_data_vec = transfer_data_and_encrypted_data
             .iter()
-            .map(|entry| {
-                if entry.topic == DataType::Transfer.to_topic() {
-                    TransferType::Normal
-                } else {
+            .map(|(_, _, transfer_data, _, _)| transfer_data.clone())
+            .collect::<Vec<_>>();
+
+        // get transfer types
+        let mut transfer_types = transfer_data_and_encrypted_data
+            .iter()
+            .map(|(data_type, _, _, _, _)| {
+                if data_type == &DataType::Withdrawal {
                     TransferType::Withdrawal
+                } else {
+                    // temporary placement
+                    TransferType::Normal
                 }
             })
             .collect::<Vec<_>>();
@@ -586,6 +587,21 @@ impl Client {
             .map(|t| t.to_string())
             .collect::<Vec<_>>();
 
+        let mut entries = vec![];
+        for (data_type, receiver, transfer_data, encrypted_data, _) in
+            &transfer_data_and_encrypted_data
+        {
+            if Some(transfer_data.transfer_index) == memo.fee_index {
+                // ignore fee transfer because it will be saved on block builder side
+                continue;
+            }
+            entries.push(SaveDataEntry {
+                topic: data_type.to_topic(),
+                pubkey: *receiver,
+                data: encrypted_data.clone(),
+            });
+        }
+
         let tx_data = TxData {
             tx_index: proposal.tx_index,
             tx_merkle_proof: proposal.tx_merkle_proof.clone(),
@@ -595,14 +611,15 @@ impl Client {
             transfer_types,
             sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
         };
+        let tx_data_encrypted = tx_data.encrypt(key.pubkey, Some(key))?;
+        let tx_digest = get_digest(&tx_data_encrypted);
         entries.push(SaveDataEntry {
             topic: DataType::Tx.to_topic(),
             pubkey: key.pubkey,
-            data: tx_data.encrypt(key.pubkey, Some(key))?,
+            data: tx_data_encrypted,
         });
 
-        let digests = self
-            .store_vault_server
+        self.store_vault_server
             .save_data_batch(key, &entries)
             .await?;
 
@@ -617,55 +634,26 @@ impl Client {
             )
             .await?;
 
-        let transfer_digests: Vec<Bytes32> = digests
-            .iter()
-            .zip(entries.iter())
-            .filter_map(|(digest, entry)| {
-                if entry.topic == DataType::Transfer.to_topic() {
-                    Some(*digest)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let withdrawal_digests: Vec<Bytes32> = digests
-            .iter()
-            .zip(entries.iter())
-            .filter_map(|(digest, entry)| {
-                if entry.topic == DataType::Withdrawal.to_topic() {
-                    Some(*digest)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let tx_digest = digests
-            .iter()
-            .zip(entries.iter())
-            .find(|(_digest, entry)| entry.topic == DataType::Tx.to_topic())
-            .ok_or(ClientError::UnexpectedError(
-                "tx_digest not found".to_string(),
-            ))?
-            .0;
-
         // Save payment memo after posting signature because it's not critical data,
         // and we should reduce the time before posting the signature.
         let mut misc_entries = Vec::new();
         for memo_entry in memo.payment_memos.iter() {
-            let (position, transfer_data) = transfer_data_vec
+            let (transfer_data, digest) = transfer_data_and_encrypted_data
                 .iter()
-                .enumerate()
-                .find(|(_position, transfer_data)| {
-                    transfer_data.transfer_index == memo_entry.transfer_index
+                .find_map(|(_, _, transfer_data, _, digest)| {
+                    if transfer_data.transfer_index == memo_entry.transfer_index {
+                        Some((transfer_data, *digest))
+                    } else {
+                        None
+                    }
                 })
                 .ok_or(ClientError::UnexpectedError(
                     "transfer_data not found".to_string(),
                 ))?;
-            let transfer_digest = transfer_digests[position];
             let payment_memo = PaymentMemo {
                 meta: MetaData {
                     timestamp: chrono::Utc::now().timestamp() as u64,
-                    digest: transfer_digest,
+                    digest,
                 },
                 transfer_data: transfer_data.clone(),
                 memo: memo_entry.memo.clone(),
@@ -690,11 +678,9 @@ impl Client {
 
         let result = TxResult {
             tx_tree_root: proposal.block_sign_payload.tx_tree_root,
-            tx_digest: *tx_digest,
-            transfer_digests,
-            withdrawal_digests,
+            tx_digest,
+            tx_data,
             transfer_data_vec,
-            withdrawal_data_vec,
             backup_csv,
         };
 

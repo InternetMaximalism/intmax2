@@ -21,7 +21,7 @@ pub enum StoreVaultType {
 
 // a prefix to make the content unique
 fn content_prefix(path: &str) -> Vec<u8> {
-    format!("intmax2/v1/store-vault-server/{}", path)
+    format!("intmax2/v1/store-vault-server/{path}",)
         .as_bytes()
         .to_vec()
 }
@@ -176,7 +176,7 @@ impl FromStr for CursorOrder {
         match s {
             "asc" => Ok(CursorOrder::Asc),
             "desc" => Ok(CursorOrder::Desc),
-            _ => Err(format!("Invalid CursorOrder: {}", s)),
+            _ => Err(format!("Invalid CursorOrder: {s}",)),
         }
     }
 }

@@ -34,7 +34,7 @@ impl FromStr for TransferType {
             "TransferCollateralFee" => Ok(TransferType::TransferCollateralFee),
             "WithdrawalFee" => Ok(TransferType::WithdrawalFee),
             "ClaimFee" => Ok(TransferType::ClaimFee),
-            _ => Err(format!("Invalid transfer type: {}", s)),
+            _ => Err(format!("Invalid transfer type: {s}")),
         }
     }
 }

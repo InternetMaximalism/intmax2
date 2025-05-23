@@ -12,7 +12,6 @@ use super::errors::RsaEncryptionError;
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-
 pub struct RsaEncryptedMessage {
     #[serde_as(as = "Base64")]
     pub nonce: [u8; 12],
@@ -57,9 +56,7 @@ pub fn decrypt_with_aes_key(
     let nonce = message.nonce.into();
     let data = cipher
         .decrypt(&nonce, message.ciphertext.as_ref())
-        .map_err(|e| {
-            RsaEncryptionError::DecryptionError(format!("Error decrypting data: {}", e))
-        })?;
+        .map_err(|e| RsaEncryptionError::DecryptionError(format!("Error decrypting data: {e}",)))?;
     Ok(data.to_vec())
 }
 

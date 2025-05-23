@@ -63,7 +63,7 @@ impl fmt::Display for TokenType {
             Self::ERC721 => "ERC721".to_string(),
             Self::ERC1155 => "ERC1155".to_string(),
         };
-        write!(f, "{}", t)
+        write!(f, "{t}",)
     }
 }
 

@@ -81,12 +81,12 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
             ttl,
             heartbeat_ttl: heartbeat_interval * 3,
             client,
-            tasks_key: format!("{}:tasks", prefix),
-            pending_key: format!("{}:tasks:pending", prefix),
-            running_key: format!("{}:tasks:running", prefix),
-            completed_key: format!("{}:tasks:completed", prefix),
-            results_key: format!("{}:results", prefix),
-            heartbeat_prefix: format!("{}:heartbeat", prefix),
+            tasks_key: format!("{prefix}:tasks",),
+            pending_key: format!("{prefix}:tasks:pending",),
+            running_key: format!("{prefix}:tasks:running",),
+            completed_key: format!("{prefix}:tasks:completed",),
+            results_key: format!("{prefix}:results",),
+            heartbeat_prefix: format!("{prefix}:heartbeat",),
             _phantom: std::marker::PhantomData,
         })
     }
@@ -137,9 +137,9 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
             .invoke_async(&mut conn)
             .await?;
         if exists == 1 {
-            log::warn!("task {} already exists", task_id);
+            log::warn!("task {task_id} already exists",);
         } else {
-            log::info!("task {} added", task_id);
+            log::info!("task {task_id} added",);
         }
         Ok(())
     }
@@ -208,7 +208,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
 
         if let Some((task_id, task_json)) = result {
             let task: T = serde_json::from_str(&task_json)?;
-            log::info!("task {} assigned to worker", task_id);
+            log::info!("task {task_id} assigned to worker",);
             Ok(Some((task_id, task)))
         } else {
             Ok(None)
@@ -221,10 +221,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
         let mut conn = self.get_connection().await?;
         let result: bool = conn.hset(&self.results_key, task_id, &result_json).await?;
         if !result {
-            log::warn!(
-                "task {} result already exists but trying to overwrite",
-                task_id
-            );
+            log::warn!("task {task_id} result already exists but trying to overwrite",);
         }
         // move task from running to completed
         let _: () = conn
@@ -246,7 +243,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
 
         // get all running tasks
         let task_ids: Vec<u32> = conn.smembers(&self.running_key).await?;
-        log::info!("running tasks: {:?}", task_ids);
+        log::info!("running tasks: {task_ids:?}",);
 
         // wait heartbeat_ttl seconds for worker to submit heartbeat
         tokio::time::sleep(tokio::time::Duration::from_secs(self.heartbeat_ttl as u64)).await;
@@ -279,7 +276,7 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
                     .invoke_async(&mut conn)
                     .await?;
                 if moved == 1 {
-                    log::warn!("task {} moved from running to pending", task_id);
+                    log::warn!("task {task_id} moved from running to pending",);
                 }
             }
         }

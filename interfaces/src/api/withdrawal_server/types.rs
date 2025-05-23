@@ -15,7 +15,7 @@ const D: usize = 2;
 
 // a prefix to make the content unique
 fn content_prefix(path: &str) -> Vec<u8> {
-    format!("intmax2/v1/withdrawal-server/{}", path)
+    format!("intmax2/v1/withdrawal-server/{path}",)
         .as_bytes()
         .to_vec()
 }

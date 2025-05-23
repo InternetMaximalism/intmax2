@@ -36,8 +36,7 @@ impl TxData {
         let transfers = self.spent_witness.transfers.clone();
         if transfer_index >= transfers.len() as u32 {
             return Err(CommonError::InvalidData(format!(
-                "transfer index: {} is out of range",
-                transfer_index
+                "transfer index: {transfer_index} is out of range"
             )));
         }
         let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);

@@ -2,7 +2,7 @@ use crate::data::rw_rights::RWRights;
 
 /// Generate a topic used in store-vault for a given set of read and write rights.
 pub fn topic_from_rights(rw_rights: RWRights, name: &str) -> String {
-    format!("v1/{}/{}", rw_rights, name)
+    format!("v1/{rw_rights}/{name}")
 }
 
 #[derive(Debug, Clone, thiserror::Error)]

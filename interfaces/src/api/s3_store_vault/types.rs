@@ -16,7 +16,7 @@ pub struct S3SaveDataEntry {
 
 // a prefix to make the content unique
 fn content_prefix(path: &str) -> Vec<u8> {
-    format!("intmax2/v1/s3-store-vault/{}", path)
+    format!("intmax2/v1/s3-store-vault/{path}",)
         .as_bytes()
         .to_vec()
 }

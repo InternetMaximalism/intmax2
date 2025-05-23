@@ -227,10 +227,10 @@ mod test {
         println!("data: {:?}", data.to_vec());
 
         let encrypted_data = encrypt_bls(key.pubkey, data, &mut rng);
-        println!("encrypted data: {:?}", encrypted_data);
+        println!("encrypted data: {encrypted_data:?}",);
 
         let decrypted_data = decrypt_bls(key, &encrypted_data).unwrap();
-        println!("decrypted data: {:?}", decrypted_data);
+        println!("decrypted data: {decrypted_data:?}",);
 
         assert_eq!(data.to_vec(), decrypted_data);
     }

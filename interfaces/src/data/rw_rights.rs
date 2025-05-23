@@ -28,7 +28,7 @@ impl fmt::Display for ReadRights {
             ReadRights::AuthRead => "ra".to_string(),
             ReadRights::OpenRead => "ro".to_string(),
         };
-        write!(f, "{}", t)
+        write!(f, "{t}",)
     }
 }
 
@@ -39,7 +39,7 @@ impl FromStr for ReadRights {
         match s {
             "ra" => Ok(ReadRights::AuthRead),
             "ro" => Ok(ReadRights::OpenRead),
-            _ => Err(format!("Invalid read rights: {}", s)),
+            _ => Err(format!("Invalid read rights: {s}",)),
         }
     }
 }
@@ -52,7 +52,7 @@ impl fmt::Display for WriteRights {
             WriteRights::AuthWrite => "wa".to_string(),
             WriteRights::OpenWrite => "wo".to_string(),
         };
-        write!(f, "{}", t)
+        write!(f, "{t}",)
     }
 }
 
@@ -65,7 +65,7 @@ impl FromStr for WriteRights {
             "swo" => Ok(WriteRights::SingleOpenWrite),
             "wa" => Ok(WriteRights::AuthWrite),
             "wo" => Ok(WriteRights::OpenWrite),
-            _ => Err(format!("Invalid write rights: {}", s)),
+            _ => Err(format!("Invalid write rights: {s}",)),
         }
     }
 }
@@ -82,7 +82,7 @@ impl FromStr for RWRights {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('_').collect();
         if parts.len() != 2 {
-            return Err(format!("Invalid rw rights: {}", s));
+            return Err(format!("Invalid rw rights: {s}",));
         }
         let read_rights = ReadRights::from_str(parts[0])?;
         let write_rights = WriteRights::from_str(parts[1])?;

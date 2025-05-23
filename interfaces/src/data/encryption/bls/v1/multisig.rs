@@ -172,11 +172,11 @@ mod test {
         println!("data: {:?}", data.to_vec());
 
         let encrypted_data = encrypt_bls(pubkey, data, &mut rng);
-        println!("encrypted data: {:?}", encrypted_data);
+        println!("encrypted data: {encrypted_data:?}",);
 
         let decrypted_data =
             decrypt_bls_interaction(server_key, client_key, &encrypted_data).unwrap();
-        println!("decrypted data by multisig: {:?}", decrypted_data);
+        println!("decrypted data by multisig: {decrypted_data:?}");
 
         assert_eq!(data.to_vec(), decrypted_data);
     }

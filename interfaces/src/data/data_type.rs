@@ -28,7 +28,7 @@ impl fmt::Display for DataType {
             DataType::SenderProofSet => "sender_proof_set".to_string(),
             DataType::UserData => "user_data".to_string(),
         };
-        write!(f, "{}", t)
+        write!(f, "{t}",)
     }
 }
 
@@ -42,7 +42,7 @@ impl FromStr for DataType {
             "withdrawal" => Ok(DataType::Withdrawal),
             "tx" => Ok(DataType::Tx),
             "sender_proof_set" => Ok(DataType::SenderProofSet),
-            _ => Err(format!("Invalid data type: {}", s)),
+            _ => Err(format!("Invalid data type: {s}",)),
         }
     }
 }
