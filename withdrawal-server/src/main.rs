@@ -15,15 +15,14 @@ use withdrawal_server::{
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     set_name_and_version(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-    logger::init_logger().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    logger::init_logger().map_err(io::Error::other)?;
 
     dotenvy::dotenv().ok();
 
-    let env = envy::from_env::<Env>()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("env error: {}", e)))?;
+    let env = envy::from_env::<Env>().map_err(|e| io::Error::other(format!("env error: {e}")))?;
     let state = State::new(&env)
         .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("state error: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("state error: {e}")))?;
     let state = Data::new(state);
     HttpServer::new(move || {
         let cors = Cors::permissive();

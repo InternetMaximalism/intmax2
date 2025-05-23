@@ -85,11 +85,9 @@ impl S3Client {
 
         let private_key_bytes = BASE64_STANDARD
             .decode(&self.config.cloudfront_private_key_base64)
-            .map_err(|e| {
-                S3Error::ParsePrivateKeyError(format!("failed to decode base64: {}", e))
-            })?;
+            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to decode base64: {e}")))?;
         let private_key = String::from_utf8(private_key_bytes)
-            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to parse utf8: {}", e)))?;
+            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to parse utf8: {e}")))?;
 
         let options = cloudfront_sign::SignedOptions {
             key_pair_id: self.config.cloudfront_key_pair_id.clone().into(),
@@ -99,7 +97,7 @@ impl S3Client {
         };
 
         let signed_url = cloudfront_sign::get_signed_url(&url, &options)
-            .map_err(|e| S3Error::CloudFrontSigning(format!("{:?}", e)))?;
+            .map_err(|e| S3Error::CloudFrontSigning(format!("{e:?}")))?;
 
         Ok(signed_url)
     }
@@ -120,7 +118,7 @@ impl S3Client {
                         return Ok(false);
                     }
                 }
-                Err(S3Error::ObjectExistenceCheck(format!("{:?}", err)))
+                Err(S3Error::ObjectExistenceCheck(format!("{err:?}")))
             }
         }
     }
@@ -132,7 +130,7 @@ impl S3Client {
             .key(key)
             .send()
             .await
-            .map_err(|e| S3Error::ObjectExistenceCheck(format!("{:?}", e)))?;
+            .map_err(|e| S3Error::ObjectExistenceCheck(format!("{e:?}")))?;
         Ok(())
     }
 }

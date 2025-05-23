@@ -56,8 +56,7 @@ pub async fn health_check(state: Data<State>) -> Result<Json<HealthCheckResponse
         if let Some(last_timestamp) = last_timestamp {
             if last_timestamp + heartbeat_timeout < current_timestamp {
                 return Err(actix_web::error::ErrorInternalServerError(format!(
-                    "Heartbeat for {} is too old, last heartbeat: {}, current timestamp: {}",
-                    key, last_timestamp, current_timestamp
+                    "Heartbeat for {key} is too old, last heartbeat: {last_timestamp}, current timestamp: {current_timestamp}"
                 )));
             }
         };

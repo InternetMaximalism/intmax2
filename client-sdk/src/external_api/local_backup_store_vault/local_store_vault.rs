@@ -67,7 +67,7 @@ impl LocalStoreVaultClient {
         );
         self.data_client.write(topic, pubkey, meta.digest, data)?;
         self.metadata_client
-            .append(topic, pubkey, &[meta.clone()])?;
+            .append(topic, pubkey, std::slice::from_ref(meta))?;
         Ok(())
     }
 
@@ -101,7 +101,7 @@ impl LocalStoreVaultClient {
             self.data_client
                 .write(&entry.topic, entry.pubkey, meta.digest, &entry.data)?;
             self.metadata_client
-                .append(&entry.topic, entry.pubkey, &[meta.clone()])?;
+                .append(&entry.topic, entry.pubkey, std::slice::from_ref(meta))?;
         }
         Ok(())
     }
@@ -245,7 +245,7 @@ impl LocalStoreVaultClient {
 
 impl From<LocalStoreVaultError> for ServerError {
     fn from(error: LocalStoreVaultError) -> Self {
-        ServerError::InternalError(format!("LocalStoreVaultClient error: {}", error))
+        ServerError::InternalError(format!("LocalStoreVaultClient error: {error}"))
     }
 }
 
@@ -261,8 +261,7 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         let stored_prev_digest = self.local_get_prev_snapshot_digest(key, topic)?;
         if stored_prev_digest != prev_digest {
             return Err(LocalStoreVaultError::LockError(format!(
-                "prev_digest mismatch with stored digest: {:?}",
-                stored_prev_digest
+                "prev_digest mismatch with stored digest: {stored_prev_digest:?}"
             ))
             .into());
         }

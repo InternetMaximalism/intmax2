@@ -109,7 +109,7 @@ pub async fn send_transfers(
                     break;
                 }
                 TxStatus::Failed(reason) => {
-                    log::error!("tx failed: {}", reason);
+                    log::error!("tx failed: {reason}");
                     break;
                 }
             }

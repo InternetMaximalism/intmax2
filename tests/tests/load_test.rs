@@ -45,7 +45,7 @@ async fn load_test() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     let env = envy::from_env::<EnvVar>()?;
-    let provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
+    let provider = get_provider_with_fallback(std::slice::from_ref(&env.l2_rpc_url))?;
 
     let rollup_contract = RollupContract::new(
         provider,
@@ -97,11 +97,11 @@ async fn load_test() -> anyhow::Result<()> {
         let results = futures::future::join_all(futures).await;
         for result in results {
             if let Err(e) = result? {
-                log::error!("Error posting block: {:?}", e);
+                log::error!("Error posting block: {e:?}");
             }
         }
         total_posted_blocks += private_keys.len();
-        log::info!("Posted {} blocks", total_posted_blocks);
+        log::info!("Posted {total_posted_blocks} blocks");
         sleep_for(env.sleep_time).await;
     }
 }

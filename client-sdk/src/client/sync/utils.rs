@@ -37,8 +37,7 @@ pub fn quote_withdrawal_claim_fee(
         .iter()
         .find(|fee| fee.token_index == fee_token_index)
         .ok_or(SyncError::FeeError(format!(
-            "fee with token index {} not found",
-            fee_token_index
+            "fee with token index {fee_token_index} not found"
         )))?;
     Ok(Some(fee.clone()))
 }
@@ -62,7 +61,7 @@ pub fn generate_spent_witness(
         new_salt,
     )
     .map_err(|e| {
-        SyncError::WitnessGenerationError(format!("failed to generate spent witness: {}", e))
+        SyncError::WitnessGenerationError(format!("failed to generate spent witness: {e}"))
     })?;
     Ok(spent_witness)
 }

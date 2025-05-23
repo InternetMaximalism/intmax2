@@ -99,7 +99,7 @@ pub(crate) async fn post_block(
             break;
         }
         if retry >= VALIDITY_SYNC_MAX_RETRY {
-            log::error!("Validity prover is not synced after {} retries", retry);
+            log::error!("Validity prover is not synced after {retry} retries");
             return Err(BlockBuilderError::ValidityProverIsNotSynced(
                 onchain_latest_block_number,
                 validity_prover_latest_block_number,
@@ -107,9 +107,7 @@ pub(crate) async fn post_block(
         }
         retry += 1;
         log::warn!(
-            "Validity prover is not synced: onchain={}, validity_prover={}",
-            onchain_latest_block_number,
-            validity_prover_latest_block_number
+            "Validity prover is not synced: onchain={onchain_latest_block_number}, validity_prover={validity_prover_latest_block_number}"
         );
         tokio::time::sleep(tokio::time::Duration::from_secs(
             VALIDITY_PROVER_SYNC_POLLING_INTERVAL,
@@ -124,9 +122,7 @@ pub(crate) async fn post_block(
             break;
         }
         log::warn!(
-            "Penalty fee is above allowance: penalty_fee={}, allowance={}",
-            penalty_fee,
-            eth_allowance_for_block
+            "Penalty fee is above allowance: penalty_fee={penalty_fee}, allowance={eth_allowance_for_block}"
         );
         tokio::time::sleep(tokio::time::Duration::from_secs(
             PENALTY_FEE_POLLING_INTERVAL,
@@ -139,10 +135,7 @@ pub(crate) async fn post_block(
     let expiry: u64 = block_post.block_sign_payload.expiry.into();
     if expiry != 0 && expiry < current_time + EXPIRY_BUFFER {
         log::error!(
-            "Block already expired: expiry={}, current_time={}, buffer={}",
-            expiry,
-            current_time,
-            EXPIRY_BUFFER
+            "Block already expired: expiry={expiry}, current_time={current_time}, buffer={EXPIRY_BUFFER}"
         );
         return Err(BlockBuilderError::AlreadyExpired);
     }

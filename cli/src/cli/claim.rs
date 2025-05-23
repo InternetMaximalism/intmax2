@@ -52,10 +52,7 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
     let env = envy::from_env::<EnvVar>()?;
     let signer_private_key = convert_bytes32_to_b256(eth_private_key);
     let user_address = get_address_from_private_key(signer_private_key);
-    log::info!(
-        "Claiming block builder reward for user address: {}",
-        user_address
-    );
+    log::info!("Claiming block builder reward for user address: {user_address}");
 
     if env.reward_contract_address.is_none() {
         return Err(CliError::EnvError(
@@ -67,7 +64,7 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
     let reward_contract_address = convert_address_to_alloy(env.reward_contract_address.unwrap());
     let reward_contract = BlockBuilderRewardContract::new(provider, reward_contract_address);
     let current_period = reward_contract.get_current_period().await?;
-    log::info!("Current period: {}", current_period);
+    log::info!("Current period: {current_period}");
 
     let mut claimable_periods = Vec::new();
     for period_number in 0..current_period {
@@ -76,9 +73,7 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
             .await?;
         if claimable_reward > U256::ZERO {
             log::info!(
-                "Claiming block builder reward for period {}: {}",
-                period_number,
-                claimable_reward
+                "Claiming block builder reward for period {period_number}: {claimable_reward}"
             );
             claimable_periods.push(period_number);
         }
@@ -87,10 +82,7 @@ pub async fn claim_builder_reward(eth_private_key: Bytes32) -> Result<(), CliErr
         println!("No block builder rewards to claim");
         return Ok(());
     }
-    log::info!(
-        "Claiming block builder rewards for periods: {:?}",
-        claimable_periods
-    );
+    log::info!("Claiming block builder rewards for periods: {claimable_periods:?}");
     reward_contract
         .batch_claim_reward(signer_private_key, None, &claimable_periods)
         .await?;

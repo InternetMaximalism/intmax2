@@ -40,9 +40,9 @@ pub type ProviderWithSigner = FillProvider<
 // alloy does not support fallback transport in WASM, so we use a provider without fallback transport in WASM.
 pub fn get_provider(rpc_urls: &str) -> Result<NormalProvider, BlockchainError> {
     let retry_layer = RetryBackoffLayer::new(5, 1000, 100);
-    let url: Url = rpc_urls.parse().map_err(|e| {
-        BlockchainError::ParseError(format!("Failed to parse URL {}: {}", rpc_urls, e))
-    })?;
+    let url: Url = rpc_urls
+        .parse()
+        .map_err(|e| BlockchainError::ParseError(format!("Failed to parse URL {rpc_urls}: {e}")))?;
     let client = RpcClient::builder().layer(retry_layer).http(url);
     let provider = ProviderBuilder::default()
         .with_gas_estimation()
@@ -58,7 +58,7 @@ pub fn get_provider_with_fallback(rpc_urls: &[String]) -> Result<NormalProvider,
         .iter()
         .map(|url| {
             let url: Url = url.parse().map_err(|e| {
-                BlockchainError::ParseError(format!("Failed to parse URL {}: {}", url, e))
+                BlockchainError::ParseError(format!("Failed to parse URL {url}: {e}"))
             })?;
             Ok(Http::new(url))
         })

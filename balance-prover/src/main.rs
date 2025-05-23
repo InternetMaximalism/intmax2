@@ -14,17 +14,13 @@ use tracing_actix_web::TracingLogger;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     set_name_and_version(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-    logger::init_logger().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    logger::init_logger().map_err(io::Error::other)?;
 
     dotenvy::dotenv().ok();
-    let env: Env = envy::from_env().map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("Failed to parse environment variables: {}", e),
-        )
-    })?;
+    let env: Env = envy::from_env()
+        .map_err(|e| io::Error::other(format!("Failed to parse environment variables: {e}")))?;
 
-    let state = BalanceProver::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let state = BalanceProver::new().map_err(io::Error::other)?;
     let state = Data::new(state);
     HttpServer::new(move || {
         let cors = Cors::permissive();

@@ -82,7 +82,7 @@ pub async fn fetch_withdrawal_info(
             match SenderProofSet::decrypt(ephemeral_key, enc_sender, &encrypted_sender_proof_set) {
                 Ok(data) => data,
                 Err(e) => {
-                    log::error!("failed to decrypt sender proof set: {}", e);
+                    log::error!("failed to decrypt sender proof set: {e}");
                     continue;
                 }
             };

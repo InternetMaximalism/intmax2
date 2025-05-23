@@ -52,7 +52,7 @@ pub async fn decrypt_deposit_data(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let deposit_data =
-        DepositData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{}", e)))?;
+        DepositData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{e}")))?;
     Ok(deposit_data.into())
 }
 
@@ -65,7 +65,7 @@ pub async fn decrypt_transfer_data(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let transfer_data =
-        TransferData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{}", e)))?;
+        TransferData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{e}")))?;
     Ok(transfer_data.into())
 }
 
@@ -74,8 +74,8 @@ pub async fn decrypt_transfer_data(
 pub async fn decrypt_tx_data(private_key: &str, data: &[u8]) -> Result<JsTxData, JsError> {
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
-    let tx_data = TxData::decrypt(key, Some(key.pubkey), data)
-        .map_err(|e| JsError::new(&format!("{}", e)))?;
+    let tx_data =
+        TxData::decrypt(key, Some(key.pubkey), data).map_err(|e| JsError::new(&format!("{e}")))?;
     Ok(tx_data.into())
 }
 
@@ -106,7 +106,7 @@ pub async fn fetch_encrypted_data(
     let auth: Auth = auth
         .clone()
         .try_into()
-        .map_err(|e| JsError::new(&format!("failed to convert JsAuth to Auth: {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to convert JsAuth to Auth: {e}")))?;
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
     let mut data_array = Vec::new();
     let (deposit_data, _) = sv
@@ -242,7 +242,7 @@ pub fn decrypt_bls_interaction_step2(
         server_key,
         &step1_response.try_into().unwrap(),
     )
-    .map_err(|e| JsError::new(&format!("{}", e)))?;
+    .map_err(|e| JsError::new(&format!("{e}")))?;
 
     Ok(response_step2.into())
 }
@@ -260,7 +260,7 @@ pub fn decrypt_bls_interaction_step3(
         &step1_response.try_into().unwrap(),
         &step2_response.try_into().unwrap(),
     )
-    .map_err(|e| JsError::new(&format!("{}", e)))?;
+    .map_err(|e| JsError::new(&format!("{e}")))?;
 
     Ok(JsMultiEciesStep3Response {
         message: response_step3.message,
@@ -307,7 +307,7 @@ pub fn multi_signature_interaction_step3(
         &step1_response.try_into().unwrap(),
         &step2_response.try_into().unwrap(),
     )
-    .map_err(|e| JsError::new(&format!("{}", e)))?;
+    .map_err(|e| JsError::new(&format!("{e}")))?;
 
     Ok(JsMultisigStep3Response::from(response_step3))
 }

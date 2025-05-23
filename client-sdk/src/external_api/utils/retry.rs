@@ -26,7 +26,7 @@ where
                 warn!(
                     "Attempt {} failed: {}. Retrying in {:?}...",
                     retries + 1,
-                    e.to_string(),
+                    e,
                     delay
                 );
                 sleep_for(delay.as_secs()).await;

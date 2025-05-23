@@ -32,7 +32,7 @@ pub async fn save_snapshot(
 
     // validate rights
     let rw_rights = extract_rights(&request.topic)
-        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {e}")))?;
     match rw_rights.write_rights {
         rw_rights::WriteRights::SingleAuthWrite => {
             if auth_pubkey != request.pubkey {
@@ -90,7 +90,7 @@ pub async fn get_snapshot(
 
     // validate rights
     let rw_rights = extract_rights(&request.topic)
-        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {e}")))?;
     match rw_rights.read_rights {
         rw_rights::ReadRights::AuthRead => {
             if auth_pubkey != request.pubkey {
@@ -124,14 +124,13 @@ pub async fn save_data_batch(
 
     if entries.len() > MAX_BATCH_SIZE {
         return Err(actix_web::error::ErrorBadRequest(format!(
-            "Batch size exceeds maximum limit of {}",
-            MAX_BATCH_SIZE
+            "Batch size exceeds maximum limit of {MAX_BATCH_SIZE}"
         )));
     }
 
     for entry in entries {
         let rw_rights = extract_rights(&entry.topic)
-            .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+            .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {e}")))?;
         match rw_rights.write_rights {
             rw_rights::WriteRights::SingleAuthWrite => {
                 return Err(actix_web::error::ErrorBadRequest(
@@ -176,14 +175,13 @@ pub async fn get_data_batch(
 
     if request.digests.len() > MAX_BATCH_SIZE {
         return Err(actix_web::error::ErrorBadRequest(format!(
-            "Batch size exceeds maximum limit of {}",
-            MAX_BATCH_SIZE
+            "Batch size exceeds maximum limit of {MAX_BATCH_SIZE}"
         )));
     }
 
     // validate rights
     let rw_rights = extract_rights(&request.topic)
-        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {e}")))?;
     match rw_rights.read_rights {
         rw_rights::ReadRights::AuthRead => {
             if auth_pubkey != request.pubkey {
@@ -218,14 +216,13 @@ pub async fn get_data_sequence(
     if let Some(limit) = request.cursor.limit {
         if limit > MAX_BATCH_SIZE as u32 {
             return Err(actix_web::error::ErrorBadRequest(format!(
-                "Batch size exceeds maximum limit of {}",
-                MAX_BATCH_SIZE
+                "Batch size exceeds maximum limit of {MAX_BATCH_SIZE}"
             )));
         }
     }
     // validate rights
     let rw_rights = extract_rights(&request.topic)
-        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {}", e)))?;
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid topic: {e}")))?;
     match rw_rights.read_rights {
         rw_rights::ReadRights::AuthRead => {
             if pubkey != request.pubkey {

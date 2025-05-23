@@ -43,7 +43,7 @@ mod tests {
         let env = EnvVar {
             port: 9004,
             block_builder_url: "http://localhost:9004".to_string(),
-            redis_url: Some(format!("redis://localhost:{}", port).to_string()),
+            redis_url: Some(format!("redis://localhost:{port}").to_string()),
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             rollup_contract_address: Address::default(),

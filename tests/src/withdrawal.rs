@@ -70,11 +70,7 @@ pub async fn single_withdrawal(
     }
     let withdrawal_amount = intmax_balance - transfer_fee - withdraw_fee - claim_fee;
     log::info!(
-        "Withdrawal amount: {}, transfer fee: {}, withdraw fee: {}, claim fee: {}",
-        withdrawal_amount,
-        transfer_fee,
-        withdraw_fee,
-        claim_fee
+        "Withdrawal amount: {withdrawal_amount}, transfer fee: {transfer_fee}, withdraw fee: {withdraw_fee}, claim fee: {claim_fee}"
     );
     let withdrawal_transfer = Transfer {
         recipient: convert_address_to_intmax(ethereum_address).into(),
@@ -111,7 +107,7 @@ pub async fn single_withdrawal(
         match result {
             Ok(_) => break,
             Err(e) => {
-                log::warn!("Failed to send withdrawal: {}", e);
+                log::warn!("Failed to send withdrawal: {e}");
             }
         }
         log::warn!("Retrying...");

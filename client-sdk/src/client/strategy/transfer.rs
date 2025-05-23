@@ -67,7 +67,7 @@ pub async fn fetch_transfer_info(
         {
             Ok(sender_proof_set) => sender_proof_set,
             Err(StrategyError::EncryptionError(e)) => {
-                log::error!("failed to decrypt sender proof set: {}", e);
+                log::error!("failed to decrypt sender proof set: {e}");
                 continue;
             }
             Err(e) => return Err(e),
@@ -79,7 +79,7 @@ pub async fn fetch_transfer_info(
                 let spent_proof = match sender_proof_set.spent_proof.decompress() {
                     Ok(proof) => proof,
                     Err(e) => {
-                        log::error!("failed to decompress spent proof: {}", e);
+                        log::error!("failed to decompress spent proof: {e}");
                         continue;
                     }
                 };
@@ -87,7 +87,7 @@ pub async fn fetch_transfer_info(
                 let spent_pis =
                     SpentPublicInputs::from_u64_slice(&spent_proof.public_inputs.to_u64_vec())
                         .map_err(|e| {
-                            log::error!("failed to decompress spent proof: {}", e);
+                            log::error!("failed to decompress spent proof: {e}");
                             StrategyError::UnexpectedError(e.to_string())
                         })?;
                 if spent_pis.tx != transfer_data.tx {
@@ -96,7 +96,7 @@ pub async fn fetch_transfer_info(
                 }
             }
             Err(e) => {
-                log::error!("failed to validate sender proof set: {}", e);
+                log::error!("failed to validate sender proof set: {e}");
                 continue;
             }
         }

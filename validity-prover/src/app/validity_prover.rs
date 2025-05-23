@@ -347,14 +347,12 @@ impl ValidityProver {
             let result = result.unwrap();
             if let Some(error) = result.error {
                 return Err(ValidityProverError::TaskError(format!(
-                    "Error in block number {}: {}",
-                    last_validity_proof_block_number, error
+                    "Error in block number {last_validity_proof_block_number}: {error}"
                 )));
             }
             if result.proof.is_none() {
                 return Err(ValidityProverError::TaskError(format!(
-                    "Proof is missing for block number {}",
-                    last_validity_proof_block_number
+                    "Proof is missing for block number {last_validity_proof_block_number}"
                 )));
             }
             let transition_proof = result.proof.unwrap();

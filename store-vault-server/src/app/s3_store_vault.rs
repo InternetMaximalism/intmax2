@@ -130,8 +130,7 @@ impl S3StoreVault {
         // validation
         if current_digest != prev_digest {
             return Err(StoreVaultError::LockError(format!(
-                "prev_digest mismatch with stored digest: {:?}",
-                current_digest
+                "prev_digest mismatch with stored digest: {current_digest:?}"
             )));
         }
 
@@ -161,8 +160,7 @@ impl S3StoreVault {
         let new_path = get_path(topic, pubkey, digest);
         if !self.s3_client.check_object_exists(&new_path).await? {
             return Err(StoreVaultError::ObjectError(format!(
-                "object {} doesn't exist",
-                new_path
+                "object {new_path} doesn't exist"
             )));
         }
 
@@ -472,7 +470,7 @@ impl S3StoreVault {
                 )
                 .execute(&self.pool)
                 .await?;
-                log::warn!("Historical data not found in s3. Deleted: path={}", path);
+                log::warn!("Historical data not found in s3. Deleted: path={path}");
             }
         }
         Ok(())
@@ -510,7 +508,7 @@ impl S3StoreVault {
                 )
                 .execute(&self.pool)
                 .await?;
-                log::warn!("Pending upload not found in s3. Deleted: path={}", path);
+                log::warn!("Pending upload not found in s3. Deleted: path={path}");
             }
         }
         Ok(())
@@ -524,7 +522,7 @@ impl S3StoreVault {
             loop {
                 interval.tick().await;
                 if let Err(e) = self_clone.cleanup_historical_data().await {
-                    log::error!("Error in cleanup_historical_data: {:?}", e);
+                    log::error!("Error in cleanup_historical_data: {e:?}");
                 }
             }
         });
@@ -535,7 +533,7 @@ impl S3StoreVault {
             loop {
                 interval.tick().await;
                 if let Err(e) = self_clone.cleanup_snapshot_data().await {
-                    log::error!("Error in cleanup_snapshot_data: {:?}", e);
+                    log::error!("Error in cleanup_snapshot_data: {e:?}");
                 }
             }
         });
@@ -810,7 +808,10 @@ mod tests {
             .expect_generate_upload_url()
             .returning(|path, _, _| Ok(path.to_owned()));
 
-        let urls = vault.batch_save_data_url(&[entry_1.clone()]).await.unwrap();
+        let urls = vault
+            .batch_save_data_url(std::slice::from_ref(&entry_1))
+            .await
+            .unwrap();
         // test case 1
         assert_eq!(urls, vec![entry_1_digest_path]);
 
@@ -941,11 +942,20 @@ mod tests {
             .s3_client
             .expect_generate_upload_url()
             .returning(|_, _, _| Ok(String::new()));
-        vault.batch_save_data_url(&[entry_1.clone()]).await.unwrap();
+        vault
+            .batch_save_data_url(std::slice::from_ref(&entry_1))
+            .await
+            .unwrap();
         sleep(Duration::from_secs(1)).await;
-        vault.batch_save_data_url(&[entry_2.clone()]).await.unwrap();
+        vault
+            .batch_save_data_url(std::slice::from_ref(&entry_2))
+            .await
+            .unwrap();
         sleep(Duration::from_secs(1)).await;
-        vault.batch_save_data_url(&[entry_3.clone()]).await.unwrap();
+        vault
+            .batch_save_data_url(std::slice::from_ref(&entry_3))
+            .await
+            .unwrap();
 
         // Returns the URL equal to the transferred path
         vault
@@ -1124,10 +1134,19 @@ mod tests {
             .s3_client
             .expect_generate_upload_url()
             .returning(|_, _, _| Ok(String::new()));
-        vault.batch_save_data_url(&[entry_1.clone()]).await.unwrap();
-        vault.batch_save_data_url(&[entry_2.clone()]).await.unwrap();
+        vault
+            .batch_save_data_url(std::slice::from_ref(&entry_1))
+            .await
+            .unwrap();
+        vault
+            .batch_save_data_url(std::slice::from_ref(&entry_2))
+            .await
+            .unwrap();
         sleep(Duration::from_secs(S3_UPLOAD_TIMEOUT)).await;
-        vault.batch_save_data_url(&[entry_3.clone()]).await.unwrap();
+        vault
+            .batch_save_data_url(std::slice::from_ref(&entry_3))
+            .await
+            .unwrap();
 
         // Returns the existence of an object for each path
         {

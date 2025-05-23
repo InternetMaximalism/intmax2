@@ -73,7 +73,7 @@ impl Client {
         direct_withdrawal_fee: Option<Vec<Fee>>,
         claimable_withdrawal_fee: Option<Vec<Fee>>,
     ) -> Result<(), SyncError> {
-        log::info!("sync_withdrawal: {:?}", meta);
+        log::info!("sync_withdrawal: {meta:?}");
         // sender balance proof after applying the tx
         let balance_proof = match update_send_by_receiver(
             self.validity_prover.as_ref(),
@@ -165,14 +165,13 @@ impl Client {
                 ))
             }
             _ => {
-                let reason = format!("fee error at the request: {:?}", fee_result);
+                let reason = format!("fee error at the request: {fee_result:?}");
                 for used_fee in &collected_fees {
                     consume_payment(self.store_vault_server.as_ref(), key, used_fee, &reason)
                         .await?;
                 }
                 return Err(SyncError::FeeError(format!(
-                    "invalid fee at the request: {:?}",
-                    fee_result
+                    "invalid fee at the request: {fee_result:?}"
                 )));
             }
         }

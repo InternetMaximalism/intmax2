@@ -56,12 +56,12 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
                 Ok(data) => match data.validate(key.pubkey) {
                     Ok(_) => Some((meta, data)),
                     Err(e) => {
-                        log::warn!("failed to validate {}: {}", data_type, e);
+                        log::warn!("failed to validate {data_type}: {e}");
                         None
                     }
                 },
                 Err(e) => {
-                    log::warn!("failed to decrypt {}: {}", data_type, e);
+                    log::warn!("failed to decrypt {data_type}: {e}");
                     None
                 }
             }
@@ -137,15 +137,13 @@ pub async fn fetch_single_data<T: BlsEncryption + Validation>(
             Ok(_) => (meta, data),
             Err(e) => {
                 return Err(StrategyError::ValidationError(format!(
-                    "failed to validate {}: {}",
-                    data_type, e
+                    "failed to validate {data_type}: {e}"
                 )));
             }
         },
         Err(e) => {
             return Err(StrategyError::ValidationError(format!(
-                "failed to decrypt {}: {}",
-                data_type, e
+                "failed to decrypt {data_type}: {e}"
             )));
         }
     };

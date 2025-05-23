@@ -48,7 +48,7 @@ impl Display for MiningStatus {
             MiningStatus::Disqualified => write!(f, "Disqualified"),
             MiningStatus::Locking => write!(f, "Locking"),
             MiningStatus::Claimable(block_number) => {
-                write!(f, "Claimable at block {}", block_number)
+                write!(f, "Claimable at block {block_number}")
             }
         }
     }

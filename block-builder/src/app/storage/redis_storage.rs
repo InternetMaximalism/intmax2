@@ -119,10 +119,10 @@ impl RedisStorage {
             .await?;
 
         if result.is_some() {
-            log::debug!("Lock acquired: {}", lock_name);
+            log::debug!("Lock acquired: {lock_name}");
             Ok(true)
         } else {
-            log::info!("Lock already held: {}", lock_name,);
+            log::info!("Lock already held: {lock_name}",);
             Ok(false)
         }
     }
@@ -154,7 +154,7 @@ impl RedisStorage {
             .arg(instance_id)
             .invoke_async(&mut conn)
             .await?;
-        log::debug!("Lock released: {}", lock_name);
+        log::debug!("Lock released: {lock_name}");
         Ok(())
     }
 
@@ -180,12 +180,7 @@ impl RedisStorage {
                     }
 
                     // Log the error and retry with exponential backoff
-                    log::warn!(
-                        "Redis operation failed (retry {}/{}): {}",
-                        retries,
-                        MAX_RETRIES,
-                        e
-                    );
+                    log::warn!("Redis operation failed (retry {retries}/{MAX_RETRIES}): {e}");
                     sleep(Duration::from_millis(RETRY_DELAY_MS * retries as u64)).await;
                 }
             }
@@ -263,7 +258,7 @@ impl RedisStorage {
             .cluster_id
             .clone()
             .unwrap_or_else(|| "default".to_string());
-        let prefix = format!("block_builder:{}", cluster_id);
+        let prefix = format!("block_builder:{cluster_id}");
         // Create Redis client with fallback to localhost if URL not provided
         let redis_url = config.redis_url.clone().expect("redis_url not found");
         let client = Client::open(redis_url).expect("Failed to create Redis client");
@@ -283,22 +278,18 @@ impl RedisStorage {
             prefix: prefix.to_string(),
 
             // Define Redis keys with shared prefix for consistent naming
-            registration_tx_requests_key: format!("{}:registration_tx_requests", prefix),
-            registration_tx_last_processed_key: format!(
-                "{}:registration_tx_last_processed",
-                prefix
-            ),
-            non_registration_tx_requests_key: format!("{}:non_registration_tx_requests", prefix),
+            registration_tx_requests_key: format!("{prefix}:registration_tx_requests"),
+            registration_tx_last_processed_key: format!("{prefix}:registration_tx_last_processed"),
+            non_registration_tx_requests_key: format!("{prefix}:non_registration_tx_requests"),
             non_registration_tx_last_processed_key: format!(
-                "{}:non_registration_tx_last_processed",
-                prefix
+                "{prefix}:non_registration_tx_last_processed"
             ),
-            request_id_to_block_id_key: format!("{}:request_id_to_block_id", prefix),
-            memos_key: format!("{}:memos", prefix),
-            signatures_key: format!("{}:signatures", prefix),
-            fee_collection_tasks_key: format!("{}:fee_collection_tasks", prefix),
-            block_post_tasks_hi_key: format!("{}:block_post_tasks_hi", prefix),
-            block_post_tasks_lo_key: format!("{}:block_post_tasks_lo", prefix),
+            request_id_to_block_id_key: format!("{prefix}:request_id_to_block_id"),
+            memos_key: format!("{prefix}:memos"),
+            signatures_key: format!("{prefix}:signatures"),
+            fee_collection_tasks_key: format!("{prefix}:fee_collection_tasks"),
+            block_post_tasks_hi_key: format!("{prefix}:block_post_tasks_hi"),
+            block_post_tasks_lo_key: format!("{prefix}:block_post_tasks_lo"),
         }
     }
 }
@@ -339,12 +330,7 @@ impl Storage for RedisStorage {
                     }
 
                     // Log the error and retry with exponential backoff
-                    log::warn!(
-                        "Redis operation failed (retry {}/{}): {}",
-                        retries,
-                        MAX_RETRIES,
-                        e
-                    );
+                    log::warn!("Redis operation failed (retry {retries}/{MAX_RETRIES}): {e}");
                     sleep(Duration::from_millis(RETRY_DELAY_MS * retries as u64)).await;
                 }
             }
@@ -402,8 +388,8 @@ impl Storage for RedisStorage {
         })
         .await
         .inspect(|result| match &result {
-            Some(_) => log::info!("Proposal found for request: {}", request_id),
-            None => log::info!("No proposal found for request: {}", request_id),
+            Some(_) => log::info!("Proposal found for request: {request_id}"),
+            None => log::info!("No proposal found for request: {request_id}"),
         })
     }
 
@@ -548,7 +534,7 @@ impl Storage for RedisStorage {
 
         // If releasing the lock failed, log the error but still return the original result
         if let Err(e) = release_result {
-            log::error!("Failed to release lock for {}: {}", lock_name, e);
+            log::error!("Failed to release lock for {lock_name}: {e}");
         }
 
         log::info!(
@@ -585,8 +571,7 @@ impl Storage for RedisStorage {
 
             let block_id = block_id.ok_or_else(|| {
                 StorageError::AddSignatureError(format!(
-                    "block_id not found for request_id: {}",
-                    request_id
+                    "block_id not found for request_id: {request_id}"
                 ))
             })?;
 
@@ -594,10 +579,7 @@ impl Storage for RedisStorage {
             let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await?;
 
             let serialized_memo = serialized_memo.ok_or_else(|| {
-                StorageError::AddSignatureError(format!(
-                    "memo not found for block_id: {}",
-                    block_id
-                ))
+                StorageError::AddSignatureError(format!("memo not found for block_id: {block_id}"))
             })?;
 
             let memo: ProposalMemo = serde_json::from_str(&serialized_memo)?;
@@ -606,7 +588,7 @@ impl Storage for RedisStorage {
             signature
                 .verify(&memo.block_sign_payload, memo.pubkey_hash)
                 .map_err(|e| {
-                    StorageError::AddSignatureError(format!("signature verification failed: {}", e))
+                    StorageError::AddSignatureError(format!("signature verification failed: {e}"))
                 })?;
 
             // Serialize signature
@@ -625,7 +607,7 @@ impl Storage for RedisStorage {
         })
         .await
         .map(|_| {
-            log::info!("Signature added for request: {}", request_id);
+            log::info!("Signature added for request: {request_id}");
         })
     }
 
@@ -638,7 +620,7 @@ impl Storage for RedisStorage {
         let lock_acquired = match self.acquire_lock("process_signatures").await {
             Ok(acquired) => acquired,
             Err(e) => {
-                log::error!("Failed to acquire lock for process_signatures: {}", e);
+                log::error!("Failed to acquire lock for process_signatures: {e}");
                 return Ok(());
             }
         };
@@ -669,9 +651,7 @@ impl Storage for RedisStorage {
                             Ok(memo) => memo,
                             Err(e) => {
                                 log::error!(
-                                    "Failed to deserialize memo for block_id {}: {}",
-                                    block_id,
-                                    e
+                                    "Failed to deserialize memo for block_id {block_id}: {e}"
                                 );
                                 continue;
                             }
@@ -700,7 +680,7 @@ impl Storage for RedisStorage {
                         match serde_json::from_str::<UserSignature>(&serialized) {
                             Ok(sig) => signatures.push(sig),
                             Err(e) => {
-                                log::error!("Failed to deserialize signature: {}", e);
+                                log::error!("Failed to deserialize signature: {e}");
                                 continue;
                             }
                         }
@@ -711,7 +691,7 @@ impl Storage for RedisStorage {
                     let serialized_task = match serde_json::to_string(&block_post_task) {
                         Ok(task) => task,
                         Err(e) => {
-                            log::error!("Failed to serialize block post task: {}", e);
+                            log::error!("Failed to serialize block post task: {e}");
                             continue;
                         }
                     };
@@ -740,7 +720,7 @@ impl Storage for RedisStorage {
                         {
                             Ok(collection) => collection,
                             Err(e) => {
-                                log::error!("Failed to serialize fee collection: {}", e);
+                                log::error!("Failed to serialize fee collection: {e}");
                                 continue;
                             }
                         };
@@ -759,11 +739,7 @@ impl Storage for RedisStorage {
 
                     // Execute the transaction
                     if let Err(e) = pipe.query_async::<()>(&mut conn).await {
-                        log::error!(
-                            "Failed to execute transaction for block_id {}: {}",
-                            block_id,
-                            e
-                        );
+                        log::error!("Failed to execute transaction for block_id {block_id}: {e}");
                         continue;
                     }
                 }
@@ -777,7 +753,7 @@ impl Storage for RedisStorage {
 
         // If releasing the lock failed, log the error but still return the original result
         if let Err(e) = release_result {
-            log::error!("Failed to release lock for process_signatures: {}", e);
+            log::error!("Failed to release lock for process_signatures: {e}");
         }
 
         log::info!("Finished processing signatures");
@@ -857,7 +833,7 @@ impl Storage for RedisStorage {
 
         // If releasing the lock failed, log the error but still return the original result
         if let Err(e) = release_result {
-            log::error!("Failed to release lock for process_fee_collection: {}", e);
+            log::error!("Failed to release lock for process_fee_collection: {e}");
         }
 
         log::info!("Finished processing fee collection tasks");
@@ -902,7 +878,7 @@ impl Storage for RedisStorage {
             match serde_json::from_str::<BlockPostTask>(&serialized_task) {
                 Ok(task) => Ok(Some(task)),
                 Err(e) => {
-                    log::error!("Failed to deserialize block post task: {}", e);
+                    log::error!("Failed to deserialize block post task: {e}");
                     Ok(None)
                 }
             }
@@ -990,7 +966,7 @@ impl Storage for RedisStorage {
 
         // If releasing the lock failed, log the error but still return the original result
         if let Err(e) = release_result {
-            log::error!("Failed to release lock for enqueue_empty_block: {}", e);
+            log::error!("Failed to release lock for enqueue_empty_block: {e}");
         }
 
         log::info!("Finished empty block check");
@@ -1008,7 +984,7 @@ pub mod test_redis_helper {
     };
 
     pub fn run_redis_docker(port: u16, container_name: &str) -> Output {
-        let port_arg = format!("{}:6379", port);
+        let port_arg = format!("{port}:6379");
 
         let output = Command::new("docker")
             .args([
@@ -1150,7 +1126,7 @@ mod tests {
 
         // Create redis storage
         let redis_storage =
-            setup_test_storage("redis-test", &format!("redis://localhost:{}", port)).await;
+            setup_test_storage("redis-test", &format!("redis://localhost:{port}")).await;
         let res = redis_storage.process_requests(true).await;
         assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
 
@@ -1181,7 +1157,7 @@ mod tests {
 
         // Create redis storage
         let redis_storage =
-            setup_test_storage("redis-test", &format!("redis://localhost:{}", port)).await;
+            setup_test_storage("redis-test", &format!("redis://localhost:{port}")).await;
 
         let res = redis_storage.add_tx(true, TxRequest::default()).await;
         assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
@@ -1204,7 +1180,7 @@ mod tests {
 
         let res = block_proposal
             .verify(TxRequest::default().tx)
-            .map_err(|e| ClientError::InvalidBlockProposal(format!("{}", e)));
+            .map_err(|e| ClientError::InvalidBlockProposal(format!("{e}")));
         assert_and_stop(cont_name, AssertUnwindSafe(|| assert!(res.is_ok())));
 
         // Stop docker image
@@ -1234,7 +1210,7 @@ mod tests {
 
         // Create redis storage
         let redis_storage =
-            setup_test_storage("redis-test", &format!("redis://localhost:{}", port)).await;
+            setup_test_storage("redis-test", &format!("redis://localhost:{port}")).await;
 
         // Test enqueue and dequeue block post task
         let res = redis_storage.enqueue_empty_block().await;

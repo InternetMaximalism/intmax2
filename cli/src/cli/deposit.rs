@@ -142,7 +142,7 @@ pub async fn deposit(
             .ok_or(CliError::UnexpectedError(
                 "Cloud not find token index".to_string(),
             ))?;
-        log::info!("token index: {}", token_index);
+        log::info!("token index: {token_index}");
         let mut deposit_data = deposit_data;
         deposit_data.set_token_index(token_index);
         client

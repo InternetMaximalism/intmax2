@@ -292,11 +292,7 @@ impl RollupContract {
         from_eth_block: u64,
         to_eth_block: u64,
     ) -> Result<Vec<BlockPosted>, BlockchainError> {
-        log::info!(
-            "get_blocks_posted_event: from_block={}, to_block={}",
-            from_eth_block,
-            to_eth_block
-        );
+        log::info!("get_blocks_posted_event: from_block={from_eth_block}, to_block={to_eth_block}");
         let contract = Rollup::new(self.address, self.provider.clone());
         let events = contract
             .event_filter::<Rollup::BlockPosted>()
@@ -351,8 +347,7 @@ impl RollupContract {
             )
             .map_err(|e| {
                 BlockchainError::DecodeCallDataError(format!(
-                    "failed to decode post block calldata: {}",
-                    e
+                    "failed to decode post block calldata: {e}"
                 ))
             })?;
             full_blocks.push(FullBlockWithMeta {
@@ -374,9 +369,7 @@ impl RollupContract {
         to_eth_block_number: u64,
     ) -> Result<Vec<DepositLeafInserted>, BlockchainError> {
         log::info!(
-            "get_deposit_leaf_inserted_event: from_eth_block={}, to_eth_block_number={}",
-            from_eth_block,
-            to_eth_block_number
+            "get_deposit_leaf_inserted_event: from_eth_block={from_eth_block}, to_eth_block_number={to_eth_block_number}"
         );
         let contract = Rollup::new(self.address, self.provider.clone());
         let events = contract

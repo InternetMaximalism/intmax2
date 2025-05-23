@@ -46,7 +46,7 @@ impl Client {
         let user_data = encrypted_data
             .map(|encrypted| UserData::decrypt(key, Some(key.pubkey), &encrypted))
             .transpose()
-            .map_err(|e| SyncError::DecryptionError(format!("failed to decrypt user data: {}", e)))?
+            .map_err(|e| SyncError::DecryptionError(format!("failed to decrypt user data: {e}")))?
             .unwrap_or(UserData::new(key.pubkey));
         Ok((user_data, digest))
     }
@@ -123,7 +123,7 @@ impl Client {
         meta: MetaDataWithBlockNumber,
         deposit_data: &DepositData,
     ) -> Result<(), SyncError> {
-        log::info!("sync_deposit: {:?}", meta);
+        log::info!("sync_deposit: {meta:?}");
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         let nullifier: Bytes32 = deposit_data.deposit().unwrap().poseidon_hash().into();
         if user_data
@@ -175,7 +175,7 @@ impl Client {
         meta: MetaDataWithBlockNumber,
         transfer_data: &TransferData,
     ) -> Result<(), SyncError> {
-        log::info!("sync_transfer: {:?}", meta);
+        log::info!("sync_transfer: {meta:?}");
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         // nullifier check
         let nullifier = transfer_data.transfer.nullifier();
@@ -253,7 +253,7 @@ impl Client {
         meta: MetaDataWithBlockNumber,
         tx_data: &TxData,
     ) -> Result<(), SyncError> {
-        log::info!("sync_tx: {:?}", meta);
+        log::info!("sync_tx: {meta:?}");
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         let prev_balance_proof = get_balance_proof(&user_data)?;
         let balance_proof = update_send_by_sender(
@@ -294,14 +294,12 @@ impl Client {
         key: KeySet,
         to_block_number: u32,
     ) -> Result<(), SyncError> {
-        log::info!("update_no_send: {:?}", to_block_number);
+        log::info!("update_no_send: {to_block_number:?}");
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
         let current_user_block_number = user_data.block_number()?;
         if current_user_block_number >= to_block_number {
             log::info!(
-                "No need to update: current {} >= to {}",
-                current_user_block_number,
-                to_block_number
+                "No need to update: current {current_user_block_number} >= to {to_block_number}"
             );
             return Ok(());
         }

@@ -210,7 +210,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         )
         .await?;
         let validity_proof = response.validity_proof.decompress().map_err(|e| {
-            ServerError::ProofDecodeError(format!("Failed to decompress proof: {}", e))
+            ServerError::ProofDecodeError(format!("Failed to decompress proof: {e}"))
         })?;
         Ok(validity_proof)
     }

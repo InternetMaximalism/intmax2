@@ -11,21 +11,14 @@ use validity_prover::{
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    logger::init_logger().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    logger::init_logger().map_err(io::Error::other)?;
 
     dotenvy::dotenv().ok();
-    let env: EnvVar = envy::from_env().map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("Failed to parse environment variables: {}", e),
-        )
-    })?;
-    let state = State::new(&env).await.map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("Failed to create validity prover: {}", e),
-        )
-    })?;
+    let env: EnvVar = envy::from_env()
+        .map_err(|e| io::Error::other(format!("Failed to parse environment variables: {e}")))?;
+    let state = State::new(&env)
+        .await
+        .map_err(|e| io::Error::other(format!("Failed to create validity prover: {e}")))?;
 
     let data = Data::new(state);
 

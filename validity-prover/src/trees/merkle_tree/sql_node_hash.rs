@@ -268,9 +268,7 @@ mod tests {
             assert_eq!(
                 proof.siblings.len(),
                 expected_length,
-                "Proof for index {} should have {} siblings",
-                index,
-                expected_length
+                "Proof for index {index} should have {expected_length} siblings"
             );
 
             let mut path = BitPath::new(height as u32, index);
@@ -282,8 +280,7 @@ mod tests {
                 let expected_zero_hash = node_hashes.zero_hashes[sibling_path.len() as usize];
                 assert_eq!(
                     *sibling, expected_zero_hash,
-                    "Sibling hash at position {} for index {} should be zero hash",
-                    i, index
+                    "Sibling hash at position {i} for index {index} should be zero hash"
                 );
             }
         }
@@ -332,9 +329,7 @@ mod tests {
             assert_eq!(
                 proof.siblings.len(),
                 height,
-                "Proof for index {} should have {} siblings",
-                index,
-                height
+                "Proof for index {index} should have {height} siblings"
             );
 
             for (i, sibling) in proof.siblings.iter().enumerate() {
@@ -345,8 +340,7 @@ mod tests {
                     let expected_zero_hash = node_hashes.zero_hashes[sibling_path.len() as usize];
                     assert_eq!(
                         *sibling, expected_zero_hash,
-                        "Sibling hash at position {} for index {} should be zero hash",
-                        i, index
+                        "Sibling hash at position {i} for index {index} should be zero hash"
                     );
                 }
             }
@@ -390,9 +384,7 @@ mod tests {
             assert_eq!(
                 proof.siblings.len(),
                 expected_length,
-                "Proof for sparse index {} should have {} siblings",
-                index,
-                expected_length
+                "Proof for sparse index {index} should have {expected_length} siblings"
             );
         }
 
@@ -435,9 +427,7 @@ mod tests {
             assert_eq!(
                 proof.siblings.len(),
                 expected_length,
-                "Proof for boundary index {} should have {} siblings",
-                index,
-                expected_length
+                "Proof for boundary index {index} should have {expected_length} siblings"
             );
         }
 
@@ -479,9 +469,7 @@ mod tests {
             assert_eq!(
                 proof.siblings.len(),
                 expected_length,
-                "Proof at timestamp {} should have {} siblings",
-                ts,
-                expected_length
+                "Proof at timestamp {ts} should have {expected_length} siblings"
             );
         }
 
@@ -525,8 +513,7 @@ mod tests {
                 let expected_zero_hash = node_hashes.zero_hashes[sibling_path.len() as usize];
                 assert_eq!(
                     *sibling, expected_zero_hash,
-                    "Sibling hash at position {} for index {} should be zero hash",
-                    i, index
+                    "Sibling hash at position {i} for index {index} should be zero hash"
                 );
             }
         }
@@ -578,15 +565,13 @@ mod tests {
                 let saved_hash = TestValue::empty_leaf().hash();
                 assert_eq!(
                     *sibling, saved_hash,
-                    "Sibling hash at position {} should be custom hash",
-                    i
+                    "Sibling hash at position {i} should be custom hash"
                 );
             } else {
                 let expected_zero_hash = node_hashes.zero_hashes[sibling_path.len() as usize];
                 assert_eq!(
                     *sibling, expected_zero_hash,
-                    "Sibling hash at position {} should be zero hash",
-                    i
+                    "Sibling hash at position {i} should be zero hash"
                 );
             }
         }

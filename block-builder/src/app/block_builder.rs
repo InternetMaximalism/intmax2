@@ -163,15 +163,15 @@ impl BlockBuilder {
         let block_builder_address =
             convert_address_to_intmax(get_address_from_private_key(env.block_builder_private_key));
         // log configuration
-        log::info!("block_builder_address: {}", block_builder_address);
+        log::info!("block_builder_address: {block_builder_address}");
         log::info!("block_builder_url: {}", env.block_builder_url);
         log::info!(
             "gas limit for block post: {:?}",
             env.gas_limit_for_block_post.clone()
         );
-        log::info!("eth_allowance_for_block: {}", eth_allowance_for_block);
-        log::info!("use_fee: {}", use_fee);
-        log::info!("use_collateral_fee: {}", use_collateral_fee);
+        log::info!("eth_allowance_for_block: {eth_allowance_for_block}");
+        log::info!("use_fee: {use_fee}");
+        log::info!("use_collateral_fee: {use_collateral_fee}");
         log::info!(
             "beneficiary_pubkey: {}",
             beneficiary_pubkey.map(|b| b.to_hex()).unwrap_or_default()
@@ -242,7 +242,7 @@ impl BlockBuilder {
             .await
             .map_err(|e| BlockBuilderError::BlockChainHealthError(e.to_string()))?;
         let balance = convert_u256_to_intmax(balance);
-        log::info!("block builder balance: {}", balance);
+        log::info!("block builder balance: {balance}");
         if balance < self.config.eth_allowance_for_block {
             return Err(BlockBuilderError::BlockChainHealthError(format!(
                 "Block builder's balance is not enough: current {} < required {}",
@@ -260,10 +260,7 @@ impl BlockBuilder {
         tx: Tx,
         fee_proof: &Option<FeeProof>,
     ) -> Result<String, BlockBuilderError> {
-        log::info!(
-            "send_tx_request is_registration_block: {}",
-            is_registration_block
-        );
+        log::info!("send_tx_request is_registration_block: {is_registration_block}");
         // Verify account info
         let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
         self.verify_account_info(is_registration_block, pubkey, &account_info)
@@ -346,7 +343,7 @@ impl BlockBuilder {
         &self,
         request_id: &str,
     ) -> Result<Option<BlockProposal>, BlockBuilderError> {
-        log::info!("query_proposal request_id: {}", request_id);
+        log::info!("query_proposal request_id: {request_id}");
         let proposal = self.storage.query_proposal(request_id).await?;
         Ok(proposal)
     }
@@ -357,7 +354,7 @@ impl BlockBuilder {
         request_id: &str,
         signature: UserSignature,
     ) -> Result<(), BlockBuilderError> {
-        log::info!("post_signature request_id: {}", request_id);
+        log::info!("post_signature request_id: {request_id}");
         self.storage.add_signature(request_id, signature).await?;
         Ok(())
     }
@@ -529,7 +526,7 @@ mod tests {
         let env = EnvVar {
             port: 9004,
             block_builder_url: "http://localhost:9004".to_string(),
-            redis_url: Some(format!("redis://localhost:{}", port).to_string()),
+            redis_url: Some(format!("redis://localhost:{port}").to_string()),
             cluster_id: Some("1".to_string()),
             l2_rpc_url: "http://localhost:8545".to_string(),
             rollup_contract_address: AlloyAddress::default(),

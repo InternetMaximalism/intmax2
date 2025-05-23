@@ -86,10 +86,10 @@ impl PrivateZKPServerClient {
         let response: GetPublicKeyResponse =
             get_request::<(), _>(&self.base_url, "/v1/public-key", None).await?;
         let public_key_bytes = BASE64_STANDARD.decode(&response.public_key).map_err(|e| {
-            ServerError::DeserializationError(format!("Failed to decode public key: {:?}", e))
+            ServerError::DeserializationError(format!("Failed to decode public key: {e:?}"))
         })?;
         let public_key = RsaPublicKey::from_public_key_der(&public_key_bytes).map_err(|e| {
-            ServerError::DeserializationError(format!("Failed to parse public key: {:?}", e))
+            ServerError::DeserializationError(format!("Failed to parse public key: {e:?}"))
         })?;
         Ok(public_key)
     }
@@ -275,7 +275,7 @@ impl PrivateZKPServerClient {
         let rsa_pubkey = self.get_pubkey().await?;
         let encrypted_request = request.encrypt_with_rsa(&rsa_pubkey);
         let encrypted_data = bincode::serialize(&encrypted_request).map_err(|e| {
-            ServerError::SerializeError(format!("Failed to serialize encrypted request: {:?}", e))
+            ServerError::SerializeError(format!("Failed to serialize encrypted request: {e:?}"))
         })?;
         let request = CreateProveRequest { encrypted_data };
         let response: CreateProofResponse =
@@ -317,8 +317,7 @@ impl PrivateZKPServerClient {
                     ProofResultWithError::decrypt(key, None, &response.result.unwrap()).map_err(
                         |e| {
                             ServerError::DeserializationError(format!(
-                                "Failed to decrypt proof result: {:?}",
-                                e
+                                "Failed to decrypt proof result: {e:?}"
                             ))
                         },
                     )?;
@@ -348,8 +347,7 @@ impl PrivateZKPServerClient {
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         if let Some(error) = proof_result.error {
             return Err(ServerError::InvalidResponse(format!(
-                "Proof result contains error: {}",
-                error
+                "Proof result contains error: {error}"
             )));
         }
         if proof_result.proof.is_none() {

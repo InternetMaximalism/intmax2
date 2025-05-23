@@ -45,7 +45,7 @@ pub async fn transfer_loop(
             match result {
                 Ok(_) => break,
                 Err(e) => {
-                    log::warn!("Failed to send transfer: {}", e);
+                    log::warn!("Failed to send transfer: {e}");
                 }
             }
             log::warn!("Retrying...");

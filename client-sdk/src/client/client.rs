@@ -165,12 +165,7 @@ impl Client {
         is_mining: bool,
     ) -> Result<DepositResult, ClientError> {
         log::info!(
-            "prepare_deposit: pubkey {}, amount {}, token_type {:?}, token_address {}, token_id {}",
-            pubkey,
-            amount,
-            token_type,
-            token_address,
-            token_id
+            "prepare_deposit: pubkey {pubkey}, amount {amount}, token_type {token_type:?}, token_address {token_address}, token_id {token_id}"
         );
         if is_mining && !validate_mining_deposit_criteria(token_type, amount) {
             return Err(ClientError::InvalidMiningDepositCriteria);
@@ -200,13 +195,13 @@ impl Client {
         let ephemeral_key = KeySet::rand(&mut default_rng());
         let digests = self
             .store_vault_server
-            .save_data_batch(ephemeral_key, &[save_entry.clone()])
+            .save_data_batch(ephemeral_key, std::slice::from_ref(&save_entry))
             .await?;
         let deposit_digest = *digests.first().ok_or(ClientError::UnexpectedError(
             "deposit_digest not found".to_string(),
         ))?;
         let backup_csv = make_backup_csv_from_entries(&[save_entry])
-            .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {}", e)))?;
+            .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {e}")))?;
         let result = DepositResult {
             deposit_data,
             deposit_digest,
@@ -483,7 +478,7 @@ impl Client {
         // verify proposal
         proposal
             .verify(memo.tx)
-            .map_err(|e| ClientError::InvalidBlockProposal(format!("{}", e)))?;
+            .map_err(|e| ClientError::InvalidBlockProposal(format!("{e}")))?;
 
         // verify expiry
         let current_time = chrono::Utc::now().timestamp() as u64;
@@ -674,7 +669,7 @@ impl Client {
             .chain(misc_entries.into_iter())
             .collect::<Vec<_>>();
         let backup_csv = make_backup_csv_from_entries(&all_entries)
-            .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {}", e)))?;
+            .map_err(|e| ClientError::BackupError(format!("Failed to make backup csv: {e}")))?;
 
         let result = TxResult {
             tx_tree_root: proposal.block_sign_payload.tx_tree_root,
@@ -881,24 +876,18 @@ impl Client {
         let onchain_block_number = self.rollup_contract.get_latest_block_number().await?;
         wait_till_validity_prover_synced(self.validity_prover.as_ref(), true, onchain_block_number)
             .await?;
-        log::info!(
-            "validity prover is synced for onchain block {}",
-            onchain_block_number
-        );
+        log::info!("validity prover is synced for onchain block {onchain_block_number}");
         let validity_proof = self
             .validity_prover
             .get_validity_proof(onchain_block_number)
             .await?;
         let verifier = CircuitVerifiers::load().get_validity_vd();
         verifier.verify(validity_proof.clone()).map_err(|e| {
-            ClientError::ValidityProverError(format!("Failed to verify validity proof: {}", e))
+            ClientError::ValidityProverError(format!("Failed to verify validity proof: {e}"))
         })?;
         let validity_pis =
             ValidityPublicInputs::from_pis(&validity_proof.public_inputs).map_err(|e| {
-                ClientError::ValidityProverError(format!(
-                    "Failed to parse validity proof pis: {}",
-                    e
-                ))
+                ClientError::ValidityProverError(format!("Failed to parse validity proof pis: {e}"))
             })?;
         let onchain_block_hash = self
             .rollup_contract
@@ -922,8 +911,7 @@ fn balance_check(balances: &Balances, amounts: &[(u32, U256)]) -> Result<(), Cli
         let is_insufficient = balances.sub_token(*token_index, *amount);
         if is_insufficient {
             return Err(ClientError::BalanceError(format!(
-                "Insufficient balance: {} < {} for token #{}",
-                prev_balance, amount, token_index
+                "Insufficient balance: {prev_balance} < {amount} for token #{token_index}"
             )));
         }
     }

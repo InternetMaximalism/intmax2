@@ -24,9 +24,9 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
     bearer_token: Option<String>,
     body: Option<&B>,
 ) -> Result<R, ServerError> {
-    let url = format!("{}{}", base_url, endpoint);
+    let url = format!("{base_url}{endpoint}");
     let _ = Url::parse(&url)
-        .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {}: {}", url, e)))?;
+        .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {url}: {e}")))?;
     let client = reqwest::Client::new();
     let mut request = client.post(url.clone());
     if let Some(token) = bearer_token {
@@ -42,13 +42,13 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
     // Serialize the body to a string for logging
     let body_str = if let Some(body) = &body {
         let body_str = serde_json::to_string(body)
-            .map_err(|e| ServerError::SerializeError(format!("Failed to serialize body: {}", e)))?;
+            .map_err(|e| ServerError::SerializeError(format!("Failed to serialize body: {e}")))?;
         Some(body_str)
     } else {
         None
     };
     let body_size = body_str.as_ref().map(|s| s.len()).unwrap_or(0);
-    log::debug!("POST request url: {} body size: {} bytes", url, body_size);
+    log::debug!("POST request url: {url} body size: {body_size} bytes");
 
     handle_response(response, &url, &body_str).await
 }
@@ -62,15 +62,14 @@ where
     Q: Serialize,
     R: DeserializeOwned,
 {
-    let mut url = format!("{}{}", base_url, endpoint);
+    let mut url = format!("{base_url}{endpoint}");
     let _ = Url::parse(&url)
-        .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {}: {}", url, e)))?;
+        .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {url}: {e}")))?;
     let query_str = query
         .as_ref()
         .map(|q| {
-            serde_qs::to_string(&q).map_err(|e| {
-                ServerError::SerializeError(format!("Failed to serialize query: {}", e))
-            })
+            serde_qs::to_string(&q)
+                .map_err(|e| ServerError::SerializeError(format!("Failed to serialize query: {e}")))
         })
         .transpose()?;
     if query_str.is_some() {
@@ -80,7 +79,7 @@ where
     let response = with_retry(|| async { client.get(&url).send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
-    log::debug!("GET request url: {}", url);
+    log::debug!("GET request url: {url}");
     handle_response(response, &url, &query_str).await
 }
 
@@ -117,9 +116,10 @@ async fn handle_response<R: DeserializeOwned>(
         ));
     }
 
-    let response_text = response.text().await.map_err(|e| {
-        ServerError::DeserializationError(format!("Failed to read response: {}", e))
-    })?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| ServerError::DeserializationError(format!("Failed to read response: {e}")))?;
 
     match serde_json::from_str::<R>(&response_text) {
         Ok(result) => Ok(result),
@@ -132,8 +132,7 @@ async fn handle_response<R: DeserializeOwned>(
                 response_text.chars().take(500).collect::<String>()
             };
             Err(ServerError::DeserializationError(format!(
-                "Failed to deserialize response of url:{} response:{}, error:{}",
-                url, abr_response, e
+                "Failed to deserialize response of url:{url} response:{abr_response}, error:{e}"
             )))
         }
     }

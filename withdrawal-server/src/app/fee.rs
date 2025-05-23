@@ -12,10 +12,10 @@ pub fn parse_fee_str(fee: &str) -> Result<Vec<Fee>, WithdrawalServerError> {
             ));
         }
         let token_index = fee_parts[0].parse::<u32>().map_err(|e| {
-            WithdrawalServerError::ParseError(format!("Failed to parse token index: {}", e))
+            WithdrawalServerError::ParseError(format!("Failed to parse token index: {e}"))
         })?;
         let amount: U256 = fee_parts[1].parse().map_err(|e| {
-            WithdrawalServerError::ParseError(format!("Failed to convert fee amount: {}", e))
+            WithdrawalServerError::ParseError(format!("Failed to convert fee amount: {e}"))
         })?;
         fees.push(Fee {
             token_index,
@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn test_u32_max_token_index() {
         let max = u32::MAX;
-        let result = parse_fee_str(&format!("{}:100", max)).unwrap();
+        let result = parse_fee_str(&format!("{max}:100")).unwrap();
         assert_eq!(result[0].token_index, max);
         assert_eq!(result[0].amount, u256_from_u32(100));
     }
@@ -204,7 +204,7 @@ mod tests {
         // The largest U256: 2^256 - 1 = 115792089237316195423570985008687907853269984665640564039457584007913129639935
         let max_u256 =
             "115792089237316195423570985008687907853269984665640564039457584007913129639935";
-        let result = parse_fee_str(&format!("0:{}", max_u256)).unwrap();
+        let result = parse_fee_str(&format!("0:{max_u256}")).unwrap();
         assert_eq!(result[0].token_index, 0);
         assert_eq!(format!("{}", result[0].amount), max_u256);
     }
@@ -214,7 +214,7 @@ mod tests {
         // 2^256 is too big
         let too_big =
             "115792089237316195423570985008687907853269984665640564039457584007913129639936";
-        let result = parse_fee_str(&format!("0:{}", too_big));
+        let result = parse_fee_str(&format!("0:{too_big}"));
         assert!(matches!(result, Err(WithdrawalServerError::ParseError(_))));
     }
 

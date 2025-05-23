@@ -82,8 +82,8 @@ pub fn get_client() -> Result<Client, CliError> {
         };
     let withdrawal_server = Box::new(WithdrawalServerClient::new(&env.withdrawal_server_base_url));
 
-    let l1_provider = get_provider_with_fallback(&[env.l1_rpc_url.clone()])?;
-    let l2_provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
+    let l1_provider = get_provider_with_fallback(std::slice::from_ref(&env.l1_rpc_url))?;
+    let l2_provider = get_provider_with_fallback(std::slice::from_ref(&env.l2_rpc_url))?;
 
     let liquidity_contract = LiquidityContract::new(
         l1_provider,

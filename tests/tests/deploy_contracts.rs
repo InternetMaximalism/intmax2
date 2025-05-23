@@ -23,7 +23,7 @@ async fn deploy_contracts() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     let config = envy::from_env::<EnvVar>().unwrap();
 
-    let provider = get_provider_with_fallback(&[config.rpc_url.clone()]).unwrap();
+    let provider = get_provider_with_fallback(std::slice::from_ref(&config.rpc_url)).unwrap();
 
     let rollup_contract =
         RollupContract::deploy(provider.clone(), config.deployer_private_key).await?;

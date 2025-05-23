@@ -296,7 +296,7 @@ async fn download_s3(url: &str) -> Result<Vec<u8>, ServerError> {
     let response = response
         .bytes()
         .await
-        .map_err(|e| ServerError::InvalidResponse(format!("Failed to read response: {:?}", e)))?;
+        .map_err(|e| ServerError::InvalidResponse(format!("Failed to read response: {e:?}")))?;
     Ok(response.to_vec())
 }
 

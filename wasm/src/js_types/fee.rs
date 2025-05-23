@@ -76,14 +76,14 @@ impl TryFrom<JsTransferFeeQuote> for TransferFeeQuote {
                 .beneficiary
                 .map(|b| U256::from_hex(&b))
                 .transpose()
-                .map_err(|e| JsError::new(&format!("Invalid beneficiary address: {}", e)))?,
+                .map_err(|e| JsError::new(&format!("Invalid beneficiary address: {e}")))?,
             fee: js_fee_quote.fee.map(JsFee::try_into).transpose()?,
             collateral_fee: js_fee_quote
                 .collateral_fee
                 .map(JsFee::try_into)
                 .transpose()?,
             block_builder_address: Address::from_hex(&js_fee_quote.block_builder_address)
-                .map_err(|e| JsError::new(&format!("Invalid block builder address: {}", e)))?,
+                .map_err(|e| JsError::new(&format!("Invalid block builder address: {e}")))?,
         })
     }
 }

@@ -113,7 +113,7 @@ pub async fn prepare_deposit(
             is_mining,
         )
         .await
-        .map_err(|e| JsError::new(&format!("failed to prepare deposit call: {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to prepare deposit call: {e}")))?;
     Ok(deposit_result.into())
 }
 
@@ -127,7 +127,7 @@ pub async fn await_tx_sendable(
 ) -> Result<(), JsError> {
     init_logger();
     let transfers: Vec<JsTransfer> = serde_wasm_bindgen::from_value(transfers.clone())
-        .map_err(|e| JsError::new(&format!("failed to deserialize transfers: {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to deserialize transfers: {e}")))?;
     let transfers: Vec<Transfer> = transfers
         .iter()
         .map(|transfer| transfer.clone().try_into())
@@ -155,14 +155,14 @@ pub async fn send_tx_request(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let transfers: Vec<JsTransfer> = serde_wasm_bindgen::from_value(transfers.clone())
-        .map_err(|e| JsError::new(&format!("failed to deserialize transfers: {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to deserialize transfers: {e}")))?;
     let transfers: Vec<Transfer> = transfers
         .iter()
         .map(|transfer| transfer.clone().try_into())
         .collect::<Result<Vec<_>, JsError>>()?;
     let payment_memos: Vec<JsPaymentMemoEntry> =
         serde_wasm_bindgen::from_value(payment_memos.clone())
-            .map_err(|e| JsError::new(&format!("failed to deserialize payment memos: {}", e)))?;
+            .map_err(|e| JsError::new(&format!("failed to deserialize payment memos: {e}")))?;
     let payment_memos: Vec<PaymentMemoEntry> = payment_memos
         .iter()
         .map(|e| e.clone().try_into())
@@ -179,7 +179,7 @@ pub async fn send_tx_request(
             &fee_quote,
         )
         .await
-        .map_err(|e| JsError::new(&format!("failed to send tx request {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to send tx request {e}")))?;
 
     Ok(JsTxRequestMemo::from_tx_request_memo(&memo))
 }
@@ -219,7 +219,7 @@ pub async fn get_tx_status(
     let status = client
         .get_tx_status(pubkey, tx_tree_root)
         .await
-        .map_err(|e| JsError::new(&format!("failed to get tx status: {}", e)))?;
+        .map_err(|e| JsError::new(&format!("failed to get tx status: {e}")))?;
     Ok(status.to_string())
 }
 

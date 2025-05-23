@@ -46,8 +46,7 @@ impl StoreVaultServer {
             if let Some((_, digest)) = result {
                 if digest != prev_digest {
                     return Err(StoreVaultError::LockError(format!(
-                        "prev_digest {} mismatch with stored digest {}",
-                        prev_digest, digest
+                        "prev_digest {prev_digest} mismatch with stored digest {digest}"
                     )));
                 }
             } else {
@@ -391,7 +390,10 @@ mod tests {
         };
         let entry_1_digest = get_digest(&entry_1.data);
 
-        let urls = vault.batch_save_data(&[entry_1.clone()]).await.unwrap();
+        let urls = vault
+            .batch_save_data(std::slice::from_ref(&entry_1))
+            .await
+            .unwrap();
         // test case 1
         assert_eq!(urls, vec![entry_1_digest]);
 
@@ -492,11 +494,20 @@ mod tests {
         let entry_3_digest = get_digest(&entry_3.data);
 
         // save test data
-        vault.batch_save_data(&[entry_1.clone()]).await.unwrap();
+        vault
+            .batch_save_data(std::slice::from_ref(&entry_1))
+            .await
+            .unwrap();
         sleep(Duration::from_secs(1)).await;
-        vault.batch_save_data(&[entry_2.clone()]).await.unwrap();
+        vault
+            .batch_save_data(std::slice::from_ref(&entry_2))
+            .await
+            .unwrap();
         sleep(Duration::from_secs(1)).await;
-        vault.batch_save_data(&[entry_3.clone()]).await.unwrap();
+        vault
+            .batch_save_data(std::slice::from_ref(&entry_3))
+            .await
+            .unwrap();
 
         let (urls, metadata) = vault
             .get_data_sequence(

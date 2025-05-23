@@ -19,7 +19,7 @@ impl JsTxRequestMemo {
 
     pub fn to_tx_request_memo(&self) -> Result<TxRequestMemo, JsError> {
         serde_json::from_str(&self.data)
-            .map_err(|e| JsError::new(&format!("failed to parse tx request memo {}", e)))
+            .map_err(|e| JsError::new(&format!("failed to parse tx request memo {e}")))
     }
 }
 
@@ -52,7 +52,7 @@ impl JsBlockProposal {
 
     pub fn to_block_proposal(&self) -> Result<BlockProposal, JsError> {
         serde_json::from_str(&self.data)
-            .map_err(|e| JsError::new(&format!("failed to parse block proposal {}", e)))
+            .map_err(|e| JsError::new(&format!("failed to parse block proposal {e}")))
     }
 }
 

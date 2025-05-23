@@ -18,15 +18,12 @@ pub async fn wait_till_validity_prover_synced(
     while synced_block_number < block_number {
         if tries > MAX_SYNC_TRIES {
             return Err(StrategyError::ValidityProverIsNotSynced(format!(
-                "expected block number {} but got {} after {} tries",
-                block_number, synced_block_number, tries
+                "expected block number {block_number} but got {synced_block_number} after {tries} tries"
             )));
         }
         tries += 1;
         log::warn!(
-            "validity prover is not synced: target {}, current {}",
-            block_number,
-            synced_block_number
+            "validity prover is not synced: target {block_number}, current {synced_block_number}"
         );
 
         sleep_for(VALIDITY_PROVER_SYNC_SLEEP_TIME).await;
@@ -39,15 +36,12 @@ pub async fn wait_till_validity_prover_synced(
     while validity_proof_block_number < block_number {
         if tries > MAX_PROOF_SYNC_TRIES {
             return Err(StrategyError::ValidityProverIsNotSynced(format!(
-                "expected validity proof block number {} but got {} after {} tries",
-                block_number, validity_proof_block_number, tries
+                "expected validity proof block number {block_number} but got {validity_proof_block_number} after {tries} tries"
             )));
         }
         tries += 1;
         log::warn!(
-            "waiting for validity proof: target {}, current {}",
-            block_number,
-            validity_proof_block_number
+            "waiting for validity proof: target {block_number}, current {validity_proof_block_number}"
         );
         sleep_for(VALIDITY_PROVER_SYNC_SLEEP_TIME).await;
         validity_proof_block_number = validity_prover.get_validity_proof_block_number().await?;

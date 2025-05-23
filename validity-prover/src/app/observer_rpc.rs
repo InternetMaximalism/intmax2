@@ -283,8 +283,7 @@ impl RPCObserver {
         let reset_eth_block_number =
             local_last_eth_block_number.unwrap_or(self.default_eth_block_number(event_type));
         warn!(
-            "Reset checkpoint. Event type: {}, Local last eth block number: {:?}, Reset eth block number: {}, Reason: {}",
-            event_type, local_last_eth_block_number, reset_eth_block_number, reason
+            "Reset checkpoint. Event type: {event_type}, Local last eth block number: {local_last_eth_block_number:?}, Reset eth block number: {reset_eth_block_number}, Reason: {reason}"
         );
         self.check_point_store
             .set_check_point(event_type, reset_eth_block_number)
@@ -319,8 +318,7 @@ impl RPCObserver {
         if from_eth_block_number > current_eth_block_number {
             // This should never happen unless checkpoint is corrupted, so we need to reset the checkpoint
             let reason = format!(
-                "from_eth_block_number : {} > current_eth_block_number: {}",
-                from_eth_block_number, current_eth_block_number
+                "from_eth_block_number : {from_eth_block_number} > current_eth_block_number: {current_eth_block_number}"
             );
             self.reset_check_point(event_type, local_last_eth_block_number, &reason)
                 .await?;
@@ -368,11 +366,7 @@ impl RPCObserver {
                 {
                     // This means we have synced all events but the onchain event is not synced yet
                     let reason = format!(
-                        "Sync all events but onchain event is not synced yet. Local next event id: {}, Onchain next event id: {}, From eth block number: {}, To eth block number: {}",
-                        local_next_event_id,
-                        onchain_next_event_id,
-                        from_eth_block_number,
-                        to_eth_block_number
+                        "Sync all events but onchain event is not synced yet. Local next event id: {local_next_event_id}, Onchain next event id: {onchain_next_event_id}, From eth block number: {from_eth_block_number}, To eth block number: {to_eth_block_number}"
                     );
                     self.reset_check_point(event_type, local_last_eth_block_number, &reason)
                         .await?;
@@ -396,11 +390,7 @@ impl RPCObserver {
                 if checkpoint_eth_block_number.is_none() {
                     // This never happens except for RPC issues
                     let reason = format!(
-                        "Checkpoint eth block number is None But event gap detected. Expected next event id: {}, Got event id: {}, From eth block number: {}, To eth block number: {}",
-                        expected_next_event_id,
-                        got_event_id,
-                        from_eth_block_number,
-                        to_eth_block_number
+                        "Checkpoint eth block number is None But event gap detected. Expected next event id: {expected_next_event_id}, Got event id: {got_event_id}, From eth block number: {from_eth_block_number}, To eth block number: {to_eth_block_number}"
                     );
                     self.reset_check_point(event_type, local_last_eth_block_number, &reason)
                         .await?;
@@ -408,11 +398,7 @@ impl RPCObserver {
                 }
                 // If event gap detected, we need to reset the checkpoint
                 let reason = format!(
-                    "Event gap detected. Expected next event id: {}, Got event id: {}, From eth block number: {}, To eth block number: {}",
-                    expected_next_event_id,
-                    got_event_id,
-                    from_eth_block_number,
-                    to_eth_block_number
+                    "Event gap detected. Expected next event id: {expected_next_event_id}, Got event id: {got_event_id}, From eth block number: {from_eth_block_number}, To eth block number: {to_eth_block_number}"
                 );
                 self.reset_check_point(event_type, local_last_eth_block_number, &reason)
                     .await?;
@@ -502,8 +488,7 @@ pub fn generate_error_for_test() -> Result<(), ObserverError> {
     for timestamp in timestamps {
         if timestamp > now.saturating_sub(100) && timestamp < now.saturating_add(100) {
             return Err(ObserverError::EnvError(format!(
-                "Error triggered by ERROR_TIMESTAMPS at time {}",
-                now
+                "Error triggered by ERROR_TIMESTAMPS at time {now}"
             )));
         }
     }

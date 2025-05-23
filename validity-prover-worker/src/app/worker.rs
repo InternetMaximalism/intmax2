@@ -74,7 +74,7 @@ impl Worker {
 
             let (block_number, task) = task.unwrap();
             self.running_tasks.write().await.insert(block_number);
-            log::info!("processing block_number {}", block_number,);
+            log::info!("processing block_number {block_number}",);
 
             // Prove the transition on another thread
             let transition_processor = self.transition_processor.clone();
@@ -87,18 +87,14 @@ impl Worker {
                 transition_processor.prove(&prev_validity_pis, &validity_witness)
             })
             .await
-            .map_err(|e| format!("panic while proving: {:?}", e))
-            .and_then(|r| r.map_err(|e| format!("error while proving: {:?}", e)));
+            .map_err(|e| format!("panic while proving: {e:?}"))
+            .and_then(|r| r.map_err(|e| format!("error while proving: {e:?}")));
             if let Err(e) = result {
-                log::error!(
-                    "error while proving for block number {}: {:?}",
-                    block_number,
-                    e
-                );
+                log::error!("error while proving for block number {block_number}: {e:?}");
                 self.running_tasks.write().await.remove(&block_number);
                 continue;
             }
-            log::info!("proof generated for block_number {}", block_number,);
+            log::info!("proof generated for block_number {block_number}",);
             let result = TransitionProofTaskResult {
                 block_number,
                 proof: result.ok(),
@@ -106,7 +102,7 @@ impl Worker {
             };
             self.manager.complete_task(block_number, &result).await?;
             self.running_tasks.write().await.remove(&block_number);
-            log::info!("completed block_number {}", block_number);
+            log::info!("completed block_number {block_number}");
         }
     }
 
@@ -119,9 +115,9 @@ impl Worker {
                     .submit_heartbeat(&self.worker_id, block_number)
                     .await
                 {
-                    log::error!("error while submitting heartbeat: {:?}", e);
+                    log::error!("error while submitting heartbeat: {e:?}");
                 } else {
-                    log::info!("submitted heartbeat for block_number {}", block_number);
+                    log::info!("submitted heartbeat for block_number {block_number}");
                 }
             }
             tokio::time::sleep(tokio::time::Duration::from_secs(
@@ -138,7 +134,7 @@ impl Worker {
                 // restart loop
                 loop {
                     if let Err(e) = worker.work().await {
-                        eprintln!("Error: {:?}. Restarting", e);
+                        eprintln!("Error: {e:?}. Restarting");
                     }
                     tokio::time::sleep(tokio::time::Duration::from_secs(RESTART_WAIT_INTERVAL))
                         .await;
@@ -150,7 +146,7 @@ impl Worker {
             // restart loop
             loop {
                 if let Err(e) = worker.heartbeat().await {
-                    eprintln!("Error: {:?}. Restarting", e);
+                    eprintln!("Error: {e:?}. Restarting");
                 }
                 tokio::time::sleep(tokio::time::Duration::from_secs(RESTART_WAIT_INTERVAL)).await;
             }

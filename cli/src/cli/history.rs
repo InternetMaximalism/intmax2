@@ -84,10 +84,10 @@ pub fn format_timestamp(timestamp: u64) -> String {
 fn format_status(status: &EntryStatus) -> ColoredString {
     match status {
         EntryStatus::Processed(block_number) => {
-            format!("Settled in block {} and processed", block_number).bright_blue()
+            format!("Settled in block {block_number} and processed").bright_blue()
         }
         EntryStatus::Settled(block_number) => {
-            format!("Settled in block {}", block_number).bright_green()
+            format!("Settled in block {block_number}").bright_green()
         }
         EntryStatus::Pending => "Pending".bright_yellow(),
         EntryStatus::Timeout => "Timeout".bright_red(),

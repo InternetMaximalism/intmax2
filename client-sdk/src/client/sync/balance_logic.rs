@@ -92,7 +92,7 @@ pub async fn receive_deposit(
         nullifier,
         new_salt,
     )
-    .map_err(|e| SyncError::WitnessGenerationError(format!("PrivateTransitionWitness {}", e)))?;
+    .map_err(|e| SyncError::WitnessGenerationError(format!("PrivateTransitionWitness {e}")))?;
     let receive_deposit_witness = ReceiveDepositWitness {
         deposit_witness,
         private_transition_witness,
@@ -163,7 +163,7 @@ pub async fn receive_transfer(
         nullifier,
         new_salt,
     )
-    .map_err(|e| SyncError::WitnessGenerationError(format!("PrivateTransitionWitness {}", e)))?;
+    .map_err(|e| SyncError::WitnessGenerationError(format!("PrivateTransitionWitness {e}")))?;
     let block_merkle_proof = validity_prover
         .get_block_merkle_proof(
             receive_block_number,
@@ -220,8 +220,7 @@ pub async fn update_send_by_sender(
         .await?;
     let validity_pis = validity_witness.to_validity_pis().map_err(|e| {
         SyncError::InternalError(format!(
-            "failed to convert validity witness to validity public inputs: {}",
-            e
+            "failed to convert validity witness to validity public inputs: {e}"
         ))
     })?;
     let sender_leaves = validity_witness.block_witness.get_sender_tree().leaves();
@@ -316,8 +315,7 @@ pub async fn update_send_by_receiver(
 
     let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs).map_err(|e| {
         SyncError::InternalError(format!(
-            "failed to convert spent proof to spent public inputs: {}",
-            e
+            "failed to convert spent proof to spent public inputs: {e}"
         ))
     })?;
     if spent_pis.prev_private_commitment != prev_balance_pis.private_commitment {
@@ -332,8 +330,7 @@ pub async fn update_send_by_receiver(
         .await?;
     let validity_pis = validity_witness.to_validity_pis().map_err(|e| {
         SyncError::InternalError(format!(
-            "failed to convert validity witness to validity public inputs: {}",
-            e
+            "failed to convert validity witness to validity public inputs: {e}"
         ))
     })?;
     let sender_leaves = validity_witness.block_witness.get_sender_tree().leaves();
@@ -372,8 +369,7 @@ pub async fn update_send_by_receiver(
     let last_block_number = update_witness.get_last_block_number();
     if prev_block_number < last_block_number {
         return Err(SyncError::InvalidTransferError(format!(
-            "prev_block_number {} is less than last_block_number {}",
-            prev_block_number, last_block_number
+            "prev_block_number {prev_block_number} is less than last_block_number {last_block_number}"
         )));
     }
     // prove tx send
@@ -421,8 +417,7 @@ pub async fn update_no_send(
     let last_block_number = update_witness.get_last_block_number();
     if prev_block_number < last_block_number {
         return Err(SyncError::InternalError(format!(
-            "prev_block_number {} is less than last_block_number {}",
-            prev_block_number, last_block_number
+            "prev_block_number {prev_block_number} is less than last_block_number {last_block_number}"
         )));
     }
     let balance_proof = balance_prover

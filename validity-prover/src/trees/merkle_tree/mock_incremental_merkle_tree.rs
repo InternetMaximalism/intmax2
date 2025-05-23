@@ -83,9 +83,9 @@ impl<V: Leafable + Serialize + DeserializeOwned> MockIncrementalMerkleTree<V> {
                 hash_node.timestamp == timestamp && hash_node.bit_path == bit_path
             })
             .map(|(i, _)| i);
-        if conflicting_index.is_some() {
+        if let Some(conflicting_index) = conflicting_index {
             // replace the conflicting node
-            hash_nodes[conflicting_index.unwrap()] = node.clone();
+            hash_nodes[conflicting_index] = node.clone();
         } else {
             hash_nodes.push(node.clone());
         }

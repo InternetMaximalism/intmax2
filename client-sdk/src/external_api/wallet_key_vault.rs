@@ -58,7 +58,7 @@ impl WalletKeyVaultClient {
         let signature = signer
             .sign_message(message.as_bytes())
             .await
-            .map_err(|e| ServerError::SigningError(format!("Failed to sign message: {}", e)))?;
+            .map_err(|e| ServerError::SigningError(format!("Failed to sign message: {e}")))?;
         Ok(signature.as_bytes())
     }
 

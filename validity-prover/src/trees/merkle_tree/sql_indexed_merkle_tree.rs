@@ -803,18 +803,15 @@ mod tests {
             let stored_leaf = tree.get_leaf(&mut tx, timestamp, index).await?;
             assert_eq!(
                 stored_leaf.key, leaf.key,
-                "Key should match for index {}",
-                index
+                "Key should match for index {index}"
             );
             assert_eq!(
                 stored_leaf.next_key, leaf.next_key,
-                "NextKey should match for index {}",
-                index
+                "NextKey should match for index {index}"
             );
             assert_eq!(
                 stored_leaf.value, leaf.value,
-                "Value should match for index {}",
-                index
+                "Value should match for index {index}"
             );
 
             tx.commit().await?;
@@ -828,13 +825,11 @@ mod tests {
                 assert_eq!(
                     leaf.key,
                     from_str_to_u256(key),
-                    "Key should match for retrieved leaf at index {}",
-                    index
+                    "Key should match for retrieved leaf at index {index}"
                 );
                 assert_eq!(
                     leaf.value, value,
-                    "Value should match for retrieved leaf at index {}",
-                    index
+                    "Value should match for retrieved leaf at index {index}"
                 );
             }
 
@@ -843,7 +838,7 @@ mod tests {
                 let root = tree.sql_node_hashes.get_root(&mut tx, timestamp).await?;
 
                 let result = proof.verify(root, AccountId(index), from_str_to_u256(key));
-                assert!(result, "Proof verification failed for index {}", index);
+                assert!(result, "Proof verification failed for index {index}");
             }
 
             tx.rollback().await?;

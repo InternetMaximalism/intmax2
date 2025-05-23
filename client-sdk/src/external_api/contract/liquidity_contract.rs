@@ -127,8 +127,7 @@ impl LiquidityContract {
                 .await
                 .map_err(|e| {
                     BlockchainError::TransactionError(format!(
-                        "Error getting eligibility permitter: {:?}",
-                        e
+                        "Error getting eligibility permitter: {e:?}"
                     ))
                 })?;
         Ok(eligibility_permitter)
@@ -169,7 +168,7 @@ impl LiquidityContract {
 
         let token_type: u8 = token_info.tokenType;
         let token_type = TokenType::try_from(token_type)
-            .map_err(|e| BlockchainError::ParseError(format!("Invalid token type: {:?}", e)))?;
+            .map_err(|e| BlockchainError::ParseError(format!("Invalid token type: {e:?}")))?;
         let token_address = convert_address_to_intmax(token_info.tokenAddress);
         let token_id = convert_u256_to_intmax(token_info.tokenId);
         Ok((token_type, token_address, token_id))
@@ -362,9 +361,7 @@ impl LiquidityContract {
         to_eth_block: u64,
     ) -> Result<Vec<Deposited>, BlockchainError> {
         log::info!(
-            "get_deposited_event: from_eth_block={}, to_eth_block={}",
-            from_eth_block,
-            to_eth_block
+            "get_deposited_event: from_eth_block={from_eth_block}, to_eth_block={to_eth_block}"
         );
         let contract = Liquidity::new(self.address, self.provider.clone());
         let events = contract

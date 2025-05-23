@@ -178,8 +178,7 @@ impl Storage for InMemoryStorage {
         let block_id = block_ids
             .get(request_id)
             .ok_or(StorageError::AddSignatureError(format!(
-                "block_id not found for request_id: {}",
-                request_id
+                "block_id not found for request_id: {request_id}"
             )))?;
 
         // get memo
@@ -187,15 +186,14 @@ impl Storage for InMemoryStorage {
         let memo = memos
             .get(block_id)
             .ok_or(StorageError::AddSignatureError(format!(
-                "memo not found for block_id: {}",
-                block_id
+                "memo not found for block_id: {block_id}"
             )))?;
 
         // verify signature
         signature
             .verify(&memo.block_sign_payload, memo.pubkey_hash)
             .map_err(|e| {
-                StorageError::AddSignatureError(format!("signature verification failed: {}", e))
+                StorageError::AddSignatureError(format!("signature verification failed: {e}"))
             })?;
 
         // add signature

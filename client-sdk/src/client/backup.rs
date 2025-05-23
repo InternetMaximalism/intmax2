@@ -94,7 +94,7 @@ pub async fn make_history_backup(
     let mut backup_csvs = Vec::new();
     for chunks in all_records.chunks(chunk_size) {
         let csv = make_backup_csv_from_records(chunks).map_err(|e| {
-            StrategyError::UnexpectedError(format!("failed to make backup csv: {}", e))
+            StrategyError::UnexpectedError(format!("failed to make backup csv: {e}"))
         })?;
         backup_csvs.push(csv);
     }

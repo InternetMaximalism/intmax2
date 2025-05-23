@@ -62,8 +62,7 @@ impl TheGraphClient {
             )
             .map_err(|e| {
                 BlockchainError::DecodeCallDataError(format!(
-                    "failed to decode post block calldata: {}",
-                    e
+                    "failed to decode post block calldata: {e}"
                 ))
             })?;
             full_blocks.push(FullBlockWithMeta {

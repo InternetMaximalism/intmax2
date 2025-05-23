@@ -50,8 +50,7 @@ pub async fn send_transaction_with_gas_bump(
             resend_tx_with_gas_bump(signer, tx_hash, &tx_eip1559, tx_name).await
         }
         Err(e) => Err(BlockchainError::TransactionError(format!(
-            "{} failed with error: {:?}",
-            tx_name, e
+            "{tx_name} failed with error: {e:?}"
         ))),
     }
 }
@@ -62,7 +61,7 @@ async fn resend_tx_with_gas_bump(
     tx_eip1559: &TxEip1559,
     tx_name: &str,
 ) -> Result<TxHash, BlockchainError> {
-    log::info!("Resending transaction: {}", tx_name);
+    log::info!("Resending transaction: {tx_name}");
     let mut pending_tx_hashes = vec![initial_tx_hash];
 
     let mut current_tx = tx_eip1559.clone();
@@ -118,11 +117,7 @@ async fn resend_tx_with_gas_bump(
         let sendable_tx = signer.fill(new_tx_request).await?;
         let tx_envelope = sendable_tx.try_into_envelope().unwrap();
         log::info!(
-            "Sending bumped gas tx {} attempt: {} with new max_fee_per_gas: {:?}, new max_priority_fee_per_gas: {:?}",
-            tx_name.to_string(),
-            attempt,
-            new_max_fee_per_gas,
-            new_max_priority_fee_per_gas,
+            "Sending bumped gas tx {tx_name} attempt: {attempt} with new max_fee_per_gas: {new_max_fee_per_gas:?}, new max_priority_fee_per_gas: {new_max_priority_fee_per_gas:?}",
         );
 
         match signer
@@ -133,7 +128,7 @@ async fn resend_tx_with_gas_bump(
             .await
         {
             Ok(tx_hash) => {
-                println!("Transaction sent: {:?}", tx_hash);
+                println!("Transaction sent: {tx_hash:?}");
                 return Ok(tx_hash);
             }
             Err(PendingTransactionError::TxWatcher(_)) => {
@@ -142,8 +137,7 @@ async fn resend_tx_with_gas_bump(
             }
             Err(e) => {
                 return Err(BlockchainError::TransactionError(format!(
-                    "{} failed with error: {:?}",
-                    tx_name, e
+                    "{tx_name} failed with error: {e:?}"
                 )));
             }
         }

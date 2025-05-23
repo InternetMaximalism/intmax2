@@ -25,22 +25,22 @@ pub async fn balance(key: KeySet, sync: bool) -> Result<(), CliError> {
     println!("Balances:");
     for (i, leaf) in balances.iter() {
         let (token_type, address, token_id) = client.liquidity_contract.get_token_info(*i).await?;
-        println!("\t Token #{}:", i);
+        println!("\t Token #{i}:");
         println!("\t\t Amount: {}", leaf.amount);
-        println!("\t\t Type: {}", token_type);
+        println!("\t\t Type: {token_type}");
 
         match token_type {
             TokenType::NATIVE => {}
             TokenType::ERC20 => {
-                println!("\t\t Address: {}", address);
+                println!("\t\t Address: {address}");
             }
             TokenType::ERC721 => {
-                println!("\t\t Address: {}", address);
-                println!("\t\t Token ID: {}", token_id);
+                println!("\t\t Address: {address}");
+                println!("\t\t Token ID: {token_id}");
             }
             TokenType::ERC1155 => {
-                println!("\t\t Address: {}", address);
-                println!("\t\t Token ID: {}", token_id);
+                println!("\t\t Address: {address}");
+                println!("\t\t Token ID: {token_id}");
             }
         }
     }

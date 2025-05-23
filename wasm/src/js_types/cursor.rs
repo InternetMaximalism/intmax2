@@ -45,7 +45,7 @@ impl TryFrom<JsMetaDataCursor> for MetaDataCursor {
             order: cursor
                 .order
                 .parse()
-                .map_err(|e| JsError::new(&format!("Failed to parse CursorOrder: {}", e)))?,
+                .map_err(|e| JsError::new(&format!("Failed to parse CursorOrder: {e}")))?,
             limit: cursor.limit,
         })
     }

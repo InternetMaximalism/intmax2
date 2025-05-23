@@ -88,7 +88,7 @@ pub async fn validate_fee_proof(
         match transfer_data.validate(U256::dummy_pubkey()) {
             Ok(_) => {}
             Err(e) => {
-                log::error!("Failed to validate transfer data: {}", e);
+                log::error!("Failed to validate transfer data: {e}");
                 return Err(FeeError::FeeVerificationError(
                     "Failed to validate transfer data".to_string(),
                 ));
@@ -118,7 +118,7 @@ pub async fn validate_fee_proof(
         user_signature
             .verify(&block_sign_payload, pubkey_hash)
             .map_err(|e| {
-                FeeError::SignatureVerificationError(format!("Failed to verify signature: {}", e))
+                FeeError::SignatureVerificationError(format!("Failed to verify signature: {e}"))
             })?;
         let sender_proof_set = fetch_sender_proof_set(
             store_vault_server_client,
@@ -153,13 +153,13 @@ async fn validate_fee_single(
     sender_proof_set
         .validate(U256::dummy_pubkey())
         .map_err(|e| {
-            FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {}", e))
+            FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {e}"))
         })?;
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
     let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs).map_err(|e| {
-        FeeError::FeeVerificationError(format!("Failed to decompress spent proof: {}", e))
+        FeeError::FeeVerificationError(format!("Failed to decompress spent proof: {e}"))
     })?;
     if spent_pis.tx != transfer_witness.tx {
         return Err(FeeError::FeeVerificationError(
@@ -184,7 +184,7 @@ async fn validate_fee_single(
             transfer_witness.tx.transfer_tree_root,
         )
         .map_err(|e| {
-            FeeError::MerkleTreeError(format!("Failed to verify transfer merkle proof: {}", e))
+            FeeError::MerkleTreeError(format!("Failed to verify transfer merkle proof: {e}"))
         })?;
 
     // make sure that transfer is for beneficiary account
@@ -232,12 +232,12 @@ pub fn parse_fee_str(fee: &str) -> Result<HashMap<u32, U256>, FeeError> {
         }
         let token_index = fee_parts[0]
             .parse::<u32>()
-            .map_err(|e| FeeError::ParseError(format!("Failed to parse token index: {}", e)))?;
+            .map_err(|e| FeeError::ParseError(format!("Failed to parse token index: {e}")))?;
         let fee_amount: U256 = fee_parts[1]
             .parse::<BigUint>()
-            .map_err(|e| FeeError::ParseError(format!("Failed to parse fee amount: {}", e)))?
+            .map_err(|e| FeeError::ParseError(format!("Failed to parse fee amount: {e}")))?
             .try_into()
-            .map_err(|e| FeeError::ParseError(format!("Failed to convert fee amount: {}", e)))?;
+            .map_err(|e| FeeError::ParseError(format!("Failed to convert fee amount: {e}")))?;
         fee_map.insert(token_index, fee_amount);
     }
     Ok(fee_map)
@@ -333,10 +333,7 @@ pub async fn collect_fee(
             signature
                 .verify(&block_sign_payload, pubkey_hash)
                 .map_err(|e| {
-                    FeeError::SignatureVerificationError(format!(
-                        "Failed to verify signature: {}",
-                        e
-                    ))
+                    FeeError::SignatureVerificationError(format!("Failed to verify signature: {e}"))
                 })?;
 
             // save transfer data
@@ -495,7 +492,7 @@ mod tests {
     fn test_maximum_u256_fee() {
         // max = 2^256 - 1
         let max = (BigUint::one() << 256) - BigUint::one();
-        let fee_str = format!("1:{}", max);
+        let fee_str = format!("1:{max}");
         let result = parse_fee_str(&fee_str).unwrap();
 
         let mut expected = HashMap::new();
@@ -509,7 +506,7 @@ mod tests {
     fn test_fee_amount_overflow_u256() {
         // 2^256 — overflow for U256
         let overflow = BigUint::one() << 256;
-        let fee_str = format!("0:{}", overflow);
+        let fee_str = format!("0:{overflow}");
 
         let result = parse_fee_str(&fee_str);
 

@@ -26,9 +26,9 @@ pub async fn make_history_backup(key: KeySet, dir: &Path, from: u64) -> Result<(
         .await?;
     for csv_str in csvs.iter() {
         let id = Uuid::new_v4().to_string()[..8].to_string();
-        let file_path = dir.join(format!("backup_{}.csv", id));
+        let file_path = dir.join(format!("backup_{id}.csv"));
         std::fs::write(file_path, csv_str)
-            .map_err(|e| CliError::BackupError(format!("Failed to write file: {}", e)))?;
+            .map_err(|e| CliError::BackupError(format!("Failed to write file: {e}")))?;
     }
     Ok(())
 }

@@ -64,10 +64,10 @@ pub async fn print_info(client: &Client, eth_private_key: B256) -> anyhow::Resul
         .provider
         .get_balance(eth_address)
         .await?;
-    println!("ETH Address: {}", eth_address);
-    println!("ETH Balance: {}", eth_balance);
+    println!("ETH Address: {eth_address}");
+    println!("ETH Balance: {eth_balance}");
     let balance = get_balance_on_intmax(client, key).await?;
     println!("Intmax Address: {}", key.pubkey.to_hex());
-    println!("Intmax Balance: {}", balance);
+    println!("Intmax Balance: {balance}");
     Ok(())
 }

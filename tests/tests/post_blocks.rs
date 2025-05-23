@@ -40,7 +40,7 @@ async fn post_blocks() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     let env = envy::from_env::<EnvVar>()?;
 
-    let provider = get_provider_with_fallback(&[env.l2_rpc_url.clone()])?;
+    let provider = get_provider_with_fallback(std::slice::from_ref(&env.l2_rpc_url))?;
     let rollup_contract = RollupContract::new(provider, env.rollup_contract_address);
     let block_builder_address =
         convert_address_to_intmax(get_address_from_private_key(env.deployer_private_key));

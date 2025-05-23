@@ -39,7 +39,7 @@ pub async fn get_tx_status(
     let block_number = block_number.unwrap();
     let validity_witness = validity_prover.get_validity_witness(block_number).await?;
     let validity_pis = validity_witness.to_validity_pis().map_err(|e| {
-        StrategyError::UnexpectedError(format!("failed to convert to validity pis: {}", e))
+        StrategyError::UnexpectedError(format!("failed to convert to validity pis: {e}"))
     })?;
 
     // get sender leaf

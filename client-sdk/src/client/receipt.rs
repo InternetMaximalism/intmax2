@@ -53,10 +53,7 @@ pub async fn validate_transfer_receipt(
     transfer_receipt: &str,
 ) -> Result<TransferData, ClientError> {
     let encrypted_data = BASE64_STANDARD.decode(transfer_receipt).map_err(|e| {
-        ClientError::DeserializeError(format!(
-            "Failed to decode transfer receipt as base64: {}",
-            e
-        ))
+        ClientError::DeserializeError(format!("Failed to decode transfer receipt as base64: {e}"))
     })?;
     let transfer_receipt: TransferReceipt = TransferReceipt::decrypt(key, None, &encrypted_data)?;
     validate_receive(

@@ -14,11 +14,11 @@ use super::{
 };
 
 pub fn sync_event_key(event_type: EventType) -> String {
-    format!("sync_events_{}", event_type)
+    format!("sync_events_{event_type}")
 }
 
 pub fn sync_event_fail_key(event_type: EventType) -> String {
-    format!("sync_events_fail_{}", event_type)
+    format!("sync_events_fail_{event_type}")
 }
 
 #[derive(Debug, Clone)]
@@ -162,7 +162,7 @@ async fn sync_events_job<O: SyncEvent + 'static>(
 
         // wait for a while before restarting
         tokio::time::sleep(tokio::time::Duration::from_secs(observer_restart_interval)).await;
-        log::info!("Restarting sync events job for {}", event_type);
+        log::info!("Restarting sync events job for {event_type}");
     }
     Ok(())
 }

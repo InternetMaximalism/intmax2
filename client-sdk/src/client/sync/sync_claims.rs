@@ -77,8 +77,7 @@ impl Client {
             let last_block_number = update_witness.account_membership_proof.get_value() as u32;
             if deposit_block_number <= last_block_number {
                 return Err(SyncError::InternalError(format!(
-                    "deposit block number {} is less than last block number {}",
-                    deposit_block_number, last_block_number
+                    "deposit block number {deposit_block_number} is less than last block number {last_block_number}"
                 )));
             }
             let deposit_hash = mining.deposit_data.deposit_hash().unwrap();
@@ -173,14 +172,13 @@ impl Client {
                     ))
                 }
                 _ => {
-                    let reason = format!("fee error at the request: {:?}", fee_result);
+                    let reason = format!("fee error at the request: {fee_result:?}");
                     for used_fee in &collected_fees {
                         consume_payment(self.store_vault_server.as_ref(), key, used_fee, &reason)
                             .await?;
                     }
                     return Err(SyncError::FeeError(format!(
-                        "invalid fee at the request: {:?}",
-                        fee_result
+                        "invalid fee at the request: {fee_result:?}"
                     )));
                 }
             }

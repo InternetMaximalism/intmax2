@@ -125,7 +125,7 @@ impl BlockBuilder {
         {
             Ok(_) => {}
             Err(e) => {
-                log::error!("Error in posting block: {}", e);
+                log::error!("Error in posting block: {e}");
             }
         }
         Ok(())
@@ -152,19 +152,13 @@ impl BlockBuilder {
                     Ok(result) => {
                         if let Err(e) = result {
                             log::error!(
-                                "Error in {}: {}. Restarting in {}sec ...",
-                                job_name,
-                                e,
-                                RESTART_JOB_INTERVAL
+                                "Error in {job_name}: {e}. Restarting in {RESTART_JOB_INTERVAL}sec ..."
                             );
                         }
                     }
                     Err(e) => {
                         log::error!(
-                            "Panic in {}: {}. Restarting in {}sec ...",
-                            job_name,
-                            e,
-                            RESTART_JOB_INTERVAL
+                            "Panic in {job_name}: {e}. Restarting in {RESTART_JOB_INTERVAL}sec ..."
                         );
                     }
                 }

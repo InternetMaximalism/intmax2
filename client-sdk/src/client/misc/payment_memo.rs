@@ -21,7 +21,7 @@ pub fn payment_memo_topic(name: &str) -> String {
             read_rights: ReadRights::AuthRead,
             write_rights: WriteRights::AuthWrite,
         },
-        format!("payment_memo/{}", name).as_str(),
+        format!("payment_memo/{name}").as_str(),
     )
 }
 
