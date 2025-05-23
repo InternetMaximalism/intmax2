@@ -19,7 +19,7 @@ exclude = ["job-servers/aggregator-prover"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.26"
+version = "0.1.27"
 edition = "2021"
 
 [workspace.dependencies]
@@ -39,7 +39,7 @@ tokio = { version = "1.45", features = [
 reqwest = { version = "0.12.15", features = ["json"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.215", features = ["derive"] }
-alloy = { version = "1.0.4", features = ["rand", "signer-mnemonic"] }
+alloy = { version = "1.0.6", features = ["rand", "signer-mnemonic"] }
 anyhow = "1.0.98"
 sqlx = { version = "0.8.5", features = [
     "chrono",
@@ -50,7 +50,7 @@ sqlx = { version = "0.8.5", features = [
 ] }
 chrono = "0.4"
 log = "0.4.27"
-uuid = { version = "1.12.1", features = ["v4", "v7"] }
+uuid = { version = "1.17.0", features = ["v4", "v7"] }
 redis = { version = "0.31", features = [
     "tokio-native-tls-comp",
     "connection-manager",

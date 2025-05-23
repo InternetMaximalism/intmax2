@@ -307,9 +307,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "alloy"
-version = "1.0.4"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bee20297e2fc9eaf4ef138849578e8bf02f95b3b9538571d605812f7b1adeb85"
+checksum = "0cd58a5dd60681ca6faffe2abf6507409e8f4f18e528c931930371e3a36df13a"
 dependencies = [
  "alloy-consensus",
  "alloy-contract",
@@ -1782,7 +1782,7 @@ dependencies = [
 
 [[package]]
 name = "balance-prover"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "block-builder"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "serde",
 ]
@@ -3849,7 +3849,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-cli"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "alloy",
  "anyhow",
@@ -3882,7 +3882,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-client-sdk"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "aes-gcm",
  "alloy",
@@ -3931,7 +3931,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3969,7 +3969,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-wasm-lib"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4196,7 +4196,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "legacy-store-vault-server"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6067,7 +6067,7 @@ dependencies = [
 
 [[package]]
 name = "server-common"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-web",
  "common",
@@ -6473,7 +6473,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "store-vault-server"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6653,7 +6653,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "tests"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "alloy",
  "anyhow",
@@ -7227,16 +7227,18 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.16.0"
+version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
+checksum = "3cf4199d1e5d15ddd86a694e4d0dffa9c323ce759fea589f00fef9d81cc1931d"
 dependencies = [
  "getrandom 0.3.3",
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]
 name = "validity-prover"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7274,7 +7276,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover-worker"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -7837,7 +7839,7 @@ dependencies = [
 
 [[package]]
 name = "withdrawal-server"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "actix-cors",
  "actix-web",
