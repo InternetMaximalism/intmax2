@@ -9,6 +9,7 @@ pub mod rw_rights;
 pub mod sender_proof_set;
 pub mod topic;
 pub mod transfer_data;
+pub mod transfer_type;
 pub mod tx_data;
 pub mod user_data;
 pub mod validation;

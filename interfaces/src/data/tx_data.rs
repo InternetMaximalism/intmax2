@@ -20,6 +20,8 @@ pub struct TxData {
     pub tx_merkle_proof: TxMerkleProof,
     pub tx_tree_root: Bytes32,
     pub spent_witness: SpentWitness, // to update sender's private state
+    pub transfer_digests: Vec<Bytes32>, // transfer digests
+    pub transfer_types: Vec<String>, // transfer types
 
     // Ephemeral key to query the sender proof set
     pub sender_proof_set_ephemeral_key: U256,

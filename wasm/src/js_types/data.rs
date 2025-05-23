@@ -63,6 +63,8 @@ impl From<TransferData> for JsTransferData {
 pub struct JsTxData {
     pub tx: JsTx,
     pub transfers: Vec<JsTransfer>,
+    pub transfer_digests: Vec<String>,
+    pub transfer_types: Vec<String>,
 }
 
 impl From<TxData> for JsTxData {
@@ -81,7 +83,17 @@ impl From<TxData> for JsTxData {
                 }
             })
             .collect();
-        Self { tx, transfers }
+        let transfer_digests = tx_data
+            .transfer_digests
+            .into_iter()
+            .map(|digest| digest.to_hex())
+            .collect();
+        Self {
+            tx,
+            transfers,
+            transfer_digests,
+            transfer_types: tx_data.transfer_types,
+        }
     }
 }
 

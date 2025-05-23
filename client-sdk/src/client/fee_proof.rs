@@ -6,10 +6,10 @@ use intmax2_interfaces::{
     },
     data::{
         data_type::DataType, encryption::BlsEncryption, proof_compression::CompressedSpentProof,
-        sender_proof_set::SenderProofSet, transfer_data::TransferData, tx_data::TxData,
-        user_data::UserData,
+        sender_proof_set::SenderProofSet, transfer_data::TransferData, transfer_type::TransferType,
+        tx_data::TxData, user_data::UserData,
     },
-    utils::random::default_rng,
+    utils::{digest::get_digest, random::default_rng},
 };
 use intmax2_zkp::{
     common::{
@@ -106,6 +106,8 @@ pub async fn generate_fee_proof(
             transfer_index,
             transfer_merkle_proof,
         };
+        let encrypted_fee_transfer_data = fee_transfer_data.encrypt(key.pubkey, Some(key))?;
+        let encrypted_fee_transfer_digest = get_digest(&encrypted_fee_transfer_data);
 
         let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
         let block_sign_payload = BlockSignPayload {
@@ -132,6 +134,8 @@ pub async fn generate_fee_proof(
             tx_merkle_proof: transfer_data.tx_merkle_proof.clone(),
             tx_tree_root: transfer_data.tx_tree_root,
             spent_witness: collateral_spent_witness.clone(),
+            transfer_digests: vec![encrypted_fee_transfer_digest],
+            transfer_types: vec![TransferType::TransferCollateralFee.to_string()],
             sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
         };
         let entry = SaveDataEntry {

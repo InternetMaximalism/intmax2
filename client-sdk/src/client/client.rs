@@ -19,10 +19,11 @@ use intmax2_interfaces::{
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,
         transfer_data::TransferData,
+        transfer_type::TransferType,
         tx_data::TxData,
         user_data::{Balances, ProcessStatus, UserData},
     },
-    utils::{circuit_verifiers::CircuitVerifiers, random::default_rng},
+    utils::{circuit_verifiers::CircuitVerifiers, digest::get_digest, random::default_rng},
 };
 use intmax2_zkp::{
     circuits::validity::validity_pis::ValidityPublicInputs,
@@ -60,10 +61,13 @@ use super::{
     backup::make_history_backup,
     config::ClientConfig,
     error::ClientError,
-    fee_payment::{quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers},
+    fee_payment::{
+        quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers, CLAIM_FEE_MEMO,
+        WITHDRAWAL_FEE_MEMO,
+    },
     fee_proof::{generate_fee_proof, quote_transfer_fee},
     history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
-    misc::payment_memo::PaymentMemo,
+    misc::payment_memo::{payment_memo_topic, PaymentMemo},
     receipt::validate_transfer_receipt,
     strategy::{
         mining::{fetch_mining_info, Mining},
@@ -501,22 +505,6 @@ impl Client {
             )));
         }
 
-        let mut entries = vec![];
-
-        let tx_data = TxData {
-            tx_index: proposal.tx_index,
-            tx_merkle_proof: proposal.tx_merkle_proof.clone(),
-            tx_tree_root: proposal.block_sign_payload.tx_tree_root,
-            spent_witness: memo.spent_witness.clone(),
-            sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
-        };
-
-        entries.push(SaveDataEntry {
-            topic: DataType::Tx.to_topic(),
-            pubkey: key.pubkey,
-            data: tx_data.encrypt(key.pubkey, Some(key))?,
-        });
-
         // save transfer data
         let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
         for transfer in &memo.transfers {
@@ -525,6 +513,7 @@ impl Client {
 
         let mut transfer_data_vec = Vec::new();
         let mut withdrawal_data_vec = Vec::new();
+        let mut entries = vec![];
         for (i, transfer) in memo.transfers.iter().enumerate() {
             if Some(i as u32) == memo.fee_index {
                 // ignore fee transfer because it will be saved on block builder side
@@ -566,6 +555,51 @@ impl Client {
                 data: transfer_data.encrypt(pubkey, sender_key)?,
             });
         }
+
+        let transfer_digests = entries
+            .iter()
+            .map(|entry| get_digest(&entry.data))
+            .collect::<Vec<_>>();
+        let mut transfer_types = entries
+            .iter()
+            .map(|entry| {
+                if entry.topic == DataType::Transfer.to_topic() {
+                    TransferType::Normal
+                } else {
+                    TransferType::Withdrawal
+                }
+            })
+            .collect::<Vec<_>>();
+        if let Some(fee_index) = memo.fee_index {
+            transfer_types[fee_index as usize] = TransferType::TransferFee;
+        }
+        for payment_memo in &memo.payment_memos {
+            if payment_memo.topic == payment_memo_topic(WITHDRAWAL_FEE_MEMO) {
+                transfer_types[payment_memo.transfer_index as usize] = TransferType::WithdrawalFee;
+            }
+            if payment_memo.topic == payment_memo_topic(CLAIM_FEE_MEMO) {
+                transfer_types[payment_memo.transfer_index as usize] = TransferType::ClaimFee;
+            }
+        }
+        let transfer_types = transfer_types
+            .into_iter()
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>();
+
+        let tx_data = TxData {
+            tx_index: proposal.tx_index,
+            tx_merkle_proof: proposal.tx_merkle_proof.clone(),
+            tx_tree_root: proposal.block_sign_payload.tx_tree_root,
+            spent_witness: memo.spent_witness.clone(),
+            transfer_digests,
+            transfer_types,
+            sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
+        };
+        entries.push(SaveDataEntry {
+            topic: DataType::Tx.to_topic(),
+            pubkey: key.pubkey,
+            data: tx_data.encrypt(key.pubkey, Some(key))?,
+        });
 
         let digests = self
             .store_vault_server
