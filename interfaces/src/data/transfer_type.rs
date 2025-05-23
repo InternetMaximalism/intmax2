@@ -1,6 +1,8 @@
 use std::{fmt::Display, str::FromStr};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TransferType {
     Normal,
     Withdrawal,
