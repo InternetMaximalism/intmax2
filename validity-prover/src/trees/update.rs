@@ -40,6 +40,12 @@ pub async fn to_block_witness<
         full_block.block.block_number != 0,
         "genesis block is not allowed"
     );
+    ensure!(
+        timestamp == full_block.block.block_number as u64,
+        "timestamp {} != block_number {}",
+        timestamp,
+        full_block.block.block_number
+    );
     let is_registration_block = full_block
         .signature
         .block_sign_payload
