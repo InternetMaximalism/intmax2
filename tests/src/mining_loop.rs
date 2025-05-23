@@ -160,3 +160,16 @@ async fn get_mining_info(
         ))?;
     Ok(corresponding_mining_info)
 }
+
+// TODO: Claimable but not claimed yet
+async fn get_latest_mining_info(client: &Client, key: KeySet) -> anyhow::Result<Mining> {
+    let mining_info = client.get_mining_list(key).await?;
+    let corresponding_mining_info = mining_info
+        .into_iter()
+        .filter(|info| (info.status == MiningStatus::Locking) && info.maturity.is_some())
+        .max_by(|x, y| y.maturity.cmp(&x.maturity))
+        .ok_or(anyhow::anyhow!(
+            "No corresponding mining info found for the deposit data"
+        ))?;
+    Ok(corresponding_mining_info.clone())
+}
