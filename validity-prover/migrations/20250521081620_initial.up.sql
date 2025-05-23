@@ -111,7 +111,6 @@ CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves
 CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (tag, key, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (tag, next_key, key, timestamp DESC);
 
-
 -- Partition tables for Merkle tree tables
 CREATE TABLE IF NOT EXISTS hash_nodes_tag1 PARTITION OF hash_nodes FOR VALUES IN (1);
 CREATE TABLE IF NOT EXISTS hash_nodes_tag2 PARTITION OF hash_nodes FOR VALUES IN (2);
