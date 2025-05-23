@@ -40,10 +40,6 @@
 
 use redis::{aio::MultiplexedConnection, AsyncCommands as _, Client};
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::time::sleep;
-
-const MAX_RETRIES: usize = 3;
-const RETRY_INTERVAL: u64 = 1;
 
 type Result<T> = std::result::Result<T, TaskManagerError>;
 
@@ -223,13 +219,12 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
         let result_json = serde_json::to_string(result)?;
 
         let mut conn = self.get_connection().await?;
-        for _ in 0..MAX_RETRIES {
-            let result: bool = conn.hset(&self.results_key, task_id, &result_json).await?;
-            if result {
-                break;
-            }
-            log::error!("failed to set result for task {}", task_id);
-            sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL)).await;
+        let result: bool = conn.hset(&self.results_key, task_id, &result_json).await?;
+        if !result {
+            log::warn!(
+                "task {} result already exists but trying to overwrite",
+                task_id
+            );
         }
         // move task from running to completed
         let _: () = conn
