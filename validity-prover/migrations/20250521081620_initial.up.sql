@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS leaves_len (
 ) PARTITION BY LIST (tag);
 
 CREATE TABLE IF NOT EXISTS indexed_leaves (
+    tag int NOT NULL,
     timestamp bigint NOT NULL,
     position bigint NOT NULL,
     leaf_hash bytea NOT NULL,
@@ -88,8 +89,8 @@ CREATE TABLE IF NOT EXISTS indexed_leaves (
     key NUMERIC(78, 0) NOT NULL,
     next_key NUMERIC(78, 0) NOT NULL,
     value bigint NOT NULL,
-    PRIMARY KEY (position, timestamp)
-);
+    PRIMARY KEY (tag, position, timestamp)
+) PARTITION BY LIST (tag);
 
 
 -- Partition tables for Merkle tree tables
@@ -108,6 +109,8 @@ CREATE TABLE  IF NOT EXISTS leaves_len_tag2 PARTITION OF leaves_len
     FOR VALUES IN (2);
 CREATE TABLE  IF NOT EXISTS leaves_len_tag3 PARTITION OF leaves_len
     FOR VALUES IN (3);
+CREATE TABLE  IF NOT EXISTS indexed_leaves_tag1 PARTITION OF indexed_leaves
+    FOR VALUES IN (1);
 
 --- Indexes for event tables
 CREATE INDEX IF NOT EXISTS idx_deposit_leaf_events_deposit_hash ON deposit_leaf_events(deposit_hash);
@@ -124,6 +127,6 @@ CREATE INDEX IF NOT EXISTS idx_hash_nodes_lookup ON hash_nodes (tag, bit_path, t
 CREATE INDEX IF NOT EXISTS idx_leaves_len_lookup ON leaves_len (tag, timestamp DESC);
 
 -- Indexes for Indexed Leaves
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (position, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (key, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (next_key, key, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_get_leaf_and_key ON indexed_leaves (tag, position, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_index ON indexed_leaves (tag, key, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_indexed_leaves_low_index ON indexed_leaves (tag, next_key, key, timestamp DESC);

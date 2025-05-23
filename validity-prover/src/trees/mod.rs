@@ -46,5 +46,11 @@ pub async fn create_partitions_for_test(
     // generate leaves partition
     let query = format!("CREATE TABLE leaves_tag_{tag} PARTITION OF leaves FOR VALUES IN ({tag})");
     sqlx::query(&query).execute(pool).await?;
+
+    // generate indexed_leaves partition
+    let query = format!(
+        "CREATE TABLE indexed_leaves_tag_{tag} PARTITION OF indexed_leaves FOR VALUES IN ({tag})"
+    );
+    sqlx::query(&query).execute(pool).await?;
     Ok(())
 }
