@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT timestamp\n            FROM indexed_leaves\n            WHERE tag = $1\n            ORDER BY timestamp DESC\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "timestamp",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b1a18c1a001718e2274c9e98e5ac332dc1fe844dbe894772a42da75caad0a7b1"
+}

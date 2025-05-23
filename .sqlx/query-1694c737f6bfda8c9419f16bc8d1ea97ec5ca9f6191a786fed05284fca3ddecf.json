@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT next_index, key, next_key, value\n            FROM indexed_leaves\n            WHERE  position = $1\n            AND timestamp <= $2\n            ORDER BY timestamp DESC \n            LIMIT 1\n            ",
+  "query": "\n            SELECT next_index, key, next_key, value\n            FROM indexed_leaves\n            WHERE  \n                tag = $3\n                AND position = $1\n                AND timestamp <= $2\n            ORDER BY timestamp DESC \n            LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -27,7 +27,8 @@
     "parameters": {
       "Left": [
         "Int8",
-        "Int8"
+        "Int8",
+        "Int4"
       ]
     },
     "nullable": [
@@ -37,5 +38,5 @@
       false
     ]
   },
-  "hash": "97313e887082c1ced80ca0eb0f0023919cd628a99b8e5ebfb26a69bb0fc2ccd3"
+  "hash": "1694c737f6bfda8c9419f16bc8d1ea97ec5ca9f6191a786fed05284fca3ddecf"
 }
