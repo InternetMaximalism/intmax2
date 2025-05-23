@@ -101,6 +101,21 @@ impl TheGraphObserver {
                 got_event_id: first.deposit_index as u64,
             });
         }
+
+        // sequence check
+        {
+            let mut next_event_id = expected_next_event_id;
+            for event in &events {
+                if event.deposit_index as u64 != next_event_id {
+                    return Err(ObserverError::EventFetchError(format!(
+                        "Event sequence error. Deposited: Expected: {}, Got: {}",
+                        next_event_id, event.deposit_index
+                    )));
+                }
+                next_event_id += 1;
+            }
+        }
+
         let mut tx = self.pool.begin().await?;
         for event in &events {
             sqlx::query!(
@@ -138,6 +153,21 @@ impl TheGraphObserver {
                 got_event_id: first.deposit_id,
             });
         }
+
+        // sequence check
+        {
+            let mut next_event_id = expected_next_event_id;
+            for event in &events {
+                if event.deposit_id != next_event_id {
+                    return Err(ObserverError::EventFetchError(format!(
+                        "Event sequence error. Deposited: Expected: {}, Got: {}",
+                        next_event_id, event.deposit_id
+                    )));
+                }
+                next_event_id += 1;
+            }
+        }
+
         let mut tx = self.pool.begin().await?;
         for event in &events {
             let deposit_hash = event.to_deposit().hash();
@@ -184,6 +214,21 @@ impl TheGraphObserver {
                 got_event_id: first.full_block.block.block_number as u64,
             });
         }
+
+        // sequence check
+        {
+            let mut next_event_id = expected_next_event_id;
+            for event in &events {
+                if event.full_block.block.block_number as u64 != next_event_id {
+                    return Err(ObserverError::EventFetchError(format!(
+                        "Event sequence error. Block posted: Expected: {}, Got: {}",
+                        next_event_id, event.full_block.block.block_number
+                    )));
+                }
+                next_event_id += 1;
+            }
+        }
+
         let mut tx = self.pool.begin().await?;
         for event in &events {
             sqlx::query!(
