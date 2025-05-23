@@ -85,15 +85,15 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
         SELECT hash_value 
         FROM hash_nodes 
         WHERE 
-          tag = $3
-          AND bit_path = $1 
-          AND timestamp <= $2
+          tag = $1
+          AND bit_path = $2
+          AND timestamp <= $3
         ORDER BY timestamp DESC 
         LIMIT 1
         "#,
+            self.tag as i32,
             bit_path_serialized,
             timestamp as i64,
-            self.tag as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;
@@ -141,14 +141,14 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlNodeHashes<V> {
             SELECT bit_path, hash_value
             FROM hash_nodes
             WHERE 
-              tag = $3
-              AND bit_path = ANY($1)
-              AND timestamp <= $2
+              tag = $1
+              AND bit_path = ANY($2)
+              AND timestamp <= $3
             ORDER BY bit_path, timestamp DESC
             "#,
+            self.tag as i32,
             &serialized_paths[..],
             timestamp as i64,
-            self.tag as i32
         )
         .fetch_all(tx.as_mut())
         .await?;

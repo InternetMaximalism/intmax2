@@ -97,13 +97,13 @@ impl SqlIndexedMerkleTree {
         .await?;
         sqlx::query!(
             r#"
-            INSERT INTO leaves_len (timestamp, tag, len)
+            INSERT INTO leaves_len (tag, timestamp, len)
             VALUES ($1, $2, $3)
             ON CONFLICT (tag, timestamp)
             DO UPDATE SET len = $3
             "#,
-            timestamp as i64,
             self.tag() as i32,
+            timestamp as i64,
             next_len as i32,
         )
         .execute(tx.as_mut())
@@ -123,15 +123,15 @@ impl SqlIndexedMerkleTree {
             SELECT next_index, key, next_key, value
             FROM indexed_leaves
             WHERE  
-                tag = $3
-                AND position = $1
-                AND timestamp <= $2
+                tag = $1
+                AND position = $2
+                AND timestamp <= $3
             ORDER BY timestamp DESC 
             LIMIT 1
             "#,
+            self.tag() as i32,
             position as i64,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;
@@ -213,13 +213,13 @@ impl SqlIndexedMerkleTree {
             SELECT len
             FROM leaves_len
             WHERE 
-              tag = $2
-              AND timestamp <= $1
+              tag = $1
+              AND timestamp <= $2
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
+            self.tag() as i32,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;
@@ -253,11 +253,11 @@ impl SqlIndexedMerkleTree {
         sqlx::query!(
             r#"
             DELETE FROM indexed_leaves
-            WHERE tag = $2
-                  AND timestamp >= $1
+            WHERE tag = $1
+                  AND timestamp >= $2
             "#,
+            self.tag() as i32,
             timestamp as i64,
-            self.tag() as i32
         )
         .execute(tx.as_mut())
         .await?;
@@ -265,11 +265,11 @@ impl SqlIndexedMerkleTree {
             r#"
             DELETE FROM leaves_len
             WHERE 
-              tag = $2
-              AND timestamp >= $1
+              tag = $1
+              AND timestamp >= $2
             "#,
+            self.tag() as i32,
             timestamp as i64,
-            self.tag() as i32
         )
         .execute(tx.as_mut())
         .await?;
@@ -310,15 +310,15 @@ impl SqlIndexedMerkleTree {
             SELECT position
             FROM indexed_leaves
             WHERE 
-                tag = $3
-                AND key = $1
-                AND timestamp <= $2
+                tag = $1
+                AND key = $2
+                AND timestamp <= $3
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
+            self.tag() as i32,
             key_decimal,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_all(tx.as_mut())
         .await?;
@@ -346,16 +346,16 @@ impl SqlIndexedMerkleTree {
             SELECT position, timestamp
             FROM indexed_leaves
             WHERE
-                tag = $3
-                AND next_key > $1
-                AND key < $1
-                AND timestamp <= $2
+                tag = $1
+                AND next_key > $2
+                AND key < $2
+                AND timestamp <= $3
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
+            self.tag() as i32,
             key_decimal,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;
@@ -365,16 +365,16 @@ impl SqlIndexedMerkleTree {
             SELECT position, timestamp
             FROM indexed_leaves
             WHERE 
-                tag = $3
+                tag = $1
                 AND next_key = '0'::numeric 
-                AND key < $1
-                AND timestamp <= $2
+                AND key < $2
+                AND timestamp <= $3
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
+            self.tag() as i32,
             key_decimal,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;
@@ -409,15 +409,15 @@ impl SqlIndexedMerkleTree {
             SELECT key
             FROM indexed_leaves
             WHERE 
-                tag = $3
-                AND  position = $1
-                AND timestamp <= $2
+                tag = $1
+                AND  position = $2
+                AND timestamp <= $3
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
+            self.tag() as i32,
             index as i64,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;

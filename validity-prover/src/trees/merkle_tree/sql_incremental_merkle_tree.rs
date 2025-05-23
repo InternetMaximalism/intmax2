@@ -46,13 +46,13 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
 
         sqlx::query!(
             r#"
-            INSERT INTO leaves (timestamp, tag, position, leaf_hash, leaf)
+            INSERT INTO leaves (tag, timestamp, position, leaf_hash, leaf)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (tag, timestamp, position)
             DO UPDATE SET leaf_hash = $4, leaf = $5
             "#,
-            timestamp as i64,
             self.tag() as i32,
+            timestamp as i64,
             position as i64,
             leaf_hash_serialized,
             leaf_serialized,
@@ -61,13 +61,13 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
         .await?;
         sqlx::query!(
             r#"
-            INSERT INTO leaves_len (timestamp, tag, len)
+            INSERT INTO leaves_len (tag, timestamp, len)
             VALUES ($1, $2, $3)
             ON CONFLICT (tag, timestamp)
             DO UPDATE SET len = $3
             "#,
-            timestamp as i64,
             self.tag() as i32,
+            timestamp as i64,
             next_len as i32,
         )
         .execute(tx.as_mut())
@@ -87,15 +87,15 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
             SELECT leaf 
             FROM leaves 
             WHERE 
-            tag = $3
-            AND position = $1 
-            AND timestamp <= $2 
+            tag = $1
+            AND position = $2
+            AND timestamp <= $3
             ORDER BY timestamp DESC 
             LIMIT 1
             "#,
+            self.tag() as i32,
             position as i64,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;
@@ -152,13 +152,13 @@ impl<V: Leafable + Serialize + DeserializeOwned> SqlIncrementalMerkleTree<V> {
             SELECT len
             FROM leaves_len
             WHERE 
-              tag = $2
-              AND timestamp <= $1
+              tag = $1
+              AND timestamp <= $2
             ORDER BY timestamp DESC
             LIMIT 1
             "#,
+            self.tag() as i32,
             timestamp as i64,
-            self.tag() as i32
         )
         .fetch_optional(tx.as_mut())
         .await?;

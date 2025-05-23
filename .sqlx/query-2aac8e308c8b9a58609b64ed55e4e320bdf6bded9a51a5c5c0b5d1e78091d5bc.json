@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT len\n            FROM leaves_len\n            WHERE \n              tag = $1\n              AND timestamp <= $2\n            ORDER BY timestamp DESC\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "len",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2aac8e308c8b9a58609b64ed55e4e320bdf6bded9a51a5c5c0b5d1e78091d5bc"
+}

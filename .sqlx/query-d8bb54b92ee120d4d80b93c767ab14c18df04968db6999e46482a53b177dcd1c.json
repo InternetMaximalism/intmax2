@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT leaf \n            FROM leaves \n            WHERE \n            tag = $1\n            AND position = $2\n            AND timestamp <= $3\n            ORDER BY timestamp DESC \n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "leaf",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d8bb54b92ee120d4d80b93c767ab14c18df04968db6999e46482a53b177dcd1c"
+}
