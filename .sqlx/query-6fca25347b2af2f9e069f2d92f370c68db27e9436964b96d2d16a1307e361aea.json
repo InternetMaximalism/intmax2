@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                    SELECT digest, timestamp\n                    FROM s3_historical_data\n                     WHERE topic = $1\n                    AND pubkey = $2\n                    AND (timestamp < $3 OR (timestamp = $3 AND digest < $4))\n                    ORDER BY timestamp DESC, digest DESC\n                    LIMIT $5\n                ",
+  "query": "\n                    SELECT digest, timestamp\n                    FROM s3_historical_data\n                    WHERE pubkey = $1\n                    AND topic = $2\n                    AND (timestamp < $3 OR (timestamp = $3 AND digest < $4))\n                    ORDER BY timestamp DESC, digest DESC\n                    LIMIT $5\n                ",
   "describe": {
     "columns": [
       {
@@ -28,5 +28,5 @@
       false
     ]
   },
-  "hash": "09e5d75fedcad5eafd6a66aa88b4fcd0df2520dbfb756ebcae567deb8fb560ac"
+  "hash": "6fca25347b2af2f9e069f2d92f370c68db27e9436964b96d2d16a1307e361aea"
 }

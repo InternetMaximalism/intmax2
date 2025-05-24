@@ -287,11 +287,13 @@ impl S3StoreVault {
             r#"
             SELECT timestamp, digest
             FROM s3_historical_data
-            WHERE topic = $1 AND pubkey = $2 AND digest = ANY($3)
+            WHERE digest = ANY($1) 
+                AND pubkey = $2 
+                AND topic = $3 
             "#,
-            topic,
+            &digests_hex,
             pubkey_hex,
-            &digests_hex
+            topic,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -338,14 +340,14 @@ impl S3StoreVault {
                     r#"
                     SELECT digest, timestamp
                     FROM s3_historical_data
-                    WHERE topic = $1
-                    AND pubkey = $2
+                    WHERE pubkey = $1
+                    AND topic = $2
                     AND (timestamp > $3 OR (timestamp = $3 AND digest > $4))
                     ORDER BY timestamp ASC, digest ASC
                     LIMIT $5
                     "#,
-                    topic,
                     pubkey_hex,
+                    topic,
                     cursor_meta.timestamp as i64,
                     cursor_meta.digest.to_hex(),
                     actual_limit + 1
@@ -369,14 +371,14 @@ impl S3StoreVault {
                     r#"
                     SELECT digest, timestamp
                     FROM s3_historical_data
-                     WHERE topic = $1
-                    AND pubkey = $2
+                    WHERE pubkey = $1
+                    AND topic = $2
                     AND (timestamp < $3 OR (timestamp = $3 AND digest < $4))
                     ORDER BY timestamp DESC, digest DESC
                     LIMIT $5
                 "#,
-                    topic,
                     pubkey_hex,
+                    topic,
                     timestamp,
                     digest,
                     actual_limit + 1
@@ -400,7 +402,11 @@ impl S3StoreVault {
         let total_count = sqlx::query_scalar!(
             r#"
             SELECT COUNT(*) FROM s3_historical_data
+            WHERE pubkey = $1
+            AND topic = $2
             "#,
+            pubkey_hex,
+            topic,
         )
         .fetch_one(&self.pool)
         .await?
@@ -975,7 +981,7 @@ mod tests {
         assert!(urls.is_empty());
         assert!(metadata.next_cursor.is_none());
         assert!(!metadata.has_more);
-        assert_eq!(metadata.total_count, 3);
+        assert_eq!(metadata.total_count, 0);
 
         let (urls, metadata) = vault
             .get_data_sequence_url(
