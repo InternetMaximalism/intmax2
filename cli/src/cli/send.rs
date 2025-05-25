@@ -35,12 +35,7 @@ pub async fn send_transfers(
         // get block builder info
         let indexer = IndexerClient::new(&env.indexer_base_url.to_string());
         let block_builder_info = indexer.get_block_builder_info().await?;
-        if block_builder_info.is_empty() {
-            return Err(CliError::UnexpectedError(
-                "Block builder info is empty".to_string(),
-            ));
-        }
-        block_builder_info.first().unwrap().url.clone()
+        block_builder_info.url.clone()
     };
 
     let fee_quote = client

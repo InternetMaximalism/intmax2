@@ -13,5 +13,5 @@ pub struct BlockBuilderInfo {
 
 #[async_trait(?Send)]
 pub trait IndexerClientInterface {
-    async fn get_block_builder_info(&self) -> Result<Vec<BlockBuilderInfo>, ServerError>;
+    async fn get_block_builder_info(&self) -> Result<BlockBuilderInfo, ServerError>;
 }

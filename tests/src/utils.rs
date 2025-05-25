@@ -14,7 +14,6 @@ use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
-use reqwest::Url;
 
 pub async fn calculate_balance_with_gas_deduction(
     provider: &NormalProvider,
@@ -45,13 +44,7 @@ pub async fn get_balance_on_intmax(client: &Client, key: KeySet) -> anyhow::Resu
 pub async fn get_block_builder_url(indexer_url: &str) -> anyhow::Result<String> {
     let indexer = IndexerClient::new(indexer_url);
     let block_builder_info = indexer.get_block_builder_info().await?;
-    if block_builder_info.is_empty() {
-        return Err(anyhow::anyhow!("Block builder info is empty"));
-    }
-    let url = block_builder_info.first().unwrap().url.clone();
-    let _ =
-        Url::parse(&url).map_err(|_| anyhow::anyhow!("Malformed block builder URL, {}", url))?;
-    Ok(block_builder_info.first().unwrap().url.clone())
+    Ok(block_builder_info.url.clone())
 }
 
 pub async fn print_info(client: &Client, eth_private_key: B256) -> anyhow::Result<()> {
