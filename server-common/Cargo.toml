@@ -19,7 +19,7 @@ opentelemetry = { version = "0.27", default-features = false, features = [
 ] }
 opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
-opentelemetry-semantic-conventions = "0.27"
+opentelemetry-semantic-conventions = "0.30"
 tracing = "0.1.41"
 tracing-actix-web = { workspace = true }
 tracing-opentelemetry = "0.28"
