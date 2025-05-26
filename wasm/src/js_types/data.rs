@@ -62,6 +62,8 @@ impl From<TransferData> for JsTransferData {
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTxData {
     pub tx: JsTx,
+    pub tx_index: u32,
+    pub tx_tree_root: String,
     pub transfers: Vec<JsTransfer>,
     pub transfer_digests: Vec<String>,
     pub transfer_types: Vec<String>,
@@ -90,6 +92,8 @@ impl From<TxData> for JsTxData {
             .collect();
         Self {
             tx,
+            tx_index: tx_data.tx_index,
+            tx_tree_root: tx_data.tx_tree_root.to_hex(),
             transfers,
             transfer_digests,
             transfer_types: tx_data.transfer_types,
