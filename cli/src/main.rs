@@ -1,4 +1,7 @@
 use clap::Parser;
+#[cfg(not(windows))]
+use colored::Colorize as _;
+#[cfg(windows)]
 use colored::{control, Colorize as _};
 use intmax2_cli::{
     args::{Args, Commands},
