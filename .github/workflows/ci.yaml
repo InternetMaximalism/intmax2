@@ -125,6 +125,8 @@ jobs:
           cd legacy-store-vault-server && sqlx database setup && cd -
           cd validity-prover && sqlx database setup && cd -
           cd withdrawal-server && sqlx database setup && cd -
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
       - name: Start Anvil
         run: |
           anvil &
@@ -137,3 +139,5 @@ jobs:
           ANVIL_IP_ADDR: 0.0.0.0
       - name: Run tests
         run: cargo nextest run --profile ci
+      - name: Run wasm tests (Node)
+        run: cd wasm && wasm-pack test --node --release && cd -

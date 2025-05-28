@@ -173,3 +173,120 @@ impl TryFrom<JsWithdrawalTransfers> for WithdrawalTransfers {
         })
     }
 }
+
+#[cfg(test)]
+mod fee_tests {
+    use std::str::FromStr;
+
+    use intmax2_client_sdk::client::{client::FeeQuote, fee_payment::WithdrawalTransfers};
+    use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
+    use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
+
+    use crate::js_types::{
+        common::{JsGenericAddress, JsTransfer},
+        fee::{JsFee, JsFeeInfo, JsFeeQuote, JsWithdrawalTransfers},
+    };
+
+    fn fee(amount: &str, token_index: u32) -> Fee {
+        Fee {
+            amount: U256::from_str(amount).unwrap(),
+            token_index,
+        }
+    }
+
+    fn dummy_js_transfer() -> JsTransfer {
+        JsTransfer {
+            recipient: JsGenericAddress {
+                is_pubkey: false,
+                data: "0x0000000000000000000000000000000000000000".to_string(),
+            },
+            token_index: 0,
+            amount: "0".to_string(),
+            salt: "0x00".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_jsfee_new_and_conversion() {
+        let js_fee = JsFee::new("12345".to_string(), 2);
+        let fee: Fee = js_fee.clone().try_into().unwrap();
+        assert_eq!(fee.amount, U256::from(12345u32));
+        assert_eq!(fee.token_index, 2);
+
+        let js_fee_back = JsFee::from(fee);
+        assert_eq!(js_fee.amount, js_fee_back.amount);
+        assert_eq!(js_fee.token_index, js_fee_back.token_index);
+    }
+
+    #[test]
+    fn test_feequote_to_jsfeequote() {
+        let quote = FeeQuote {
+            beneficiary: Some(
+                U256::from_str("0x1111111111111111111111111111111111111111").unwrap(),
+            ),
+            fee: Some(fee("100", 1)),
+            collateral_fee: Some(fee("200", 2)),
+        };
+
+        let js_quote = JsFeeQuote::from(quote);
+
+        assert_eq!(
+            js_quote.beneficiary,
+            Some("0x0000000000000000000000001111111111111111111111111111111111111111".to_string())
+        );
+        assert_eq!(js_quote.fee.as_ref().unwrap().amount, "100");
+        assert_eq!(js_quote.fee.as_ref().unwrap().token_index, 1);
+        assert_eq!(js_quote.collateral_fee.as_ref().unwrap().amount, "200");
+        assert_eq!(js_quote.collateral_fee.as_ref().unwrap().token_index, 2);
+    }
+
+    #[test]
+    fn test_blockbuilderfeeinfo_to_jsfeeinfo() {
+        let info = BlockBuilderFeeInfo {
+            beneficiary: Some(
+                U256::from_str("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
+            ),
+            registration_fee: Some(vec![fee("10", 0), fee("20", 1)]),
+            non_registration_fee: None,
+            registration_collateral_fee: Some(vec![fee("30", 2)]),
+            non_registration_collateral_fee: None,
+            block_builder_address: Address::default(),
+        };
+
+        let js_info = JsFeeInfo::from(info);
+
+        assert_eq!(
+            js_info.beneficiary,
+            Some("0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string())
+        );
+
+        let reg_fees = js_info.registration_fee.unwrap();
+        assert_eq!(reg_fees.len(), 2);
+        assert_eq!(reg_fees[0].amount, "10");
+        assert_eq!(reg_fees[1].token_index, 1);
+
+        let reg_col_fees = js_info.registration_collateral_fee.unwrap();
+        assert_eq!(reg_col_fees[0].amount, "30");
+        assert_eq!(reg_col_fees[0].token_index, 2);
+    }
+
+    #[test]
+    fn test_withdrawaltransfers_conversion_roundtrip() {
+        let js_transfer = dummy_js_transfer();
+        let js_transfers = JsWithdrawalTransfers {
+            transfers: vec![js_transfer],
+            withdrawal_fee_transfer_index: Some(0),
+            claim_fee_transfer_index: Some(1),
+        };
+
+        let wt: WithdrawalTransfers = js_transfers.clone().try_into().unwrap();
+        assert_eq!(wt.transfers.len(), 1);
+        assert_eq!(wt.withdrawal_fee_transfer_index, Some(0));
+        assert_eq!(wt.claim_fee_transfer_index, Some(1));
+
+        let js_back = JsWithdrawalTransfers::from(wt);
+        assert_eq!(js_back.transfers.len(), 1);
+        assert_eq!(js_back.withdrawal_fee_transfer_index, Some(0));
+        assert_eq!(js_back.claim_fee_transfer_index, Some(1));
+    }
+}
