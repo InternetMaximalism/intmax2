@@ -140,4 +140,4 @@ jobs:
       - name: Run tests
         run: cargo nextest run --profile ci
       - name: Run wasm tests (Node)
-        run: wasm-pack test --node --release
+        run: cd wasm && wasm-pack test --node --release && cd -
