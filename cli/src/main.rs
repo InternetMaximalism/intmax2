@@ -33,7 +33,8 @@ const MAX_BATCH_TRANSFER: usize = 63;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    if cfg!(target_os = "windows") {
+    #[cfg(windows)]
+    {
         control::set_virtual_terminal(true).unwrap();
     }
 
