@@ -1,5 +1,5 @@
 use clap::Parser;
-use colored::Colorize as _;
+use colored::{control, Colorize as _};
 use intmax2_cli::{
     args::{Args, Commands},
     cli::{
@@ -33,6 +33,10 @@ const MAX_BATCH_TRANSFER: usize = 63;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if cfg!(target_os = "windows") {
+        control::set_virtual_terminal(true).unwrap();
+    }
+
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
