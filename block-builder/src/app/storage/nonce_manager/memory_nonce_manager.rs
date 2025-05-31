@@ -18,84 +18,89 @@ pub struct InMemoryNonceManager {
 }
 
 impl InMemoryNonceManager {
-    pub fn new(config: NonceManagerConfig, rollup: RollupContract) -> Self {
-        Self {
+    pub async fn new(
+        config: NonceManagerConfig,
+        rollup: RollupContract,
+    ) -> Result<Self, NonceError> {
+        let onchain_next_registration_nonce =
+            rollup.get_nonce(true, config.block_builder_address).await?;
+        let onchain_next_non_registration_nonce = rollup
+            .get_nonce(false, config.block_builder_address)
+            .await?;
+        Ok(Self {
             config,
             rollup,
-            next_registration_nonce: Arc::new(RwLock::new(0)),
-            next_non_registration_nonce: Arc::new(RwLock::new(0)),
+            next_registration_nonce: Arc::new(RwLock::new(onchain_next_registration_nonce)),
+            next_non_registration_nonce: Arc::new(RwLock::new(onchain_next_non_registration_nonce)),
             reserved_registration_nonces: Arc::new(RwLock::new(BTreeSet::new())),
             reserved_non_registration_nonces: Arc::new(RwLock::new(BTreeSet::new())),
-        }
+        })
     }
 }
 
 #[async_trait::async_trait(?Send)]
 impl NonceManager for InMemoryNonceManager {
     async fn sync_onchain(&self) -> Result<(), NonceError> {
-        let next_registration_nonce = self
+        // Fetch the latest nonces from the blockchain for both types.
+        let onchain_next_registration_nonce = self
             .rollup
             .get_nonce(true, self.config.block_builder_address)
             .await?;
-        let next_non_registration_nonce = self
+        let onchain_next_non_registration_nonce = self
             .rollup
             .get_nonce(false, self.config.block_builder_address)
             .await?;
+        let mut local_next_reg_guard = self.next_registration_nonce.write().await;
+        *local_next_reg_guard = onchain_next_registration_nonce.max(*local_next_reg_guard);
+        drop(local_next_reg_guard);
 
-        *self.next_registration_nonce.write().await = next_registration_nonce;
-        *self.next_non_registration_nonce.write().await = next_non_registration_nonce;
+        let mut local_next_non_reg_guard = self.next_non_registration_nonce.write().await;
+        *local_next_non_reg_guard =
+            onchain_next_non_registration_nonce.max(*local_next_non_reg_guard);
+        drop(local_next_non_reg_guard);
 
-        // Clear all reservations older than the on-chain nonce
-        let mut reserved_registration_nonces = self.reserved_registration_nonces.write().await;
-        reserved_registration_nonces.retain(|&nonce| nonce >= next_registration_nonce);
+        let mut reserved_registration_nonces_guard =
+            self.reserved_registration_nonces.write().await;
+        reserved_registration_nonces_guard
+            .retain(|&nonce| nonce >= onchain_next_registration_nonce);
+        drop(reserved_registration_nonces_guard);
 
-        let mut reserved_non_registration_nonces =
+        let mut reserved_non_registration_nonces_guard =
             self.reserved_non_registration_nonces.write().await;
-        reserved_non_registration_nonces.retain(|&nonce| nonce >= next_non_registration_nonce);
+        reserved_non_registration_nonces_guard
+            .retain(|&nonce| nonce >= onchain_next_non_registration_nonce);
+        drop(reserved_non_registration_nonces_guard);
+
         Ok(())
     }
 
     async fn reserve_nonce(&self, is_registration: bool) -> Result<u32, NonceError> {
-        let mut next_nonce = if is_registration {
+        let mut next_nonce_guard = if is_registration {
             self.next_registration_nonce.write().await
         } else {
             self.next_non_registration_nonce.write().await
         };
+        let next_nonce = *next_nonce_guard;
+        *next_nonce_guard += 1;
+        drop(next_nonce_guard);
 
-        let reserved_nonces = if is_registration {
+        let reserved_nonces_arc = if is_registration {
             &self.reserved_registration_nonces
         } else {
             &self.reserved_non_registration_nonces
         };
-
-        // Find the next available nonce
-        while reserved_nonces.read().await.contains(&*next_nonce) {
-            *next_nonce += 1;
-        }
-
-        // Reserve the nonce
-        if is_registration {
-            self.reserved_registration_nonces
-                .write()
-                .await
-                .insert(*next_nonce);
-        } else {
-            self.reserved_non_registration_nonces
-                .write()
-                .await
-                .insert(*next_nonce);
-        }
-        Ok(*next_nonce)
+        reserved_nonces_arc.write().await.insert(next_nonce);
+        Ok(next_nonce)
     }
 
     async fn release_nonce(&self, nonce: u32, is_registration: bool) -> Result<(), NonceError> {
-        let reserved_nonces = if is_registration {
+        let reserved_nonces_arc = if is_registration {
             &self.reserved_registration_nonces
         } else {
             &self.reserved_non_registration_nonces
         };
-        let mut reserved_nonces_set = reserved_nonces.write().await;
-        reserved_nonces_set.remove(&nonce);
+        let mut reserved_nonces_set_guard = reserved_nonces_arc.write().await;
+        reserved_nonces_set_guard.remove(&nonce);
         Ok(())
     }
 
@@ -104,12 +109,13 @@ impl NonceManager for InMemoryNonceManager {
         nonce: u32,
         is_registration: bool,
     ) -> Result<bool, NonceError> {
-        let reserved_nonces = if is_registration {
+        let reserved_nonces_guard = if is_registration {
             self.reserved_registration_nonces.read().await
         } else {
             self.reserved_non_registration_nonces.read().await
         };
-        // Check if the given nonce is the smallest among all currently reserved nonces
-        Ok(reserved_nonces.iter().next() == Some(&nonce))
+        // `BTreeSet` iterators yield elements in ascending order.
+        // So, the first element from `iter().next()` is the smallest.
+        Ok(reserved_nonces_guard.iter().next() == Some(&nonce))
     }
 }
