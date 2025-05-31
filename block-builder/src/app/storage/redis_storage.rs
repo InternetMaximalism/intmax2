@@ -338,7 +338,8 @@ impl Storage for RedisStorage {
         }
 
         // Make sure we release the lock when we're done
-        let result = with_retry(|| async {
+        // we don't use `with_retry` here because we want to ensure the lock is released quickly
+        let result = {
             // Select the appropriate keys based on transaction type
             let requests_key = if is_registration {
                 &self.registration_tx_requests_key
@@ -441,8 +442,7 @@ impl Storage for RedisStorage {
             let _: () = pipe.query_async(&mut conn).await?;
 
             Ok(())
-        })
-        .await;
+        };
 
         // Release the lock regardless of the result
         let release_result = self.release_lock(lock_name).await;
@@ -542,7 +542,8 @@ impl Storage for RedisStorage {
         }
 
         // Make sure we release the lock when we're done
-        let result = with_retry(|| async {
+        // we don't use `with_retry` here because we want to ensure the lock is released quickly
+        let result = {
             let mut conn = self.get_conn().await?;
 
             // Get all memo keys
@@ -650,8 +651,7 @@ impl Storage for RedisStorage {
             }
 
             Ok(())
-        })
-        .await;
+        };
 
         // Release the lock regardless of the result
         let release_result = self.release_lock("process_signatures").await;
@@ -683,7 +683,8 @@ impl Storage for RedisStorage {
         }
 
         // Make sure we release the lock when we're done
-        let result = with_retry(|| async {
+        // we don't use `with_retry` here because we want to ensure the lock is released quickly
+        let result = {
             let mut conn = self.get_conn().await?;
 
             // Use BLPOP with a short timeout to avoid race conditions between multiple instances
@@ -728,8 +729,7 @@ impl Storage for RedisStorage {
             }
 
             Ok(())
-        })
-        .await;
+        };
 
         // Release the lock regardless of the result
         let release_result = self.release_lock("process_fee_collection").await;
@@ -809,7 +809,8 @@ impl Storage for RedisStorage {
         }
 
         // Make sure we release the lock when we're done
-        let result = with_retry(|| async {
+        // we don't use `with_retry` here because we want to ensure the lock is released quickly
+        let result = {
             let mut conn = self.get_conn().await?;
 
             // Key for storing the timestamp of the last empty block post
@@ -857,8 +858,7 @@ impl Storage for RedisStorage {
             let _: () = pipe.query_async(&mut conn).await?;
 
             Ok(())
-        })
-        .await;
+        };
 
         // Release the lock regardless of the result
         let release_result = self.release_lock("enqueue_empty_block").await;
