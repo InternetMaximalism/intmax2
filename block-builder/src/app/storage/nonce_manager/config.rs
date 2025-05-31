@@ -1,4 +1,4 @@
-use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
+use alloy::primitives::Address;
 
 #[derive(Debug, Clone)]
 pub struct NonceManagerConfig {
