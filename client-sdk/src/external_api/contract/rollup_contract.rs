@@ -283,6 +283,26 @@ impl RollupContract {
         let penalty = contract.getPenalty().call().await?;
         Ok(convert_u256_to_intmax(penalty))
     }
+
+    pub async fn get_nonce(
+        &self,
+        is_registration: bool,
+        block_builder_address: Address,
+    ) -> Result<u32, BlockchainError> {
+        let contract = Rollup::new(self.address, self.provider.clone());
+        let nonce = if is_registration {
+            contract
+                .builderRegistrationNonce(block_builder_address)
+                .call()
+                .await?
+        } else {
+            contract
+                .builderNonRegistrationNonce(block_builder_address)
+                .call()
+                .await?
+        };
+        Ok(nonce)
+    }
 }
 
 // Event related methods
