@@ -25,6 +25,8 @@ const LOCK_TIMEOUT_SECONDS: usize = 10;
 /// TTL for general Redis keys in seconds
 const GENERAL_KEY_TTL_SECONDS: usize = 1200; // 20min
 
+type Result<T> = std::result::Result<T, StorageError>;
+
 /// Transaction request with timestamp
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct TxRequestWithTimestamp {
@@ -96,7 +98,7 @@ impl RedisStorage {
     /// * `Ok(true)` - Lock acquired
     /// * `Ok(false)` - Lock held by another instance
     /// * `Err` - Redis communication error
-    async fn acquire_lock(&self, lock_name: &str) -> Result<bool, StorageError> {
+    async fn acquire_lock(&self, lock_name: &str) -> Result<bool> {
         let mut conn = self.get_conn().await?;
         let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
         let instance_id = &self.config.block_builder_id;
@@ -124,7 +126,7 @@ impl RedisStorage {
     ///
     /// # Arguments
     /// * `lock_name` - Lock name to release
-    async fn release_lock(&self, lock_name: &str) -> Result<(), StorageError> {
+    async fn release_lock(&self, lock_name: &str) -> Result<()> {
         let mut conn = self.get_conn().await?;
         let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
         let instance_id = &self.config.block_builder_id;
@@ -203,11 +205,7 @@ impl Storage for RedisStorage {
     /// # Arguments
     /// * `is_registration` - If this is a registration transaction
     /// * `tx_request` - Transaction request to add
-    async fn add_tx(
-        &self,
-        is_registration: bool,
-        tx_request: TxRequest,
-    ) -> Result<(), StorageError> {
+    async fn add_tx(&self, is_registration: bool, tx_request: TxRequest) -> Result<()> {
         log::info!(
             "Adding transaction to {} queue with retries: {}",
             if is_registration {
@@ -217,7 +215,6 @@ impl Storage for RedisStorage {
             },
             tx_request.request_id
         );
-        // Implement retry logic directly for this method
 
         with_retry(|| async {
             let tx_request = tx_request.clone();
@@ -256,7 +253,7 @@ impl Storage for RedisStorage {
                 },
                 request_id
             );
-            Result::<(), StorageError>::Ok(())
+            Result::Ok(())
         })
         .await?;
         Ok(())
@@ -272,12 +269,9 @@ impl Storage for RedisStorage {
     /// # Returns
     /// * `Some(BlockProposal)` - Proposal found
     /// * `None` - No proposal exists
-    async fn query_proposal(
-        &self,
-        request_id: &str,
-    ) -> Result<Option<BlockProposal>, StorageError> {
+    async fn query_proposal(&self, request_id: &str) -> Result<Option<BlockProposal>> {
         log::info!("Querying proposal for request: {}", request_id);
-        with_retry(|| async {
+        let block_proposal = with_retry(|| async {
             let mut conn = self.get_conn().await?;
 
             // Get block_id for request_id
@@ -287,7 +281,7 @@ impl Storage for RedisStorage {
 
             let block_id = match block_id {
                 Some(id) => id,
-                None => return Ok(None), // No block ID found for this request
+                None => return Result::Ok(None), // No block ID found for this request
             };
 
             // Get memo for block_id
@@ -311,11 +305,8 @@ impl Storage for RedisStorage {
                 None => Ok(None), // No memo found for this block ID
             }
         })
-        .await
-        .inspect(|result| match &result {
-            Some(_) => log::info!("Proposal found for request: {request_id}"),
-            None => log::info!("No proposal found for request: {request_id}"),
-        })
+        .await?;
+        Ok(block_proposal)
     }
 
     /// Process transaction requests and create memos
@@ -324,7 +315,7 @@ impl Storage for RedisStorage {
     ///
     /// # Arguments
     /// * `is_registration` - Process registration or non-registration transactions
-    async fn process_requests(&self, is_registration: bool) -> Result<(), StorageError> {
+    async fn process_requests(&self, is_registration: bool) -> Result<()> {
         log::info!(
             "Processing {} transaction requests",
             if is_registration {
@@ -479,11 +470,7 @@ impl Storage for RedisStorage {
     /// # Arguments
     /// * `request_id` - Transaction request ID
     /// * `signature` - User signature to add
-    async fn add_signature(
-        &self,
-        request_id: &str,
-        signature: UserSignature,
-    ) -> Result<(), StorageError> {
+    async fn add_signature(&self, request_id: &str, signature: UserSignature) -> Result<()> {
         log::info!("Adding signature for request: {}", request_id);
         with_retry(|| async {
             let mut conn = self.get_conn().await?;
@@ -538,7 +525,7 @@ impl Storage for RedisStorage {
     /// Process signatures and create block post tasks
     ///
     /// Processes signatures for ready memos and creates necessary tasks.
-    async fn process_signatures(&self) -> Result<(), StorageError> {
+    async fn process_signatures(&self) -> Result<()> {
         log::info!("Processing signatures");
         // Try to acquire the lock
         let lock_acquired = match self.acquire_lock("process_signatures").await {
@@ -687,7 +674,7 @@ impl Storage for RedisStorage {
     async fn process_fee_collection(
         &self,
         store_vault_server_client: &dyn StoreVaultClientInterface,
-    ) -> Result<(), StorageError> {
+    ) -> Result<()> {
         log::info!("Processing fee collection tasks");
         // Try to acquire the lock
         if !self.acquire_lock("process_fee_collection").await? {
@@ -763,12 +750,12 @@ impl Storage for RedisStorage {
     /// # Returns
     /// * `Some(BlockPostTask)` - Task dequeued
     /// * `None` - No tasks available
-    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>> {
         log::info!("Dequeuing block post task");
         // We don't need a distributed lock here since BLPOP is atomic
         // and each instance should be able to dequeue tasks
 
-        with_retry(|| async {
+        let block_post_task = with_retry(|| async {
             let mut conn = self.get_conn().await?;
 
             // Try to get a task from high priority queue first using BLPOP with a short timeout
@@ -785,7 +772,7 @@ impl Storage for RedisStorage {
 
                     match serialized_task {
                         Some((_, value)) => value,
-                        None => return Ok(None),
+                        None => return Result::Ok(None),
                     }
                 }
             };
@@ -799,17 +786,14 @@ impl Storage for RedisStorage {
                 }
             }
         })
-        .await
-        .inspect(|result| match &result {
-            Some(task) => log::info!("Block post task dequeued: {}", task.block_id),
-            None => log::info!("No block post tasks available"),
-        })
+        .await?;
+        Ok(block_post_task)
     }
 
     /// Enqueue empty block for deposit checking
     ///
     /// Adds empty block task if enough time passed since last check.
-    async fn enqueue_empty_block(&self) -> Result<(), StorageError> {
+    async fn enqueue_empty_block(&self) -> Result<()> {
         log::info!("Checking if empty block should be enqueued");
         // If deposit check is disabled, do nothing
         if self.config.deposit_check_interval.is_none() {
