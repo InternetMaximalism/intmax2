@@ -18,23 +18,15 @@ pub struct InMemoryNonceManager {
 }
 
 impl InMemoryNonceManager {
-    pub async fn new(
-        config: NonceManagerConfig,
-        rollup: RollupContract,
-    ) -> Result<Self, NonceError> {
-        let onchain_next_registration_nonce =
-            rollup.get_nonce(true, config.block_builder_address).await?;
-        let onchain_next_non_registration_nonce = rollup
-            .get_nonce(false, config.block_builder_address)
-            .await?;
-        Ok(Self {
+    pub fn new(config: NonceManagerConfig, rollup: RollupContract) -> Self {
+        Self {
             config,
             rollup,
-            next_registration_nonce: Arc::new(RwLock::new(onchain_next_registration_nonce)),
-            next_non_registration_nonce: Arc::new(RwLock::new(onchain_next_non_registration_nonce)),
+            next_registration_nonce: Arc::new(RwLock::new(0)),
+            next_non_registration_nonce: Arc::new(RwLock::new(0)),
             reserved_registration_nonces: Arc::new(RwLock::new(BTreeSet::new())),
             reserved_non_registration_nonces: Arc::new(RwLock::new(BTreeSet::new())),
-        })
+        }
     }
 }
 

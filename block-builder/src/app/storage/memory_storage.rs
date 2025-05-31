@@ -16,7 +16,10 @@ use crate::app::{
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StorageConfig, error::StorageError, Storage};
+use super::{
+    config::StorageConfig, error::StorageError,
+    nonce_manager::memory_nonce_manager::InMemoryNonceManager, Storage,
+};
 
 type AR<T> = Arc<RwLock<T>>;
 type ARQueue<T> = AR<VecDeque<T>>;
@@ -24,6 +27,8 @@ type ARMap<K, V> = AR<HashMap<K, V>>;
 
 pub struct InMemoryStorage {
     pub config: StorageConfig,
+
+    pub nonce_manager: InMemoryNonceManager,
 
     pub registration_tx_requests: ARQueue<TxRequest>, // registration tx requests queue
     pub registration_tx_last_processed: AR<u64>,      // last processed timestamp
@@ -42,9 +47,10 @@ pub struct InMemoryStorage {
 }
 
 impl InMemoryStorage {
-    pub async fn new(config: &StorageConfig) -> Self {
+    pub fn new(config: &StorageConfig, nonce_manager: InMemoryNonceManager) -> Self {
         Self {
             config: config.clone(),
+            nonce_manager,
             registration_tx_requests: Default::default(),
             registration_tx_last_processed: Default::default(),
             non_registration_tx_requests: Default::default(),
@@ -338,11 +344,17 @@ impl Storage for InMemoryStorage {
 
 #[cfg(test)]
 mod tests {
+    use crate::app::storage::nonce_manager::config::NonceManagerConfig;
+
     use super::*;
+    use alloy::providers::{mock::Asserter, ProviderBuilder};
+    use intmax2_client_sdk::external_api::contract::{
+        convert::convert_address_to_alloy, rollup_contract::RollupContract,
+    };
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
-    fn dummy_config() -> StorageConfig {
-        StorageConfig {
+    async fn create_storage() -> InMemoryStorage {
+        let config = StorageConfig {
             use_fee: false,
             use_collateral: false,
             block_builder_address: Address::default(),
@@ -354,7 +366,23 @@ mod tests {
             block_builder_id: "builder1".to_string(),
             redis_url: None,
             cluster_id: None,
-        }
+        };
+
+        let provider_asserter = Asserter::new();
+        let provider = ProviderBuilder::default()
+            .with_gas_estimation()
+            .with_simple_nonce_management()
+            .fetch_chain_id()
+            .connect_mocked_client(provider_asserter);
+
+        let rollup = RollupContract::new(provider, Default::default());
+        let nonce_config = NonceManagerConfig {
+            block_builder_address: convert_address_to_alloy(config.block_builder_address),
+            redis_url: None,
+            cluster_id: None,
+        };
+        let nonce_manager = InMemoryNonceManager::new(nonce_config, rollup);
+        InMemoryStorage::new(&config, nonce_manager)
     }
 
     fn dummy_tx_request(request_id: &str) -> TxRequest {
@@ -369,7 +397,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_tx_registration() {
-        let storage = InMemoryStorage::new(&dummy_config()).await;
+        let storage = create_storage().await;
         let tx = dummy_tx_request("reg-1");
 
         storage.add_tx(true, tx.clone()).await.unwrap();
@@ -381,7 +409,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_tx_non_registration() {
-        let storage = InMemoryStorage::new(&dummy_config()).await;
+        let storage = create_storage().await;
         let tx = dummy_tx_request("nonreg-1");
 
         storage.add_tx(false, tx.clone()).await.unwrap();

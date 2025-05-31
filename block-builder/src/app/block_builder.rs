@@ -103,7 +103,7 @@ impl BlockBuilder {
             env.block_builder_registry_contract_address,
         );
         let config = Self::create_config(env)?;
-        let storage = Self::create_storage(env, &config).await?;
+        let storage = Self::create_storage(env, &config, rollup_contract.clone()).await?;
 
         Ok(Self {
             config,
@@ -199,6 +199,7 @@ impl BlockBuilder {
     async fn create_storage(
         env: &EnvVar,
         config: &Config,
+        rollup: RollupContract,
     ) -> Result<Arc<Box<dyn Storage>>, BlockBuilderError> {
         let storage_config = StorageConfig {
             use_fee: config.use_fee,
@@ -213,7 +214,7 @@ impl BlockBuilder {
             cluster_id: env.cluster_id.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
-        let storage = storage::create_storage(&storage_config).await;
+        let storage = storage::create_storage(&storage_config, rollup).await;
         Ok(Arc::new(storage))
     }
 

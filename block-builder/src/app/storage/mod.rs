@@ -1,5 +1,9 @@
+use intmax2_client_sdk::external_api::contract::{
+    convert::convert_address_to_alloy, rollup_contract::RollupContract,
+};
 use intmax2_interfaces::api::store_vault_server::interface::StoreVaultClientInterface;
 use intmax2_zkp::common::block_builder::{BlockProposal, UserSignature};
+use nonce_manager::{config::NonceManagerConfig, memory_nonce_manager::InMemoryNonceManager};
 
 use super::{block_post::BlockPostTask, types::TxRequest};
 
@@ -9,13 +13,6 @@ pub mod error;
 pub mod memory_storage;
 pub mod nonce_manager;
 pub mod redis_storage;
-
-/// Factory trait for creating Storage instances
-#[async_trait::async_trait(?Send)]
-pub trait StorageFactory {
-    /// Create a new storage instance with the given configuration
-    async fn new(config: &StorageConfig) -> Self;
-}
 
 #[async_trait::async_trait(?Send)]
 pub trait Storage: Sync + Send {
@@ -59,12 +56,18 @@ pub trait Storage: Sync + Send {
 /// Create a storage implementation based on the configuration
 ///
 /// Returns RedisStorage if redis_url is set in the config, otherwise returns InMemoryStorage
-pub async fn create_storage(config: &StorageConfig) -> Box<dyn Storage> {
+pub async fn create_storage(config: &StorageConfig, rollup: RollupContract) -> Box<dyn Storage> {
     if config.redis_url.is_some() {
         log::info!("use redis storage");
         Box::new(redis_storage::RedisStorage::new(config).await)
     } else {
         log::info!("use in-memory storage");
-        Box::new(memory_storage::InMemoryStorage::new(config).await)
+        let nonce_config = NonceManagerConfig {
+            block_builder_address: convert_address_to_alloy(config.block_builder_address),
+            redis_url: None,
+            cluster_id: None,
+        };
+        let nonce_manager = InMemoryNonceManager::new(nonce_config, rollup);
+        Box::new(memory_storage::InMemoryStorage::new(config, nonce_manager))
     }
 }
