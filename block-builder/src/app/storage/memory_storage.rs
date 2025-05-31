@@ -13,6 +13,7 @@ use tokio::sync::RwLock;
 use crate::app::{
     block_post::BlockPostTask,
     fee::{collect_fee, FeeCollection},
+    storage::nonce_manager::NonceManager,
     types::{ProposalMemo, TxRequest},
 };
 
@@ -115,10 +116,11 @@ impl Storage for InMemoryStorage {
 
         let num_tx_requests = tx_requests.len().min(NUM_SENDERS_IN_BLOCK);
         let tx_requests: Vec<TxRequest> = tx_requests.drain(..num_tx_requests).collect();
+        let nonce = self.nonce_manager.reserve_nonce(is_registration).await?;
         let memo = ProposalMemo::from_tx_requests(
             is_registration,
             self.config.block_builder_address,
-            0, // todo: fetch nonce from contract
+            nonce,
             &tx_requests,
             self.config.tx_timeout,
         );
@@ -300,24 +302,6 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
-        let block_post_task = {
-            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
-            block_post_tasks_hi.pop_front()
-        };
-        let result = match block_post_task {
-            Some(block_post_task) => Some(block_post_task),
-            None => {
-                // if there is no high priority task, pop from block_post_tasks_lo
-                {
-                    let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
-                    block_post_tasks_lo.pop_front()
-                }
-            }
-        };
-        Ok(result)
-    }
-
     async fn enqueue_empty_block(&self) -> Result<(), StorageError> {
         if self.config.deposit_check_interval.is_none() {
             // if deposit check is disabled, do nothing
@@ -339,6 +323,24 @@ impl Storage for InMemoryStorage {
             .await
             .push_back(BlockPostTask::default());
         Ok(())
+    }
+
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
+        let block_post_task = {
+            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
+            block_post_tasks_hi.pop_front()
+        };
+        let result = match block_post_task {
+            Some(block_post_task) => Some(block_post_task),
+            None => {
+                // if there is no high priority task, pop from block_post_tasks_lo
+                {
+                    let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
+                    block_post_tasks_lo.pop_front()
+                }
+            }
+        };
+        Ok(result)
     }
 }
 
