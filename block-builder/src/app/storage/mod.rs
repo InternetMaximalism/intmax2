@@ -7,6 +7,7 @@ pub mod config;
 use config::StorageConfig;
 pub mod error;
 pub mod memory_storage;
+pub mod nonce_manager;
 pub mod redis_storage;
 
 /// Factory trait for creating Storage instances
