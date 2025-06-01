@@ -36,11 +36,11 @@ impl InMemoryNonceManager {
         // Fetch the latest nonces from the blockchain for both types.
         let onchain_next_registration_nonce = self
             .rollup
-            .get_nonce(true, self.config.block_builder_address)
+            .get_block_builder_nonce(true, self.config.block_builder_address)
             .await?;
         let onchain_next_non_registration_nonce = self
             .rollup
-            .get_nonce(false, self.config.block_builder_address)
+            .get_block_builder_nonce(false, self.config.block_builder_address)
             .await?;
         let mut local_next_reg_guard = self.next_registration_nonce.write().await;
         *local_next_reg_guard = onchain_next_registration_nonce.max(*local_next_reg_guard);

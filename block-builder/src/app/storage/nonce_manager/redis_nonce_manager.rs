@@ -58,11 +58,11 @@ impl RedisNonceManager {
     async fn sync_onchain(&self) -> Result<(), NonceError> {
         let onchain_next_registration_nonce = self
             .rollup
-            .get_nonce(true, self.config.block_builder_address)
+            .get_block_builder_nonce(true, self.config.block_builder_address)
             .await?;
         let onchain_next_non_registration_nonce = self
             .rollup
-            .get_nonce(false, self.config.block_builder_address)
+            .get_block_builder_nonce(false, self.config.block_builder_address)
             .await?;
 
         let mut conn = self.get_conn().await?;

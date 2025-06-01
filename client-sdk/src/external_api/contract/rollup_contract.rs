@@ -284,7 +284,8 @@ impl RollupContract {
         Ok(convert_u256_to_intmax(penalty))
     }
 
-    pub async fn get_nonce(
+    /// Returns the nonce for the block builder address
+    pub async fn get_block_builder_nonce(
         &self,
         is_registration: bool,
         block_builder_address: Address,
