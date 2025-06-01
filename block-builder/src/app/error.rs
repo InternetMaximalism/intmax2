@@ -26,18 +26,6 @@ pub enum BlockBuilderError {
     #[error("Invalid fee setting: {0}")]
     InvalidFeeSetting(String),
 
-    #[error("Queue error: {0}")]
-    QueueError(String),
-
-    #[error("Not accepting transactions")]
-    NotAcceptingTx,
-
-    #[error("Block is full")]
-    BlockIsFull,
-
-    #[error("Only one sender allowed in a block")]
-    OnlyOneSenderAllowed,
-
     #[error("Validity prover is not synced onchain:{0} validity prover:{1}")]
     ValidityProverIsNotSynced(u32, u32),
 
@@ -47,29 +35,10 @@ pub enum BlockBuilderError {
     #[error("Account not found pubkey: {0}")]
     AccountNotFound(U256),
 
-    #[error("Block builder is pausing")]
-    BlockBuilderIsPausing,
-
-    #[error("Not proposing")]
-    NotProposing,
-
-    #[error("Tx request is not found")]
-    TxRequestNotFound,
-
-    #[error("Invalid signature: {0}")]
-    InvalidSignature(String),
-
-    #[error("Block builder should be pausing")]
-    ShouldBePausing,
-
     #[error("Block already expired")]
     AlreadyExpired,
 
-    #[error("Unexpected error: {0}")]
-    UnexpectedError(String),
-
-    /// Error for health check in `get_fee_info`
-    #[error("{0}")]
+    #[error("Block chain health error: {0}")]
     BlockChainHealthError(String),
 }
 
