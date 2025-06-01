@@ -2,6 +2,7 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
 use tokio::sync::RwLock;
+use tracing::instrument;
 
 use super::{config::NonceManagerConfig, error::NonceError, NonceManager};
 
@@ -68,6 +69,7 @@ impl InMemoryNonceManager {
 
 #[async_trait::async_trait(?Send)]
 impl NonceManager for InMemoryNonceManager {
+    #[instrument(skip(self))]
     async fn reserve_nonce(&self, is_registration: bool) -> Result<u32, NonceError> {
         // Synchronize the local state with the on-chain state.
         self.sync_onchain().await?;
@@ -87,9 +89,12 @@ impl NonceManager for InMemoryNonceManager {
             &self.reserved_non_registration_nonces
         };
         reserved_nonces_arc.write().await.insert(next_nonce);
+
+        tracing::Span::current().record("next_nonce", next_nonce);
         Ok(next_nonce)
     }
 
+    #[instrument(skip(self))]
     async fn release_nonce(&self, nonce: u32, is_registration: bool) -> Result<(), NonceError> {
         let reserved_nonces_arc = if is_registration {
             &self.reserved_registration_nonces

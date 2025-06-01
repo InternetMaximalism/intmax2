@@ -1987,6 +1987,7 @@ dependencies = [
  "server-common",
  "thiserror 2.0.12",
  "tokio",
+ "tracing",
  "tracing-actix-web",
  "url",
  "uuid",
