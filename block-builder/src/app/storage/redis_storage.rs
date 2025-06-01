@@ -14,6 +14,7 @@ use tokio::sync::Mutex;
 use crate::app::{
     block_post::BlockPostTask,
     fee::{collect_fee, FeeCollection},
+    storage::nonce_manager::NonceManager,
     types::{ProposalMemo, TxRequest},
 };
 
@@ -364,11 +365,13 @@ impl Storage for RedisStorage {
                 tx_requests.push(request_with_timestamp.request);
             }
 
+            let nonce = self.nonce_manager.reserve_nonce(is_registration).await?;
+
             // Create memo from the transaction requests
             let memo = ProposalMemo::from_tx_requests(
                 is_registration,
                 self.config.block_builder_address,
-                0, // todo: fetch builder nonce from contract
+                nonce,
                 &tx_requests,
                 self.config.tx_timeout,
             );
@@ -717,53 +720,6 @@ impl Storage for RedisStorage {
         result
     }
 
-    /// Dequeue block post task
-    ///
-    /// Gets task from high priority queue first, then low priority if none available.
-    ///
-    /// # Returns
-    /// * `Some(BlockPostTask)` - Task dequeued
-    /// * `None` - No tasks available
-    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>> {
-        log::info!("Dequeuing block post task");
-        // We don't need a distributed lock here since BLPOP is atomic
-        // and each instance should be able to dequeue tasks
-
-        let block_post_task = with_retry(|| async {
-            let mut conn = self.get_conn().await?;
-
-            // Try to get a task from high priority queue first using BLPOP with a short timeout
-            let serialized_task: Option<(String, String)> =
-                conn.blpop(&self.block_post_tasks_hi_key, 1.0).await?;
-
-            // If no high priority task, try low priority queue
-            let serialized_task = match serialized_task {
-                Some((_, value)) => value,
-                None => {
-                    // Try low priority queue
-                    let serialized_task: Option<(String, String)> =
-                        conn.blpop(&self.block_post_tasks_lo_key, 1.0).await?;
-
-                    match serialized_task {
-                        Some((_, value)) => value,
-                        None => return Result::Ok(None),
-                    }
-                }
-            };
-
-            // Deserialize the task
-            match serde_json::from_str::<BlockPostTask>(&serialized_task) {
-                Ok(task) => Ok(Some(task)),
-                Err(e) => {
-                    log::error!("Failed to deserialize block post task: {e}");
-                    Ok(None)
-                }
-            }
-        })
-        .await?;
-        Ok(block_post_task)
-    }
-
     /// Enqueue empty block for deposit checking
     ///
     /// Adds empty block task if enough time passed since last check.
@@ -844,6 +800,97 @@ impl Storage for RedisStorage {
 
         log::info!("Finished empty block check");
         result
+    }
+
+    /// Dequeue block post task
+    ///
+    /// Gets task from high priority queue first, then low priority if none available.
+    ///
+    /// # Returns
+    /// * `Some(BlockPostTask)` - Task dequeued
+    /// * `None` - No tasks available
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>> {
+        log::info!("Dequeuing block post task (Redis, with nonce check and re-queue logic)");
+
+        // Assume self.get_conn().await can return an error that is convertible to StorageError via From trait
+        let mut conn = self.get_conn().await?;
+        let blpop_timeout: f64 = 1.0; // seconds for each BLPOP attempt
+
+        // --- 1. Attempt High Priority Queue ---
+        // Assume redis::RedisError can be converted to StorageError via From trait
+        if let Some((_key, task_json)) = conn
+            .blpop::<_, Option<(String, String)>>(&self.block_post_tasks_hi_key, blpop_timeout)
+            .await?
+        {
+            match serde_json::from_str::<BlockPostTask>(&task_json) {
+                Ok(task) => {
+                    let is_registration = task.block_sign_payload.is_registration_block;
+                    let block_nonce = task.block_sign_payload.block_builder_nonce;
+
+                    // Assume NonceError can be converted to StorageError via From trait
+                    let smallest_reserved_nonce = self
+                        .nonce_manager
+                        .smallest_reserved_nonce(is_registration)
+                        .await?;
+
+                    if smallest_reserved_nonce == Some(block_nonce) {
+                        // Nonce matches, process this task
+                        self.nonce_manager
+                            .release_nonce(block_nonce, is_registration)
+                            .await?;
+                        log::info!(
+                            "Dequeued and processing high-priority task (nonce match): id={:?}",
+                            task.block_id
+                        );
+                        return Ok(Some(task));
+                    } else {
+                        // Nonce does not match. Re-queue the task to the end of the high-priority queue.
+                        log::warn!(
+                        "High-priority task id={:?} (nonce {}) is not the smallest reserved ({:?}). Re-queuing and sleeping.",
+                        task.block_id, block_nonce, smallest_reserved_nonce
+                    );
+                        let () = conn
+                            .rpush(&self.block_post_tasks_hi_key, &task_json)
+                            .await?;
+
+                        // Sleep, similar to the reference implementation's behavior
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+                        return Ok(None); // Indicate no task was fully processed in *this specific call*
+                    }
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to deserialize high-priority task from Redis: {e}. Task JSON: {task_json}",
+                    );
+                    return Ok(None); // This task cannot be processed.
+                }
+            }
+        }
+
+        // --- 2. If no high-priority task was processed, attempt Low Priority Queue ---
+        if let Some((_key, task_json)) = conn
+            .blpop::<_, Option<(String, String)>>(&self.block_post_tasks_lo_key, blpop_timeout)
+            .await?
+        {
+            match serde_json::from_str::<BlockPostTask>(&task_json) {
+                Ok(task) => {
+                    log::info!(
+                        "Dequeued and processing low-priority task: id={:?}",
+                        task.block_id
+                    );
+                    return Ok(Some(task));
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to deserialize low-priority task from Redis: {e}. Task JSON: {task_json}",
+                    );
+                    return Ok(None);
+                }
+            }
+        }
+        log::info!("No suitable block post task found in queues for this attempt.");
+        Ok(None)
     }
 }
 
