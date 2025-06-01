@@ -4,7 +4,9 @@ use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
 use tokio::sync::RwLock;
 use tracing::instrument;
 
-use super::{config::NonceManagerConfig, error::NonceError, NonceManager};
+use super::{
+    common::get_onchain_next_nonce, config::NonceManagerConfig, error::NonceError, NonceManager,
+};
 
 type AR<T> = Arc<RwLock<T>>;
 
@@ -33,15 +35,11 @@ impl InMemoryNonceManager {
 
 impl InMemoryNonceManager {
     async fn sync_onchain(&self) -> Result<(), NonceError> {
-        // Fetch the latest nonces from the blockchain for both types.
-        let onchain_next_registration_nonce = self
-            .rollup
-            .get_block_builder_nonce(true, self.config.block_builder_address)
-            .await?;
-        let onchain_next_non_registration_nonce = self
-            .rollup
-            .get_block_builder_nonce(false, self.config.block_builder_address)
-            .await?;
+        let onchain_next_registration_nonce =
+            get_onchain_next_nonce(&self.rollup, true, self.config.block_builder_address).await?;
+        let onchain_next_non_registration_nonce =
+            get_onchain_next_nonce(&self.rollup, false, self.config.block_builder_address).await?;
+
         let mut local_next_reg_guard = self.next_registration_nonce.write().await;
         *local_next_reg_guard = onchain_next_registration_nonce.max(*local_next_reg_guard);
         drop(local_next_reg_guard);

@@ -1,4 +1,6 @@
-use super::{config::NonceManagerConfig, error::NonceError, NonceManager};
+use super::{
+    common::get_onchain_next_nonce, config::NonceManagerConfig, error::NonceError, NonceManager,
+};
 use intmax2_client_sdk::external_api::contract::rollup_contract::RollupContract;
 use redis::{aio::ConnectionManager, Client};
 use std::sync::Arc;
@@ -56,14 +58,10 @@ impl RedisNonceManager {
     }
 
     async fn sync_onchain(&self) -> Result<(), NonceError> {
-        let onchain_next_registration_nonce = self
-            .rollup
-            .get_block_builder_nonce(true, self.config.block_builder_address)
-            .await?;
-        let onchain_next_non_registration_nonce = self
-            .rollup
-            .get_block_builder_nonce(false, self.config.block_builder_address)
-            .await?;
+        let onchain_next_registration_nonce =
+            get_onchain_next_nonce(&self.rollup, true, self.config.block_builder_address).await?;
+        let onchain_next_non_registration_nonce =
+            get_onchain_next_nonce(&self.rollup, false, self.config.block_builder_address).await?;
 
         let mut conn = self.get_conn().await?;
 
