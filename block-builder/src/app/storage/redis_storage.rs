@@ -936,11 +936,15 @@ mod tests {
     use std::panic::AssertUnwindSafe;
 
     use super::*;
-    use alloy::providers::{mock::Asserter, ProviderBuilder};
+    use alloy::{
+        providers::{mock::Asserter, ProviderBuilder},
+        sol_types::SolCall,
+    };
     use intmax2_client_sdk::{
         client::error::ClientError,
         external_api::contract::{
-            convert::convert_address_to_alloy, rollup_contract::RollupContract,
+            convert::convert_address_to_alloy,
+            rollup_contract::{Rollup, RollupContract},
         },
     };
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait};
@@ -969,6 +973,11 @@ mod tests {
             cluster_id: config.cluster_id.clone(),
         };
         let provider_asserter = Asserter::new();
+        // add nonce assertions
+        let reg_nonce_return = Rollup::builderRegistrationNonceCall::abi_encode_returns(&1);
+        provider_asserter.push_success(&reg_nonce_return);
+        let non_reg_nonce_return = Rollup::builderNonRegistrationNonceCall::abi_encode_returns(&1);
+        provider_asserter.push_success(&non_reg_nonce_return);
         let provider = ProviderBuilder::default()
             .with_gas_estimation()
             .with_simple_nonce_management()
