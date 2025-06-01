@@ -16,7 +16,7 @@ log = { workspace = true }
 bincode = { workspace = true }
 anyhow = "1.0.98"
 num-bigint = "0.4.6"
-rand = "0.8.5"
+rand = { workspace = true }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 wasm-bindgen = { version = "0.2.99", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4"
