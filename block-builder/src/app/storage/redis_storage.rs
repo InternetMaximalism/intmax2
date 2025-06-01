@@ -61,7 +61,6 @@ pub struct RedisStorage {
 
 impl RedisStorage {
     pub async fn new(config: &StorageConfig, nonce_manager: RedisNonceManager) -> Self {
-        log::info!("Initializing Redis storage");
         let cluster_id = config
             .cluster_id
             .clone()
@@ -135,7 +134,7 @@ impl RedisStorage {
             log::debug!("Lock acquired: {lock_name}");
             Ok(true)
         } else {
-            log::info!("Lock already held: {lock_name}",);
+            log::debug!("Lock already held: {lock_name}",);
             Ok(false)
         }
     }
@@ -181,7 +180,7 @@ impl Storage for RedisStorage {
     /// * `is_registration` - If this is a registration transaction
     /// * `tx_request` - Transaction request to add
     async fn add_tx(&self, is_registration: bool, tx_request: TxRequest) -> Result<()> {
-        log::info!(
+        log::debug!(
             "Adding transaction to {} queue with retries: {}",
             if is_registration {
                 "registration"
@@ -245,7 +244,6 @@ impl Storage for RedisStorage {
     /// * `Some(BlockProposal)` - Proposal found
     /// * `None` - No proposal exists
     async fn query_proposal(&self, request_id: &str) -> Result<Option<BlockProposal>> {
-        log::info!("Querying proposal for request: {}", request_id);
         let block_proposal = with_retry(|| async {
             let mut conn = self.get_conn().await?;
 
@@ -291,14 +289,6 @@ impl Storage for RedisStorage {
     /// # Arguments
     /// * `is_registration` - Process registration or non-registration transactions
     async fn process_requests(&self, is_registration: bool) -> Result<()> {
-        log::info!(
-            "Processing {} transaction requests",
-            if is_registration {
-                "registration"
-            } else {
-                "non-registration"
-            }
-        );
         // Use a lock to prevent multiple instances from processing the same requests
         let lock_name = if is_registration {
             "process_registration_requests"
@@ -448,7 +438,6 @@ impl Storage for RedisStorage {
     /// * `request_id` - Transaction request ID
     /// * `signature` - User signature to add
     async fn add_signature(&self, request_id: &str, signature: UserSignature) -> Result<()> {
-        log::info!("Adding signature for request: {}", request_id);
         with_retry(|| async {
             let mut conn = self.get_conn().await?;
 
@@ -494,16 +483,12 @@ impl Storage for RedisStorage {
             Ok(())
         })
         .await
-        .map(|_| {
-            log::info!("Signature added for request: {request_id}");
-        })
     }
 
     /// Process signatures and create block post tasks
     ///
     /// Processes signatures for ready memos and creates necessary tasks.
     async fn process_signatures(&self) -> Result<()> {
-        log::info!("Processing signatures");
         // Try to acquire the lock
         let lock_acquired = match self.acquire_lock("process_signatures").await {
             Ok(acquired) => acquired,
@@ -638,7 +623,6 @@ impl Storage for RedisStorage {
             log::error!("Failed to release lock for process_signatures: {e}");
         }
 
-        log::info!("Finished processing signatures");
         result
     }
 
@@ -652,7 +636,6 @@ impl Storage for RedisStorage {
         &self,
         store_vault_server_client: &dyn StoreVaultClientInterface,
     ) -> Result<()> {
-        log::info!("Processing fee collection tasks");
         // Try to acquire the lock
         if !self.acquire_lock("process_fee_collection").await? {
             // Another instance is already processing, just return
@@ -716,7 +699,6 @@ impl Storage for RedisStorage {
             log::error!("Failed to release lock for process_fee_collection: {e}");
         }
 
-        log::info!("Finished processing fee collection tasks");
         result
     }
 
@@ -724,7 +706,6 @@ impl Storage for RedisStorage {
     ///
     /// Adds empty block task if enough time passed since last check.
     async fn enqueue_empty_block(&self) -> Result<()> {
-        log::info!("Checking if empty block should be enqueued");
         // If deposit check is disabled, do nothing
         if self.config.deposit_check_interval.is_none() {
             return Ok(());
@@ -798,7 +779,6 @@ impl Storage for RedisStorage {
             log::error!("Failed to release lock for enqueue_empty_block: {e}");
         }
 
-        log::info!("Finished empty block check");
         result
     }
 
@@ -810,8 +790,6 @@ impl Storage for RedisStorage {
     /// * `Some(BlockPostTask)` - Task dequeued
     /// * `None` - No tasks available
     async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>> {
-        log::info!("Dequeuing block post task (Redis, with nonce check and re-queue logic)");
-
         // Assume self.get_conn().await can return an error that is convertible to StorageError via From trait
         let mut conn = self.get_conn().await?;
         let blpop_timeout: f64 = 1.0; // seconds for each BLPOP attempt
@@ -886,7 +864,6 @@ impl Storage for RedisStorage {
                 }
             }
         }
-        log::info!("No suitable block post task found in queues for this attempt.");
         Ok(None)
     }
 }
