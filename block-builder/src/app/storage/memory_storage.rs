@@ -9,6 +9,7 @@ use intmax2_zkp::{
     common::block_builder::{BlockProposal, UserSignature},
     constants::NUM_SENDERS_IN_BLOCK,
 };
+use rand::Rng as _;
 use tokio::sync::RwLock;
 
 use crate::app::{
@@ -308,7 +309,9 @@ impl Storage for InMemoryStorage {
             // if deposit check is disabled, do nothing
             return Ok(());
         }
-        let deposit_check_interval = self.config.deposit_check_interval.unwrap();
+        let multiplier = rand::thread_rng().gen_range(0.5..=1.5);
+        let deposit_check_interval =
+            (self.config.deposit_check_interval.unwrap() as f64 * multiplier) as u64;
         let empty_block_posted_at = *self.empty_block_posted_at.read().await;
         let current_time = chrono::Utc::now().timestamp() as u64;
         if let Some(empty_block_posted_at) = empty_block_posted_at {

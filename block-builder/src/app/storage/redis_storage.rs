@@ -7,6 +7,7 @@ use intmax2_zkp::{
     constants::NUM_SENDERS_IN_BLOCK,
 };
 
+use rand::Rng as _;
 use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisResult, Script};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -711,8 +712,6 @@ impl Storage for RedisStorage {
             return Ok(());
         }
 
-        let deposit_check_interval = self.config.deposit_check_interval.unwrap();
-
         // Try to acquire a lock to prevent multiple instances from posting empty blocks
         if !self.acquire_lock("enqueue_empty_block").await? {
             // Another instance is already processing, just return
@@ -733,6 +732,9 @@ impl Storage for RedisStorage {
             let empty_block_posted_at = empty_block_posted_at
                 .map(|s| s.parse::<u64>().unwrap_or(0))
                 .unwrap_or(0);
+            let multiplier = rand::thread_rng().gen_range(0.5..=1.5);
+            let deposit_check_interval =
+                (self.config.deposit_check_interval.unwrap() as f64 * multiplier) as u64;
 
             let current_time = chrono::Utc::now().timestamp() as u64;
 
