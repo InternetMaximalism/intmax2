@@ -3,6 +3,7 @@ use error::NonceError;
 pub mod config;
 pub mod error;
 pub mod memory_nonce_manager;
+pub mod redis_nonce_manager;
 
 #[async_trait::async_trait(?Send)]
 pub trait NonceManager: Sync + Send {
@@ -12,10 +13,9 @@ pub trait NonceManager: Sync + Send {
     /// Release a previously reserved nonce. This should be called when the nonce is no longer needed.
     async fn release_nonce(&self, nonce: u32, is_registration: bool) -> Result<(), NonceError>;
 
-    /// Checks if the given nonce is the smallest among all currently reserved nonces.
-    async fn is_least_reserved_nonce(
+    /// Get the smallest among all currently reserved nonces.
+    async fn smallest_reserved_nonce(
         &self,
-        nonce: u32,
         is_registration: bool,
-    ) -> Result<bool, NonceError>;
+    ) -> Result<Option<u32>, NonceError>;
 }

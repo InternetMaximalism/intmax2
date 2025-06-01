@@ -330,14 +330,15 @@ impl Storage for InMemoryStorage {
         // first, check if there is a high priority task
         {
             let block_post_task = self.block_post_tasks_hi.read().await.front().cloned();
+
             if let Some(block_post_task) = block_post_task {
                 let is_registration = block_post_task.block_sign_payload.is_registration_block;
                 let block_nonce = block_post_task.block_sign_payload.block_builder_nonce;
-                if self
+                let smallest_reserved_nonce = self
                     .nonce_manager
-                    .is_least_reserved_nonce(block_nonce, is_registration)
-                    .await?
-                {
+                    .smallest_reserved_nonce(is_registration)
+                    .await?;
+                if smallest_reserved_nonce == Some(block_nonce) {
                     // get front again to avoid deadlock
                     let block_post_task = self.block_post_tasks_hi.write().await.pop_front();
                     if let Some(block_post_task) = block_post_task {

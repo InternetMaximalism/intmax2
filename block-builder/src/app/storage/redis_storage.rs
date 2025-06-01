@@ -79,9 +79,47 @@ pub struct RedisStorage {
 }
 
 impl RedisStorage {
-    //-------------------------------------------------------------------------
-    // Helper Methods
-    //-------------------------------------------------------------------------
+    pub async fn new(config: &StorageConfig) -> Self {
+        log::info!("Initializing Redis storage");
+        let cluster_id = config
+            .cluster_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
+        let prefix = format!("block_builder:{cluster_id}");
+        // Create Redis client with fallback to localhost if URL not provided
+        let redis_url = config.redis_url.clone().expect("redis_url not found");
+        let client = Client::open(redis_url).expect("Failed to create Redis client");
+
+        // Create connection manager asynchronously
+        let conn_manager = ConnectionManager::new(client)
+            .await
+            .expect("Failed to create Redis connection manager");
+
+        log::info!("Redis storage initialized");
+
+        Self {
+            config: config.clone(),
+            conn_manager: Arc::new(Mutex::new(conn_manager)),
+
+            // Store prefix for all keys
+            prefix: prefix.to_string(),
+
+            // Define Redis keys with shared prefix for consistent naming
+            registration_tx_requests_key: format!("{prefix}:registration_tx_requests"),
+            registration_tx_last_processed_key: format!("{prefix}:registration_tx_last_processed"),
+            non_registration_tx_requests_key: format!("{prefix}:non_registration_tx_requests"),
+            non_registration_tx_last_processed_key: format!(
+                "{prefix}:non_registration_tx_last_processed"
+            ),
+            request_id_to_block_id_key: format!("{prefix}:request_id_to_block_id"),
+            memos_key: format!("{prefix}:memos"),
+            signatures_key: format!("{prefix}:signatures"),
+            fee_collection_tasks_key: format!("{prefix}:fee_collection_tasks"),
+            block_post_tasks_hi_key: format!("{prefix}:block_post_tasks_hi"),
+            block_post_tasks_lo_key: format!("{prefix}:block_post_tasks_lo"),
+        }
+    }
+
     async fn get_conn(&self) -> RedisResult<ConnectionManager> {
         let conn = self.conn_manager.lock().await;
         Ok(conn.clone())
@@ -141,7 +179,6 @@ impl RedisStorage {
             end
         ",
         );
-
         let _: () = script
             .key(lock_key)
             .arg(instance_id)
@@ -149,50 +186,6 @@ impl RedisStorage {
             .await?;
         log::debug!("Lock released: {lock_name}");
         Ok(())
-    }
-
-    /// Create new RedisStorage instance
-    ///
-    /// Initializes Redis connection and sets up keys for shared state.
-    pub async fn new(config: &StorageConfig) -> Self {
-        log::info!("Initializing Redis storage");
-        let cluster_id = config
-            .cluster_id
-            .clone()
-            .unwrap_or_else(|| "default".to_string());
-        let prefix = format!("block_builder:{cluster_id}");
-        // Create Redis client with fallback to localhost if URL not provided
-        let redis_url = config.redis_url.clone().expect("redis_url not found");
-        let client = Client::open(redis_url).expect("Failed to create Redis client");
-
-        // Create connection manager asynchronously
-        let conn_manager = ConnectionManager::new(client)
-            .await
-            .expect("Failed to create Redis connection manager");
-
-        log::info!("Redis storage initialized");
-
-        Self {
-            config: config.clone(),
-            conn_manager: Arc::new(Mutex::new(conn_manager)),
-
-            // Store prefix for all keys
-            prefix: prefix.to_string(),
-
-            // Define Redis keys with shared prefix for consistent naming
-            registration_tx_requests_key: format!("{prefix}:registration_tx_requests"),
-            registration_tx_last_processed_key: format!("{prefix}:registration_tx_last_processed"),
-            non_registration_tx_requests_key: format!("{prefix}:non_registration_tx_requests"),
-            non_registration_tx_last_processed_key: format!(
-                "{prefix}:non_registration_tx_last_processed"
-            ),
-            request_id_to_block_id_key: format!("{prefix}:request_id_to_block_id"),
-            memos_key: format!("{prefix}:memos"),
-            signatures_key: format!("{prefix}:signatures"),
-            fee_collection_tasks_key: format!("{prefix}:fee_collection_tasks"),
-            block_post_tasks_hi_key: format!("{prefix}:block_post_tasks_hi"),
-            block_post_tasks_lo_key: format!("{prefix}:block_post_tasks_lo"),
-        }
     }
 }
 

@@ -106,11 +106,10 @@ impl NonceManager for InMemoryNonceManager {
         Ok(())
     }
 
-    async fn is_least_reserved_nonce(
+    async fn smallest_reserved_nonce(
         &self,
-        nonce: u32,
         is_registration: bool,
-    ) -> Result<bool, NonceError> {
+    ) -> Result<Option<u32>, NonceError> {
         let reserved_nonces_guard = if is_registration {
             self.reserved_registration_nonces.read().await
         } else {
@@ -118,6 +117,6 @@ impl NonceManager for InMemoryNonceManager {
         };
         // `BTreeSet` iterators yield elements in ascending order.
         // So, the first element from `iter().next()` is the smallest.
-        Ok(reserved_nonces_guard.iter().next() == Some(&nonce))
+        Ok(reserved_nonces_guard.iter().next().cloned())
     }
 }
