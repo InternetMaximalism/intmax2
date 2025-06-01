@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use intmax2_client_sdk::external_api::utils::time::sleep_for;
 use intmax2_interfaces::api::store_vault_server::interface::StoreVaultClientInterface;
 use intmax2_zkp::{
     common::block_builder::{BlockProposal, UserSignature},
@@ -326,12 +327,50 @@ impl Storage for InMemoryStorage {
     }
 
     async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
+        // first, check if there is a high priority task
+        {
+            let block_post_task = self.block_post_tasks_hi.read().await.front().cloned();
+            if let Some(block_post_task) = block_post_task {
+                let is_registration = block_post_task.block_sign_payload.is_registration_block;
+                let block_nonce = block_post_task.block_sign_payload.block_builder_nonce;
+                if self
+                    .nonce_manager
+                    .is_least_reserved_nonce(block_nonce, is_registration)
+                    .await?
+                {
+                    // get front again to avoid deadlock
+                    let block_post_task = self.block_post_tasks_hi.write().await.pop_front();
+                    if let Some(block_post_task) = block_post_task {
+                        self.nonce_manager
+                            .release_nonce(
+                                block_post_task.block_sign_payload.block_builder_nonce,
+                                block_post_task.block_sign_payload.is_registration_block,
+                            )
+                            .await?;
+                        return Ok(Some(block_post_task.clone()));
+                    }
+                } else {
+                    // if the nonce is not the least reserved nonce, wait for 5 seconds and try again
+                    sleep_for(5).await;
+                }
+            }
+        }
+
         let block_post_task = {
             let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
             block_post_tasks_hi.pop_front()
         };
         let result = match block_post_task {
-            Some(block_post_task) => Some(block_post_task),
+            Some(block_post_task) => {
+                // release the nonce for the block post task
+                self.nonce_manager
+                    .release_nonce(
+                        block_post_task.block_sign_payload.block_builder_nonce,
+                        block_post_task.block_sign_payload.is_registration_block,
+                    )
+                    .await?;
+                Some(block_post_task)
+            }
             None => {
                 // if there is no high priority task, pop from block_post_tasks_lo
                 {

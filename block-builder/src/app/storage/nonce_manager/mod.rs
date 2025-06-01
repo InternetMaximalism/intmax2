@@ -6,9 +6,6 @@ pub mod memory_nonce_manager;
 
 #[async_trait::async_trait(?Send)]
 pub trait NonceManager: Sync + Send {
-    /// Synchronize the nonce with on-chain data. All reservations older than the on-chain nonce will be cleared.
-    async fn sync_onchain(&self) -> Result<(), NonceError>;
-
     /// Reserve a nonce for the current process. This should be used to ensure that the nonce is unique and not used by other processes.
     async fn reserve_nonce(&self, is_registration: bool) -> Result<u32, NonceError>;
 

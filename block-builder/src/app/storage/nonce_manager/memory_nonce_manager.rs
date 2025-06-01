@@ -30,8 +30,7 @@ impl InMemoryNonceManager {
     }
 }
 
-#[async_trait::async_trait(?Send)]
-impl NonceManager for InMemoryNonceManager {
+impl InMemoryNonceManager {
     async fn sync_onchain(&self) -> Result<(), NonceError> {
         // Fetch the latest nonces from the blockchain for both types.
         let onchain_next_registration_nonce = self
@@ -65,8 +64,14 @@ impl NonceManager for InMemoryNonceManager {
 
         Ok(())
     }
+}
 
+#[async_trait::async_trait(?Send)]
+impl NonceManager for InMemoryNonceManager {
     async fn reserve_nonce(&self, is_registration: bool) -> Result<u32, NonceError> {
+        // Synchronize the local state with the on-chain state.
+        self.sync_onchain().await?;
+
         let mut next_nonce_guard = if is_registration {
             self.next_registration_nonce.write().await
         } else {
