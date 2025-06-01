@@ -29,6 +29,7 @@ pub struct EnvVar {
     pub initial_heart_beat_delay: u64,
     pub gas_limit_for_block_post: Option<u64>,
     pub heart_beat_interval: u64,
+    pub nonce_waiting_time: Option<u64>,
 
     pub beneficiary_pubkey: Option<Bytes32>,
     pub registration_fee: Option<String>,

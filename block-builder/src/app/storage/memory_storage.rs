@@ -352,7 +352,7 @@ impl Storage for InMemoryStorage {
                     }
                 } else {
                     // if the nonce is not the least reserved nonce, wait for 5 seconds and try again
-                    sleep_for(5).await;
+                    sleep_for(self.config.nonce_waiting_time).await;
                 }
             }
         }
@@ -405,6 +405,7 @@ mod tests {
             accepting_tx_interval: 10,
             proposing_block_interval: 10,
             deposit_check_interval: Some(5),
+            nonce_waiting_time: 5,
             block_builder_id: "builder1".to_string(),
             redis_url: None,
             cluster_id: None,

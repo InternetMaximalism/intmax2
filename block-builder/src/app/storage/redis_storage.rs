@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use intmax2_client_sdk::external_api::utils::retry::with_retry;
+use intmax2_client_sdk::external_api::utils::{retry::with_retry, time::sleep_for};
 use intmax2_interfaces::api::store_vault_server::interface::StoreVaultClientInterface;
 use intmax2_zkp::{
     common::block_builder::{BlockProposal, UserSignature},
@@ -852,10 +852,7 @@ impl Storage for RedisStorage {
                         let () = conn
                             .rpush(&self.block_post_tasks_hi_key, &task_json)
                             .await?;
-
-                        // Sleep, similar to the reference implementation's behavior
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-
+                        sleep_for(self.config.nonce_waiting_time).await;
                         return Ok(None); // Indicate no task was fully processed in *this specific call*
                     }
                 }
@@ -982,6 +979,7 @@ mod tests {
             accepting_tx_interval: 40,
             proposing_block_interval: 10,
             deposit_check_interval: Some(20),
+            nonce_waiting_time: 5,
             redis_url: Some(redis_port.to_string()),
             cluster_id: Some(instance_id.to_string()),
             block_builder_id: Uuid::new_v4().to_string(),
