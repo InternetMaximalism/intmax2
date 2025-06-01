@@ -3,7 +3,10 @@ use intmax2_client_sdk::external_api::contract::{
 };
 use intmax2_interfaces::api::store_vault_server::interface::StoreVaultClientInterface;
 use intmax2_zkp::common::block_builder::{BlockProposal, UserSignature};
-use nonce_manager::{config::NonceManagerConfig, memory_nonce_manager::InMemoryNonceManager};
+use nonce_manager::{
+    config::NonceManagerConfig, memory_nonce_manager::InMemoryNonceManager,
+    redis_nonce_manager::RedisNonceManager,
+};
 
 use super::{block_post::BlockPostTask, types::TxRequest};
 
@@ -59,7 +62,13 @@ pub trait Storage: Sync + Send {
 pub async fn create_storage(config: &StorageConfig, rollup: RollupContract) -> Box<dyn Storage> {
     if config.redis_url.is_some() {
         log::info!("use redis storage");
-        Box::new(redis_storage::RedisStorage::new(config).await)
+        let nonce_config = NonceManagerConfig {
+            block_builder_address: convert_address_to_alloy(config.block_builder_address),
+            redis_url: config.redis_url.clone(),
+            cluster_id: config.cluster_id.clone(),
+        };
+        let nonce_manager = RedisNonceManager::new(nonce_config, rollup).await;
+        Box::new(redis_storage::RedisStorage::new(config, nonce_manager).await)
     } else {
         log::info!("use in-memory storage");
         let nonce_config = NonceManagerConfig {

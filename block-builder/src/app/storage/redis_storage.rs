@@ -17,7 +17,10 @@ use crate::app::{
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StorageConfig, error::StorageError, Storage};
+use super::{
+    config::StorageConfig, error::StorageError,
+    nonce_manager::redis_nonce_manager::RedisNonceManager, Storage,
+};
 
 /// Timeout for distributed locks in seconds
 const LOCK_TIMEOUT_SECONDS: usize = 10;
@@ -38,48 +41,25 @@ struct TxRequestWithTimestamp {
 }
 
 pub struct RedisStorage {
-    /// Configuration for the storage system
     pub config: StorageConfig,
-
-    /// Connection manager for Redis (thread-safe)
     conn_manager: Arc<Mutex<ConnectionManager>>,
+    pub nonce_manager: RedisNonceManager,
 
-    /// Common prefix for all Redis keys
     prefix: String,
-
-    /// Queue for registration transaction requests
     registration_tx_requests_key: String,
-
-    /// Timestamp of last processed registration batch
     registration_tx_last_processed_key: String,
-
-    /// Queue for non-registration transaction requests
     non_registration_tx_requests_key: String,
-
-    /// Timestamp of last processed non-registration batch
     non_registration_tx_last_processed_key: String,
-
-    /// Mapping from request ID to block ID
     request_id_to_block_id_key: String,
-
-    /// Storage for proposal memos
     memos_key: String,
-
-    /// Storage for user signatures
     signatures_key: String,
-
-    /// Queue for fee collection tasks
     fee_collection_tasks_key: String,
-
-    /// High priority queue for block posting tasks
     block_post_tasks_hi_key: String,
-
-    /// Low priority queue for block posting tasks
     block_post_tasks_lo_key: String,
 }
 
 impl RedisStorage {
-    pub async fn new(config: &StorageConfig) -> Self {
+    pub async fn new(config: &StorageConfig, nonce_manager: RedisNonceManager) -> Self {
         log::info!("Initializing Redis storage");
         let cluster_id = config
             .cluster_id
@@ -100,6 +80,7 @@ impl RedisStorage {
         Self {
             config: config.clone(),
             conn_manager: Arc::new(Mutex::new(conn_manager)),
+            nonce_manager,
 
             // Store prefix for all keys
             prefix: prefix.to_string(),
@@ -928,10 +909,17 @@ pub mod test_redis_helper {
 
 #[cfg(test)]
 mod tests {
+    use crate::app::storage::nonce_manager::config::NonceManagerConfig;
     use std::panic::AssertUnwindSafe;
 
     use super::*;
-    use intmax2_client_sdk::client::error::ClientError;
+    use alloy::providers::{mock::Asserter, ProviderBuilder};
+    use intmax2_client_sdk::{
+        client::error::ClientError,
+        external_api::contract::{
+            convert::convert_address_to_alloy, rollup_contract::RollupContract,
+        },
+    };
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait};
     use uuid::Uuid;
 
@@ -951,8 +939,20 @@ mod tests {
             cluster_id: Some(instance_id.to_string()),
             block_builder_id: Uuid::new_v4().to_string(),
         };
-
-        RedisStorage::new(&config).await
+        let nonce_config = NonceManagerConfig {
+            block_builder_address: convert_address_to_alloy(config.block_builder_address),
+            redis_url: config.redis_url.clone(),
+            cluster_id: config.cluster_id.clone(),
+        };
+        let provider_asserter = Asserter::new();
+        let provider = ProviderBuilder::default()
+            .with_gas_estimation()
+            .with_simple_nonce_management()
+            .fetch_chain_id()
+            .connect_mocked_client(provider_asserter);
+        let rollup = RollupContract::new(provider, Default::default());
+        let nonce_manager = RedisNonceManager::new(nonce_config, rollup).await;
+        RedisStorage::new(&config, nonce_manager).await
     }
 
     #[tokio::test]
