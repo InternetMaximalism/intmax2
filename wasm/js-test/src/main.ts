@@ -3,6 +3,17 @@ import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
 import { ethers } from 'ethers';
 import { env, config } from './setup';
+import { TokenType } from './token';
+
+async function syncAndPrintBalances(config: Config, configPrivKey: string, userPrivKey: string) {
+  await syncBalanceProof(config, configPrivKey);
+  const userData = await get_user_data(config, userPrivKey);
+  
+  console.log("Synced balances:");
+  for (const balance of userData.balances) {
+    console.log(`Token ${balance.token_index}: ${balance.amount}`);
+  }
+}
 
 async function main() {
   const ethKey = env.USER_ETH_PRIVATE_KEY;
@@ -10,9 +21,7 @@ async function main() {
   console.log("ethAddress: ", ethAddress);
 
   // generate key
-  const key = await generate_intmax_account_from_eth_key(ethKey);
-  const publicKey = key.pubkey;
-  const privateKey = key.privkey;
+  const { privkey: privateKey, pubkey: publicKey } = await generate_intmax_account_from_eth_key(ethKey);
   console.log("privateKey: ", privateKey);
   console.log("publicKey: ", publicKey);
 
@@ -20,30 +29,21 @@ async function main() {
   console.log("eth balance: ", balance);
 
   // deposit to the account
-  const tokenType = 0; // 0: native token, 1: ERC20, 2: ERC721, 3: ERC1155
+  const tokenType = TokenType.Native; // 0: native token, 1: ERC20, 2: ERC721, 3: ERC1155
   const tokenAddress = "0x0000000000000000000000000000000000000000";
   const tokenId = "0"; // Use "0" for fungible tokens
   const amount = "1000000000000000"; // in wei
   await depositWrapper(config, ethKey, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId);
 
-  // sync the account's balance proof 
-  await syncBalanceProof(config, privateKey);
-
-  // get the account's balance
-  let userData = await get_user_data(config, privateKey);
-  let balances = userData.balances;
-  console.log("Balances:");
-  for (let i = 0; i < balances.length; i++) {
-    const balance = balances[i];
-    console.log(`Token ${balance.token_index}: ${balance.amount}`);
-  }
+  // sync the account's balance proof and print the account's balance
+  syncAndPrintBalances(config, privateKey, privateKey);
 
   // send a transfer tx
   const someonesKey = await generate_intmax_account_from_eth_key(generateRandomHex(32));
   const genericAddress = new JsGenericAddress(true, someonesKey.pubkey);
 
   const transfer = new JsTransfer(genericAddress, 0, "1", generateRandomHex(32));
-  const feeTokenIndex = 0; // use native token for fee
+  const feeTokenIndex = TokenType.Native; // use native token for fee
 
   await sendTx(config, env.BLOCK_BUILDER_BASE_URL, publicKey, privateKey, [transfer], [], feeTokenIndex);
 
@@ -51,13 +51,7 @@ async function main() {
   await sleep(80);
 
   // get the receiver's balance
-  await syncBalanceProof(config, privateKey);
-  userData = await get_user_data(config, someonesKey.privkey);
-  balances = userData.balances;
-  for (let i = 0; i < balances.length; i++) {
-    const balance = balances[i];
-    console.log(`Token ${balance.token_index}: ${balance.amount}`);
-  }
+  syncAndPrintBalances(config, privateKey, someonesKey.privkey);
 
   // Withdrawal 
   const withClaimFee = false; // set to true if you want to pay claim fee
@@ -77,24 +71,20 @@ async function main() {
 
   const cursor = new JsMetaDataCursor(null, "asc", null);
   const deposit_history = await fetch_deposit_history(config, privateKey, cursor);
-  for (let i = 0; i < deposit_history.history.length; i++) {
-    const entry = deposit_history.history[i];
+  for (const entry of deposit_history.history) {
     console.log(`Deposit: depositor ${entry.data.depositor} of ${entry.data.amount} (#${entry.data.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
   }
   const transfer_history = await fetch_transfer_history(config, privateKey, cursor);
-  for (let i = 0; i < transfer_history.history.length; i++) {
-    const entry = transfer_history.history[i];
+  for (const entry of transfer_history.history) {
     console.log(`Receive: sender ${entry.data.sender} of ${entry.data.transfer.amount} (#${entry.data.transfer.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
   }
   const tx_history = await fetch_tx_history(config, privateKey, cursor);
-  for (let i = 0; i < tx_history.history.length; i++) {
-    const entry = tx_history.history[i];
+  for (const entry of tx_history.history) {
     console.log(`Send: transfers ${entry.data.transfers.length} at ${entry.meta.timestamp} ${entry.status.status}`);
   }
   // print withdrawal status 
   const withdrawalInfo = await get_withdrawal_info(config, privateKey);
-  for (let i = 0; i < withdrawalInfo.length; i++) {
-    const withdrawal = withdrawalInfo[i];
+  for (const withdrawal of withdrawalInfo) {
     const contract_withdrawal = withdrawal.contract_withdrawal;
     console.log(`Withdrawal: amount: ${contract_withdrawal.amount}, token_index: ${contract_withdrawal.token_index}, status: ${withdrawal.status}`);
   }

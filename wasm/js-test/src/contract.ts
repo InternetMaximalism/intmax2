@@ -2,16 +2,16 @@ import { ethers } from 'ethers';
 import * as RollupArtifact from '../abi/Rollup.json';
 import * as LiquidityArtifact from '../abi/Liquidity.json';
 import { get_deposit_hash, JsContractWithdrawal } from '../pkg/intmax2_wasm_lib';
+import { TokenType, TokenTypeNames } from './token';
 
 export async function claimWithdrawals(privateKey: string, l1RpcUrl: string, liquidityContractAddress: string, contractWithdrawals: JsContractWithdrawal[]) {
     const { liquidityContract } = await getContract(privateKey, l1RpcUrl, liquidityContractAddress, "", "");
-    const claimableWithdrawals = [];
-    for (const w of contractWithdrawals) {
-        const isClaimable = await checkIfClaimable(liquidityContract, w);
-        if (isClaimable) {
-            claimableWithdrawals.push(w);
-        }
-    }
+    
+    const claimStatuses = await Promise.all(
+        contractWithdrawals.map(w => checkIfClaimable(liquidityContract, w))
+    )
+    const claimableWithdrawals = contractWithdrawals.filter((w, i) => claimStatuses[i]);
+
     if (claimableWithdrawals.length === 0) {
         console.log("No claimable withdrawals");
         return;
@@ -37,22 +37,24 @@ export async function deposit(privateKey: string, l1RpcUrl: string, liquidityCon
     const { liquidityContract, rollupContract } = await getContract(privateKey, l1RpcUrl, liquidityContractAddress, l2RpcUrl, rollupContractAddress);
     const amlPermission = "0x"
     const eligibilityPermission = "0x"
-    if (tokenType === 0) {
+
+    if (tokenType === TokenType.Native) {
         await liquidityContract.depositNativeToken(pubkeySaltHash, amlPermission, eligibilityPermission, { value: amount });
-    } else if (tokenType === 1) {
+    } else if (tokenType === TokenType.ERC20) {
         await liquidityContract.depositERC20(tokenAddress, pubkeySaltHash, amount, amlPermission, eligibilityPermission,);
-    } else if (tokenType === 2) {
+    } else if (tokenType === TokenType.ERC721) {
         await liquidityContract.depositERC721(tokenAddress, tokenId, pubkeySaltHash, amlPermission, eligibilityPermission,);
-    } else if (tokenType === 3) {
+    } else if (tokenType === TokenType.ERC1155) {
         await liquidityContract.depositERC1155(tokenAddress, tokenId, pubkeySaltHash, amount, amlPermission, eligibilityPermission,);
     } else {
         throw new Error("Invalid token type");
     }
+    
     const [isRegistered, tokenIndex] = await liquidityContract.getTokenIndex(tokenType, tokenAddress, tokenId);
     if (!isRegistered) {
         throw new Error("Token is not registered");
     }
-    console.log("Deposited successfully");
+    console.log(`Successfully deposited token type ${TokenTypeNames[tokenType] ?? "Unknown"} with amount ${amount.toString()}`);
 
     if (process.env.ENV === "local") {
         // following code is not used in testnet-alpha. Relay the deposits to the rollup contract
@@ -68,8 +70,8 @@ function getDepositHash(depositor: string, recipientSaltHash: string, amount: bi
 }
 
 async function getContract(privateKey: string, l1RpcUrl: string, liquidityContractAddress: string, l2RpcUrl: string, rollupContractAddress: string,): Promise<{ liquidityContract: ethers.Contract, rollupContract: ethers.Contract }> {
-    const l1Povider = new ethers.JsonRpcProvider(l1RpcUrl);
-    const l1Wallet = new ethers.Wallet(privateKey, l1Povider)
+    const l1Provider = new ethers.JsonRpcProvider(l1RpcUrl);
+    const l1Wallet = new ethers.Wallet(privateKey, l1Provider)
     const liquidityContract = new ethers.Contract(
         liquidityContractAddress,
         LiquidityArtifact.abi,
