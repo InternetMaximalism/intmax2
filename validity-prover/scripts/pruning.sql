@@ -13,7 +13,8 @@ BEGIN;
 CREATE TEMP TABLE _temp_pruning_cutoff_val AS
 SELECT COALESCE((SELECT block_number FROM cutoff WHERE singleton_key = TRUE LIMIT 1), 0) as val;
 
-\set timestamp_cutoff `p_one "SELECT val FROM _temp_pruning_cutoff_val_tbl"`
+-- Set psql variable for the pruning cutoff value
+SELECT val AS timestamp_cutoff FROM _temp_pruning_cutoff_val \gset
 
 \echo '--- Starting pruning (Cutoff: ' :'timestamp_cutoff' ' ) ---'
 
@@ -25,7 +26,7 @@ WITH latest_within_cutoff AS (
         bit_path,
         MAX(timestamp) AS max_ts
     FROM hash_nodes
-    WHERE timestamp <= :'timestamp_cutoff' 
+    WHERE timestamp <= :'timestamp_cutoff' -- Using the psql variable
       AND tag IN (:'ORIGINAL_TAG_1', :'ORIGINAL_TAG_2', :'ORIGINAL_TAG_3')
     GROUP BY tag, bit_path
 )
