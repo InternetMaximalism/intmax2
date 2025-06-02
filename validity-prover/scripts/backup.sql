@@ -43,27 +43,7 @@ VALUES (TRUE, :'final_new_cutoff_value')
 ON CONFLICT (singleton_key) DO UPDATE
 SET block_number = EXCLUDED.block_number;
 
-\echo 'Cutoff value in cutoff table ensured to be :'final_new_cutoff_value
-
-\echo '--- Creating backup partitions (Tags: ' :'BACKUP_TAG_1', :'BACKUP_TAG_2', :'BACKUP_TAG_3' ') ---'
-
--- hash_nodes
-CREATE TABLE IF NOT EXISTS hash_nodes_tag11 PARTITION OF hash_nodes FOR VALUES IN (:'BACKUP_TAG_1');
-CREATE TABLE IF NOT EXISTS hash_nodes_tag12 PARTITION OF hash_nodes FOR VALUES IN (:'BACKUP_TAG_2');
-CREATE TABLE IF NOT EXISTS hash_nodes_tag13 PARTITION OF hash_nodes FOR VALUES IN (:'BACKUP_TAG_3');
-
--- leaves
-CREATE TABLE IF NOT EXISTS leaves_tag11 PARTITION OF leaves FOR VALUES IN (:'BACKUP_TAG_1');
-CREATE TABLE IF NOT EXISTS leaves_tag12 PARTITION OF leaves FOR VALUES IN (:'BACKUP_TAG_2');
-CREATE TABLE IF NOT EXISTS leaves_tag13 PARTITION OF leaves FOR VALUES IN (:'BACKUP_TAG_3');
-
--- leaves_len
-CREATE TABLE IF NOT EXISTS leaves_len_tag11 PARTITION OF leaves_len FOR VALUES IN (:'BACKUP_TAG_1');
-CREATE TABLE IF NOT EXISTS leaves_len_tag12 PARTITION OF leaves_len FOR VALUES IN (:'BACKUP_TAG_2');
-CREATE TABLE IF NOT EXISTS leaves_len_tag13 PARTITION OF leaves_len FOR VALUES IN (:'BACKUP_TAG_3');
-
--- indexed_leaves (Backup for tag 1 only, as per original logic for indexed_leaves)
-CREATE TABLE IF NOT EXISTS indexed_leaves_tag11 PARTITION OF indexed_leaves FOR VALUES IN (:'BACKUP_TAG_1');
+\echo 'Cutoff value in cutoff table ensured to be:':final_new_cutoff_value
 
 \echo '--- Copying data up to new cutoff ---'
 -- The psql variable 'final_new_cutoff_value' is already set
