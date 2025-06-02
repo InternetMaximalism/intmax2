@@ -29,7 +29,7 @@ actix-web = { workspace = true }
 actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
 aws-config = "1.6.3"
-aws-sdk-s3 = "1.86.0"
+aws-sdk-s3 = "1.90.0"
 cloudfront_sign = "0.4.0"
 base64 = "0.22.1"
 mockall = "0.13.1"
