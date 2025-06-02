@@ -276,6 +276,20 @@ impl ValidityProver {
         Ok(last_block_number as u32)
     }
 
+    pub async fn get_cutoff(&self) -> Result<u32, ValidityProverError> {
+        let row_option = sqlx::query!(
+            r#"
+            SELECT block_number
+            FROM cutoff
+            WHERE singleton_key = TRUE
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        let cutoff_val = row_option.map(|row| row.block_number).unwrap_or(0);
+        Ok(cutoff_val as u32)
+    }
+
     pub async fn get_block_merkle_proof(
         &self,
         root_block_number: u32,
@@ -286,8 +300,12 @@ impl ValidityProver {
                 "leaf_block_number should be smaller than root_block_number".to_string(),
             ));
         }
-        let proof = self
-            .block_tree
+        let block_tree = if root_block_number <= self.get_cutoff().await? {
+            &self.block_tree_backup
+        } else {
+            &self.block_tree
+        };
+        let proof = block_tree
             .prove(root_block_number as u64, leaf_block_number as u64)
             .await?;
         Ok(proof)
@@ -298,8 +316,12 @@ impl ValidityProver {
         block_number: u32,
         pubkey: U256,
     ) -> Result<AccountMembershipProof, ValidityProverError> {
-        let proof = self
-            .account_tree
+        let account_tree = if block_number <= self.get_cutoff().await? {
+            &self.account_tree_backup
+        } else {
+            &self.account_tree
+        };
+        let proof = account_tree
             .prove_membership(block_number as u64, pubkey)
             .await?;
         Ok(proof)
@@ -310,8 +332,12 @@ impl ValidityProver {
         block_number: u32,
         deposit_index: u32,
     ) -> Result<DepositMerkleProof, ValidityProverError> {
-        let proof = self
-            .deposit_hash_tree
+        let deposit_hash_tree = if block_number <= self.get_cutoff().await? {
+            &self.deposit_hash_tree_backup
+        } else {
+            &self.deposit_hash_tree
+        };
+        let proof = deposit_hash_tree
             .prove(block_number as u64, deposit_index as u64)
             .await?;
         Ok(IncrementalMerkleProof(MerkleProof {
