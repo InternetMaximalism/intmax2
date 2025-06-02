@@ -39,10 +39,10 @@ impl From<GenericAddress> for JsGenericAddress {
     }
 }
 
-impl TryFrom<JsGenericAddress> for GenericAddress {
+impl TryFrom<&JsGenericAddress> for GenericAddress {
     type Error = JsError;
 
-    fn try_from(js_generic_address: JsGenericAddress) -> Result<Self, Self::Error> {
+    fn try_from(js_generic_address: &JsGenericAddress) -> Result<Self, Self::Error> {
         if js_generic_address.is_pubkey {
             let pubkey = U256::from_hex(&js_generic_address.data)
                 .map_err(|_| JsError::new("Failed to parse pubkey"))?;
@@ -52,6 +52,14 @@ impl TryFrom<JsGenericAddress> for GenericAddress {
                 .map_err(|_| JsError::new("Failed to parse address"))?;
             Ok(address.into())
         }
+    }
+}
+
+impl TryFrom<JsGenericAddress> for GenericAddress {
+    type Error = JsError;
+
+    fn try_from(js_generic_address: JsGenericAddress) -> Result<Self, Self::Error> {
+        (&js_generic_address).try_into()
     }
 }
 
@@ -96,7 +104,7 @@ impl JsTransfer {
     }
 
     pub fn to_withdrawal(&self) -> Result<JsContractWithdrawal, JsError> {
-        let transfer: Transfer = self.clone().try_into()?;
+        let transfer: Transfer = self.try_into()?;
         if transfer.recipient.is_pubkey {
             return Err(JsError::new("Recipient must be an ethereum address"));
         }
@@ -120,6 +128,23 @@ impl From<Transfer> for JsTransfer {
             amount: transfer.amount.to_string(),
             salt: transfer.salt.to_string(),
         }
+    }
+}
+
+impl TryFrom<&JsTransfer> for Transfer {
+    type Error = JsError;
+
+    fn try_from(js_transfer: &JsTransfer) -> Result<Self, Self::Error> {
+        let recipient = (&js_transfer.recipient).try_into()?;
+        let amount =
+            parse_u256(&js_transfer.amount).map_err(|_| JsError::new("Failed to parse amount"))?;
+        let salt = parse_salt(&js_transfer.salt)?;
+        Ok(Transfer {
+            recipient,
+            token_index: js_transfer.token_index,
+            amount,
+            salt,
+        })
     }
 }
 
@@ -176,21 +201,27 @@ impl From<ContractWithdrawal> for JsContractWithdrawal {
     }
 }
 
-impl TryFrom<JsContractWithdrawal> for ContractWithdrawal {
+impl TryFrom<&JsContractWithdrawal> for ContractWithdrawal {
     type Error = JsError;
 
-    fn try_from(
-        js_contract_withdrawal: JsContractWithdrawal,
-    ) -> Result<ContractWithdrawal, Self::Error> {
-        let recipient = parse_address(&js_contract_withdrawal.recipient)?;
-        let amount = parse_u256(&js_contract_withdrawal.amount)?;
-        let nullifier = parse_bytes32(&js_contract_withdrawal.nullifier)?;
+    fn try_from(js: &JsContractWithdrawal) -> Result<Self, Self::Error> {
+        let recipient = parse_address(&js.recipient)?;
+        let amount = parse_u256(&js.amount)?;
+        let nullifier = parse_bytes32(&js.nullifier)?;
         Ok(ContractWithdrawal {
             recipient,
-            token_index: js_contract_withdrawal.token_index,
+            token_index: js.token_index,
             amount,
             nullifier,
         })
+    }
+}
+
+impl TryFrom<JsContractWithdrawal> for ContractWithdrawal {
+    type Error = JsError;
+
+    fn try_from(js_contract_withdrawal: JsContractWithdrawal) -> Result<Self, Self::Error> {
+        Self::try_from(&js_contract_withdrawal)
     }
 }
 
@@ -207,7 +238,7 @@ impl JsContractWithdrawal {
     }
 
     pub fn hash(&self) -> Result<String, JsError> {
-        let contract_withdrawal: ContractWithdrawal = self.clone().try_into()?;
+        let contract_withdrawal: ContractWithdrawal = self.try_into()?;
         let hash = contract_withdrawal.withdrawal_hash().to_hex();
         Ok(hash)
     }
@@ -251,16 +282,24 @@ impl From<MetaData> for JsMetaData {
     }
 }
 
-impl TryFrom<JsMetaData> for MetaData {
+impl TryFrom<&JsMetaData> for MetaData {
     type Error = JsError;
 
-    fn try_from(js_meta_data: JsMetaData) -> Result<MetaData, Self::Error> {
+    fn try_from(js_meta_data: &JsMetaData) -> Result<MetaData, Self::Error> {
         let digest = Bytes32::from_hex(&js_meta_data.digest)
             .map_err(|_| JsError::new("Failed to parse digest"))?;
         Ok(MetaData {
             timestamp: js_meta_data.timestamp,
             digest,
         })
+    }
+}
+
+impl TryFrom<JsMetaData> for MetaData {
+    type Error = JsError;
+
+    fn try_from(js_meta_data: JsMetaData) -> Result<MetaData, Self::Error> {
+        Self::try_from(&js_meta_data)
     }
 }
 
@@ -345,5 +384,88 @@ impl From<Mining> for JsMining {
             maturity: mining.maturity,
             status: mining.status.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use intmax2_zkp::ethereum_types::u256::U256;
+
+    #[test]
+    fn test_js_generic_address_pubkey_conversion() {
+        let hex = "0x01";
+        let js = JsGenericAddress {
+            is_pubkey: true,
+            data: hex.to_string(),
+        };
+
+        let generic: GenericAddress = (&js).try_into().expect("Conversion failed");
+        assert!(generic.is_pubkey);
+        assert_eq!(generic.to_pubkey().unwrap(), U256::from(1));
+    }
+
+    #[test]
+    fn test_js_generic_address_address_conversion() {
+        let hex = "0x000000000000000000000000000000000000dead";
+        let js = JsGenericAddress {
+            is_pubkey: false,
+            data: hex.to_string(),
+        };
+
+        let generic: GenericAddress = (&js).try_into().expect("Conversion failed");
+        assert!(!generic.is_pubkey);
+        assert_eq!(generic.to_address().unwrap().to_hex(), hex);
+    }
+
+    #[test]
+    fn test_js_transfer_conversion_success() {
+        let js_transfer_old = JsTransfer {
+            recipient: JsGenericAddress {
+                is_pubkey: true,
+                data: "0x02".to_string(),
+            },
+            token_index: 1,
+            amount: "1000".to_string(),
+            salt: "0x1234".to_string(),
+        };
+
+        let result: Result<Transfer, JsError> = js_transfer_old.clone().try_into();
+        assert!(result.is_ok());
+
+        let js_transfer_new = JsTransfer::from(result.unwrap());
+
+        // Check string fields match
+        assert_eq!(js_transfer_new.amount, js_transfer_old.amount);
+        assert_eq!(js_transfer_new.token_index, js_transfer_old.token_index);
+        assert_eq!(
+            js_transfer_new.recipient.is_pubkey,
+            js_transfer_old.recipient.is_pubkey
+        );
+
+        let left = U256::from_hex(&js_transfer_old.recipient.data).unwrap();
+        let right = U256::from_hex(&js_transfer_new.recipient.data).unwrap();
+        assert_eq!(left, right);
+
+        // Check salt hex values (as Bytes32) are equal
+        let left = Bytes32::from_hex(&js_transfer_old.salt).unwrap();
+        let right = Bytes32::from_hex(&js_transfer_new.salt).unwrap();
+
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn test_contract_withdrawal_hash() {
+        let js = JsContractWithdrawal {
+            recipient: "0x000000000000000000000000000000000000dead".to_string(),
+            token_index: 1,
+            amount: "1000".to_string(),
+            nullifier: "0x0101010101010101010101010101010101010101010101010101010101010101"
+                .to_string(),
+        };
+
+        let hash = js.hash();
+        assert!(hash.is_ok());
+        assert_eq!(hash.unwrap().len(), 66); // 0x + 64 hex digits
     }
 }
