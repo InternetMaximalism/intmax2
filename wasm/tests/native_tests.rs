@@ -41,10 +41,10 @@ fn test_encrypt_message() {
 #[wasm_bindgen_test]
 fn test_calc_aggregated_pubkey() {
     let mut rng = default_rng();
-    let key = KeySet::rand(&mut rng);
+    let server_key = KeySet::rand(&mut rng);
+    let client_key = KeySet::rand(&mut rng);
 
-    // For some reason this test function fails if "cargo test" wasn't run before "wasm-pack test --node"
-    let signers = vec![key.privkey.to_hex(), key.pubkey.to_hex()];
+    let signers = vec![server_key.pubkey.to_hex(), client_key.pubkey.to_hex()];
     let aggregated =
         calc_simple_aggregated_pubkey(signers).expect("Aggregated pubkey should be calculated");
     assert!(!aggregated.is_empty());
