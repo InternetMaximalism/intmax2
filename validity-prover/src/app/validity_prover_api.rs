@@ -180,7 +180,6 @@ impl ValidityProver {
         if tx_tree_roots.is_empty() {
             return Ok(Vec::new());
         }
-
         // Create a mapping to preserve the original order
         let mut result_map: HashMap<Vec<u8>, Option<u32>> = tx_tree_roots
             .iter()
@@ -252,23 +251,6 @@ impl ValidityProver {
         Ok(validity_witness)
     }
 
-    pub async fn get_block_merkle_proof(
-        &self,
-        root_block_number: u32,
-        leaf_block_number: u32,
-    ) -> Result<BlockHashMerkleProof, ValidityProverError> {
-        if leaf_block_number > root_block_number {
-            return Err(ValidityProverError::InputError(
-                "leaf_block_number should be smaller than root_block_number".to_string(),
-            ));
-        }
-        let proof = self
-            .block_tree
-            .prove(root_block_number as u64, leaf_block_number as u64)
-            .await?;
-        Ok(proof)
-    }
-
     pub async fn get_latest_validity_proof_block_number(&self) -> Result<u32, ValidityProverError> {
         let record = sqlx::query!(
             r#"
@@ -292,6 +274,23 @@ impl ValidityProver {
         let last_block_number = record.and_then(|r| r.last_block_number).unwrap_or(0); // i32
 
         Ok(last_block_number as u32)
+    }
+
+    pub async fn get_block_merkle_proof(
+        &self,
+        root_block_number: u32,
+        leaf_block_number: u32,
+    ) -> Result<BlockHashMerkleProof, ValidityProverError> {
+        if leaf_block_number > root_block_number {
+            return Err(ValidityProverError::InputError(
+                "leaf_block_number should be smaller than root_block_number".to_string(),
+            ));
+        }
+        let proof = self
+            .block_tree
+            .prove(root_block_number as u64, leaf_block_number as u64)
+            .await?;
+        Ok(proof)
     }
 
     async fn get_account_membership_proof(
