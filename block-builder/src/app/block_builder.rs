@@ -103,7 +103,7 @@ impl BlockBuilder {
             env.block_builder_registry_contract_address,
         );
         let config = Self::create_config(env)?;
-        let storage = Self::create_storage(env, &config).await?;
+        let storage = Self::create_storage(env, &config, rollup_contract.clone()).await?;
 
         Ok(Self {
             config,
@@ -199,6 +199,7 @@ impl BlockBuilder {
     async fn create_storage(
         env: &EnvVar,
         config: &Config,
+        rollup: RollupContract,
     ) -> Result<Arc<Box<dyn Storage>>, BlockBuilderError> {
         let storage_config = StorageConfig {
             use_fee: config.use_fee,
@@ -209,11 +210,12 @@ impl BlockBuilder {
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
             deposit_check_interval: env.deposit_check_interval,
+            nonce_waiting_time: env.nonce_waiting_time.unwrap_or(5),
             redis_url: env.redis_url.clone(),
             cluster_id: env.cluster_id.clone(),
             block_builder_id: Uuid::new_v4().to_string(),
         };
-        let storage = storage::create_storage(&storage_config).await;
+        let storage = storage::create_storage(&storage_config, rollup).await;
         Ok(Arc::new(storage))
     }
 
@@ -408,6 +410,7 @@ mod tests {
             initial_heart_beat_delay: 600,
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
+            nonce_waiting_time: None,
             beneficiary_pubkey: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
@@ -459,6 +462,7 @@ mod tests {
             initial_heart_beat_delay: 600,
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
+            nonce_waiting_time: None,
             beneficiary_pubkey: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
@@ -501,6 +505,7 @@ mod tests {
             initial_heart_beat_delay: 600,
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
+            nonce_waiting_time: None,
             beneficiary_pubkey: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
@@ -546,6 +551,7 @@ mod tests {
             initial_heart_beat_delay: 600,
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
+            nonce_waiting_time: None,
             beneficiary_pubkey: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),

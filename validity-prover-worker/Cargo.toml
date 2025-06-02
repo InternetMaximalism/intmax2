@@ -22,7 +22,7 @@ envy = { workspace = true }
 bincode = { workspace = true }
 thiserror = { workspace = true }
 actix-web = { workspace = true }
-rand = "0.8.5"
+rand = { workspace = true }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 async-trait = "0.1.88"

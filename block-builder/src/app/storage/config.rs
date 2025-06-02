@@ -11,6 +11,7 @@ pub struct StorageConfig {
     pub proposing_block_interval: u64,
     pub deposit_check_interval: Option<u64>,
     pub block_builder_id: String,
+    pub nonce_waiting_time: u64,
 
     // Redis configuration
     pub redis_url: Option<String>,
