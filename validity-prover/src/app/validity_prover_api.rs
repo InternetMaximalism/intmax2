@@ -269,18 +269,6 @@ impl ValidityProver {
         Ok(proof)
     }
 
-    async fn get_account_membership_proof(
-        &self,
-        block_number: u32,
-        pubkey: U256,
-    ) -> Result<AccountMembershipProof, ValidityProverError> {
-        let proof = self
-            .account_tree
-            .prove_membership(block_number as u64, pubkey)
-            .await?;
-        Ok(proof)
-    }
-
     pub async fn get_latest_validity_proof_block_number(&self) -> Result<u32, ValidityProverError> {
         let record = sqlx::query!(
             r#"
@@ -304,6 +292,18 @@ impl ValidityProver {
         let last_block_number = record.and_then(|r| r.last_block_number).unwrap_or(0); // i32
 
         Ok(last_block_number as u32)
+    }
+
+    async fn get_account_membership_proof(
+        &self,
+        block_number: u32,
+        pubkey: U256,
+    ) -> Result<AccountMembershipProof, ValidityProverError> {
+        let proof = self
+            .account_tree
+            .prove_membership(block_number as u64, pubkey)
+            .await?;
+        Ok(proof)
     }
 
     pub async fn get_deposit_merkle_proof(
