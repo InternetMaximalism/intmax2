@@ -16,7 +16,7 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 uuid = { workspace = true }
 anyhow = { workspace = true }
-clap = { version = "4.5.38", features = ["derive"] }
+clap = { version = "4.5.39", features = ["derive"] }
 num-bigint = "0.4.6"
 rand = { workspace = true }
 log = "0.4.27"
