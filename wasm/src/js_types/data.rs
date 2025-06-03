@@ -1,11 +1,15 @@
 use intmax2_client_sdk::client::client::{DepositResult, TxResult};
 use intmax2_interfaces::data::{
     deposit_data::DepositData,
+    meta_data::MetaData,
     transfer_data::TransferData,
     tx_data::TxData,
     user_data::{Balances, UserData},
 };
-use intmax2_zkp::{common::transfer::Transfer, ethereum_types::u32limb_trait::U32LimbTrait as _};
+use intmax2_zkp::{
+    common::transfer::Transfer,
+    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
+};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use super::common::{JsTransfer, JsTx};
@@ -76,14 +80,8 @@ impl From<TxData> for JsTxData {
             .spent_witness
             .transfers
             .into_iter()
-            .flat_map(|transfer| {
-                if transfer == Transfer::default() {
-                    // ignore default transfer
-                    None
-                } else {
-                    Some(transfer.into())
-                }
-            })
+            .filter(|t| *t != Transfer::default())
+            .map(Into::into)
             .collect();
         let transfer_digests = tx_data
             .transfer_digests
@@ -138,7 +136,7 @@ impl From<TxResult> for JsTxResult {
             transfer_data_vec: tx_result
                 .transfer_data_vec
                 .into_iter()
-                .map(JsTransferData::from)
+                .map(Into::into)
                 .collect(),
             backup_csv: tx_result.backup_csv,
         }
@@ -196,80 +194,127 @@ pub struct TokenBalance {
     pub is_insufficient: bool,
 }
 
+fn extract_timestamp(opt: &Option<MetaData>) -> u64 {
+    opt.as_ref().map(|x| x.timestamp).unwrap_or(0)
+}
+
+fn convert_bytes32_vec_to_hex(digests: Vec<Bytes32>) -> Vec<String> {
+    digests.into_iter().map(|x| x.to_hex()).collect()
+}
+
 impl From<UserData> for JsUserData {
     fn from(user_data: UserData) -> Self {
         Self {
             pubkey: user_data.pubkey.to_hex(),
-            balances: balances_to_token_balances(&user_data.balances()),
+            balances: balances_to_token_balances(user_data.balances()),
             private_commitment: user_data
                 .full_private_state
                 .to_private_state()
                 .commitment()
                 .to_string(),
-            deposit_lpt: user_data
-                .deposit_status
-                .last_processed_meta_data
-                .as_ref()
-                .map(|x| x.timestamp)
-                .unwrap_or(0),
-            transfer_lpt: user_data
-                .transfer_status
-                .last_processed_meta_data
-                .as_ref()
-                .map(|x| x.timestamp)
-                .unwrap_or(0),
-            tx_lpt: user_data
-                .tx_status
-                .last_processed_meta_data
-                .as_ref()
-                .map(|x| x.timestamp)
-                .unwrap_or(0),
-            withdrawal_lpt: user_data
-                .withdrawal_status
-                .last_processed_meta_data
-                .as_ref()
-                .map(|x| x.timestamp)
-                .unwrap_or(0),
-            processed_deposit_digests: user_data
-                .deposit_status
-                .processed_digests
-                .into_iter()
-                .map(|x| x.to_hex())
-                .collect(),
-            processed_transfer_digests: user_data
-                .transfer_status
-                .processed_digests
-                .into_iter()
-                .map(|x| x.to_hex())
-                .collect(),
-            processed_tx_digests: user_data
-                .tx_status
-                .processed_digests
-                .into_iter()
-                .map(|x| x.to_hex())
-                .collect(),
-            processed_withdrawal_digests: user_data
-                .withdrawal_status
-                .processed_digests
-                .into_iter()
-                .map(|x| x.to_hex())
-                .collect(),
+            deposit_lpt: extract_timestamp(&user_data.deposit_status.last_processed_meta_data),
+            transfer_lpt: extract_timestamp(&user_data.transfer_status.last_processed_meta_data),
+            tx_lpt: extract_timestamp(&user_data.tx_status.last_processed_meta_data),
+            withdrawal_lpt: extract_timestamp(
+                &user_data.withdrawal_status.last_processed_meta_data,
+            ),
+            processed_deposit_digests: convert_bytes32_vec_to_hex(
+                user_data.deposit_status.processed_digests,
+            ),
+            processed_transfer_digests: convert_bytes32_vec_to_hex(
+                user_data.transfer_status.processed_digests,
+            ),
+            processed_tx_digests: convert_bytes32_vec_to_hex(user_data.tx_status.processed_digests),
+            processed_withdrawal_digests: convert_bytes32_vec_to_hex(
+                user_data.withdrawal_status.processed_digests,
+            ),
         }
     }
 }
 
-pub fn balances_to_token_balances(balances: &Balances) -> Vec<TokenBalance> {
+pub fn balances_to_token_balances(balances: Balances) -> Vec<TokenBalance> {
     balances
         .0
         .iter()
-        .map(|(token_index, leaf)| {
-            let amount = leaf.amount.to_string();
-            let is_insufficient = leaf.is_insufficient;
-            TokenBalance {
-                token_index: *token_index,
-                amount,
-                is_insufficient,
-            }
+        .map(|(token_index, leaf)| TokenBalance {
+            token_index: *token_index,
+            amount: leaf.amount.to_string(),
+            is_insufficient: leaf.is_insufficient,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hashbrown::HashMap;
+    use intmax2_interfaces::data::user_data::Balances;
+    use intmax2_zkp::{common::trees::asset_tree::AssetLeaf, ethereum_types::u256::U256};
+
+    #[test]
+    fn test_balances_to_token_balances_basic() {
+        let mut map = HashMap::new();
+        map.insert(
+            0,
+            AssetLeaf {
+                amount: U256::from(1000),
+                is_insufficient: false,
+            },
+        );
+        map.insert(
+            1,
+            AssetLeaf {
+                amount: U256::from(0),
+                is_insufficient: true,
+            },
+        );
+
+        let balances = Balances(map);
+        let mut result = balances_to_token_balances(balances);
+
+        // Ensure consistent order for test (HashMap is unordered)
+        result.sort_by_key(|b| b.token_index);
+
+        assert_eq!(result.len(), 2);
+
+        let b0 = &result[0];
+        assert_eq!(b0.token_index, 0);
+        assert_eq!(b0.amount, "1000");
+        assert!(!b0.is_insufficient);
+
+        let b1 = &result[1];
+        assert_eq!(b1.token_index, 1);
+        assert_eq!(b1.amount, "0");
+        assert!(b1.is_insufficient);
+    }
+
+    #[test]
+    fn test_balances_to_token_balances_empty() {
+        let balances = Balances(HashMap::new());
+        let result = balances_to_token_balances(balances);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_balances_to_token_balance_max_value() {
+        let mut map = HashMap::new();
+        map.insert(
+            42,
+            AssetLeaf {
+                amount: U256::from_u32_slice(&[0xFFFFFFFF; 8]).unwrap(),
+                is_insufficient: false,
+            },
+        );
+
+        let balances = Balances(map);
+        let result = balances_to_token_balances(balances);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].token_index, 42);
+        assert_eq!(
+            result[0].amount,
+            U256::from_u32_slice(&[0xFFFFFFFF; 8]).unwrap().to_string()
+        );
+        assert!(!result[0].is_insufficient);
+    }
 }

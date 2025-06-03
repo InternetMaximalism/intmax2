@@ -8,30 +8,36 @@ use intmax2_zkp::{
 use num_bigint::BigUint;
 use wasm_bindgen::JsError;
 
+fn js_err<T, E: ToString>(result: Result<T, E>, msg: &'static str) -> Result<T, JsError> {
+    result.map_err(|_| JsError::new(msg))
+}
+
 pub fn parse_u256(input: &str) -> Result<U256, JsError> {
-    let input = BigUint::from_str(input).map_err(|_| JsError::new("Failed to parse as BigUint"))?;
-    let input = input
-        .try_into()
-        .map_err(|_| JsError::new("Failed to cast to u256"))?;
-    Ok(input)
+    let big_uint = js_err(
+        BigUint::from_str(input),
+        "Failed to parse as BigUint. Expected decimal string",
+    )?;
+    js_err(big_uint.try_into(), "Failed to cast to U256")
 }
 
 pub fn parse_bytes32(input: &str) -> Result<Bytes32, JsError> {
-    let input = Bytes32::from_hex(input).map_err(|_| JsError::new("Failed to parse as Bytes32"))?;
-    Ok(input)
+    js_err(
+        Bytes32::from_hex(input),
+        "Failed to parse as Bytes32. Expected 0x-prefixed hex string",
+    )
 }
 
 pub fn parse_address(input: &str) -> Result<Address, JsError> {
-    let input = Address::from_hex(input).map_err(|_| JsError::new("Failed to parse as Address"))?;
-    Ok(input)
+    js_err(
+        Address::from_hex(input),
+        "Failed to parse as Address. Expected 0x-prefixed hex Ethereum address",
+    )
 }
 
 pub fn parse_poseidon_hashout(input: &str) -> Result<PoseidonHashOut, JsError> {
-    let input = parse_bytes32(input)?;
-    Ok(input.reduce_to_hash_out())
+    Ok(parse_bytes32(input)?.reduce_to_hash_out())
 }
 
 pub fn parse_salt(input: &str) -> Result<Salt, JsError> {
-    let input = parse_poseidon_hashout(input)?;
-    Ok(Salt(input))
+    Ok(Salt(parse_poseidon_hashout(input)?))
 }

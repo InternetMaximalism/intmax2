@@ -15,7 +15,7 @@ impl From<PaymentMemoEntry> for JsPaymentMemoEntry {
         Self {
             transfer_index: payment_memo_entry.transfer_index,
             topic: payment_memo_entry.topic,
-            memo: payment_memo_entry.memo.to_string(),
+            memo: payment_memo_entry.memo,
         }
     }
 }
@@ -26,8 +26,8 @@ impl TryFrom<JsPaymentMemoEntry> for PaymentMemoEntry {
     fn try_from(js_payment_memo_entry: JsPaymentMemoEntry) -> Result<Self, JsError> {
         Ok(PaymentMemoEntry {
             transfer_index: js_payment_memo_entry.transfer_index,
-            topic: js_payment_memo_entry.topic.clone(),
-            memo: js_payment_memo_entry.memo.clone(),
+            topic: js_payment_memo_entry.topic,
+            memo: js_payment_memo_entry.memo,
         })
     }
 }

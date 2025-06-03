@@ -17,6 +17,7 @@ serde = { workspace = true }
 anyhow = "1.0.98"
 console_error_panic_hook = "0.1.7"
 getrandom = { version = "0.3", features = ["wasm_js"] }
+hashbrown = "0.15.2"
 hex = "0.4.3"
 num-bigint = "0.4.6"
 rand = "0.8.5"

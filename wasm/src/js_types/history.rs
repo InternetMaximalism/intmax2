@@ -25,19 +25,19 @@ impl From<EntryStatus> for JsEntryStatusWithBlockNumber {
     fn from(status: EntryStatus) -> Self {
         match status {
             EntryStatus::Settled(b) => Self {
-                status: "settled".to_string(),
+                status: "settled".to_owned(),
                 block_number: Some(b),
             },
             EntryStatus::Processed(b) => Self {
-                status: "processed".to_string(),
+                status: "processed".to_owned(),
                 block_number: Some(b),
             },
             EntryStatus::Pending => Self {
-                status: "pending".to_string(),
+                status: "pending".to_owned(),
                 block_number: None,
             },
             EntryStatus::Timeout => Self {
-                status: "timeout".to_string(),
+                status: "timeout".to_owned(),
                 block_number: None,
             },
         }

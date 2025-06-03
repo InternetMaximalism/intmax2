@@ -116,22 +116,18 @@ pub struct JsFeeInfo {
     pub non_registration_collateral_fee: Option<Vec<JsFee>>,
 }
 
+fn convert_fees(fees: Option<Vec<Fee>>) -> Option<Vec<JsFee>> {
+    fees.map(|f| f.into_iter().map(JsFee::from).collect())
+}
+
 impl From<BlockBuilderFeeInfo> for JsFeeInfo {
     fn from(fee_info: BlockBuilderFeeInfo) -> Self {
         Self {
             beneficiary: fee_info.beneficiary.map(|b| b.to_hex()),
-            registration_fee: fee_info
-                .registration_fee
-                .map(|fees| fees.into_iter().map(JsFee::from).collect()),
-            non_registration_fee: fee_info
-                .non_registration_fee
-                .map(|fees| fees.into_iter().map(JsFee::from).collect()),
-            registration_collateral_fee: fee_info
-                .registration_collateral_fee
-                .map(|fees| fees.into_iter().map(JsFee::from).collect()),
-            non_registration_collateral_fee: fee_info
-                .non_registration_collateral_fee
-                .map(|fees| fees.into_iter().map(JsFee::from).collect()),
+            registration_fee: convert_fees(fee_info.registration_fee),
+            non_registration_fee: convert_fees(fee_info.non_registration_fee),
+            registration_collateral_fee: convert_fees(fee_info.registration_collateral_fee),
+            non_registration_collateral_fee: convert_fees(fee_info.non_registration_collateral_fee),
         }
     }
 }

@@ -435,7 +435,7 @@ pub async fn get_balances_without_sync(
     let key = str_privkey_to_keyset(private_key)?;
     let client = get_client(config);
     let balances = client.get_balances_without_sync(key).await?;
-    Ok(balances_to_token_balances(&balances))
+    Ok(balances_to_token_balances(balances))
 }
 
 #[wasm_bindgen]
