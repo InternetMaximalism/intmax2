@@ -26,8 +26,10 @@ server-common = { path = "../server-common" }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 redis = { workspace = true }
+tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
 uuid = { workspace = true }
+rand = { workspace = true }
 async-trait = "0.1.88"
 actix-rt = "2.10.0"
 num-bigint = "0.4.6"

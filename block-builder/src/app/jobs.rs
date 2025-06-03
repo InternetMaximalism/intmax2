@@ -1,8 +1,7 @@
+use super::{block_builder::BlockBuilder, block_post::post_block, error::BlockBuilderError};
 use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInterface;
 use std::time::Duration;
 use tokio::{task::JoinHandle, time::sleep};
-
-use super::{block_builder::BlockBuilder, block_post::post_block, error::BlockBuilderError};
 
 pub const GENERAL_POLLING_INTERVAL: u64 = 2;
 pub const RESTART_JOB_INTERVAL: u64 = 60;

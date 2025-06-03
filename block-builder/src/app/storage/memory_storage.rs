@@ -3,20 +3,26 @@ use std::{
     sync::Arc,
 };
 
+use intmax2_client_sdk::external_api::utils::time::sleep_for;
 use intmax2_interfaces::api::store_vault_server::interface::StoreVaultClientInterface;
 use intmax2_zkp::{
     common::block_builder::{BlockProposal, UserSignature},
     constants::NUM_SENDERS_IN_BLOCK,
 };
+use rand::Rng as _;
 use tokio::sync::RwLock;
 
 use crate::app::{
     block_post::BlockPostTask,
     fee::{collect_fee, FeeCollection},
+    storage::nonce_manager::NonceManager,
     types::{ProposalMemo, TxRequest},
 };
 
-use super::{config::StorageConfig, error::StorageError, Storage};
+use super::{
+    config::StorageConfig, error::StorageError,
+    nonce_manager::memory_nonce_manager::InMemoryNonceManager, Storage,
+};
 
 type AR<T> = Arc<RwLock<T>>;
 type ARQueue<T> = AR<VecDeque<T>>;
@@ -24,6 +30,8 @@ type ARMap<K, V> = AR<HashMap<K, V>>;
 
 pub struct InMemoryStorage {
     pub config: StorageConfig,
+
+    pub nonce_manager: InMemoryNonceManager,
 
     pub registration_tx_requests: ARQueue<TxRequest>, // registration tx requests queue
     pub registration_tx_last_processed: AR<u64>,      // last processed timestamp
@@ -42,9 +50,10 @@ pub struct InMemoryStorage {
 }
 
 impl InMemoryStorage {
-    pub async fn new(config: &StorageConfig) -> Self {
+    pub fn new(config: &StorageConfig, nonce_manager: InMemoryNonceManager) -> Self {
         Self {
             config: config.clone(),
+            nonce_manager,
             registration_tx_requests: Default::default(),
             registration_tx_last_processed: Default::default(),
             non_registration_tx_requests: Default::default(),
@@ -109,10 +118,11 @@ impl Storage for InMemoryStorage {
 
         let num_tx_requests = tx_requests.len().min(NUM_SENDERS_IN_BLOCK);
         let tx_requests: Vec<TxRequest> = tx_requests.drain(..num_tx_requests).collect();
+        let nonce = self.nonce_manager.reserve_nonce(is_registration).await?;
         let memo = ProposalMemo::from_tx_requests(
             is_registration,
             self.config.block_builder_address,
-            0, // todo: fetch nonce from contract
+            nonce,
             &tx_requests,
             self.config.tx_timeout,
         );
@@ -294,30 +304,14 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
-        let block_post_task = {
-            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
-            block_post_tasks_hi.pop_front()
-        };
-        let result = match block_post_task {
-            Some(block_post_task) => Some(block_post_task),
-            None => {
-                // if there is no high priority task, pop from block_post_tasks_lo
-                {
-                    let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
-                    block_post_tasks_lo.pop_front()
-                }
-            }
-        };
-        Ok(result)
-    }
-
     async fn enqueue_empty_block(&self) -> Result<(), StorageError> {
         if self.config.deposit_check_interval.is_none() {
             // if deposit check is disabled, do nothing
             return Ok(());
         }
-        let deposit_check_interval = self.config.deposit_check_interval.unwrap();
+        let multiplier = rand::thread_rng().gen_range(0.5..=1.5);
+        let deposit_check_interval =
+            (self.config.deposit_check_interval.unwrap() as f64 * multiplier) as u64;
         let empty_block_posted_at = *self.empty_block_posted_at.read().await;
         let current_time = chrono::Utc::now().timestamp() as u64;
         if let Some(empty_block_posted_at) = empty_block_posted_at {
@@ -334,15 +328,78 @@ impl Storage for InMemoryStorage {
             .push_back(BlockPostTask::default());
         Ok(())
     }
+
+    async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>, StorageError> {
+        // first, check if there is a high priority task
+        {
+            let block_post_task = self.block_post_tasks_hi.read().await.front().cloned();
+
+            if let Some(block_post_task) = block_post_task {
+                let is_registration = block_post_task.block_sign_payload.is_registration_block;
+                let block_nonce = block_post_task.block_sign_payload.block_builder_nonce;
+                let smallest_reserved_nonce = self
+                    .nonce_manager
+                    .smallest_reserved_nonce(is_registration)
+                    .await?;
+                if smallest_reserved_nonce == Some(block_nonce) {
+                    // get front again to avoid deadlock
+                    let block_post_task = self.block_post_tasks_hi.write().await.pop_front();
+                    if let Some(block_post_task) = block_post_task {
+                        self.nonce_manager
+                            .release_nonce(
+                                block_post_task.block_sign_payload.block_builder_nonce,
+                                block_post_task.block_sign_payload.is_registration_block,
+                            )
+                            .await?;
+                        return Ok(Some(block_post_task.clone()));
+                    }
+                } else {
+                    // if the nonce is not the least reserved nonce, wait for 5 seconds and try again
+                    sleep_for(self.config.nonce_waiting_time).await;
+                }
+            }
+        }
+
+        let block_post_task = {
+            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
+            block_post_tasks_hi.pop_front()
+        };
+        let result = match block_post_task {
+            Some(block_post_task) => {
+                // release the nonce for the block post task
+                self.nonce_manager
+                    .release_nonce(
+                        block_post_task.block_sign_payload.block_builder_nonce,
+                        block_post_task.block_sign_payload.is_registration_block,
+                    )
+                    .await?;
+                Some(block_post_task)
+            }
+            None => {
+                // if there is no high priority task, pop from block_post_tasks_lo
+                {
+                    let mut block_post_tasks_lo = self.block_post_tasks_lo.write().await;
+                    block_post_tasks_lo.pop_front()
+                }
+            }
+        };
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::app::storage::nonce_manager::config::NonceManagerConfig;
+
     use super::*;
+    use alloy::providers::{mock::Asserter, ProviderBuilder};
+    use intmax2_client_sdk::external_api::contract::{
+        convert::convert_address_to_alloy, rollup_contract::RollupContract,
+    };
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
-    fn dummy_config() -> StorageConfig {
-        StorageConfig {
+    async fn create_storage() -> InMemoryStorage {
+        let config = StorageConfig {
             use_fee: false,
             use_collateral: false,
             block_builder_address: Address::default(),
@@ -351,10 +408,27 @@ mod tests {
             accepting_tx_interval: 10,
             proposing_block_interval: 10,
             deposit_check_interval: Some(5),
+            nonce_waiting_time: 5,
             block_builder_id: "builder1".to_string(),
             redis_url: None,
             cluster_id: None,
-        }
+        };
+
+        let provider_asserter = Asserter::new();
+        let provider = ProviderBuilder::default()
+            .with_gas_estimation()
+            .with_simple_nonce_management()
+            .fetch_chain_id()
+            .connect_mocked_client(provider_asserter);
+
+        let rollup = RollupContract::new(provider, Default::default());
+        let nonce_config = NonceManagerConfig {
+            block_builder_address: convert_address_to_alloy(config.block_builder_address),
+            redis_url: None,
+            cluster_id: None,
+        };
+        let nonce_manager = InMemoryNonceManager::new(nonce_config, rollup);
+        InMemoryStorage::new(&config, nonce_manager)
     }
 
     fn dummy_tx_request(request_id: &str) -> TxRequest {
@@ -369,7 +443,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_tx_registration() {
-        let storage = InMemoryStorage::new(&dummy_config()).await;
+        let storage = create_storage().await;
         let tx = dummy_tx_request("reg-1");
 
         storage.add_tx(true, tx.clone()).await.unwrap();
@@ -381,7 +455,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_tx_non_registration() {
-        let storage = InMemoryStorage::new(&dummy_config()).await;
+        let storage = create_storage().await;
         let tx = dummy_tx_request("nonreg-1");
 
         storage.add_tx(false, tx.clone()).await.unwrap();
