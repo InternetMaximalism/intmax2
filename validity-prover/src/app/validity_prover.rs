@@ -47,6 +47,10 @@ const D: usize = 2;
 const ACCOUNT_DB_TAG: u32 = 1;
 const BLOCK_DB_TAG: u32 = 2;
 const DEPOSIT_DB_TAG: u32 = 3;
+const ACCOUNT_BACKUP_DB_TAG: u32 = 11;
+const BLOCK_BACKUP_DB_TAG: u32 = 12;
+const DEPOSIT_BACKUP_DB_TAG: u32 = 13;
+
 const MAX_TASKS: u32 = 30;
 
 pub const SYNC_VALIDITY_WITNESS_KEY: &str = "sync_validity_witness";
@@ -75,6 +79,9 @@ pub struct ValidityProver {
     pub account_tree: SqlIndexedMerkleTree,
     pub block_tree: SqlIncrementalMerkleTree<Bytes32>,
     pub deposit_hash_tree: SqlIncrementalMerkleTree<DepositHash>,
+    pub account_tree_backup: SqlIndexedMerkleTree,
+    pub block_tree_backup: SqlIncrementalMerkleTree<Bytes32>,
+    pub deposit_hash_tree_backup: SqlIncrementalMerkleTree<DepositHash>,
     pub pool: DbPool,
 }
 
@@ -139,6 +146,18 @@ impl ValidityProver {
             "account tree len: {}",
             account_tree.len(last_timestamp).await?
         );
+        let account_tree_backup =
+            SqlIndexedMerkleTree::new(pool.clone(), ACCOUNT_BACKUP_DB_TAG, ACCOUNT_TREE_HEIGHT);
+        let block_tree_backup = SqlIncrementalMerkleTree::<Bytes32>::new(
+            pool.clone(),
+            BLOCK_BACKUP_DB_TAG,
+            BLOCK_HASH_TREE_HEIGHT,
+        );
+        let deposit_hash_tree_backup = SqlIncrementalMerkleTree::<DepositHash>::new(
+            pool.clone(),
+            DEPOSIT_BACKUP_DB_TAG,
+            DEPOSIT_TREE_HEIGHT,
+        );
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
             idle_timeout: env.database_timeout,
@@ -157,6 +176,9 @@ impl ValidityProver {
             account_tree,
             block_tree,
             deposit_hash_tree,
+            account_tree_backup,
+            block_tree_backup,
+            deposit_hash_tree_backup,
         })
     }
 
