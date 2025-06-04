@@ -4,7 +4,7 @@ import { claimWithdrawals, getEthBalance } from './contract';
 import { env, config } from './setup';
 
 async function getEthAddress(privateKey: string): Promise<string> {
-    return new ethers.wallet(privateKey).address;
+    return new ethers.Wallet(privateKey).address;
 }
 
 async function getWithdrawalsToClaim(privateKey: string) {

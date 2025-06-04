@@ -36,7 +36,7 @@ async function main() {
   await depositWrapper(config, ethKey, ethAddress, publicKey, amount, tokenType, tokenAddress, tokenId);
 
   // sync the account's balance proof and print the account's balance
-  syncAndPrintBalances(config, privateKey, privateKey);
+  await syncAndPrintBalances(config, privateKey, privateKey);
 
   // send a transfer tx
   const someonesKey = await generate_intmax_account_from_eth_key(generateRandomHex(32));
@@ -51,7 +51,7 @@ async function main() {
   await sleep(80);
 
   // get the receiver's balance
-  syncAndPrintBalances(config, privateKey, someonesKey.privkey);
+  await syncAndPrintBalances(config, privateKey, someonesKey.privkey);
 
   // Withdrawal 
   const withClaimFee = false; // set to true if you want to pay claim fee
