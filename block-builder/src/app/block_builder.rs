@@ -143,7 +143,7 @@ impl BlockBuilder {
             .transpose()?;
         let use_fee = registration_fee.is_some() || non_registration_fee.is_some();
         let use_collateral_fee =
-            registration_collateral_fee.is_some() || non_registration_fee.is_some();
+            registration_collateral_fee.is_some() || non_registration_collateral_fee.is_some();
         if use_collateral_fee && !use_fee {
             return Err(BlockBuilderError::InvalidFeeSetting(
                 "Collateral fee is set but fee is not set".to_string(),
