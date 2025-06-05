@@ -37,6 +37,7 @@ pub async fn send_transfers(
         let block_builder_info = indexer.get_block_builder_info().await?;
         block_builder_info.url.clone()
     };
+    log::info!("Block Builder URL: {block_builder_url}",);
 
     let fee_quote = client
         .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
