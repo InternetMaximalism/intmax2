@@ -298,4 +298,42 @@ mod tests {
             client.smallest_reserved_nonce(false).await.unwrap();
         assert_eq!(smallest_non_reg_nonce_after_release, Some(21));
     }
+
+    #[tokio::test]
+    async fn test_nonce_manager_clean_when_sync() {
+        let port = find_free_port();
+        let cont_name = "redis-test_nonce_manager_clean_when_sync";
+
+        stop_redis_docker(cont_name);
+        let output = run_redis_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let (client, asserter) = create_client(port).await;
+
+        set_reg_nonce_asserter(&asserter, 10);
+        set_non_reg_nonce_asserter(&asserter, 20);
+        let nonce1 = client.reserve_nonce(true).await.unwrap();
+        assert_eq!(nonce1, 10);
+
+        set_reg_nonce_asserter(&asserter, 10);
+        set_non_reg_nonce_asserter(&asserter, 20);
+        let nonce2 = client.reserve_nonce(true).await.unwrap();
+        assert_eq!(nonce2, 11);
+
+        set_reg_nonce_asserter(&asserter, 10);
+        set_non_reg_nonce_asserter(&asserter, 20);
+        let nonce3 = client.reserve_nonce(true).await.unwrap();
+        assert_eq!(nonce3, 12);
+
+        set_reg_nonce_asserter(&asserter, 11);
+        set_non_reg_nonce_asserter(&asserter, 20);
+        client.sync_onchain().await.unwrap();
+        let smallest_reg_nonce = client.smallest_reserved_nonce(true).await.unwrap();
+        assert_eq!(smallest_reg_nonce, Some(11));
+    }
 }
