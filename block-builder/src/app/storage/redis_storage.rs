@@ -792,79 +792,78 @@ impl Storage for RedisStorage {
     /// * `Some(BlockPostTask)` - Task dequeued
     /// * `None` - No tasks available
     async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>> {
-        // Assume self.get_conn().await can return an error that is convertible to StorageError via From trait
         let mut conn = self.get_conn().await?;
-        let blpop_timeout: f64 = 1.0; // seconds for each BLPOP attempt
 
-        // --- 1. Attempt High Priority Queue ---
-        // Assume redis::RedisError can be converted to StorageError via From trait
-        if let Some((_key, task_json)) = conn
-            .blpop::<_, Option<(String, String)>>(&self.block_post_tasks_hi_key, blpop_timeout)
+        /* ---------- 1. High-priority queue: peek (non-destructive) ---------- */
+        if let Some(task_json) = conn
+            .lindex::<_, Option<String>>(&self.block_post_tasks_hi_key, 0)
             .await?
         {
-            match serde_json::from_str::<BlockPostTask>(&task_json) {
-                Ok(task) => {
-                    let is_registration = task.block_sign_payload.is_registration_block;
-                    let block_nonce = task.block_sign_payload.block_builder_nonce;
+            // ------------- decode task & nonce check -------------
+            let peek_task: BlockPostTask = serde_json::from_str(&task_json)?;
+            let is_registration = peek_task.block_sign_payload.is_registration_block;
+            let block_nonce = peek_task.block_sign_payload.block_builder_nonce;
 
-                    // Assume NonceError can be converted to StorageError via From trait
-                    let smallest_reserved_nonce = self
-                        .nonce_manager
-                        .smallest_reserved_nonce(is_registration)
+            let smallest_reserved_nonce = self
+                .nonce_manager
+                .smallest_reserved_nonce(is_registration)
+                .await?;
+
+            /* ----- 2A. Nonce matches: pop immediately ----- */
+            if smallest_reserved_nonce == Some(block_nonce) {
+                if let Some(popped_json) = conn
+                    .lpop::<_, Option<String>>(&self.block_post_tasks_hi_key, None)
+                    .await?
+                {
+                    let task: BlockPostTask = serde_json::from_str(&popped_json)?;
+                    self.nonce_manager
+                        .release_nonce(
+                            task.block_sign_payload.block_builder_nonce,
+                            task.block_sign_payload.is_registration_block,
+                        )
                         .await?;
-
-                    if smallest_reserved_nonce == Some(block_nonce) {
-                        // Nonce matches, process this task
-                        self.nonce_manager
-                            .release_nonce(block_nonce, is_registration)
-                            .await?;
-                        log::info!(
-                            "Dequeued and processing high-priority task (nonce match): id={:?}",
-                            task.block_id
-                        );
-                        return Ok(Some(task));
-                    } else {
-                        // Nonce does not match. Re-queue the task to the end of the high-priority queue.
-                        log::warn!(
-                        "High-priority task id={:?} (nonce {}) is not the smallest reserved ({:?}). Re-queuing and sleeping.",
-                        task.block_id, block_nonce, smallest_reserved_nonce
-                    );
-                        let () = conn
-                            .rpush(&self.block_post_tasks_hi_key, &task_json)
-                            .await?;
-                        sleep_for(self.config.nonce_waiting_time).await;
-                        return Ok(None); // Indicate no task was fully processed in *this specific call*
-                    }
-                }
-                Err(e) => {
-                    log::error!(
-                        "Failed to deserialize high-priority task from Redis: {e}. Task JSON: {task_json}",
-                    );
-                    return Ok(None); // This task cannot be processed.
-                }
-            }
-        }
-
-        // --- 2. If no high-priority task was processed, attempt Low Priority Queue ---
-        if let Some((_key, task_json)) = conn
-            .blpop::<_, Option<(String, String)>>(&self.block_post_tasks_lo_key, blpop_timeout)
-            .await?
-        {
-            match serde_json::from_str::<BlockPostTask>(&task_json) {
-                Ok(task) => {
                     log::info!(
-                        "Dequeued and processing low-priority task: id={:?}",
+                        "Dequeued high-priority task (nonce match): id={}",
                         task.block_id
                     );
                     return Ok(Some(task));
                 }
-                Err(e) => {
-                    log::error!(
-                        "Failed to deserialize low-priority task from Redis: {e}. Task JSON: {task_json}",
+            } else {
+                log::info!(
+                    "High-priority head nonce {} ≠ smallest {:?}. Waiting {} then processing anyway.",
+                    block_nonce,
+                    smallest_reserved_nonce,
+                    self.config.nonce_waiting_time,
+                );
+                // sleep for nonce waiting time
+                sleep_for(self.config.nonce_waiting_time).await;
+                if let Some(popped_json) = conn
+                    .lpop::<_, Option<String>>(&self.block_post_tasks_hi_key, None)
+                    .await?
+                {
+                    let task: BlockPostTask = serde_json::from_str(&popped_json)?;
+                    self.nonce_manager
+                        .release_nonce(
+                            task.block_sign_payload.block_builder_nonce,
+                            task.block_sign_payload.is_registration_block,
+                        )
+                        .await?;
+                    log::info!(
+                        "Dequeued high-priority task after wait: id={}",
+                        task.block_id
                     );
-                    return Ok(None);
+                    return Ok(Some(task));
                 }
             }
+        }
+        const BLPOP_TIMEOUT_SEC: f64 = 1.0;
+        if let Some((_key, task_json)) = conn
+            .blpop::<_, Option<(String, String)>>(&self.block_post_tasks_lo_key, BLPOP_TIMEOUT_SEC)
+            .await?
+        {
+            let task = serde_json::from_str::<BlockPostTask>(&task_json)?;
+            log::info!("Dequeued low-priority task: id={}", task.block_id);
+            return Ok(Some(task));
         }
         Ok(None)
     }
