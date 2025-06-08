@@ -12,12 +12,12 @@ use intmax2_zkp::{
     utils::poseidon_hash_out::PoseidonHashOut,
 };
 
+use crate::data::encryption::errors::BlsEncryptionError;
+
 use super::{
     deposit_data::DepositData, encryption::BlsEncryption, error::DataError, meta_data::MetaData,
-    proof_compression::CompressedBalanceProof, transfer_data::TransferData, tx_data::TxData,
+    proof_compression::CompressedBalanceProof, transfer_data::LegacyTransferData, tx_data::TxData,
 };
-
-type Result<T> = std::result::Result<T, DataError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,7 +65,7 @@ impl UserData {
         }
     }
 
-    pub fn block_number(&self) -> Result<u32> {
+    pub fn block_number(&self) -> Result<u32, DataError> {
         let balance_proof = self
             .balance_proof
             .as_ref()
@@ -95,7 +95,14 @@ impl UserData {
     }
 }
 
-impl BlsEncryption for UserData {}
+impl BlsEncryption for UserData {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 /// Token index -> AssetLeaf
 #[derive(Debug, Clone)]
@@ -144,7 +151,7 @@ impl Balances {
     }
 
     /// Update the balance with the transfer data
-    pub fn add_transfer(&mut self, transfer_data: &TransferData) {
+    pub fn add_transfer(&mut self, transfer_data: &LegacyTransferData) {
         let transfer = &transfer_data.transfer;
         self.add_token(transfer.token_index, transfer.amount);
     }

@@ -9,14 +9,13 @@ pub mod bls;
 pub mod errors;
 pub mod rsa;
 
+const LATEST_VERSION: u8 = 2;
+
 pub trait BlsEncryption: Sized + Serialize + DeserializeOwned {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError>;
+
     fn to_bytes(&self) -> Vec<u8> {
         bincode::serialize(self).unwrap()
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Result<Self, BlsEncryptionError> {
-        let data = bincode::deserialize(bytes)?;
-        Ok(data)
     }
 
     fn encrypt(
@@ -25,7 +24,8 @@ pub trait BlsEncryption: Sized + Serialize + DeserializeOwned {
         sender_key: Option<KeySet>,
     ) -> Result<Vec<u8>, BlsEncryptionError> {
         let data = self.to_bytes();
-        let encrypted_data = VersionedBlsEncryption::encrypt(1, receiver, sender_key, &data)?;
+        let encrypted_data =
+            VersionedBlsEncryption::encrypt(LATEST_VERSION, receiver, sender_key, &data)?;
         Ok(bincode::serialize(&encrypted_data)?)
     }
 
@@ -36,7 +36,7 @@ pub trait BlsEncryption: Sized + Serialize + DeserializeOwned {
     ) -> Result<Self, BlsEncryptionError> {
         let data: VersionedBlsEncryption = bincode::deserialize(encrypted_data)?;
         let decrypted_data = data.decrypt(receiver_key, sender)?;
-        let data = Self::from_bytes(&decrypted_data)?;
+        let data = Self::from_bytes(&decrypted_data, data.version)?;
         Ok(data)
     }
 }

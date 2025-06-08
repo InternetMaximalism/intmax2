@@ -1,6 +1,7 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use intmax2_interfaces::data::{
-    data_type::DataType, encryption::BlsEncryption, transfer_data::TransferData, tx_data::TxData,
+    data_type::DataType, encryption::BlsEncryption, transfer_data::LegacyTransferData,
+    tx_data::TxData,
 };
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use super::{client::Client, error::ClientError, strategy::common::fetch_single_d
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferReceipt {
-    pub data: TransferData,
+    pub data: LegacyTransferData,
     pub timestamp: u64,
 }
 
@@ -51,7 +52,7 @@ pub async fn validate_transfer_receipt(
     client: &Client,
     key: KeySet,
     transfer_receipt: &str,
-) -> Result<TransferData, ClientError> {
+) -> Result<LegacyTransferData, ClientError> {
     let encrypted_data = BASE64_STANDARD.decode(transfer_receipt).map_err(|e| {
         ClientError::DeserializeError(format!("Failed to decode transfer receipt as base64: {e}"))
     })?;

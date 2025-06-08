@@ -13,7 +13,7 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         rw_rights::WriteRights,
         sender_proof_set::SenderProofSet,
-        transfer_data::TransferData,
+        transfer_data::LegacyTransferData,
         user_data::ProcessStatus,
     },
 };
@@ -24,9 +24,9 @@ use intmax2_zkp::{
 
 #[derive(Debug, Clone)]
 pub struct WithdrawalInfo {
-    pub settled: Vec<(MetaDataWithBlockNumber, TransferData)>,
-    pub pending: Vec<(MetaData, TransferData)>,
-    pub timeout: Vec<(MetaData, TransferData)>,
+    pub settled: Vec<(MetaDataWithBlockNumber, LegacyTransferData)>,
+    pub pending: Vec<(MetaData, LegacyTransferData)>,
+    pub timeout: Vec<(MetaData, LegacyTransferData)>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -44,7 +44,7 @@ pub async fn fetch_withdrawal_info(
     let mut pending = Vec::new();
     let mut timeout = Vec::new();
 
-    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TransferData>(
+    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<LegacyTransferData>(
         store_vault_server,
         key,
         DataType::Withdrawal,

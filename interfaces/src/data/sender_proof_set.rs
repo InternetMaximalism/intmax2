@@ -4,7 +4,9 @@ use intmax2_zkp::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::utils::circuit_verifiers::CircuitVerifiers;
+use crate::{
+    data::encryption::errors::BlsEncryptionError, utils::circuit_verifiers::CircuitVerifiers,
+};
 
 use super::{
     encryption::BlsEncryption,
@@ -20,7 +22,14 @@ pub struct SenderProofSet {
     pub prev_balance_proof: CompressedBalanceProof,
 }
 
-impl BlsEncryption for SenderProofSet {}
+impl BlsEncryption for SenderProofSet {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 impl Validation for SenderProofSet {
     fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {

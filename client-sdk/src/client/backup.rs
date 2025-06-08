@@ -2,7 +2,7 @@ use intmax2_interfaces::{
     api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{
         data_type::DataType, encryption::BlsEncryption, meta_data::MetaData,
-        transfer_data::TransferData,
+        transfer_data::LegacyTransferData,
     },
     utils::digest::get_digest,
 };
@@ -44,7 +44,7 @@ pub async fn make_history_backup(
     let mut transfer_data = Vec::new();
     for record in all_records.iter() {
         if record.topic == DataType::Transfer.to_topic() {
-            let transfer_data_entry = match TransferData::decrypt(key, None, &record.data) {
+            let transfer_data_entry = match LegacyTransferData::decrypt(key, None, &record.data) {
                 Ok(transfer_data_entry) => transfer_data_entry,
                 Err(e) => {
                     log::warn!(

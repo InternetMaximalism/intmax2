@@ -8,7 +8,7 @@ use intmax2_zkp::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{api::error::ServerError, data::transfer_data::TransferData};
+use crate::{api::error::ServerError, data::transfer_data::LegacyTransferData};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +22,7 @@ pub struct FeeProof {
 #[serde(rename_all = "camelCase")]
 pub struct CollateralBlock {
     pub sender_proof_set_ephemeral_key: U256,
-    pub fee_transfer_data: TransferData,
+    pub fee_transfer_data: LegacyTransferData,
     pub is_registration_block: bool,
     pub expiry: u64,
     pub block_builder_address: Address,

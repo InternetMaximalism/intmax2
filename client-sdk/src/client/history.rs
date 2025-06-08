@@ -3,7 +3,7 @@ use intmax2_interfaces::{
     data::{
         deposit_data::DepositData,
         meta_data::{MetaData, MetaDataWithBlockNumber},
-        transfer_data::TransferData,
+        transfer_data::LegacyTransferData,
         tx_data::TxData,
     },
 };
@@ -106,7 +106,13 @@ pub async fn fetch_transfer_history(
     client: &Client,
     key: KeySet,
     cursor: &MetaDataCursor,
-) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
+) -> Result<
+    (
+        Vec<HistoryEntry<LegacyTransferData>>,
+        MetaDataCursorResponse,
+    ),
+    ClientError,
+> {
     let current_time = chrono::Utc::now().timestamp() as u64;
     let user_data = client.get_user_data(key).await?;
 

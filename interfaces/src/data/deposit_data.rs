@@ -10,6 +10,8 @@ use intmax2_zkp::{
     utils::leafable::Leafable,
 };
 
+use crate::data::encryption::errors::BlsEncryptionError;
+
 use super::{encryption::BlsEncryption, validation::Validation};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -101,7 +103,14 @@ impl DepositData {
     }
 }
 
-impl BlsEncryption for DepositData {}
+impl BlsEncryption for DepositData {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 impl Validation for DepositData {
     fn validate(&self, pubkey: U256) -> anyhow::Result<()> {

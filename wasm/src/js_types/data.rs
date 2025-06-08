@@ -2,7 +2,7 @@ use intmax2_client_sdk::client::client::{DepositResult, TxResult};
 use intmax2_interfaces::data::{
     deposit_data::DepositData,
     meta_data::MetaData,
-    transfer_data::TransferData,
+    transfer_data::LegacyTransferData,
     tx_data::TxData,
     user_data::{Balances, UserData},
 };
@@ -53,8 +53,8 @@ pub struct JsTransferData {
     pub transfer: JsTransfer,
 }
 
-impl From<TransferData> for JsTransferData {
-    fn from(transfer_data: TransferData) -> Self {
+impl From<LegacyTransferData> for JsTransferData {
+    fn from(transfer_data: LegacyTransferData) -> Self {
         Self {
             sender: transfer_data.sender.to_hex(),
             transfer: transfer_data.transfer.into(),

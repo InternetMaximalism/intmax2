@@ -2,7 +2,7 @@ use intmax2_interfaces::{
     data::{
         data_type::DataType, deposit_data::DepositData, encryption::BlsEncryption as _,
         meta_data::MetaDataWithBlockNumber, proof_compression::CompressedBalanceProof,
-        transfer_data::TransferData, tx_data::TxData, user_data::UserData,
+        transfer_data::LegacyTransferData, tx_data::TxData, user_data::UserData,
     },
     utils::digest::get_digest,
 };
@@ -173,7 +173,7 @@ impl Client {
         &self,
         key: KeySet,
         meta: MetaDataWithBlockNumber,
-        transfer_data: &TransferData,
+        transfer_data: &LegacyTransferData,
     ) -> Result<(), SyncError> {
         log::info!("sync_transfer: {meta:?}");
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;

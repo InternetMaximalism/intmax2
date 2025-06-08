@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{encryption::BlsEncryption, transfer_data::TransferData, validation::Validation};
+use super::{encryption::BlsEncryption, transfer_data::LegacyTransferData, validation::Validation};
 use intmax2_zkp::{
     common::{
         error::CommonError,
@@ -32,7 +32,7 @@ impl TxData {
         &self,
         sender: U256,
         transfer_index: u32,
-    ) -> Result<TransferData, CommonError> {
+    ) -> Result<LegacyTransferData, CommonError> {
         let transfers = self.spent_witness.transfers.clone();
         if transfer_index >= transfers.len() as u32 {
             return Err(CommonError::InvalidData(format!(
@@ -44,7 +44,7 @@ impl TxData {
             transfer_tree.push(*transfer);
         }
         let transfer_merkle_tree = transfer_tree.prove(transfer_index as u64);
-        Ok(TransferData {
+        Ok(LegacyTransferData {
             sender_proof_set_ephemeral_key: self.sender_proof_set_ephemeral_key,
             sender_proof_set: None,
             sender,
