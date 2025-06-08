@@ -11,11 +11,8 @@ use intmax2_zkp::{
 };
 
 use crate::{
-    data::encryption::errors::BlsEncryptionError,
-    utils::{
-        address::PaymentId,
-        key::{PublicKey, PublicKeyPair},
-    },
+    data::{encryption::errors::BlsEncryptionError, extra_data::ExtraData},
+    utils::key::{PublicKey, PublicKeyPair},
 };
 
 use super::{encryption::BlsEncryption, sender_proof_set::SenderProofSet, validation::Validation};
@@ -28,7 +25,6 @@ struct LegacyTransferData {
     pub sender_proof_set_ephemeral_key: U256,
     // After fetching sender proof set, this will be filled
     pub sender_proof_set: Option<SenderProofSet>,
-
     pub sender: U256,
     pub tx: Tx,
     pub tx_index: u32,
@@ -49,7 +45,7 @@ impl LegacyTransferData {
             sender_proof_set_ephemeral_key: self.sender_proof_set_ephemeral_key,
             sender_proof_set: self.sender_proof_set,
             sender,
-            payment_id: None,
+            extra_data: ExtraData::default(), // legacy data does not have extra data
             tx: self.tx,
             tx_index: self.tx_index,
             tx_merkle_proof: self.tx_merkle_proof,
@@ -70,9 +66,7 @@ pub struct TransferData {
     // After fetching sender proof set, this will be filled
     pub sender_proof_set: Option<SenderProofSet>,
     pub sender: PublicKeyPair,
-    pub payment_id: Option<PaymentId>,
-    pub description_hash: Option<Bytes32>,
-    pub inner_salt: Salt,
+    pub extra_data: ExtraData,
     pub tx: Tx,
     pub tx_index: u32,
     pub tx_merkle_proof: TxMerkleProof,
@@ -103,6 +97,15 @@ impl BlsEncryption for TransferData {
 
 impl Validation for TransferData {
     fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
+        if let Some(extra_data_salt) = self.extra_data.to_salt() {
+            if extra_data_salt != self.transfer.salt {
+                return Err(anyhow::anyhow!(
+                    "Extra data salt does not match transfer salt: {} != {}",
+                    extra_data_salt,
+                    self.transfer.salt
+                ));
+            }
+        }
         let tx_tree_root: PoseidonHashOut = self.tx_tree_root.try_into()?;
         self.tx_merkle_proof
             .verify(&self.tx, self.tx_index as u64, tx_tree_root)?;

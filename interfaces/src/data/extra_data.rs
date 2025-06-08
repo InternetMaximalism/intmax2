@@ -37,7 +37,7 @@ impl ExtraData {
             fields_flag += 4;
             data.extend_from_slice(&inner_salt.to_u64_vec());
         }
-        // Add the fields flag to the data
+        // Add the fields flag to the data for length padding
         data.push(fields_flag as u64);
         // Use Poseidon hash for ZKP compatibility in the future
         let hash = PoseidonHashOut::hash_inputs_u64(&data);
