@@ -158,3 +158,10 @@ impl From<&KeyPair> for ViewPair {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
+pub struct PublicKeyPair {
+    pub view: PublicKey,
+    pub spend: PublicKey,
+}
+

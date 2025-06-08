@@ -12,7 +12,7 @@ use intmax2_zkp::{
     utils::poseidon_hash_out::PoseidonHashOut,
 };
 
-use crate::data::encryption::errors::BlsEncryptionError;
+use crate::data::{encryption::errors::BlsEncryptionError, transfer_data::TransferData};
 
 use super::{
     deposit_data::DepositData, encryption::BlsEncryption, error::DataError, meta_data::MetaData,
@@ -151,7 +151,7 @@ impl Balances {
     }
 
     /// Update the balance with the transfer data
-    pub fn add_transfer(&mut self, transfer_data: &LegacyTransferData) {
+    pub fn add_transfer(&mut self, transfer_data: &TransferData) {
         let transfer = &transfer_data.transfer;
         self.add_token(transfer.token_index, transfer.amount);
     }

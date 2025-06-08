@@ -1,13 +1,16 @@
 use base58_monero::base58;
+use intmax2_zkp::ethereum_types::{u32limb_trait::U32LimbTrait, EthereumTypeError};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tiny_keccak::{Hasher as _, Keccak};
 
 use crate::utils::{
-    key::{KeyPair, PublicKey, ViewPair},
+    key::{KeyPair, PublicKey, PublicKeyPair, ViewPair},
     network::{self, Network},
+    payment_id::PaymentId,
 };
 use std::{fmt, str::FromStr};
 
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     /// Invalid address magic byte.
     #[error("Invalid magic byte")]
@@ -30,32 +33,9 @@ pub enum Error {
     /// Encode error.
     #[error("Encode error: {0}")]
     Encoding(&'static str),
-}
 
-#[derive(Default, Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct PaymentId(pub [u8; 8]);
-
-impl PaymentId {
-    pub fn from_slice(bytes: &[u8]) -> Result<PaymentId, Error> {
-        if bytes.len() != 8 {
-            return Err(Error::InvalidPaymentId);
-        }
-        let mut buffer = [0u8; 8];
-        buffer.copy_from_slice(bytes);
-        Ok(PaymentId(buffer))
-    }
-}
-
-impl hex::FromHex for PaymentId {
-    type Error = hex::FromHexError;
-
-    fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
-        let hex = hex.as_ref();
-        let hex = hex.strip_prefix("0x".as_bytes()).unwrap_or(hex);
-
-        let buffer = <[u8; 8]>::from_hex(hex)?;
-        Ok(PaymentId(buffer))
-    }
+    #[error(transparent)]
+    EthereumTypeError(#[from] EthereumTypeError),
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -87,7 +67,7 @@ impl AddressType {
                             "from_slice: Not enough bytes to decode the AddressType (<73)",
                         ));
                     }
-                    let payment_id = PaymentId::from_slice(&bytes[65..73])?;
+                    let payment_id = PaymentId::from_bytes_be(&bytes[65..73])?;
                     Ok(Integrated(payment_id))
                 }
                 _ => Err(Error::InvalidMagicByte),
@@ -100,7 +80,7 @@ impl AddressType {
                             "from_slice: Not enough bytes to decode the AddressType (<73)",
                         ));
                     }
-                    let payment_id = PaymentId::from_slice(&bytes[65..73])?;
+                    let payment_id = PaymentId::from_bytes_be(&bytes[65..73])?;
                     Ok(Integrated(payment_id))
                 }
                 _ => Err(Error::InvalidMagicByte),
@@ -113,7 +93,7 @@ impl AddressType {
                             "from_slice: Not enough bytes to decode the AddressType (<73)",
                         ));
                     }
-                    let payment_id = PaymentId::from_slice(&bytes[65..73])?;
+                    let payment_id = PaymentId::from_bytes_be(&bytes[65..73])?;
                     Ok(Integrated(payment_id))
                 }
                 _ => Err(Error::InvalidMagicByte),
@@ -180,6 +160,15 @@ impl IntmaxAddress {
         }
     }
 
+    pub fn from_public_keypair(network: Network, keys: &PublicKeyPair) -> IntmaxAddress {
+        IntmaxAddress {
+            network,
+            addr_type: AddressType::Standard,
+            public_spend: keys.spend,
+            public_view: keys.view,
+        }
+    }
+
     /// Parse an address from a vector of bytes, fail if the magic byte is incorrect, if public
     /// keys are not valid points, if payment id is invalid, and if checksums mismatch.
     pub fn from_bytes(bytes: &[u8]) -> Result<IntmaxAddress, Error> {
@@ -231,7 +220,7 @@ impl IntmaxAddress {
         bytes.extend_from_slice(&self.public_spend.to_bytes());
         bytes.extend_from_slice(&self.public_view.to_bytes());
         if let AddressType::Integrated(payment_id) = &self.addr_type {
-            bytes.extend_from_slice(&payment_id.0);
+            bytes.extend_from_slice(&payment_id.to_bytes_be());
         }
         let checksum = keccak256(bytes.as_slice());
         bytes.extend_from_slice(&checksum[0..4]);
@@ -254,6 +243,25 @@ impl FromStr for IntmaxAddress {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_bytes(&base58::decode(s)?)
+    }
+}
+
+impl Serialize for IntmaxAddress {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for IntmaxAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        IntmaxAddress::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

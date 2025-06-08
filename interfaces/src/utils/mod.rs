@@ -3,6 +3,7 @@ pub mod circuit_verifiers;
 pub mod digest;
 pub mod key;
 pub mod network;
+pub mod payment_id;
 pub mod random;
 pub mod serializer;
 pub mod signature;
