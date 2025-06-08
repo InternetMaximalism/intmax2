@@ -6,6 +6,7 @@ use intmax2_zkp::{
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use rand::Rng;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -57,6 +58,25 @@ impl TryFrom<&[u8]> for PublicKey {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Self::from_slice(value)
+    }
+}
+
+impl Serialize for PublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        PublicKey::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
