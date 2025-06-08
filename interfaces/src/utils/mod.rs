@@ -1,5 +1,8 @@
+pub mod address;
 pub mod circuit_verifiers;
 pub mod digest;
+pub mod key;
+pub mod network;
 pub mod random;
 pub mod serializer;
 pub mod signature;
