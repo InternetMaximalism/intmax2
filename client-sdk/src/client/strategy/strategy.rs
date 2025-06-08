@@ -6,7 +6,7 @@ use intmax2_interfaces::{
     },
     data::{
         deposit_data::DepositData, meta_data::MetaDataWithBlockNumber,
-        transfer_data::LegacyTransferData, tx_data::TxData, user_data::Balances,
+        transfer_data::TransferData, tx_data::TxData, user_data::Balances,
     },
 };
 use itertools::Itertools;
@@ -44,7 +44,7 @@ pub enum Action {
 #[derive(Debug, Clone)]
 pub enum ReceiveAction {
     Deposit(MetaDataWithBlockNumber, DepositData),
-    Transfer(MetaDataWithBlockNumber, Box<LegacyTransferData>), // Boxed to avoid large stack size
+    Transfer(MetaDataWithBlockNumber, Box<TransferData>), // Boxed to avoid large stack size
 }
 
 impl ReceiveAction {
@@ -242,7 +242,7 @@ pub async fn determine_sequence(
 async fn collect_receives(
     tx: &Option<(MetaDataWithBlockNumber, TxData)>,
     deposits: &mut Vec<(MetaDataWithBlockNumber, DepositData)>,
-    transfers: &mut Vec<(MetaDataWithBlockNumber, LegacyTransferData)>,
+    transfers: &mut Vec<(MetaDataWithBlockNumber, TransferData)>,
 ) -> Result<Vec<ReceiveAction>, StrategyError> {
     let mut receives: Vec<ReceiveAction> = Vec::new();
     if let Some((meta, _tx_data)) = tx {
@@ -304,7 +304,7 @@ pub async fn determine_withdrawals(
     tx_timeout: u64,
 ) -> Result<
     (
-        Vec<(MetaDataWithBlockNumber, LegacyTransferData)>,
+        Vec<(MetaDataWithBlockNumber, TransferData)>,
         Vec<Bytes32>, // pending withdrawals
     ),
     StrategyError,

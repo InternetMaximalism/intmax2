@@ -3,7 +3,7 @@ use intmax2_interfaces::{
         balance_prover::interface::BalanceProverClientInterface,
         validity_prover::interface::ValidityProverClientInterface,
     },
-    data::{deposit_data::DepositData, transfer_data::LegacyTransferData, tx_data::TxData},
+    data::{deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData},
 };
 use intmax2_zkp::{
     circuits::balance::{
@@ -122,7 +122,7 @@ pub async fn receive_transfer(
                                                             * applying tx */
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>, /* receiver's prev balance
                                                                   * proof */
-    transfer_data: &LegacyTransferData,
+    transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
     let receive_block_number = prev_balance_pis.public_state.block_number;
@@ -292,7 +292,7 @@ pub async fn update_send_by_receiver(
     key: KeySet,
     sender: U256,
     tx_block_number: u32,
-    transfer_data: &LegacyTransferData,
+    transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     wait_till_validity_prover_synced(validity_prover, true, tx_block_number).await?;
 

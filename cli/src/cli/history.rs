@@ -4,7 +4,7 @@ use intmax2_client_sdk::client::history::EntryStatus;
 use intmax2_interfaces::{
     api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{
-        deposit_data::DepositData, meta_data::MetaData, transfer_data::LegacyTransferData,
+        deposit_data::DepositData, meta_data::MetaData, transfer_data::TransferData,
         tx_data::TxData,
     },
 };
@@ -116,7 +116,7 @@ enum HistoryEum {
         meta: MetaData,
     },
     Receive {
-        transfer: LegacyTransferData,
+        transfer: TransferData,
         status: EntryStatus,
         meta: MetaData,
     },

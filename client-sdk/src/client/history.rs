@@ -3,7 +3,7 @@ use intmax2_interfaces::{
     data::{
         deposit_data::DepositData,
         meta_data::{MetaData, MetaDataWithBlockNumber},
-        transfer_data::LegacyTransferData,
+        transfer_data::TransferData,
         tx_data::TxData,
     },
 };
@@ -108,7 +108,7 @@ pub async fn fetch_transfer_history(
     cursor: &MetaDataCursor,
 ) -> Result<
     (
-        Vec<HistoryEntry<LegacyTransferData>>,
+        Vec<HistoryEntry<TransferData>>,
         MetaDataCursorResponse,
     ),
     ClientError,

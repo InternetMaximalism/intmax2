@@ -32,7 +32,7 @@ use intmax2_interfaces::{
             bls::v1::{algorithm::encrypt_bls, multisig as multisig_encryption},
             BlsEncryption as _,
         },
-        transfer_data::LegacyTransferData,
+        transfer_data::TransferData,
         tx_data::TxData,
     },
     utils::{random::default_rng, signature::Auth},
@@ -65,7 +65,7 @@ pub async fn decrypt_transfer_data(
     init_logger();
     let key = str_privkey_to_keyset(private_key)?;
     let transfer_data =
-        LegacyTransferData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{e}")))?;
+        TransferData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{e}")))?;
     Ok(transfer_data.into())
 }
 

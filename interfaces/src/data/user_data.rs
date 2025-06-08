@@ -16,7 +16,7 @@ use crate::data::encryption::errors::BlsEncryptionError;
 
 use super::{
     deposit_data::DepositData, encryption::BlsEncryption, error::DataError, meta_data::MetaData,
-    proof_compression::CompressedBalanceProof, transfer_data::LegacyTransferData, tx_data::TxData,
+    proof_compression::CompressedBalanceProof, tx_data::TxData,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

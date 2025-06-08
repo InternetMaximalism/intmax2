@@ -6,7 +6,7 @@ use intmax2_interfaces::{
     },
     data::{
         data_type::DataType, encryption::BlsEncryption, proof_compression::CompressedSpentProof,
-        sender_proof_set::SenderProofSet, transfer_data::LegacyTransferData,
+        sender_proof_set::SenderProofSet, transfer_data::TransferData,
         transfer_type::TransferType, tx_data::TxData, user_data::UserData,
     },
     utils::{digest::get_digest, random::default_rng},
@@ -94,7 +94,7 @@ pub async fn generate_fee_proof(
         pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
         let pubkey_hash = get_pubkey_hash(&pubkeys);
 
-        let fee_transfer_data = LegacyTransferData {
+        let fee_transfer_data = TransferData {
             sender_proof_set_ephemeral_key,
             sender_proof_set: None,
             sender: key.pubkey,

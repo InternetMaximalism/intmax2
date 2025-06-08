@@ -5,7 +5,7 @@ use intmax2_interfaces::{
     },
     data::{
         encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError,
-        transfer_data::LegacyTransferData, validation::Validation as _,
+        transfer_data::TransferData, validation::Validation as _,
     },
 };
 use intmax2_zkp::{
@@ -46,7 +46,7 @@ pub async fn validate_receive(
     validity_prover: &dyn ValidityProverClientInterface,
     recipient_pubkey: U256,
     transfer_timestamp: u64,
-    transfer_data: &LegacyTransferData,
+    transfer_data: &TransferData,
 ) -> Result<Transfer, ReceiveValidationError> {
     transfer_data
         .validate(recipient_pubkey)

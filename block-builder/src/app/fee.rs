@@ -9,7 +9,7 @@ use intmax2_interfaces::{
     },
     data::{
         data_type::DataType, encryption::BlsEncryption, sender_proof_set::SenderProofSet,
-        transfer_data::LegacyTransferData, validation::Validation,
+        transfer_data::TransferData, validation::Validation,
     },
     utils::random::default_rng,
 };
@@ -278,7 +278,7 @@ pub async fn collect_fee(
             .find(|s| s.pubkey == request.pubkey);
         if signature.is_some() {
             // fee will be paid
-            let transfer_data = LegacyTransferData {
+            let transfer_data = TransferData {
                 sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
                 sender_proof_set: None,
                 sender: request.pubkey,

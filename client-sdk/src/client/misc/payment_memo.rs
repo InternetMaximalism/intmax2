@@ -9,7 +9,7 @@ use intmax2_interfaces::{
         meta_data::MetaData,
         rw_rights::{RWRights, ReadRights, WriteRights},
         topic::topic_from_rights,
-        transfer_data::LegacyTransferData,
+        transfer_data::TransferData,
     },
 };
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
@@ -29,7 +29,7 @@ pub fn payment_memo_topic(name: &str) -> String {
 #[serde(rename_all = "camelCase", bound(deserialize = ""))]
 pub struct PaymentMemo {
     pub meta: MetaData,
-    pub transfer_data: LegacyTransferData,
+    pub transfer_data: TransferData,
     pub memo: String,
 }
 

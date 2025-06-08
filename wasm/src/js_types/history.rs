@@ -1,6 +1,6 @@
 use intmax2_client_sdk::client::history::{EntryStatus, HistoryEntry};
 use intmax2_interfaces::data::{
-    deposit_data::DepositData, transfer_data::LegacyTransferData, tx_data::TxData,
+    deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -77,8 +77,8 @@ impl From<HistoryEntry<DepositData>> for JsDepositEntry {
     }
 }
 
-impl From<HistoryEntry<LegacyTransferData>> for JsTransferEntry {
-    fn from(entry: HistoryEntry<LegacyTransferData>) -> Self {
+impl From<HistoryEntry<TransferData>> for JsTransferEntry {
+    fn from(entry: HistoryEntry<TransferData>) -> Self {
         Self {
             data: entry.data.into(),
             status: entry.status.into(),

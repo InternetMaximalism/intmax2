@@ -13,7 +13,7 @@ use intmax2_interfaces::{
     data::{
         data_type::DataType,
         meta_data::{MetaData, MetaDataWithBlockNumber},
-        transfer_data::LegacyTransferData,
+        transfer_data::TransferData,
         user_data::ProcessStatus,
         validation::Validation,
     },
@@ -27,9 +27,9 @@ use intmax2_zkp::{
 
 #[derive(Debug, Clone)]
 pub struct TransferInfo {
-    pub settled: Vec<(MetaDataWithBlockNumber, LegacyTransferData)>,
-    pub pending: Vec<(MetaData, LegacyTransferData)>,
-    pub timeout: Vec<(MetaData, LegacyTransferData)>,
+    pub settled: Vec<(MetaDataWithBlockNumber, TransferData)>,
+    pub pending: Vec<(MetaData, TransferData)>,
+    pub timeout: Vec<(MetaData, TransferData)>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -46,7 +46,7 @@ pub async fn fetch_transfer_info(
     let mut settled = Vec::new();
     let mut pending = Vec::new();
     let mut timeout = Vec::new();
-    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<LegacyTransferData>(
+    let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TransferData>(
         store_vault_server,
         key,
         DataType::Transfer,

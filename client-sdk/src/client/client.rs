@@ -18,7 +18,7 @@ use intmax2_interfaces::{
         meta_data::MetaData,
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,
-        transfer_data::LegacyTransferData,
+        transfer_data::TransferData,
         transfer_type::TransferType,
         tx_data::TxData,
         user_data::{Balances, ProcessStatus, UserData},
@@ -147,7 +147,7 @@ pub struct TxResult {
     pub tx_tree_root: Bytes32,
     pub tx_digest: Bytes32,
     pub tx_data: TxData,
-    pub transfer_data_vec: Vec<LegacyTransferData>,
+    pub transfer_data_vec: Vec<TransferData>,
     pub backup_csv: String,
 }
 
@@ -507,7 +507,7 @@ impl Client {
         let mut transfer_data_and_encrypted_data = Vec::new();
         for (i, transfer) in memo.transfers.iter().enumerate() {
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
-            let transfer_data = LegacyTransferData {
+            let transfer_data = TransferData {
                 sender: key.pubkey,
                 transfer: *transfer,
                 transfer_index: i as u32,
@@ -744,13 +744,7 @@ impl Client {
         &self,
         key: KeySet,
         cursor: &MetaDataCursor,
-    ) -> Result<
-        (
-            Vec<HistoryEntry<LegacyTransferData>>,
-            MetaDataCursorResponse,
-        ),
-        ClientError,
-    > {
+    ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
         fetch_transfer_history(self, key, cursor).await
     }
 
@@ -860,7 +854,7 @@ impl Client {
         &self,
         key: KeySet,
         transfer_receipt: &str,
-    ) -> Result<LegacyTransferData, ClientError> {
+    ) -> Result<TransferData, ClientError> {
         validate_transfer_receipt(self, key, transfer_receipt).await
     }
 

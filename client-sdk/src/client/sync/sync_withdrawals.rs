@@ -3,7 +3,7 @@ use intmax2_interfaces::{
         block_builder::interface::Fee,
         withdrawal_server::interface::{FeeResult, WithdrawalFeeInfo},
     },
-    data::{meta_data::MetaDataWithBlockNumber, transfer_data::LegacyTransferData},
+    data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData},
 };
 use intmax2_zkp::{
     common::{
@@ -67,7 +67,7 @@ impl Client {
         &self,
         key: KeySet,
         meta: MetaDataWithBlockNumber,
-        withdrawal_data: &LegacyTransferData,
+        withdrawal_data: &TransferData,
         fee_beneficiary: Option<U256>,
         fee_token_index: u32,
         direct_withdrawal_fee: Option<Vec<Fee>>,
