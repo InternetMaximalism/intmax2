@@ -5,9 +5,14 @@ use intmax2_interfaces::{
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
-        data_type::DataType, encryption::BlsEncryption, extra_data::ExtraData,
-        proof_compression::CompressedSpentProof, sender_proof_set::SenderProofSet,
-        transfer_data::TransferData, transfer_type::TransferType, tx_data::TxData,
+        data_type::DataType,
+        encryption::BlsEncryption,
+        extra_data::{ExtraData, FullExtraData},
+        proof_compression::CompressedSpentProof,
+        sender_proof_set::SenderProofSet,
+        transfer_data::TransferData,
+        transfer_type::TransferType,
+        tx_data::TxData,
         user_data::UserData,
     },
     utils::{
@@ -143,7 +148,7 @@ pub async fn generate_fee_proof(
             transfer_digests: vec![encrypted_fee_transfer_digest],
             transfer_types: vec![TransferType::TransferCollateralFee.to_string()],
             sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
-            extra_data: vec![ExtraData::default()],
+            full_extra_data: vec![FullExtraData::default()],
         };
         let entry = SaveDataEntry {
             topic: DataType::Tx.to_topic(),

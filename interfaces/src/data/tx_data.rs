@@ -1,5 +1,5 @@
 use crate::{
-    data::{encryption::errors::BlsEncryptionError, extra_data::ExtraData},
+    data::{encryption::errors::BlsEncryptionError, extra_data::FullExtraData},
     utils::key::PublicKeyPair,
 };
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,7 @@ pub struct LegacyTxData {
 impl LegacyTxData {
     pub fn into_latest(self) -> TxData {
         // use default extra data for migration
-        let extra_data = vec![ExtraData::default(); self.transfer_digests.len()];
+        let full_extra_data = vec![FullExtraData::default(); self.transfer_digests.len()];
         TxData {
             tx_index: self.tx_index,
             tx_merkle_proof: self.tx_merkle_proof,
@@ -42,7 +42,7 @@ impl LegacyTxData {
             spent_witness: self.spent_witness,
             transfer_digests: self.transfer_digests,
             transfer_types: self.transfer_types,
-            extra_data,
+            full_extra_data,
             sender_proof_set_ephemeral_key: self.sender_proof_set_ephemeral_key,
         }
     }
@@ -58,7 +58,7 @@ pub struct TxData {
     pub spent_witness: SpentWitness, // to update sender's private state
     pub transfer_digests: Vec<Bytes32>,
     pub transfer_types: Vec<String>,
-    pub extra_data: Vec<ExtraData>, // new field for extra data
+    pub full_extra_data: Vec<FullExtraData>,
     // Ephemeral key to query the sender proof set
     pub sender_proof_set_ephemeral_key: U256,
 }
@@ -80,12 +80,12 @@ impl TxData {
             transfer_tree.push(*transfer);
         }
         let transfer_merkle_tree = transfer_tree.prove(transfer_index as u64);
-        let extra_data = self.extra_data[transfer_index as usize].clone();
+        let full_extra_data = self.full_extra_data[transfer_index as usize].clone();
         Ok(TransferData {
             sender_proof_set_ephemeral_key: self.sender_proof_set_ephemeral_key,
             sender_proof_set: None,
             sender,
-            extra_data,
+            extra_data: full_extra_data.to_extra_data(),
             tx: self.spent_witness.tx,
             tx_index: self.tx_index,
             tx_merkle_proof: self.tx_merkle_proof.clone(),

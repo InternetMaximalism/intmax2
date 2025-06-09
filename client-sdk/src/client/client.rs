@@ -15,6 +15,7 @@ use intmax2_interfaces::{
         data_type::DataType,
         deposit_data::{DepositData, TokenType},
         encryption::BlsEncryption as _,
+        extra_data::FullExtraData,
         meta_data::MetaData,
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,
@@ -115,6 +116,7 @@ pub struct TxRequestMemo {
     pub is_registration_block: bool,
     pub tx: Tx,
     pub transfers: Vec<Transfer>,
+    pub full_extra_data: Vec<FullExtraData>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
     pub payment_memos: Vec<PaymentMemoEntry>,
@@ -320,13 +322,12 @@ impl Client {
         block_builder_url: &str,
         key_pair: KeyPair,
         transfers: &[Transfer],
+        full_extra_data: &[FullExtraData],
         payment_memos: &[PaymentMemoEntry],
         fee_quote: &TransferFeeQuote,
     ) -> Result<TxRequestMemo, ClientError> {
         let view_pair: ViewPair = key_pair.into();
         let spend_pub = key_pair.spend.to_public_key();
-        let spend_priv = key_pair.spend;
-
         log::info!(
             "send_tx_request: spend pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
            spend_pub,
@@ -342,6 +343,12 @@ impl Client {
                 ));
             }
         }
+        if transfers.len() != full_extra_data.len() {
+            return Err(ClientError::SendTxRequestError(
+                "transfers and full_extra_data length mismatch".to_string(),
+            ));
+        }
+
         let user_data = self
             .await_tx_sendable(view_pair, transfers, fee_quote)
             .await?;
@@ -451,6 +458,7 @@ impl Client {
             sender_proof_set_ephemeral_key: ephemeral_key.0,
             fee_index,
             payment_memos: payment_memos.to_vec(),
+            full_extra_data: full_extra_data.to_vec(),
         };
         Ok(memo)
     }
@@ -522,7 +530,12 @@ impl Client {
         }
 
         let mut transfer_data_and_encrypted_data = Vec::new();
-        for (i, transfer) in memo.transfers.iter().enumerate() {
+        for (i, (transfer, full_extra_data)) in memo
+            .transfers
+            .iter()
+            .zip(memo.full_extra_data.iter())
+            .enumerate()
+        {
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
             let transfer_data = TransferData {
                 sender: view_pair.into(),
@@ -531,6 +544,7 @@ impl Client {
                 transfer_merkle_proof,
                 sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
                 sender_proof_set: None,
+                extra_data: full_extra_data.to_extra_data(),
                 tx: memo.tx,
                 tx_index: proposal.tx_index,
                 tx_merkle_proof: proposal.tx_merkle_proof.clone(),
@@ -542,12 +556,13 @@ impl Client {
                 DataType::Withdrawal
             };
             let receiver = if transfer.recipient.is_pubkey {
+                // todo: use view key
                 transfer.recipient.to_pubkey().unwrap()
             } else {
                 key.pubkey
             };
             let sender_key = if data_type == DataType::Withdrawal {
-                Some(key)
+                Some(view_pair.view)
             } else {
                 None
             };
@@ -619,6 +634,7 @@ impl Client {
             tx_merkle_proof: proposal.tx_merkle_proof.clone(),
             tx_tree_root: proposal.block_sign_payload.tx_tree_root,
             spent_witness: memo.spent_witness.clone(),
+            full_extra_data: memo.full_extra_data.clone(),
             transfer_digests,
             transfer_types,
             sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
