@@ -68,7 +68,6 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             fee_token_index,
             fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
-        let key = view_pair.view.to_key_set();
         let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
         let result: RequestWithdrawalResponse = post_request(
             &self.base_url,

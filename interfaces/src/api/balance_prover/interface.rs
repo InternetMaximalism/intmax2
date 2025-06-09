@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use intmax2_zkp::{
     common::{
-        signature_content::key_set::KeySet,
         witness::{
             claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
             receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,
@@ -16,7 +15,7 @@ use plonky2::{
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
 
-use crate::api::error::ServerError;
+use crate::{api::error::ServerError, utils::key::PrivateKey};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -26,13 +25,13 @@ const D: usize = 2;
 pub trait BalanceProverClientInterface: Sync + Send {
     async fn prove_spent(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         spent_witness: &SpentWitness,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError>;
 
     async fn prove_send(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         tx_witness: &TxWitness,
         update_witness: &UpdateWitness<F, C, D>,
@@ -42,7 +41,7 @@ pub trait BalanceProverClientInterface: Sync + Send {
 
     async fn prove_update(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         update_witness: &UpdateWitness<F, C, D>,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -50,7 +49,7 @@ pub trait BalanceProverClientInterface: Sync + Send {
 
     async fn prove_receive_transfer(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         receive_transfer_witness: &ReceiveTransferWitness<F, C, D>,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -58,7 +57,7 @@ pub trait BalanceProverClientInterface: Sync + Send {
 
     async fn prove_receive_deposit(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         receive_deposit_witness: &ReceiveDepositWitness,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -66,13 +65,13 @@ pub trait BalanceProverClientInterface: Sync + Send {
 
     async fn prove_single_withdrawal(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         withdrawal_witness: &WithdrawalWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError>;
 
     async fn prove_single_claim(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         is_faster_mining: bool,
         claim_witness: &ClaimWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError>;

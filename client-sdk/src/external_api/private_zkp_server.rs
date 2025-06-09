@@ -19,16 +19,14 @@ use intmax2_interfaces::{
         },
     },
     data::encryption::{BlsEncryption, RsaEncryption},
+    utils::key::PrivateKey,
 };
 use intmax2_zkp::{
-    common::{
-        signature_content::key_set::KeySet,
-        witness::{
-            claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
-            receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,
-            tx_witness::TxWitness, update_witness::UpdateWitness,
-            withdrawal_witness::WithdrawalWitness,
-        },
+    common::witness::{
+        claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
+        receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,
+        tx_witness::TxWitness, update_witness::UpdateWitness,
+        withdrawal_witness::WithdrawalWitness,
     },
     ethereum_types::u256::U256,
 };
@@ -99,7 +97,7 @@ impl PrivateZKPServerClient {
 impl BalanceProverClientInterface for PrivateZKPServerClient {
     async fn prove_spent(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         spent_witness: &SpentWitness,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let request = ProveSpentRequest {
@@ -107,10 +105,10 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         };
         let result = self
             .request_and_get_proof(
-                key,
+                view_key,
                 &ProveRequestWithType {
                     prove_type: ProveType::Spent,
-                    pubkey: key.pubkey,
+                    pubkey: view_key.to_public_key().0,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -120,7 +118,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 
     async fn prove_send(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         tx_witness: &TxWitness,
         update_witness: &UpdateWitness<F, C, D>,
@@ -136,10 +134,10 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         };
         let result = self
             .request_and_get_proof(
-                key,
+                view_key,
                 &ProveRequestWithType {
                     prove_type: ProveType::Send,
-                    pubkey: key.pubkey,
+                    pubkey: view_key.to_public_key().0,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -149,7 +147,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 
     async fn prove_update(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         update_witness: &UpdateWitness<F, C, D>,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -161,10 +159,10 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         };
         let result = self
             .request_and_get_proof(
-                key,
+                view_key,
                 &ProveRequestWithType {
                     prove_type: ProveType::Update,
-                    pubkey: key.pubkey,
+                    pubkey: view_key.to_public_key().0,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -174,7 +172,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 
     async fn prove_receive_transfer(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         receive_transfer_witness: &ReceiveTransferWitness<F, C, D>,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -186,10 +184,10 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         };
         let result = self
             .request_and_get_proof(
-                key,
+                view_key,
                 &ProveRequestWithType {
                     prove_type: ProveType::ReceiveTransfer,
-                    pubkey: key.pubkey,
+                    pubkey: view_key.to_public_key().0,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -199,7 +197,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 
     async fn prove_receive_deposit(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         pubkey: U256,
         receive_deposit_witness: &ReceiveDepositWitness,
         prev_proof: &Option<ProofWithPublicInputs<F, C, D>>,
@@ -211,10 +209,10 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         };
         let result = self
             .request_and_get_proof(
-                key,
+                view_key,
                 &ProveRequestWithType {
                     prove_type: ProveType::ReceiveDeposit,
-                    pubkey: key.pubkey,
+                    pubkey: view_key.to_public_key().0,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -224,7 +222,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 
     async fn prove_single_withdrawal(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         withdrawal_witness: &WithdrawalWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let request = ProveSingleWithdrawalRequest {
@@ -232,10 +230,10 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         };
         let result = self
             .request_and_get_proof(
-                key,
+                view_key,
                 &ProveRequestWithType {
                     prove_type: ProveType::SingleWithdrawal,
-                    pubkey: key.pubkey,
+                    pubkey: view_key.to_public_key().0,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -245,7 +243,7 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
 
     async fn prove_single_claim(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         is_faster_mining: bool,
         claim_witness: &ClaimWitness<F, C, D>,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
@@ -255,10 +253,10 @@ impl BalanceProverClientInterface for PrivateZKPServerClient {
         };
         let result = self
             .request_and_get_proof(
-                key,
+                view_key,
                 &ProveRequestWithType {
                     prove_type: ProveType::SingleClaim,
-                    pubkey: key.pubkey,
+                    pubkey: view_key.to_public_key().0,
                     request: bincode::serialize(&request).unwrap(),
                 },
             )
@@ -297,7 +295,7 @@ impl PrivateZKPServerClient {
 
     pub async fn request_and_get_proof(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         request: &ProveRequestWithType,
     ) -> Result<ProofResultWithError, ServerError> {
         let request_id = self.send_prove_request(request).await?;
@@ -314,13 +312,12 @@ impl PrivateZKPServerClient {
                 }
 
                 let proof_with_result =
-                    ProofResultWithError::decrypt(key, None, &response.result.unwrap()).map_err(
-                        |e| {
+                    ProofResultWithError::decrypt(view_key, None, &response.result.unwrap())
+                        .map_err(|e| {
                             ServerError::DeserializationError(format!(
                                 "Failed to decrypt proof result: {e:?}"
                             ))
-                        },
-                    )?;
+                        })?;
 
                 return Ok(proof_with_result);
             } else if response.status == "error" {
