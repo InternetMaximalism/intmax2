@@ -96,7 +96,7 @@ impl BlsEncryption for TransferData {
 }
 
 impl Validation for TransferData {
-    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
+    fn validate(&self) -> anyhow::Result<()> {
         if let Some(extra_data_salt) = self.extra_data.to_salt() {
             if extra_data_salt != self.transfer.salt {
                 return Err(anyhow::anyhow!(

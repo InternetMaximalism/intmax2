@@ -1,6 +1,5 @@
-use intmax2_zkp::{
-    circuits::balance::{balance_pis::BalancePublicInputs, send::spent_circuit::SpentPublicInputs},
-    ethereum_types::u256::U256,
+use intmax2_zkp::circuits::balance::{
+    balance_pis::BalancePublicInputs, send::spent_circuit::SpentPublicInputs,
 };
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +31,7 @@ impl BlsEncryption for SenderProofSet {
 }
 
 impl Validation for SenderProofSet {
-    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
+    fn validate(&self) -> anyhow::Result<()> {
         let verifiers = CircuitVerifiers::load();
         let spent_proof = self.spent_proof.decompress()?;
         verifiers.get_spent_vd().verify(spent_proof.clone())?;

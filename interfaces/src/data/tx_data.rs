@@ -111,7 +111,7 @@ impl BlsEncryption for TxData {
 }
 
 impl Validation for TxData {
-    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
+    fn validate(&self) -> anyhow::Result<()> {
         let tx_tree_root: PoseidonHashOut = self.tx_tree_root.try_into()?;
         self.tx_merkle_proof
             .verify(&self.spent_witness.tx, self.tx_index as u64, tx_tree_root)?;
