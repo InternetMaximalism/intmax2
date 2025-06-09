@@ -5,9 +5,10 @@ use intmax2_interfaces::{
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
     data::{
-        deposit_data::DepositData, meta_data::MetaDataWithBlockNumber,
-        transfer_data::TransferData, tx_data::TxData, user_data::Balances,
+        deposit_data::DepositData, meta_data::MetaDataWithBlockNumber, transfer_data::TransferData,
+        tx_data::TxData, user_data::Balances,
     },
+    utils::key::ViewPair,
 };
 use itertools::Itertools;
 
@@ -79,7 +80,7 @@ pub async fn determine_sequence(
     validity_prover: &dyn ValidityProverClientInterface,
     rollup_contract: &RollupContract,
     liquidity_contract: &LiquidityContract,
-    key: KeySet,
+    view_pair: ViewPair,
     deposit_timeout: u64,
     tx_timeout: u64,
 ) -> Result<(Vec<Action>, Balances, PendingInfo), StrategyError> {
@@ -100,7 +101,7 @@ pub async fn determine_sequence(
     let tx_info = fetch_all_unprocessed_tx_info(
         store_vault_server,
         validity_prover,
-        key,
+        view_pair,
         current_time,
         &user_data.tx_status,
         tx_timeout,
@@ -120,7 +121,7 @@ pub async fn determine_sequence(
         store_vault_server,
         validity_prover,
         liquidity_contract,
-        key,
+        view_pair,
         current_time,
         &user_data.deposit_status,
         deposit_timeout,
@@ -129,7 +130,7 @@ pub async fn determine_sequence(
     let transfer_info = fetch_all_unprocessed_transfer_info(
         store_vault_server,
         validity_prover,
-        key,
+        view_pair,
         current_time,
         &user_data.transfer_status,
         tx_timeout,
@@ -300,7 +301,7 @@ pub async fn determine_withdrawals(
     validity_prover: &dyn ValidityProverClientInterface,
     withdrawal_server: &dyn WithdrawalServerClientInterface,
     rollup_contract: &RollupContract,
-    key: KeySet,
+    view_pair: ViewPair,
     tx_timeout: u64,
 ) -> Result<
     (

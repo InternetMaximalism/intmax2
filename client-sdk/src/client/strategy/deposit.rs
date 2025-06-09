@@ -11,7 +11,7 @@ use intmax2_interfaces::{
         deposit_data::DepositData,
         meta_data::{MetaData, MetaDataWithBlockNumber},
         user_data::ProcessStatus,
-    },
+    }, utils::key::ViewPair,
 };
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
@@ -34,7 +34,7 @@ pub async fn fetch_deposit_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],

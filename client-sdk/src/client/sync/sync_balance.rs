@@ -71,19 +71,20 @@ impl Client {
     }
 
     /// Sync the client's balance proof with the latest block
-    pub async fn sync(&self, key: KeySet) -> Result<(), SyncError> {
+    pub async fn sync(&self, view_pair: ViewPair) -> Result<(), SyncError> {
         let (sequence, _, pending_info) = determine_sequence(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             &self.rollup_contract,
             &self.liquidity_contract,
-            key,
+            view_pair,
             self.config.deposit_timeout,
             self.config.tx_timeout,
         )
         .await?;
         // replaces pending receives with the new pending info
-        self.update_pending_receives(key, pending_info).await?;
+        self.update_pending_receives(view_pair, pending_info)
+            .await?;
 
         for action in sequence {
             match action {
@@ -95,15 +96,15 @@ impl Client {
                             .map(|r| r.meta().block_number)
                             .max()
                             .unwrap(); // safe to unwrap because receives is not empty
-                        self.update_no_send(key, largest_block_number).await?;
+                        self.update_no_send(view_pair, largest_block_number).await?;
 
                         for receive in receives {
                             match receive {
                                 ReceiveAction::Deposit(meta, data) => {
-                                    self.sync_deposit(key, meta, &data).await?;
+                                    self.sync_deposit(view_pair, meta, &data).await?;
                                 }
                                 ReceiveAction::Transfer(meta, data) => {
-                                    self.sync_transfer(key, meta, &data).await?;
+                                    self.sync_transfer(view_pair, meta, &data).await?;
                                 }
                             }
                         }
