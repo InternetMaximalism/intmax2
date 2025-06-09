@@ -15,12 +15,9 @@ use intmax2_interfaces::{
             },
         },
     },
-    utils::signature::Signable,
+    utils::{key::ViewPair, signature::Signable},
 };
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{address::Address, bytes32::Bytes32},
-};
+use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32};
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -61,7 +58,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
 
     async fn request_withdrawal(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
@@ -71,7 +68,8 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             fee_token_index,
             fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let key = view_pair.view.to_key_set();
+        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
         let result: RequestWithdrawalResponse = post_request(
             &self.base_url,
             "/withdrawal-server/request-withdrawal",
@@ -83,7 +81,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
 
     async fn request_claim(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
@@ -93,7 +91,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             fee_token_index,
             fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
         let result: RequestClaimResponse = post_request(
             &self.base_url,
             "/withdrawal-server/request-claim",
@@ -103,9 +101,12 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         Ok(result.fee_result)
     }
 
-    async fn get_withdrawal_info(&self, key: KeySet) -> Result<Vec<WithdrawalInfo>, ServerError> {
+    async fn get_withdrawal_info(
+        &self,
+        view_pair: ViewPair,
+    ) -> Result<Vec<WithdrawalInfo>, ServerError> {
         let request = GetWithdrawalInfoRequest;
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
         let response: GetWithdrawalInfoResponse = post_request(
             &self.base_url,
             "/withdrawal-server/get-withdrawal-info",
@@ -129,9 +130,9 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         Ok(response.withdrawal_info)
     }
 
-    async fn get_claim_info(&self, key: KeySet) -> Result<Vec<ClaimInfo>, ServerError> {
+    async fn get_claim_info(&self, view_pair: ViewPair) -> Result<Vec<ClaimInfo>, ServerError> {
         let request = GetClaimInfoRequest;
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
         let response: GetClaimInfoResponse = post_request(
             &self.base_url,
             "/withdrawal-server/get-claim-info",

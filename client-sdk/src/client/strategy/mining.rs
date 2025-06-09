@@ -8,10 +8,11 @@ use intmax2_interfaces::{
         meta_data::MetaData,
         user_data::ProcessStatus,
     },
+    utils::key::ViewPair,
 };
 use intmax2_zkp::{
     circuits::claim::determine_lock_time::{get_lock_time, LockTimeConfig},
-    common::{block::Block, signature_content::key_set::KeySet},
+    common::block::Block,
     ethereum_types::u256::U256,
 };
 use num_bigint::BigUint;
@@ -59,7 +60,7 @@ pub async fn fetch_mining_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
-    key: KeySet,
+    view_pair: ViewPair,
     is_faster_mining: bool,
     current_time: u64, // current timestamp for timeout checking
     claim_status: &ProcessStatus,
@@ -77,7 +78,7 @@ pub async fn fetch_mining_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
-        key,
+        view_pair,
         current_time,
         &ProcessStatus::default(),
         deposit_timeout,
@@ -138,14 +139,14 @@ pub async fn fetch_mining_info(
     }
 
     // fetch last block number
-    let account_info = validity_prover.get_account_info(key.pubkey).await?;
+    let account_info = validity_prover.get_account_info(view_pair.spend.0).await?;
     let last_block_number = account_info.last_block_number;
 
     // get tx info
     let tx_info = fetch_all_unprocessed_tx_info(
         store_vault_server,
         validity_prover,
-        key,
+        view_pair,
         current_time,
         &ProcessStatus::default(),
         tx_timeout,

@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use async_trait::async_trait;
 use intmax2_zkp::{
-    common::{claim::Claim, signature_content::key_set::KeySet},
+    common::claim::Claim,
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 use plonky2::{
@@ -12,7 +12,10 @@ use plonky2::{
 use plonky2_keccak::utils::solidity_keccak256;
 use serde::{Deserialize, Serialize};
 
-use crate::api::{block_builder::interface::Fee, error::ServerError};
+use crate::{
+    api::{block_builder::interface::Fee, error::ServerError},
+    utils::key::ViewPair,
+};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -133,7 +136,7 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
 
     async fn request_withdrawal(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
@@ -141,18 +144,21 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
 
     async fn request_claim(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
     ) -> Result<FeeResult, ServerError>;
 
-    async fn get_withdrawal_info(&self, key: KeySet) -> Result<Vec<WithdrawalInfo>, ServerError>;
+    async fn get_withdrawal_info(
+        &self,
+        view_pair: ViewPair,
+    ) -> Result<Vec<WithdrawalInfo>, ServerError>;
 
     async fn get_withdrawal_info_by_recipient(
         &self,
         recipient: Address,
     ) -> Result<Vec<WithdrawalInfo>, ServerError>;
 
-    async fn get_claim_info(&self, key: KeySet) -> Result<Vec<ClaimInfo>, ServerError>;
+    async fn get_claim_info(&self, view_pair: ViewPair) -> Result<Vec<ClaimInfo>, ServerError>;
 }

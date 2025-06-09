@@ -16,11 +16,9 @@ use intmax2_interfaces::{
         transfer_data::TransferData,
         user_data::ProcessStatus,
     },
+    utils::key::{PrivateKey, ViewPair},
 };
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
-};
+use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _};
 
 #[derive(Debug, Clone)]
 pub struct WithdrawalInfo {
@@ -33,7 +31,7 @@ pub struct WithdrawalInfo {
 pub async fn fetch_withdrawal_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
@@ -46,7 +44,7 @@ pub async fn fetch_withdrawal_info(
 
     let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TransferData>(
         store_vault_server,
-        key,
+        view_pair.view,
         DataType::Withdrawal,
         included_digests,
         excluded_digests,
@@ -57,7 +55,7 @@ pub async fn fetch_withdrawal_info(
     // First, fetch and decrypt all sender proof sets
     let mut valid_transfers = Vec::new();
     for (meta, mut transfer_data) in data_with_meta {
-        let ephemeral_key = KeySet::new(transfer_data.sender_proof_set_ephemeral_key);
+        let ephemeral_key = PrivateKey(transfer_data.sender_proof_set_ephemeral_key);
 
         // Fetch encrypted sender proof set
         let encrypted_sender_proof_set = match store_vault_server
@@ -73,8 +71,8 @@ pub async fn fetch_withdrawal_info(
 
         // Decrypt sender proof set
         let enc_sender = match DataType::UserData.rw_rights().write_rights {
-            WriteRights::SingleAuthWrite => Some(ephemeral_key.pubkey),
-            WriteRights::AuthWrite => Some(ephemeral_key.pubkey),
+            WriteRights::SingleAuthWrite => Some(ephemeral_key.to_public_key()),
+            WriteRights::AuthWrite => Some(ephemeral_key.to_public_key()),
             WriteRights::SingleOpenWrite => None,
             WriteRights::OpenWrite => None,
         };
@@ -144,7 +142,7 @@ pub async fn fetch_withdrawal_info(
 pub async fn fetch_all_unprocessed_withdrawal_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64, // current timestamp for timeout checking
     process_status: &ProcessStatus,
     tx_timeout: u64,
@@ -170,7 +168,7 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
         ) = fetch_withdrawal_info(
             store_vault_server,
             validity_prover,
-            key,
+            view_pair,
             current_time,
             &included_digests,
             &process_status.processed_digests,

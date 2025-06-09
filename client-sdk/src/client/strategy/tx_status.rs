@@ -1,8 +1,9 @@
-use std::fmt;
-
-use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInterface;
-use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u256::U256};
+use intmax2_interfaces::{
+    api::validity_prover::interface::ValidityProverClientInterface, utils::key::PublicKey,
+};
+use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use super::error::StrategyError;
 
@@ -26,7 +27,7 @@ impl fmt::Display for TxStatus {
 
 pub async fn get_tx_status(
     validity_prover: &dyn ValidityProverClientInterface,
-    sender: U256,
+    sender: PublicKey,
     tx_tree_root: Bytes32,
 ) -> Result<TxStatus, StrategyError> {
     // get onchain info
@@ -48,7 +49,7 @@ pub async fn get_tx_status(
         .get_sender_tree()
         .leaves()
         .into_iter()
-        .find(|leaf| leaf.sender == sender);
+        .find(|leaf| leaf.sender == sender.0);
     let sender_leaf = match sender_leaf {
         Some(leaf) => leaf,
         None => return Ok(TxStatus::Failed("sender leaf not found".to_string())),

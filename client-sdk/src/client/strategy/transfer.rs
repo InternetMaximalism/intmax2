@@ -17,10 +17,10 @@ use intmax2_interfaces::{
         user_data::ProcessStatus,
         validation::Validation,
     },
+    utils::key::{PrivateKey, ViewPair},
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
-    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
     utils::conversion::ToU64,
 };
@@ -36,7 +36,7 @@ pub struct TransferInfo {
 pub async fn fetch_transfer_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
@@ -48,7 +48,7 @@ pub async fn fetch_transfer_info(
     let mut timeout = Vec::new();
     let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TransferData>(
         store_vault_server,
-        key,
+        view_pair.view,
         DataType::Transfer,
         included_digests,
         excluded_digests,
@@ -61,7 +61,7 @@ pub async fn fetch_transfer_info(
         // Fetch and decrypt sender proof set
         let sender_proof_set = match fetch_sender_proof_set(
             store_vault_server,
-            transfer_data.sender_proof_set_ephemeral_key,
+            PrivateKey(transfer_data.sender_proof_set_ephemeral_key),
         )
         .await
         {
@@ -74,7 +74,7 @@ pub async fn fetch_transfer_info(
         };
 
         // Validate sender proof set and check tx
-        match sender_proof_set.validate(key.pubkey) {
+        match sender_proof_set.validate() {
             Ok(_) => {
                 let spent_proof = match sender_proof_set.spent_proof.decompress() {
                     Ok(proof) => proof,
@@ -158,7 +158,7 @@ pub async fn fetch_transfer_info(
 pub async fn fetch_all_unprocessed_transfer_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64,
     process_status: &ProcessStatus,
     tx_timeout: u64,
@@ -184,7 +184,7 @@ pub async fn fetch_all_unprocessed_transfer_info(
         ) = fetch_transfer_info(
             store_vault_server,
             validity_prover,
-            key,
+            view_pair,
             current_time,
             &included_digests,
             &process_status.processed_digests,

@@ -12,10 +12,9 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         tx_data::TxData,
         user_data::ProcessStatus,
-    },
+    }, utils::key::ViewPair,
 };
 use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
 };
 
@@ -30,7 +29,7 @@ pub struct TxInfo {
 pub async fn fetch_tx_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
@@ -43,7 +42,7 @@ pub async fn fetch_tx_info(
 
     let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TxData>(
         store_vault_server,
-        key,
+        view_pair.view,
         DataType::Tx,
         included_digests,
         excluded_digests,
@@ -103,7 +102,7 @@ pub async fn fetch_tx_info(
 pub async fn fetch_all_unprocessed_tx_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64,
     process_status: &ProcessStatus,
     tx_timeout: u64,
@@ -129,7 +128,7 @@ pub async fn fetch_all_unprocessed_tx_info(
         ) = fetch_tx_info(
             store_vault_server,
             validity_prover,
-            key,
+            view_pair,
             current_time,
             &included_digests,
             &process_status.processed_digests,
