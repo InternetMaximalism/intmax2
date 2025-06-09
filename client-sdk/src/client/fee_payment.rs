@@ -6,6 +6,7 @@ use intmax2_interfaces::{
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
     data::encryption::BlsEncryption,
+    utils::key::ViewPair,
 };
 use intmax2_zkp::{
     common::{signature_content::key_set::KeySet, transfer::Transfer},
@@ -234,7 +235,7 @@ pub async fn get_unused_payments(
 /// consume payment memo
 pub async fn consume_payment(
     store_vault_server: &dyn StoreVaultClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     payment_memo: &PaymentMemo,
     reason: &str,
 ) -> Result<(), SyncError> {
@@ -260,7 +261,7 @@ pub async fn consume_payment(
 pub async fn select_unused_fees(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     fee_beneficiary: U256,
     fee: Fee,
     fee_type: FeeType,

@@ -1,11 +1,11 @@
-use intmax2_interfaces::api::withdrawal_server::interface::{ClaimFeeInfo, FeeResult};
+use intmax2_interfaces::{
+    api::withdrawal_server::interface::{ClaimFeeInfo, FeeResult},
+    utils::key::ViewPair,
+};
 use intmax2_zkp::{
-    common::{
-        signature_content::key_set::KeySet,
-        witness::{
-            claim_witness::ClaimWitness,
-            deposit_time_witness::{DepositTimePublicWitness, DepositTimeWitness},
-        },
+    common::witness::{
+        claim_witness::ClaimWitness,
+        deposit_time_witness::{DepositTimePublicWitness, DepositTimeWitness},
     },
     ethereum_types::address::Address,
 };
@@ -24,7 +24,7 @@ impl Client {
     /// Sync the client's withdrawals and relays to the withdrawal server
     pub async fn sync_claims(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         recipient: Address,
         fee_info: &ClaimFeeInfo,
         fee_token_index: u32,
@@ -40,7 +40,7 @@ impl Client {
             &self.rollup_contract,
             &self.liquidity_contract,
             self.config.is_faster_mining,
-            key,
+            view_pair,
             self.config.tx_timeout,
             self.config.deposit_timeout,
         )
@@ -72,7 +72,12 @@ impl Client {
             let deposit_block_number = block.block_number;
             let update_witness = self
                 .validity_prover
-                .get_update_witness(key.pubkey, claim_block_number, deposit_block_number, false)
+                .get_update_witness(
+                    view_pair.spend.0,
+                    claim_block_number,
+                    deposit_block_number,
+                    false,
+                )
                 .await?;
             let last_block_number = update_witness.account_membership_proof.get_value() as u32;
             if deposit_block_number <= last_block_number {
@@ -115,7 +120,7 @@ impl Client {
                 deposit_index,
                 deposit: mining.deposit_data.deposit().unwrap(),
                 deposit_salt: mining.deposit_data.deposit_salt,
-                pubkey: key.pubkey,
+                pubkey: view_pair.spend.0,
             };
             let claim_witness = ClaimWitness {
                 recipient,
@@ -124,7 +129,7 @@ impl Client {
             };
             let single_claim_proof = self
                 .balance_prover
-                .prove_single_claim(key, self.config.is_faster_mining, &claim_witness)
+                .prove_single_claim(view_pair.view, self.config.is_faster_mining, &claim_witness)
                 .await?;
 
             let collected_fees = match &fee {
@@ -133,7 +138,7 @@ impl Client {
                     select_unused_fees(
                         self.store_vault_server.as_ref(),
                         self.validity_prover.as_ref(),
-                        key,
+                        view_pair,
                         fee_beneficiary,
                         fee.clone(),
                         FeeType::Claim,
@@ -152,7 +157,7 @@ impl Client {
             let fee_result = self
                 .withdrawal_server
                 .request_claim(
-                    key,
+                    view_pair,
                     &single_claim_proof,
                     Some(fee_token_index),
                     &fee_transfer_digests,
@@ -174,7 +179,7 @@ impl Client {
                 _ => {
                     let reason = format!("fee error at the request: {fee_result:?}");
                     for used_fee in &collected_fees {
-                        consume_payment(self.store_vault_server.as_ref(), key, used_fee, &reason)
+                        consume_payment(self.store_vault_server.as_ref(),  view_pair, used_fee, &reason)
                             .await?;
                     }
                     return Err(SyncError::FeeError(format!(
@@ -187,7 +192,7 @@ impl Client {
             for used_fee in &collected_fees {
                 consume_payment(
                     self.store_vault_server.as_ref(),
-                    key,
+                    view_pair,
                     used_fee,
                     "used for claim fee",
                 )
@@ -195,11 +200,12 @@ impl Client {
             }
 
             // update user data
-            let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+            let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
             user_data.claim_status.process(mining.meta.clone());
 
             // save user data
-            self.save_user_data(key, prev_digest, &user_data).await?;
+            self.save_user_data(view_pair, prev_digest, &user_data)
+                .await?;
 
             log::info!("Claimed {}", mining.meta.digest.clone());
         }

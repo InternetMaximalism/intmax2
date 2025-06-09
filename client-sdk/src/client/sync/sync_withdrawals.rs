@@ -3,13 +3,10 @@ use intmax2_interfaces::{
         block_builder::interface::Fee,
         withdrawal_server::interface::{FeeResult, WithdrawalFeeInfo},
     },
-    data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData},
+    data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData}, utils::key::ViewPair,
 };
 use intmax2_zkp::{
-    common::{
-        signature_content::key_set::KeySet,
-        witness::{transfer_witness::TransferWitness, withdrawal_witness::WithdrawalWitness},
-    },
+    common::witness::{transfer_witness::TransferWitness, withdrawal_witness::WithdrawalWitness},
     ethereum_types::{bytes32::Bytes32, u256::U256},
 };
 
@@ -26,7 +23,7 @@ impl Client {
     /// Sync the client's withdrawals and relays to the withdrawal server
     pub async fn sync_withdrawals(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         withdrawal_fee: &WithdrawalFeeInfo,
         fee_token_index: u32,
     ) -> Result<(), SyncError> {
@@ -42,14 +39,14 @@ impl Client {
             self.validity_prover.as_ref(),
             self.withdrawal_server.as_ref(),
             &self.rollup_contract,
-            key,
+            view_pair,
             self.config.tx_timeout,
         )
         .await?;
-        self.update_pending_withdrawals(key, pending).await?;
+        self.update_pending_withdrawals(view_pair, pending).await?;
         for (meta, data) in withdrawals {
             self.sync_withdrawal(
-                key,
+                view_pair,
                 meta,
                 &data,
                 fee_beneficiary,
@@ -65,7 +62,7 @@ impl Client {
     #[allow(clippy::too_many_arguments)]
     async fn sync_withdrawal(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         meta: MetaDataWithBlockNumber,
         withdrawal_data: &TransferData,
         fee_beneficiary: Option<U256>,
@@ -78,8 +75,8 @@ impl Client {
         let balance_proof = match update_send_by_receiver(
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
-            key,
-            key.pubkey,
+            view_pair,
+            view_pair.spend.0,
             meta.block_number,
             withdrawal_data,
         )
@@ -108,7 +105,7 @@ impl Client {
         };
         let single_withdrawal_proof = self
             .balance_prover
-            .prove_single_withdrawal(key, &withdrawal_witness)
+            .prove_single_withdrawal(view_pair.view, &withdrawal_witness)
             .await?;
 
         let direct_withdrawal_indices = self
@@ -127,7 +124,7 @@ impl Client {
                 select_unused_fees(
                     self.store_vault_server.as_ref(),
                     self.validity_prover.as_ref(),
-                    key,
+                    view_pair,
                     fee_beneficiary,
                     fee.clone(),
                     FeeType::Withdrawal,
@@ -146,7 +143,7 @@ impl Client {
         let fee_result = self
             .withdrawal_server
             .request_withdrawal(
-                key,
+                view_pair,
                 &single_withdrawal_proof,
                 Some(fee_token_index),
                 &fee_transfer_digests,
@@ -167,7 +164,7 @@ impl Client {
             _ => {
                 let reason = format!("fee error at the request: {fee_result:?}");
                 for used_fee in &collected_fees {
-                    consume_payment(self.store_vault_server.as_ref(), key, used_fee, &reason)
+                    consume_payment(self.store_vault_server.as_ref(), view_pair, used_fee, &reason)
                         .await?;
                 }
                 return Err(SyncError::FeeError(format!(
@@ -180,7 +177,7 @@ impl Client {
         for used_fee in &collected_fees {
             consume_payment(
                 self.store_vault_server.as_ref(),
-                key,
+                view_pair,
                 used_fee,
                 "used for withdrawal fee",
             )
@@ -188,28 +185,28 @@ impl Client {
         }
 
         // update user data
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         user_data.withdrawal_status.process(meta.meta);
 
         // save user data
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data).await?;
 
         Ok(())
     }
 
     async fn update_pending_withdrawals(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         pending_withdrawal_digests: Vec<Bytes32>,
     ) -> Result<(), SyncError> {
         if pending_withdrawal_digests.is_empty() {
             // no pending withdrawals
             return Ok(());
         }
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         user_data.withdrawal_status.pending_digests = pending_withdrawal_digests;
         // save user data
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data).await?;
         Ok(())
     }
 }
