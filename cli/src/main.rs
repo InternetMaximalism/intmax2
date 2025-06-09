@@ -20,7 +20,7 @@ use intmax2_cli::{
         sync::{resync, sync_claims, sync_withdrawals},
         withdrawal::send_withdrawal,
     },
-    format::{format_token_info, parse_generic_address, privkey_to_keyset},
+    format::{format_token_info, parse_generic_address, privkey_to_keyset, TokenInput},
 };
 use intmax2_client_sdk::client::{
     key_from_eth::generate_intmax_account_from_eth_key, sync::utils::generate_salt,
@@ -154,8 +154,14 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             mining,
         } => {
             let key = privkey_to_keyset(private_key);
-            let (amount, token_address, token_id) =
-                format_token_info(token_type, amount, token_address, token_id)?;
+            let token_input = TokenInput {
+                token_type,
+                amount,
+                token_address,
+                token_id,
+            };
+
+            let (amount, token_address, token_id) = format_token_info(token_input)?;
             deposit(
                 key,
                 eth_private_key,
