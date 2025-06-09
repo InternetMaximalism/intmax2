@@ -19,36 +19,46 @@ pub enum FormatTokenInfoError {
     AmountShouldNotBeSpecified,
 }
 
-pub fn format_token_info(
-    token_type: TokenType,
-    amount: Option<U256>,
-    token_address: Option<Address>,
-    token_id: Option<U256>,
-) -> Result<(U256, Address, U256), FormatTokenInfoError> {
-    match token_type {
-        TokenType::NATIVE => Ok({
-            let amount = amount.ok_or(FormatTokenInfoError::MissingAmount)?;
-            (amount, Address::zero(), U256::zero())
-        }),
-        TokenType::ERC20 => {
-            let amount = amount.ok_or(FormatTokenInfoError::MissingAmount)?;
-            let token_address = token_address.ok_or(FormatTokenInfoError::MissingTokenAddress)?;
-            Ok((amount, token_address, U256::zero()))
-        }
+pub struct TokenInput {
+    pub token_type: TokenType,
+    pub amount: Option<U256>,
+    pub token_address: Option<Address>,
+    pub token_id: Option<U256>,
+}
+
+pub fn format_token_info(input: TokenInput) -> Result<(U256, Address, U256), FormatTokenInfoError> {
+    match input.token_type {
+        TokenType::NATIVE => Ok((
+            input.amount.ok_or(FormatTokenInfoError::MissingAmount)?,
+            Address::zero(),
+            U256::zero(),
+        )),
+        TokenType::ERC20 => Ok((
+            input.amount.ok_or(FormatTokenInfoError::MissingAmount)?,
+            input
+                .token_address
+                .ok_or(FormatTokenInfoError::MissingTokenAddress)?,
+            U256::zero(),
+        )),
         TokenType::ERC721 => {
-            if amount.is_some() {
+            if input.amount.is_some() {
                 return Err(FormatTokenInfoError::AmountShouldNotBeSpecified);
             }
-            let token_address = token_address.ok_or(FormatTokenInfoError::MissingTokenAddress)?;
-            let token_id = token_id.ok_or(FormatTokenInfoError::MissingTokenId)?;
-            Ok((U256::one(), token_address, token_id))
+            Ok((
+                U256::one(),
+                input
+                    .token_address
+                    .ok_or(FormatTokenInfoError::MissingTokenAddress)?,
+                input.token_id.ok_or(FormatTokenInfoError::MissingTokenId)?,
+            ))
         }
-        TokenType::ERC1155 => {
-            let amount = amount.ok_or(FormatTokenInfoError::MissingAmount)?;
-            let token_address = token_address.ok_or(FormatTokenInfoError::MissingTokenAddress)?;
-            let token_id = token_id.ok_or(FormatTokenInfoError::MissingTokenId)?;
-            Ok((amount, token_address, token_id))
-        }
+        TokenType::ERC1155 => Ok((
+            input.amount.ok_or(FormatTokenInfoError::MissingAmount)?,
+            input
+                .token_address
+                .ok_or(FormatTokenInfoError::MissingTokenAddress)?,
+            input.token_id.ok_or(FormatTokenInfoError::MissingTokenId)?,
+        )),
     }
 }
 
@@ -59,13 +69,10 @@ pub fn privkey_to_keyset(privkey: Bytes32) -> KeySet {
 pub fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
     ensure!(address.starts_with("0x"), "Invalid prefix");
     let bytes = hex::decode(&address[2..])?;
-    if bytes.len() == 20 {
-        let address = Address::from_bytes_be(&bytes).unwrap();
-        Ok(address.into())
-    } else if bytes.len() == 32 {
-        let pubkey = U256::from_bytes_be(&bytes).unwrap();
-        Ok(pubkey.into())
-    } else {
-        bail!("Invalid length");
+
+    match bytes.len() {
+        20 => Ok(Address::from_bytes_be(&bytes)?.into()),
+        32 => Ok(U256::from_bytes_be(&bytes)?.into()),
+        _ => bail!("Invalid length"),
     }
 }

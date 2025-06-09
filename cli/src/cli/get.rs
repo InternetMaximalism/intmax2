@@ -1,4 +1,5 @@
 use colored::Colorize;
+use futures::future::try_join_all;
 use intmax2_client_sdk::client::misc::payment_memo::get_all_payment_memos;
 use intmax2_interfaces::data::deposit_data::TokenType;
 use intmax2_zkp::{
@@ -22,9 +23,14 @@ pub async fn balance(key: KeySet, sync: bool) -> Result<(), CliError> {
     let mut balances: Vec<(u32, AssetLeaf)> = balances.0.into_iter().collect();
     balances.sort_by_key(|(i, _leaf)| *i);
 
+    let token_info_futures = balances
+        .iter()
+        .map(|(i, _)| client.liquidity_contract.get_token_info(*i));
+    let token_infos = try_join_all(token_info_futures).await?;
+
     println!("Balances:");
-    for (i, leaf) in balances.iter() {
-        let (token_type, address, token_id) = client.liquidity_contract.get_token_info(*i).await?;
+    for ((i, leaf), (token_type, address, token_id)) in balances.iter().zip(token_infos) {
+        //let (token_type, address, token_id) = client.liquidity_contract.get_token_info(*i).await?;
         println!("\t Token #{i}:");
         println!("\t\t Amount: {}", leaf.amount);
         println!("\t\t Type: {token_type}");
@@ -52,7 +58,7 @@ pub async fn withdrawal_status(key: KeySet) -> Result<(), CliError> {
     let withdrawal_info = client.get_withdrawal_info(key).await?;
     println!("Withdrawal status:");
     for (i, withdrawal_info) in withdrawal_info.iter().enumerate() {
-        let withdrawal = withdrawal_info.contract_withdrawal.clone();
+        let withdrawal = &withdrawal_info.contract_withdrawal;
         let l1_tx_hash = withdrawal_info
             .l1_tx_hash
             .map_or("N/A".to_string(), |h| h.to_hex());
