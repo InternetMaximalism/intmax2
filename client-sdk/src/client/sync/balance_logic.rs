@@ -48,7 +48,7 @@ pub async fn receive_deposit(
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
     deposit_data: &DepositData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    let prev_balance_pis = get_prev_balance_pis(view_pair.spend, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     let receive_block_number = prev_balance_pis.public_state.block_number;
     // Generate witness
     let deposit_info = validity_prover
@@ -124,7 +124,7 @@ pub async fn receive_transfer(
                                                                   * proof */
     transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    let prev_balance_pis = get_prev_balance_pis(view_pair.spend, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     let receive_block_number = prev_balance_pis.public_state.block_number;
     let sender_balance_pis = BalancePublicInputs::from_pis(&sender_balance_proof.public_inputs)?;
     if receive_block_number < prev_balance_pis.public_state.block_number {
@@ -201,7 +201,7 @@ pub async fn update_send_by_sender(
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     // sync check
     wait_till_validity_prover_synced(validity_prover, true, tx_block_number).await?;
-    let prev_balance_pis = get_prev_balance_pis(view_pair.spend, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     if tx_block_number <= prev_balance_pis.public_state.block_number {
         return Err(SyncError::InternalError(
             "tx block number is not greater than prev balance proof".to_string(),
@@ -263,7 +263,9 @@ pub async fn update_send_by_sender(
             .update_private_state(full_private_state)
             .map_err(|e| SyncError::FailedToUpdatePrivateState(e.to_string()))?;
     }
-    let spent_proof = balance_prover.prove_spent(view_pair.view, &spent_witness).await?;
+    let spent_proof = balance_prover
+        .prove_spent(view_pair.view, &spent_witness)
+        .await?;
     let balance_proof = balance_prover
         .prove_send(
             view_pair.view,
@@ -398,7 +400,7 @@ pub async fn update_no_send(
     to_block_number: u32,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     wait_till_validity_prover_synced(validity_prover, true, to_block_number).await?;
-    let prev_balance_pis = get_prev_balance_pis(view_pair.spend, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     let prev_block_number = prev_balance_pis.public_state.block_number;
     if to_block_number <= prev_block_number {
         // no need to update balance proof
