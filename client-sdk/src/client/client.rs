@@ -23,7 +23,12 @@ use intmax2_interfaces::{
         tx_data::TxData,
         user_data::{Balances, ProcessStatus, UserData},
     },
-    utils::{circuit_verifiers::CircuitVerifiers, digest::get_digest, random::default_rng},
+    utils::{
+        circuit_verifiers::CircuitVerifiers,
+        digest::get_digest,
+        key::{PrivateKey, PublicKey, PublicKeyPair, ViewPair},
+        random::default_rng,
+    },
 };
 use intmax2_zkp::{
     circuits::validity::validity_pis::ValidityPublicInputs,
@@ -157,7 +162,7 @@ impl Client {
     pub async fn prepare_deposit(
         &self,
         depositor: Address,
-        pubkey: U256,
+        public_keypair: PublicKeyPair,
         amount: U256,
         token_type: TokenType,
         token_address: Address,
@@ -165,7 +170,8 @@ impl Client {
         is_mining: bool,
     ) -> Result<DepositResult, ClientError> {
         log::info!(
-            "prepare_deposit: pubkey {pubkey}, amount {amount}, token_type {token_type:?}, token_address {token_address}, token_id {token_id}"
+            "prepare_deposit: spend pub {}, amount {amount}, token_type {token_type:?}, token_address {token_address}, token_id {token_id}",
+            public_keypair.spend,
         );
         if is_mining && !validate_mining_deposit_criteria(token_type, amount) {
             return Err(ClientError::InvalidMiningDepositCriteria);
@@ -174,7 +180,7 @@ impl Client {
         let deposit_salt = generate_salt();
 
         // backup before contract call
-        let pubkey_salt_hash = get_pubkey_salt_hash(pubkey, deposit_salt);
+        let pubkey_salt_hash = get_pubkey_salt_hash(public_keypair.spend.0, deposit_salt);
         let deposit_data = DepositData {
             deposit_salt,
             depositor,
@@ -189,10 +195,10 @@ impl Client {
         };
         let save_entry = SaveDataEntry {
             topic: DataType::Deposit.to_topic(),
-            pubkey,
-            data: deposit_data.encrypt(pubkey, None)?,
+            pubkey: public_keypair.view.0,
+            data: deposit_data.encrypt(public_keypair.view, None)?,
         };
-        let ephemeral_key = KeySet::rand(&mut default_rng());
+        let ephemeral_key = PrivateKey::rand(&mut default_rng());
         let digests = self
             .store_vault_server
             .save_data_batch(ephemeral_key, std::slice::from_ref(&save_entry))
@@ -213,7 +219,7 @@ impl Client {
     /// Check balance and await for both balance proof and validity proof synced
     pub async fn await_tx_sendable(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         transfers: &[Transfer],
         fee_quote: &TransferFeeQuote,
     ) -> Result<UserData, ClientError> {
@@ -246,7 +252,7 @@ impl Client {
         } else {
             vec![]
         };
-        let mut user_data = self.get_user_data(key).await?;
+        let mut user_data = self.get_user_data(view_pair).await?;
         let mut already_synced = false;
 
         match balance_check(&user_data.balances(), &transfer_amounts) {
@@ -254,9 +260,9 @@ impl Client {
             Err(_) => {
                 // if balance check failed, sync and retry
                 log::warn!("Balance for transfers is not enough, start to sync");
-                self.sync(key).await?;
+                self.sync(view_pair).await?;
                 already_synced = true;
-                user_data = self.get_user_data(key).await?;
+                user_data = self.get_user_data(view_pair).await?;
 
                 // check again
                 balance_check(&user_data.balances(), &transfer_amounts)?;
@@ -268,8 +274,8 @@ impl Client {
                 // if balance check failed, sync and retry
                 if !already_synced {
                     log::warn!("Balance for collateral transfer is not enough, start to sync");
-                    self.sync(key).await?;
-                    user_data = self.get_user_data(key).await?;
+                    self.sync(view_pair).await?;
+                    user_data = self.get_user_data(view_pair).await?;
                 }
                 // check again
                 balance_check(&user_data.balances(), &collateral_amounts)?;
@@ -289,7 +295,7 @@ impl Client {
         let tx_info = fetch_all_unprocessed_tx_info(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
-            key,
+            view_pair,
             current_time,
             &user_data.tx_status,
             self.config.tx_timeout,
@@ -302,8 +308,8 @@ impl Client {
                 ));
             }
             // error here is there are pending txs
-            self.sync(key).await?;
-            user_data = self.get_user_data(key).await?;
+            self.sync(view_pair).await?;
+            user_data = self.get_user_data(view_pair).await?;
         }
         Ok(user_data)
     }
@@ -312,14 +318,14 @@ impl Client {
     pub async fn send_tx_request(
         &self,
         block_builder_url: &str,
-        key: KeySet,
+        view_pair: ViewPair,
         transfers: &[Transfer],
         payment_memos: &[PaymentMemoEntry],
         fee_quote: &TransferFeeQuote,
     ) -> Result<TxRequestMemo, ClientError> {
         log::info!(
-            "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
-            key.pubkey.to_hex(),
+            "send_tx_request: spend pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
+            view_pair.spend,
             transfers.len(),
             fee_quote.beneficiary.map_or("N/A".to_string(), |b| b.to_hex()),
             fee_quote.fee,
@@ -332,10 +338,15 @@ impl Client {
                 ));
             }
         }
-        let user_data = self.await_tx_sendable(key, transfers, fee_quote).await?;
+        let user_data = self
+            .await_tx_sendable(view_pair, transfers, fee_quote)
+            .await?;
 
         // fetch if this is first time tx
-        let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
+        let account_info = self
+            .validity_prover
+            .get_account_info(view_pair.spend.0)
+            .await?;
         let is_registration_block = account_info.account_id.is_none();
 
         let fee_transfer = fee_quote.fee.clone().map(|fee| Transfer {
@@ -384,24 +395,23 @@ impl Client {
             spent_proof,
             prev_balance_proof,
         };
-        let ephemeral_key = KeySet::rand(&mut default_rng());
+        let ephemeral_key = PrivateKey::rand(&mut default_rng());
         self.store_vault_server
             .save_snapshot(
                 ephemeral_key,
                 &DataType::SenderProofSet.to_topic(),
                 None,
-                &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
+                &sender_proof_set.encrypt(ephemeral_key.to_public_key(), Some(ephemeral_key))?,
             )
             .await?;
-        let sender_proof_set_ephemeral_key: U256 = ephemeral_key.privkey;
         let fee_proof = if let Some(fee_index) = fee_index {
             let fee_proof = generate_fee_proof(
                 self.store_vault_server.as_ref(),
                 self.balance_prover.as_ref(),
                 self.config.tx_timeout,
-                key,
+                view_pair,
                 &user_data,
-                sender_proof_set_ephemeral_key,
+                ephemeral_key,
                 tx_nonce,
                 fee_index,
                 &transfers,
@@ -471,7 +481,7 @@ impl Client {
     pub async fn finalize_tx(
         &self,
         block_builder_url: &str,
-        key: KeySet,
+        view_pair: ViewPair,
         memo: &TxRequestMemo,
         proposal: &BlockProposal,
     ) -> Result<TxResult, ClientError> {
@@ -684,7 +694,7 @@ impl Client {
 
     pub async fn get_tx_status(
         &self,
-        sender: U256,
+        sender: PublicKey,
         tx_tree_root: Bytes32,
     ) -> Result<TxStatus, ClientError> {
         let status = get_tx_status(self.validity_prover.as_ref(), sender, tx_tree_root).await?;
@@ -693,7 +703,7 @@ impl Client {
 
     pub async fn get_withdrawal_info(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
     ) -> Result<Vec<WithdrawalInfo>, ClientError> {
         let withdrawal_info = self.withdrawal_server.get_withdrawal_info(key).await?;
         Ok(withdrawal_info)
@@ -710,7 +720,7 @@ impl Client {
         Ok(withdrawal_info)
     }
 
-    pub async fn get_mining_list(&self, key: KeySet) -> Result<Vec<Mining>, ClientError> {
+    pub async fn get_mining_list(&self, view_pair: ViewPair) -> Result<Vec<Mining>, ClientError> {
         let current_time = chrono::Utc::now().timestamp() as u64;
         let minings = fetch_mining_info(
             self.store_vault_server.as_ref(),
@@ -727,14 +737,14 @@ impl Client {
         Ok(minings)
     }
 
-    pub async fn get_claim_info(&self, key: KeySet) -> Result<Vec<ClaimInfo>, ClientError> {
+    pub async fn get_claim_info(&self, view_pair: ViewPair) -> Result<Vec<ClaimInfo>, ClientError> {
         let claim_info = self.withdrawal_server.get_claim_info(key).await?;
         Ok(claim_info)
     }
 
     pub async fn fetch_deposit_history(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
         fetch_deposit_history(self, key, cursor).await
@@ -742,7 +752,7 @@ impl Client {
 
     pub async fn fetch_transfer_history(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
         fetch_transfer_history(self, key, cursor).await
@@ -750,7 +760,7 @@ impl Client {
 
     pub async fn fetch_tx_history(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
         fetch_tx_history(self, key, cursor).await
@@ -833,7 +843,7 @@ impl Client {
 
     pub async fn make_history_backup(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         from: u64,
         chunk_size: usize,
     ) -> Result<Vec<String>, ClientError> {
@@ -843,22 +853,25 @@ impl Client {
 
     pub async fn generate_transfer_receipt(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         tx_digest: Bytes32,
         transfer_index: u32,
     ) -> Result<String, ClientError> {
-        generate_transfer_receipt(self, key, tx_digest, transfer_index).await
+        generate_transfer_receipt(self, view_pair, tx_digest, transfer_index).await
     }
 
     pub async fn validate_transfer_receipt(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         transfer_receipt: &str,
     ) -> Result<TransferData, ClientError> {
-        validate_transfer_receipt(self, key, transfer_receipt).await
+        validate_transfer_receipt(self, view_pair, transfer_receipt).await
     }
 
-    pub async fn get_balances_without_sync(&self, key: KeySet) -> Result<Balances, ClientError> {
+    pub async fn get_balances_without_sync(
+        &self,
+        view_pair: ViewPair,
+    ) -> Result<Balances, ClientError> {
         let (_, balances, _) = determine_sequence(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),

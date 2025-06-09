@@ -7,10 +7,10 @@ use intmax2_interfaces::{
         encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError,
         transfer_data::TransferData, validation::Validation as _,
     },
+    utils::key::{PrivateKey, PublicKey},
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs, common::transfer::Transfer,
-    ethereum_types::u256::U256,
 };
 use thiserror::Error;
 
@@ -44,16 +44,16 @@ pub enum ReceiveValidationError {
 pub async fn validate_receive(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    recipient_pubkey: U256,
+    recipient_spend_pub: PublicKey,
     transfer_timestamp: u64,
     transfer_data: &TransferData,
 ) -> Result<Transfer, ReceiveValidationError> {
     transfer_data
-        .validate(recipient_pubkey)
+        .validate()
         .map_err(|e| StrategyError::ValidationError(e.to_string()))?;
 
     let recipient = transfer_data.transfer.recipient;
-    if recipient != recipient_pubkey.into() {
+    if recipient != recipient_spend_pub.0.into() {
         return Err(ReceiveValidationError::GeneralError(
             "Recipient is not the same as the key".to_string(),
         ));
@@ -67,16 +67,12 @@ pub async fn validate_receive(
     }
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server,
-        transfer_data.sender_proof_set_ephemeral_key,
+        PrivateKey(transfer_data.sender_proof_set_ephemeral_key),
     )
     .await?;
-    sender_proof_set
-        .validate(U256::dummy_pubkey())
-        .map_err(|e| {
-            ReceiveValidationError::ValidationError(format!(
-                "Failed to validate sender proof set: {e}"
-            ))
-        })?;
+    sender_proof_set.validate().map_err(|e| {
+        ReceiveValidationError::ValidationError(format!("Failed to validate sender proof set: {e}"))
+    })?;
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;

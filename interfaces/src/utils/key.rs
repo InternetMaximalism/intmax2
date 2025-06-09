@@ -168,3 +168,23 @@ pub struct PublicKeyPair {
     pub view: PublicKey,
     pub spend: PublicKey,
 }
+
+impl From<ViewPair> for PublicKeyPair {
+    fn from(k: ViewPair) -> PublicKeyPair {
+        let view = PublicKey::from_private_key(&k.view);
+        PublicKeyPair {
+            view,
+            spend: k.spend,
+        }
+    }
+}
+
+impl From<&ViewPair> for PublicKeyPair {
+    fn from(k: &ViewPair) -> PublicKeyPair {
+        let view = PublicKey::from_private_key(&k.view);
+        PublicKeyPair {
+            view,
+            spend: k.spend,
+        }
+    }
+}
