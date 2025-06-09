@@ -5,7 +5,7 @@ use intmax2_interfaces::{
         types::{CursorOrder, MetaDataCursor},
     },
     data::{
-        encryption::BlsEncryption,
+        encryption::{errors::BlsEncryptionError, BlsEncryption},
         meta_data::MetaData,
         rw_rights::{RWRights, ReadRights, WriteRights},
         topic::topic_from_rights,
@@ -33,7 +33,14 @@ pub struct PaymentMemo {
     pub memo: String,
 }
 
-impl BlsEncryption for PaymentMemo {}
+impl BlsEncryption for PaymentMemo {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 pub async fn save_payment_memo<M: Default + Clone + Serialize + DeserializeOwned>(
     store_vault_server: &dyn StoreVaultClientInterface,

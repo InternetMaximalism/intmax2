@@ -1,7 +1,6 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use intmax2_interfaces::data::{
-    data_type::DataType, encryption::BlsEncryption, transfer_data::TransferData,
-    tx_data::TxData,
+    data_type::DataType, encryption::{errors::BlsEncryptionError, BlsEncryption}, transfer_data::TransferData, tx_data::TxData,
 };
 use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
 use serde::{Deserialize, Serialize};
@@ -17,7 +16,14 @@ pub struct TransferReceipt {
     pub timestamp: u64,
 }
 
-impl BlsEncryption for TransferReceipt {}
+impl BlsEncryption for TransferReceipt {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 pub async fn generate_transfer_receipt(
     client: &Client,
