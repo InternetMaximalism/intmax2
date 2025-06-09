@@ -28,6 +28,7 @@ use intmax2_interfaces::{
         circuit_verifiers::CircuitVerifiers,
         digest::get_digest,
         key::{KeyPair, PrivateKey, PublicKey, PublicKeyPair, ViewPair},
+        payment_id::PaymentId,
         random::default_rng,
     },
 };
@@ -35,8 +36,9 @@ use intmax2_zkp::{
     circuits::validity::validity_pis::ValidityPublicInputs,
     common::{
         block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
-        signature_content::key_set::KeySet, transfer::Transfer, trees::transfer_tree::TransferTree,
-        tx::Tx, witness::spent_witness::SpentWitness,
+        generic_address::GenericAddress, salt::Salt, signature_content::key_set::KeySet,
+        transfer::Transfer, trees::transfer_tree::TransferTree, tx::Tx,
+        witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
@@ -103,6 +105,62 @@ pub struct Client {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GenericRecipient {
+    PublicKeyPair(PublicKeyPair),
+    Address(Address),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferRequest {
+    pub recipient: GenericRecipient,
+    pub token_index: u32,
+    pub amount: U256,
+    pub payment_id: Option<PaymentId>,
+    pub description: Option<String>,
+}
+
+impl TransferRequest {
+    pub fn to_transfer_and_full_extra_data(&self) -> (Transfer, FullExtraData) {
+        let recipient: GenericAddress = match self.recipient {
+            GenericRecipient::PublicKeyPair(pubkey_pair) => pubkey_pair.spend.0.into(),
+            GenericRecipient::Address(address) => address.into(),
+        };
+        let mut rng = default_rng();
+        let description_salt = if self.description.is_some() {
+            Some(Bytes32::rand(&mut rng))
+        } else {
+            None
+        };
+        let inner_salt = if self.payment_id.is_some() || self.description.is_some() {
+            Some(Salt::rand(&mut rng))
+        } else {
+            None
+        };
+        let full_extra_data = FullExtraData {
+            payment_id: self.payment_id,
+            description: self.description.clone(),
+            description_salt,
+            inner_salt,
+        };
+        // full extra data is binded to the salt
+        // if the salt is not provided, generate a new one
+        let salt = full_extra_data
+            .to_extra_data()
+            .to_salt()
+            .unwrap_or(generate_salt());
+        let transfer = Transfer {
+            recipient,
+            amount: self.amount,
+            token_index: self.token_index,
+            salt,
+        };
+        (transfer, full_extra_data)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentMemoEntry {
     pub transfer_index: u32,
     pub topic: String,
@@ -116,6 +174,7 @@ pub struct TxRequestMemo {
     pub is_registration_block: bool,
     pub tx: Tx,
     pub transfers: Vec<Transfer>,
+    pub recipients: Vec<GenericRecipient>,
     pub full_extra_data: Vec<FullExtraData>,
     pub spent_witness: SpentWitness,
     pub sender_proof_set_ephemeral_key: U256,
@@ -134,7 +193,7 @@ pub struct DepositResult {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferFeeQuote {
-    pub beneficiary: Option<U256>,
+    pub beneficiary: Option<PublicKeyPair>,
     pub fee: Option<Fee>,
     pub collateral_fee: Option<Fee>,
     pub block_builder_address: Address,
@@ -222,16 +281,16 @@ impl Client {
     pub async fn await_tx_sendable(
         &self,
         view_pair: ViewPair,
-        transfers: &[Transfer],
+        transfer_requests: &[TransferRequest],
         fee_quote: &TransferFeeQuote,
     ) -> Result<UserData, ClientError> {
         // input validation
-        if transfers.is_empty() {
+        if transfer_requests.is_empty() {
             return Err(ClientError::TransferLenError(
                 "transfers is empty".to_string(),
             ));
         }
-        if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
+        if transfer_requests.len() > NUM_TRANSFERS_IN_TX - 1 {
             return Err(ClientError::TransferLenError(
                 "transfers is too many".to_string(),
             ));
@@ -242,7 +301,7 @@ impl Client {
             ));
         }
         // balance check
-        let mut transfer_amounts = transfers
+        let mut transfer_amounts = transfer_requests
             .iter()
             .map(|t| (t.token_index, t.amount))
             .collect::<Vec<_>>();
@@ -321,8 +380,7 @@ impl Client {
         &self,
         block_builder_url: &str,
         key_pair: KeyPair,
-        transfers: &[Transfer],
-        full_extra_data: &[FullExtraData],
+        transfer_requests: &[TransferRequest],
         payment_memos: &[PaymentMemoEntry],
         fee_quote: &TransferFeeQuote,
     ) -> Result<TxRequestMemo, ClientError> {
@@ -331,26 +389,21 @@ impl Client {
         log::info!(
             "send_tx_request: spend pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
            spend_pub,
-            transfers.len(),
+            transfer_requests.len(),
             fee_quote.beneficiary.map_or("N/A".to_string(), |b| b.to_hex()),
             fee_quote.fee,
             fee_quote.collateral_fee
         );
         for e in payment_memos {
-            if e.transfer_index as usize >= transfers.len() {
+            if e.transfer_index as usize >= transfer_requests.len() {
                 return Err(ClientError::PaymentMemoError(
                     "memo.transfer_index is out of range".to_string(),
                 ));
             }
         }
-        if transfers.len() != full_extra_data.len() {
-            return Err(ClientError::SendTxRequestError(
-                "transfers and full_extra_data length mismatch".to_string(),
-            ));
-        }
 
         let user_data = self
-            .await_tx_sendable(view_pair, transfers, fee_quote)
+            .await_tx_sendable(view_pair, transfer_requests, fee_quote)
             .await?;
 
         // fetch if this is first time tx
@@ -373,16 +426,22 @@ impl Client {
             salt: generate_salt(),
         });
 
-        // add fee transfer to the end
-        let transfers: Vec<Transfer> = if let Some(fee_transfer) = fee_transfer {
-            transfers
+        let (mut transfers, mut full_extra_data): (Vec<Transfer>, Vec<FullExtraData>) =
+            transfer_requests
                 .iter()
-                .cloned()
-                .chain(std::iter::once(fee_transfer))
-                .collect()
-        } else {
-            transfers.to_vec()
-        };
+                .map(|t| t.to_transfer_and_full_extra_data())
+                .unzip();
+        let mut recipients = transfer_requests
+            .iter()
+            .map(|t| t.recipient.clone())
+            .collect::<Vec<_>>();
+
+        // add fee transfer to the end
+        if let Some(fee_transfer) = fee_transfer {
+            full_extra_data.push(FullExtraData::default());
+            transfers.push(fee_transfer);
+            recipients.push(GenericRecipient::PublicKeyPair(todo!()));
+        }
         let fee_index = if fee_transfer.is_some() {
             Some(transfers.len() as u32 - 1)
         } else {
@@ -454,6 +513,10 @@ impl Client {
             is_registration_block,
             tx,
             transfers: transfers.to_vec(),
+            recipients: transfer_requests
+                .iter()
+                .map(|t| t.recipient.clone())
+                .collect(),
             spent_witness,
             sender_proof_set_ephemeral_key: ephemeral_key.0,
             fee_index,
