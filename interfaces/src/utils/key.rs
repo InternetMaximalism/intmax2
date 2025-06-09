@@ -188,3 +188,21 @@ impl From<&ViewPair> for PublicKeyPair {
         }
     }
 }
+
+impl From<KeyPair> for PublicKeyPair {
+    fn from(k: KeyPair) -> PublicKeyPair {
+        PublicKeyPair {
+            view: PublicKey::from_private_key(&k.view),
+            spend: PublicKey::from_private_key(&k.spend),
+        }
+    }
+}
+
+impl From<&KeyPair> for PublicKeyPair {
+    fn from(k: &KeyPair) -> PublicKeyPair {
+        PublicKeyPair {
+            view: PublicKey::from_private_key(&k.view),
+            spend: PublicKey::from_private_key(&k.spend),
+        }
+    }
+}

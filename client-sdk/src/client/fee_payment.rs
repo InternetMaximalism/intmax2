@@ -6,10 +6,10 @@ use intmax2_interfaces::{
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
     data::encryption::BlsEncryption,
-    utils::key::ViewPair,
+    utils::key::{PublicKey, ViewPair},
 };
 use intmax2_zkp::{
-    common::{signature_content::key_set::KeySet, transfer::Transfer},
+    common::transfer::Transfer,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait as _},
 };
 use serde::{Deserialize, Serialize};
@@ -212,15 +212,16 @@ pub async fn generate_withdrawal_transfers(
 /// get unused payment memos
 pub async fn get_unused_payments(
     store_vault_server: &dyn StoreVaultClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     fee_type: FeeType,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
     let memo_name = match fee_type {
         FeeType::Withdrawal => WITHDRAWAL_FEE_MEMO,
         FeeType::Claim => CLAIM_FEE_MEMO,
     };
-    let memos = get_all_payment_memos(store_vault_server, key, memo_name).await?;
-    let used_memos = get_all_payment_memos(store_vault_server, key, USED_OR_INVALID_MEMO).await?;
+    let memos = get_all_payment_memos(store_vault_server, view_pair.view, memo_name).await?;
+    let used_memos =
+        get_all_payment_memos(store_vault_server, view_pair.view, USED_OR_INVALID_MEMO).await?;
     let unused_memos = memos
         .into_iter()
         .filter(|memo| {
@@ -250,10 +251,12 @@ pub async fn consume_payment(
     };
     let entry = SaveDataEntry {
         topic,
-        pubkey: key.pubkey,
-        data: payment_memo.encrypt(key.pubkey, Some(key))?,
+        pubkey: view_pair.view.to_public_key().0,
+        data: payment_memo.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?,
     };
-    store_vault_server.save_data_batch(key, &[entry]).await?;
+    store_vault_server
+        .save_data_batch(view_pair.view, &[entry])
+        .await?;
     Ok(())
 }
 
@@ -267,7 +270,7 @@ pub async fn select_unused_fees(
     fee_type: FeeType,
     tx_timeout: u64,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
-    let unused_fees = get_unused_payments(store_vault_server, key, fee_type).await?;
+    let unused_fees = get_unused_payments(store_vault_server, view_pair, fee_type).await?;
     // Extract only those whose fee.token_index and recipient matches and sort by fee.amount
     let mut sorted_fee_memo = unused_fees
         .into_iter()
@@ -285,7 +288,7 @@ pub async fn select_unused_fees(
         match validate_receive(
             store_vault_server,
             validity_prover,
-            memo.transfer_data.transfer.recipient.to_pubkey().unwrap(),
+            PublicKey(memo.transfer_data.transfer.recipient.to_pubkey().unwrap()),
             memo.meta.timestamp,
             &memo.transfer_data,
         )
@@ -297,14 +300,14 @@ pub async fn select_unused_fees(
             }
             Err(ReceiveValidationError::TxIsNotSettled(timestamp)) => {
                 if timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
-                    consume_payment(store_vault_server, key, &memo, "tx is timeout").await?;
+                    consume_payment(store_vault_server, view_pair, &memo, "tx is timeout").await?;
                 }
                 log::info!("fee: {} is not settled yet", memo.meta.digest);
                 continue;
             }
             Err(e) => {
                 log::warn!("invalid fee: {} reason: {}", memo.meta.digest, e,);
-                consume_payment(store_vault_server, key, &memo, &e.to_string()).await?;
+                consume_payment(store_vault_server, view_pair, &memo, &e.to_string()).await?;
             }
         }
         if collected_total_fee >= fee.amount {
