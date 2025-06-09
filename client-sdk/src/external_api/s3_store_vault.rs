@@ -15,6 +15,7 @@ use intmax2_interfaces::{
     },
     utils::{
         digest::get_digest,
+        key::PrivateKey,
         signature::{Auth, Signable, WithAuth},
     },
 };
@@ -42,11 +43,12 @@ impl S3StoreVaultClient {
 impl StoreVaultClientInterface for S3StoreVaultClient {
     async fn save_snapshot(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         topic: &str,
         prev_digest: Option<Bytes32>,
         data: &[u8],
     ) -> Result<(), ServerError> {
+        let key = view_key.to_key_set();
         let digest = get_digest(data);
         let request = S3PreSaveSnapshotRequest {
             pubkey: key.pubkey,
@@ -82,7 +84,12 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         Ok(())
     }
 
-    async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
+    async fn get_snapshot(
+        &self,
+        view_key: PrivateKey,
+        topic: &str,
+    ) -> Result<Option<Vec<u8>>, ServerError> {
+        let key = view_key.to_key_set();
         let request = S3GetSnapshotRequest {
             topic: topic.to_string(),
             pubkey: key.pubkey,
@@ -106,9 +113,10 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
 
     async fn save_data_batch(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         entries: &[SaveDataEntry],
     ) -> Result<Vec<Bytes32>, ServerError> {
+        let key = view_key.to_key_set();
         let mut all_digests = vec![];
 
         for chunk in entries.chunks(MAX_BATCH_SIZE) {
@@ -143,10 +151,11 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
 
     async fn get_data_batch(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         topic: &str,
         digests: &[Bytes32],
     ) -> Result<Vec<DataWithMetaData>, ServerError> {
+        let key = view_key.to_key_set();
         let mut all_data = vec![];
         for chunk in digests.chunks(MAX_BATCH_SIZE) {
             let request = S3GetDataBatchRequest {
@@ -186,10 +195,11 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
 
     async fn get_data_sequence(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        let key = view_key.to_key_set();
         let auth = generate_auth_for_get_data_sequence_s3(key);
         let (data, cursor) = self
             .get_data_sequence_with_auth(topic, cursor, &auth)

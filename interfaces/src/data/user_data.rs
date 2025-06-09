@@ -12,7 +12,10 @@ use intmax2_zkp::{
     utils::poseidon_hash_out::PoseidonHashOut,
 };
 
-use crate::data::{encryption::errors::BlsEncryptionError, transfer_data::TransferData};
+use crate::{
+    data::{encryption::errors::BlsEncryptionError, transfer_data::TransferData},
+    utils::key::PublicKey,
+};
 
 use super::{
     deposit_data::DepositData, encryption::BlsEncryption, error::DataError, meta_data::MetaData,
@@ -50,9 +53,9 @@ impl ProcessStatus {
 }
 
 impl UserData {
-    pub fn new(pubkey: U256) -> Self {
+    pub fn new(spend_pub: PublicKey) -> Self {
         Self {
-            pubkey,
+            pubkey: spend_pub.0,
             full_private_state: FullPrivateState::new(),
 
             balance_proof: None,

@@ -99,6 +99,10 @@ impl PrivateKey {
         PublicKey::from_private_key(&self)
     }
 
+    pub fn to_key_set(self) -> KeySet {
+        KeySet::new(self.0)
+    }
+
     pub fn rand<R: Rng>(rng: &mut R) -> PrivateKey {
         PrivateKey(U256::rand(rng))
     }
@@ -164,4 +168,3 @@ pub struct PublicKeyPair {
     pub view: PublicKey,
     pub spend: PublicKey,
 }
-

@@ -4,7 +4,7 @@ use intmax2_interfaces::{
         meta_data::MetaDataWithBlockNumber, proof_compression::CompressedBalanceProof,
         transfer_data::TransferData, tx_data::TxData, user_data::UserData,
     },
-    utils::digest::get_digest,
+    utils::{digest::get_digest, key::ViewPair},
 };
 use intmax2_zkp::{
     circuits::balance::balance_pis::BalancePublicInputs,
@@ -26,41 +26,42 @@ use crate::client::{
 use super::error::SyncError;
 
 impl Client {
-    pub async fn get_user_data(&self, key: KeySet) -> Result<UserData, SyncError> {
-        let (user_data, _) = self.get_user_data_and_digest(key).await?;
+    pub async fn get_user_data(&self, view_pair: ViewPair) -> Result<UserData, SyncError> {
+        let (user_data, _) = self.get_user_data_and_digest(view_pair).await?;
         Ok(user_data)
     }
 
     /// Get the latest user data from the data store server
     pub(super) async fn get_user_data_and_digest(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
     ) -> Result<(UserData, Option<Bytes32>), SyncError> {
         let encrypted_data = self
             .store_vault_server
-            .get_snapshot(key, &DataType::UserData.to_topic())
+            .get_snapshot(view_pair.view, &DataType::UserData.to_topic())
             .await?;
         let digest = encrypted_data
             .as_ref()
             .map(|encrypted| get_digest(encrypted));
         let user_data = encrypted_data
-            .map(|encrypted| UserData::decrypt(key, Some(key.pubkey), &encrypted))
+            .map(|encrypted| UserData::decrypt(view_pair.view, Some(key.pubkey), &encrypted))
             .transpose()
             .map_err(|e| SyncError::DecryptionError(format!("failed to decrypt user data: {e}")))?
-            .unwrap_or(UserData::new(key.pubkey));
+            .unwrap_or(UserData::new(view_pair.spend));
         Ok((user_data, digest))
     }
 
     pub(super) async fn save_user_data(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         prev_digest: Option<Bytes32>,
         user_data: &UserData,
     ) -> Result<(), SyncError> {
-        let encrypted_data = user_data.encrypt(key.pubkey, Some(key))?;
+        let encrypted_data =
+            user_data.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?;
         self.store_vault_server
             .save_snapshot(
-                key,
+                view_pair.view,
                 &DataType::UserData.to_topic(),
                 prev_digest,
                 &encrypted_data,
