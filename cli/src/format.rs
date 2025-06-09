@@ -72,7 +72,7 @@ pub fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
 
     match bytes.len() {
         20 => Ok(Address::from_bytes_be(&bytes)?.into()),
-        30 => Ok(U256::from_bytes_be(&bytes)?.into()),
+        32 => Ok(U256::from_bytes_be(&bytes)?.into()),
         _ => bail!("Invalid length"),
     }
 }

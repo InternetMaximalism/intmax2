@@ -201,7 +201,7 @@ fn print_receive_entry(transfer: &TransferData, status: &EntryStatus, meta: &Met
 }
 
 fn print_send_entry(tx: &TxData, status: &EntryStatus, meta: &MetaData) {
-    print_digest_status(meta, status, &"RECEIVE".bright_red().bold());
+    print_digest_status(meta, status, &"SEND".bright_red().bold());
 
     println!(
         "  Tx Nonce: {}",
