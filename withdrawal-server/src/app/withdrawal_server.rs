@@ -13,11 +13,13 @@ use intmax2_interfaces::{
         encryption::{errors::BlsEncryptionError, BlsEncryption},
         transfer_data::TransferData,
     },
+    utils::{address::IntmaxAddress, network::Network},
 };
 
 use super::{error::WithdrawalServerError, fee::parse_optional_fee_str};
 use intmax2_client_sdk::{
     client::{
+        config::network_from_env,
         fee_payment::FeeType,
         receive_validation::{validate_receive, ReceiveValidationError},
         sync::utils::quote_withdrawal_claim_fee,
@@ -62,6 +64,7 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 struct Config {
+    network: Network,
     is_faster_mining: bool,
     withdrawal_beneficiary_key: ViewPair,
     claim_beneficiary_key: ViewPair,
@@ -76,8 +79,9 @@ impl Config {
         let claimable_withdrawal_fee: Option<Vec<Fee>> =
             parse_optional_fee_str(&env.claimable_withdrawal_fee)?;
         let claim_fee: Option<Vec<Fee>> = parse_optional_fee_str(&env.claim_fee)?;
-
+        let network = network_from_env();
         Ok(Self {
+            network,
             is_faster_mining: env.is_faster_mining,
             withdrawal_beneficiary_key: env.withdrawal_beneficiary_view_keypair,
             claim_beneficiary_key: env.claim_beneficiary_view_keypair,
@@ -143,7 +147,10 @@ impl WithdrawalServer {
 
     pub fn get_withdrawal_fee(&self) -> WithdrawalFeeInfo {
         WithdrawalFeeInfo {
-            beneficiary: self.config.withdrawal_beneficiary_key,
+            beneficiary: IntmaxAddress::from_viewpair(
+                self.config.network,
+                &self.config.withdrawal_beneficiary_key,
+            ),
             direct_withdrawal_fee: self.config.direct_withdrawal_fee.clone(),
             claimable_withdrawal_fee: self.config.claimable_withdrawal_fee.clone(),
         }
@@ -151,7 +158,10 @@ impl WithdrawalServer {
 
     pub fn get_claim_fee(&self) -> ClaimFeeInfo {
         ClaimFeeInfo {
-            beneficiary: self.config.claim_beneficiary_key,
+            beneficiary: IntmaxAddress::from_viewpair(
+                self.config.network,
+                &self.config.claim_beneficiary_key,
+            ),
             fee: self.config.claim_fee.clone(),
         }
     }
@@ -467,14 +477,18 @@ impl WithdrawalServer {
     ) -> Result<(Vec<Transfer>, FeeResult), WithdrawalServerError> {
         // check duplicated nullifiers
 
-        let key = match fee_type {
-            FeeType::Withdrawal => self.config.withdrawal_beneficiary_key.unwrap(),
-            FeeType::Claim => self.config.claim_beneficiary_key.unwrap(),
+        let view_pair = match fee_type {
+            FeeType::Withdrawal => self.config.withdrawal_beneficiary_key,
+            FeeType::Claim => self.config.claim_beneficiary_key,
         };
         // fetch transfer data
         let encrypted_transfer_data = self
             .store_vault_server
-            .get_data_batch(key, &DataType::Transfer.to_topic(), fee_transfer_digests)
+            .get_data_batch(
+                view_pair.view,
+                &DataType::Transfer.to_topic(),
+                fee_transfer_digests,
+            )
             .await?;
         if encrypted_transfer_data.len() != fee_transfer_digests.len() {
             return Err(WithdrawalServerError::InvalidFee(format!(
@@ -487,7 +501,7 @@ impl WithdrawalServer {
         let transfer_data_with_meta = encrypted_transfer_data
             .iter()
             .map(|data| {
-                let transfer_data = TransferData::decrypt(key, None, &data.data)?;
+                let transfer_data = TransferData::decrypt(view_pair.view, None, &data.data)?;
                 Ok((data.meta.clone(), transfer_data))
             })
             .collect::<Result<Vec<_>, BlsEncryptionError>>();
@@ -505,7 +519,7 @@ impl WithdrawalServer {
             let transfer = match validate_receive(
                 self.store_vault_server.as_ref(),
                 &self.validity_prover,
-                key.pubkey,
+                view_pair.spend,
                 meta.timestamp,
                 &transfer_data,
             )

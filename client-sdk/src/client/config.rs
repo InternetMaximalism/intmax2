@@ -28,7 +28,7 @@ impl Default for ClientConfig {
     }
 }
 
-fn network_from_env() -> Network {
+pub fn network_from_env() -> Network {
     match get_env_type() {
         EnvType::Local => Network::Testnet,
         EnvType::Dev => Network::Testnet,
