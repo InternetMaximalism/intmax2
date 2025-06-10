@@ -12,6 +12,7 @@ pub async fn send_withdrawal(
     to: Address,
     amount: U256,
     token_index: u32,
+    description: Option<String>,
     fee_token_index: u32,
     with_claim_fee: bool,
     wait: bool,
@@ -21,7 +22,7 @@ pub async fn send_withdrawal(
         recipient: GenericRecipient::Address(to),
         token_index,
         amount,
-        description: None,
+        description,
     };
     let withdrawal_transfers = client
         .generate_withdrawal_transfers(&withdrawal_transfer_req, fee_token_index, with_claim_fee)

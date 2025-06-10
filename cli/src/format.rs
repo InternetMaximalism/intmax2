@@ -1,7 +1,13 @@
 use anyhow::{bail, ensure};
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_interfaces::{
+    data::deposit_data::TokenType,
+    utils::{
+        key::{KeyPair, PrivateKey},
+        key_derivation::derive_keypair_from_spend_key,
+    },
+};
 use intmax2_zkp::{
-    common::{generic_address::GenericAddress, signature_content::key_set::KeySet},
+    common::generic_address::GenericAddress,
     ethereum_types::{
         address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _,
     },
@@ -52,8 +58,8 @@ pub fn format_token_info(
     }
 }
 
-pub fn privkey_to_keyset(privkey: Bytes32) -> KeySet {
-    KeySet::new(privkey.into())
+pub fn privkey_to_keypair(privkey: Bytes32) -> KeyPair {
+    derive_keypair_from_spend_key(PrivateKey(privkey.into()), false)
 }
 
 pub fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
