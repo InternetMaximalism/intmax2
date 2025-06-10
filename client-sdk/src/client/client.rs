@@ -222,6 +222,10 @@ pub struct TxResult {
 }
 
 impl Client {
+    pub fn get_address(&self, public_keypair: PublicKeyPair) -> IntmaxAddress {
+        IntmaxAddress::from_public_keypair(self.config.network, &public_keypair)
+    }
+
     /// Back up deposit information before calling the contract's deposit function
     #[allow(clippy::too_many_arguments)]
     pub async fn prepare_deposit(
@@ -384,6 +388,7 @@ impl Client {
         fee_quote: &TransferFeeQuote,
     ) -> Result<TxRequestMemo, ClientError> {
         let view_pair: ViewPair = key_pair.into();
+        let sender_address = self.get_address(view_pair.into());
         let spend_pub = key_pair.spend.to_public_key();
         log::info!(
             "send_tx_request: spend pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
@@ -496,7 +501,7 @@ impl Client {
             .send_tx_request(
                 block_builder_url,
                 is_registration_block,
-                spend_pub.0,
+                sender_address,
                 tx,
                 fee_proof.clone(),
             )

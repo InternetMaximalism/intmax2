@@ -247,25 +247,30 @@ impl BlockBuilder {
     pub async fn send_tx_request(
         &self,
         is_registration_block: bool,
-        pubkey: U256,
+        sender: IntmaxAddress,
         tx: Tx,
         fee_proof: &Option<FeeProof>,
     ) -> Result<String, BlockBuilderError> {
         log::info!("send_tx_request is_registration_block: {is_registration_block}");
+        let sender_spend_pub = sender.public_spend.0;
+
         // Verify account info
-        let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
-        self.verify_account_info(is_registration_block, pubkey, &account_info)
+        let account_info = self
+            .validity_prover_client
+            .get_account_info(sender_spend_pub)
+            .await?;
+        self.verify_account_info(is_registration_block, sender_spend_pub, &account_info)
             .await?;
 
         // Verify fee proof
-        self.verify_fee_proof(is_registration_block, pubkey, fee_proof)
+        self.verify_fee_proof(is_registration_block, sender_spend_pub, fee_proof)
             .await?;
 
         // Create and add transaction request
         let request_id = Uuid::new_v4().to_string();
         let account_id = account_info.account_id.map(AccountId);
         let tx_request = TxRequest {
-            pubkey,
+            sender: sender.to_public_keypair(),
             account_id,
             tx,
             fee_proof: fee_proof.clone(),

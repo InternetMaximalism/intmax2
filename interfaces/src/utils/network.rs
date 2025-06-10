@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::utils::address::AddressType;
@@ -10,7 +11,7 @@ pub enum Error {
     InvalidMagicByte,
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Default, Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
 pub enum Network {
     #[default]
     Mainnet,

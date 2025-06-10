@@ -17,8 +17,15 @@ pub enum Error {
     EthereumTypeError(#[from] intmax2_zkp::ethereum_types::EthereumTypeError),
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub struct PublicKey(pub U256);
+
+impl Default for PublicKey {
+    fn default() -> Self {
+        // Use a dummy public key for default
+        PublicKey(U256::dummy_pubkey())
+    }
+}
 
 impl PublicKey {
     pub fn to_bytes(self) -> [u8; 32] {
@@ -163,7 +170,7 @@ impl From<&KeyPair> for ViewPair {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct PublicKeyPair {
     pub view: PublicKey,
     pub spend: PublicKey,

@@ -215,6 +215,13 @@ impl IntmaxAddress {
         })
     }
 
+    pub fn to_public_keypair(&self) -> PublicKeyPair {
+        PublicKeyPair {
+            spend: self.public_spend,
+            view: self.public_view,
+        }
+    }
+
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![self.network.as_u8(&self.addr_type)];
         bytes.extend_from_slice(&self.public_spend.to_bytes());

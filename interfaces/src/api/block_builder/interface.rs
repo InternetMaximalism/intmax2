@@ -68,7 +68,7 @@ pub trait BlockBuilderClientInterface: Sync + Send {
         &self,
         block_builder_url: &str,
         is_registration_block: bool,
-        pubkey: U256,
+        sender: IntmaxAddress,
         tx: Tx,
         fee_proof: Option<FeeProof>,
     ) -> Result<String, ServerError>;

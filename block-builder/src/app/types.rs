@@ -1,4 +1,4 @@
-use intmax2_interfaces::api::block_builder::interface::FeeProof;
+use intmax2_interfaces::{api::block_builder::interface::FeeProof, utils::key::PublicKeyPair};
 use intmax2_zkp::{
     common::{
         block_builder::BlockProposal,
@@ -20,7 +20,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxRequest {
     pub request_id: String,
-    pub pubkey: U256,
+    pub sender: PublicKeyPair,
     pub account_id: Option<AccountId>,
     pub tx: Tx,
     pub fee_proof: Option<FeeProof>,

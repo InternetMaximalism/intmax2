@@ -396,8 +396,8 @@ mod tests {
     use intmax2_client_sdk::external_api::contract::{
         convert::convert_address_to_alloy, rollup_contract::RollupContract,
     };
-    use intmax2_interfaces::utils::address::IntmaxAddress;
-    use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
+    use intmax2_interfaces::utils::{address::IntmaxAddress, key::PublicKeyPair};
+    use intmax2_zkp::ethereum_types::address::Address;
 
     async fn create_storage() -> InMemoryStorage {
         let config = StorageConfig {
@@ -435,7 +435,7 @@ mod tests {
     fn dummy_tx_request(request_id: &str) -> TxRequest {
         TxRequest {
             request_id: request_id.to_string(),
-            pubkey: U256::from(1),
+            sender: PublicKeyPair::default(),
             account_id: None,
             tx: Default::default(), // assuming Tx: Default
             fee_proof: None,
