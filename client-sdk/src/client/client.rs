@@ -185,6 +185,29 @@ impl Client {
                 "transfers is too many".to_string(),
             ));
         }
+        // network validation
+        for transfer_request in transfer_requests {
+            match &transfer_request.recipient {
+                GenericRecipient::IntmaxAddress(intmax_address) => {
+                    if intmax_address.network != self.config.network {
+                        return Err(ClientError::NetworkMismatch(format!(
+                            "Recipient network {} does not match client network {}",
+                            intmax_address.network, self.config.network
+                        )));
+                    }
+                }
+                GenericRecipient::Address(_) => {
+                    // Address is not network specific, so no check needed
+                }
+            }
+        }
+        // fee quote validation
+        if fee_quote.beneficiary.network != self.config.network {
+            return Err(ClientError::NetworkMismatch(format!(
+                "Fee beneficiary network {} does not match client network {}",
+                fee_quote.beneficiary.network, self.config.network
+            )));
+        }
         // balance check
         let mut transfer_amounts = transfer_requests
             .iter()
