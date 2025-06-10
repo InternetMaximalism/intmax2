@@ -17,7 +17,7 @@ use intmax2_interfaces::{
         signature::{Auth, Signable, WithAuth},
     },
 };
-use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
+use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 
 use super::utils::query::post_request;
 
@@ -139,8 +139,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        let key = view_key.to_key_set();
-        let auth = generate_auth_for_get_data_sequence(key);
+        let auth = generate_auth_for_get_data_sequence(view_key);
         let (data, cursor) = self
             .get_data_sequence_with_auth(topic, cursor, &auth)
             .await?;
@@ -195,7 +194,8 @@ impl StoreVaultServerClient {
     }
 }
 
-pub fn generate_auth_for_get_data_sequence(key: KeySet) -> Auth {
+pub fn generate_auth_for_get_data_sequence(view_key: PrivateKey) -> Auth {
+    let key = view_key.to_key_set();
     // because auth is not dependent on the datatype and cursor, we can use a dummy request
     let dummy_request = GetDataSequenceRequest {
         topic: "dummy".to_string(),

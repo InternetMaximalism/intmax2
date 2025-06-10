@@ -5,7 +5,7 @@ use crate::{
         cursor::{JsMetaDataCursor, JsMetaDataCursorResponse},
         history::{JsDepositEntry, JsTransferEntry, JsTxEntry},
     },
-    utils::str_privkey_to_keyset,
+    utils::str_to_view_pair,
 };
 use intmax2_interfaces::api::store_vault_server::types::MetaDataCursor;
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
@@ -37,7 +37,7 @@ pub async fn fetch_deposit_history(
     init_logger();
 
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
-    let key = str_privkey_to_keyset(private_key)?;
+    let key = str_to_view_pair(private_key)?;
     let client = get_client(config);
     let (history, cursor_response) = client.fetch_deposit_history(key, &cursor).await?;
     let js_history = history.into_iter().map(JsDepositEntry::from).collect();
@@ -57,7 +57,7 @@ pub async fn fetch_transfer_history(
     init_logger();
 
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
-    let key = str_privkey_to_keyset(private_key)?;
+    let key = str_to_view_pair(private_key)?;
     let client = get_client(config);
     let (history, cursor_response) = client.fetch_transfer_history(key, &cursor).await?;
     let js_history = history.into_iter().map(JsTransferEntry::from).collect();
@@ -77,7 +77,7 @@ pub async fn fetch_tx_history(
     init_logger();
 
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
-    let key = str_privkey_to_keyset(private_key)?;
+    let key = str_to_view_pair(private_key)?;
     let client = get_client(config);
     let (history, cursor_response) = client.fetch_tx_history(key, &cursor).await?;
     let js_history = history.into_iter().map(JsTxEntry::from).collect();

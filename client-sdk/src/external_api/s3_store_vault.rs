@@ -19,7 +19,7 @@ use intmax2_interfaces::{
         signature::{Auth, Signable, WithAuth},
     },
 };
-use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32};
+use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 
 use super::utils::{query::post_request, retry::with_retry};
 
@@ -199,8 +199,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
-        let key = view_key.to_key_set();
-        let auth = generate_auth_for_get_data_sequence_s3(key);
+        let auth = generate_auth_for_get_data_sequence_s3(view_key);
         let (data, cursor) = self
             .get_data_sequence_with_auth(topic, cursor, &auth)
             .await?;
@@ -336,7 +335,8 @@ async fn batch_download_s3(urls: &[String]) -> Result<Vec<Vec<u8>>, ServerError>
     Ok(all_data)
 }
 
-pub fn generate_auth_for_get_data_sequence_s3(key: KeySet) -> Auth {
+pub fn generate_auth_for_get_data_sequence_s3(view_key: PrivateKey) -> Auth {
+    let key = view_key.to_key_set();
     // because auth is not dependent on the topic and cursor, we can use a dummy request
     let dummy_request = S3GetDataSequenceRequest {
         topic: "dummy".to_string(),

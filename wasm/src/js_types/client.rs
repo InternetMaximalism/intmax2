@@ -3,9 +3,10 @@ use intmax2_client_sdk::client::types::{
     DepositResult, GenericRecipient, TransferRequest, TxResult,
 };
 use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTransferRequest {
     pub recipient: String,
