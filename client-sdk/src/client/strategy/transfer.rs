@@ -17,7 +17,7 @@ use intmax2_interfaces::{
         user_data::ProcessStatus,
         validation::Validation,
     },
-    utils::key::{PrivateKey, ViewPair},
+    utils::key::ViewPair,
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
@@ -61,7 +61,7 @@ pub async fn fetch_transfer_info(
         // Fetch and decrypt sender proof set
         let sender_proof_set = match fetch_sender_proof_set(
             store_vault_server,
-            PrivateKey(transfer_data.sender_proof_set_ephemeral_key),
+            transfer_data.sender_proof_set_ephemeral_key,
         )
         .await
         {

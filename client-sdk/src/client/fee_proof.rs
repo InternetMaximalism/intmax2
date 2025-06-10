@@ -103,7 +103,7 @@ pub async fn generate_fee_proof(
         let pubkey_hash = get_pubkey_hash(&pubkeys);
 
         let fee_transfer_data = TransferData {
-            sender_proof_set_ephemeral_key: ephemeral_key.0,
+            sender_proof_set_ephemeral_key: ephemeral_key,
             sender_proof_set: None,
             sender: key_pair.into(),
             extra_data: ExtraData::default(),
@@ -130,7 +130,7 @@ pub async fn generate_fee_proof(
         };
         let signature = block_sign_payload.sign(key_pair.spend.0, pubkey_hash);
         let collateral_block = CollateralBlock {
-            sender_proof_set_ephemeral_key: ephemeral_key.0,
+            sender_proof_set_ephemeral_key: ephemeral_key,
             fee_transfer_data,
             is_registration_block,
             expiry,
@@ -167,7 +167,7 @@ pub async fn generate_fee_proof(
     Ok(FeeProof {
         fee_transfer_witness,
         collateral_block,
-        sender_proof_set_ephemeral_key: sender_proof_set_ephemeral_key.0,
+        sender_proof_set_ephemeral_key,
     })
 }
 

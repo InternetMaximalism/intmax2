@@ -16,7 +16,7 @@ use intmax2_interfaces::{
         transfer_data::TransferData,
         user_data::ProcessStatus,
     },
-    utils::key::{PrivateKey, ViewPair},
+    utils::key::ViewPair,
 };
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _};
 
@@ -55,8 +55,7 @@ pub async fn fetch_withdrawal_info(
     // First, fetch and decrypt all sender proof sets
     let mut valid_transfers = Vec::new();
     for (meta, mut transfer_data) in data_with_meta {
-        let ephemeral_key = PrivateKey(transfer_data.sender_proof_set_ephemeral_key);
-
+        let ephemeral_key = transfer_data.sender_proof_set_ephemeral_key;
         // Fetch encrypted sender proof set
         let encrypted_sender_proof_set = match store_vault_server
             .get_snapshot(ephemeral_key, &DataType::SenderProofSet.to_topic())

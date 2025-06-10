@@ -7,7 +7,7 @@ use intmax2_interfaces::{
         encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError,
         transfer_data::TransferData, validation::Validation as _,
     },
-    utils::key::{PrivateKey, PublicKey},
+    utils::key::PublicKey,
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs, common::transfer::Transfer,
@@ -67,7 +67,7 @@ pub async fn validate_receive(
     }
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server,
-        PrivateKey(transfer_data.sender_proof_set_ephemeral_key),
+        transfer_data.sender_proof_set_ephemeral_key,
     )
     .await?;
     sender_proof_set.validate().map_err(|e| {

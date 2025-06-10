@@ -418,7 +418,7 @@ impl Client {
             transfers,
             recipients,
             spent_witness,
-            sender_proof_set_ephemeral_key: ephemeral_key.0,
+            sender_proof_set_ephemeral_key: ephemeral_key,
             fee_index,
             payment_memos: payment_memos.to_vec(),
             full_extra_data: full_extra_data.to_vec(),

@@ -12,7 +12,7 @@ use intmax2_zkp::{
 
 use crate::{
     data::{encryption::errors::BlsEncryptionError, extra_data::ExtraData},
-    utils::key::{PublicKey, PublicKeyPair},
+    utils::key::{PrivateKey, PublicKey, PublicKeyPair},
 };
 
 use super::{encryption::BlsEncryption, sender_proof_set::SenderProofSet, validation::Validation};
@@ -42,7 +42,7 @@ impl LegacyTransferData {
             spend: PublicKey(self.sender),
         };
         TransferData {
-            sender_proof_set_ephemeral_key: self.sender_proof_set_ephemeral_key,
+            sender_proof_set_ephemeral_key: PrivateKey(self.sender_proof_set_ephemeral_key),
             sender_proof_set: self.sender_proof_set,
             sender,
             extra_data: ExtraData::default(), // legacy data does not have extra data
@@ -62,7 +62,7 @@ impl LegacyTransferData {
 #[serde(rename_all = "camelCase")]
 pub struct TransferData {
     // Ephemeral key to query the sender proof set
-    pub sender_proof_set_ephemeral_key: U256,
+    pub sender_proof_set_ephemeral_key: PrivateKey,
     // After fetching sender proof set, this will be filled
     pub sender_proof_set: Option<SenderProofSet>,
     pub sender: PublicKeyPair,

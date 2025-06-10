@@ -70,7 +70,7 @@ impl Client {
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
             view_pair,
-            view_pair.spend.0,
+            view_pair.spend,
             meta.block_number,
             withdrawal_data,
         )

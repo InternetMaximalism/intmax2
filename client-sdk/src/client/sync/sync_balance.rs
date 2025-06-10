@@ -209,7 +209,7 @@ impl Client {
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
             view_pair,
-            transfer_data.sender.spend.0,
+            transfer_data.sender.spend,
             meta.block_number,
             transfer_data,
         )

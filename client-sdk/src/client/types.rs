@@ -6,6 +6,7 @@ use intmax2_interfaces::{
     },
     utils::{
         address::{AddressType, IntmaxAddress},
+        key::PrivateKey,
         payment_id::PaymentId,
         random::default_rng,
     },
@@ -138,7 +139,7 @@ pub struct TxRequestMemo {
     pub recipients: Vec<GenericRecipient>,
     pub full_extra_data: Vec<FullExtraData>,
     pub spent_witness: SpentWitness,
-    pub sender_proof_set_ephemeral_key: U256,
+    pub sender_proof_set_ephemeral_key: PrivateKey,
     pub payment_memos: Vec<PaymentMemoEntry>,
     pub fee_index: Option<u32>,
 }

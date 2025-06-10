@@ -11,7 +11,11 @@ use intmax2_interfaces::{
         data_type::DataType, encryption::BlsEncryption, extra_data::ExtraData,
         sender_proof_set::SenderProofSet, transfer_data::TransferData, validation::Validation,
     },
-    utils::{address::IntmaxAddress, key::PrivateKey, random::default_rng},
+    utils::{
+        address::IntmaxAddress,
+        key::{PrivateKey, PublicKey},
+        random::default_rng,
+    },
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
@@ -38,7 +42,7 @@ pub async fn validate_fee_proof(
     block_builder_address: Address,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
-    sender: U256,
+    sender_spend_pub: PublicKey,
     fee_proof: &Option<FeeProof>,
 ) -> Result<(), FeeError> {
     log::info!(
@@ -55,7 +59,7 @@ pub async fn validate_fee_proof(
         .ok_or(FeeError::InvalidFee("Fee proof is missing".to_string()))?;
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server_client,
-        PrivateKey(fee_proof.sender_proof_set_ephemeral_key),
+        fee_proof.sender_proof_set_ephemeral_key,
     )
     .await?;
 
@@ -96,10 +100,10 @@ pub async fn validate_fee_proof(
 
         // validate signature
         let user_signature = UserSignature {
-            pubkey: sender,
+            pubkey: sender_spend_pub.0,
             signature: collateral_block.signature.clone(),
         };
-        let mut pubkeys = vec![sender];
+        let mut pubkeys = vec![sender_spend_pub.0];
         pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
         let pubkey_hash = get_pubkey_hash(&pubkeys);
         let block_sign_payload = BlockSignPayload {
@@ -116,7 +120,7 @@ pub async fn validate_fee_proof(
             })?;
         let sender_proof_set = fetch_sender_proof_set(
             store_vault_server_client,
-            PrivateKey(collateral_block.sender_proof_set_ephemeral_key),
+            collateral_block.sender_proof_set_ephemeral_key,
         )
         .await?;
 

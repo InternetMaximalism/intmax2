@@ -1,6 +1,6 @@
 use crate::{
     data::{encryption::errors::BlsEncryptionError, extra_data::FullExtraData},
-    utils::key::PublicKeyPair,
+    utils::key::{PrivateKey, PublicKeyPair},
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +43,7 @@ impl LegacyTxData {
             transfer_digests: self.transfer_digests,
             transfer_types: self.transfer_types,
             full_extra_data,
-            sender_proof_set_ephemeral_key: self.sender_proof_set_ephemeral_key,
+            sender_proof_set_ephemeral_key: PrivateKey(self.sender_proof_set_ephemeral_key),
         }
     }
 }
@@ -60,7 +60,7 @@ pub struct TxData {
     pub transfer_types: Vec<String>,
     pub full_extra_data: Vec<FullExtraData>,
     // Ephemeral key to query the sender proof set
-    pub sender_proof_set_ephemeral_key: U256,
+    pub sender_proof_set_ephemeral_key: PrivateKey,
 }
 
 impl TxData {

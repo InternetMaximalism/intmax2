@@ -4,7 +4,7 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData},
-    utils::key::ViewPair,
+    utils::key::{PublicKey, ViewPair},
 };
 use intmax2_zkp::{
     circuits::balance::{
@@ -21,7 +21,7 @@ use intmax2_zkp::{
             tx_witness::TxWitness,
         },
     },
-    ethereum_types::{bytes32::Bytes32, u256::U256},
+    ethereum_types::bytes32::Bytes32,
     utils::leafable::Leafable as _,
 };
 use plonky2::{
@@ -292,7 +292,7 @@ pub async fn update_send_by_receiver(
     validity_prover: &dyn ValidityProverClientInterface,
     balance_prover: &dyn BalanceProverClientInterface,
     view_pair: ViewPair,
-    sender: U256,
+    sender_spend_pub: PublicKey,
     tx_block_number: u32,
     transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
@@ -344,7 +344,7 @@ pub async fn update_send_by_receiver(
     }
     let sender_leaf = sender_leaves
         .iter()
-        .find(|leaf| leaf.sender == sender)
+        .find(|leaf| leaf.sender == sender_spend_pub.0)
         .ok_or(SyncError::InvalidTransferError(
             "sender leaf not found in sender leaves".to_string(),
         ))?;
@@ -362,7 +362,7 @@ pub async fn update_send_by_receiver(
     };
     let update_witness = validity_prover
         .get_update_witness(
-            sender,
+            sender_spend_pub.0,
             tx_block_number,
             prev_balance_pis.public_state.block_number,
             true,
@@ -378,7 +378,7 @@ pub async fn update_send_by_receiver(
     let balance_proof = balance_prover
         .prove_send(
             view_pair.view,
-            sender,
+            sender_spend_pub.0,
             &tx_witness,
             &update_witness,
             &spent_proof,

@@ -27,6 +27,7 @@ use intmax2_interfaces::{
     },
     utils::{
         address::IntmaxAddress,
+        key::PublicKey,
         key_derivation::{derive_keypair_from_spend_key, derive_spend_key_from_bytes32},
         network::Network,
     },
@@ -266,12 +267,12 @@ impl BlockBuilder {
         fee_proof: &Option<FeeProof>,
     ) -> Result<String, BlockBuilderError> {
         log::info!("send_tx_request is_registration_block: {is_registration_block}");
-        let sender_spend_pub = sender.public_spend.0;
+        let sender_spend_pub = sender.public_spend;
 
         // Verify account info
         let account_info = self
             .validity_prover_client
-            .get_account_info(sender_spend_pub)
+            .get_account_info(sender_spend_pub.0)
             .await?;
         self.verify_account_info(is_registration_block, sender_spend_pub, &account_info)
             .await?;
@@ -300,18 +301,19 @@ impl BlockBuilder {
     async fn verify_account_info(
         &self,
         is_registration_block: bool,
-        pubkey: U256,
+        sender_spend_pub: PublicKey,
         account_info: &AccountInfo,
     ) -> Result<(), BlockBuilderError> {
         let account_id = account_info.account_id;
         if is_registration_block {
             if let Some(account_id) = account_id {
                 return Err(BlockBuilderError::AccountAlreadyRegistered(
-                    pubkey, account_id,
+                    sender_spend_pub,
+                    account_id,
                 ));
             }
         } else if account_id.is_none() {
-            return Err(BlockBuilderError::AccountNotFound(pubkey));
+            return Err(BlockBuilderError::AccountNotFound(sender_spend_pub));
         }
         Ok(())
     }
@@ -320,7 +322,7 @@ impl BlockBuilder {
     async fn verify_fee_proof(
         &self,
         is_registration_block: bool,
-        pubkey: U256,
+        sender_spend_pub: PublicKey,
         fee_proof: &Option<FeeProof>,
     ) -> Result<(), BlockBuilderError> {
         let required_fee = if is_registration_block {
@@ -341,7 +343,7 @@ impl BlockBuilder {
             self.config.block_builder_address,
             required_fee,
             required_collateral_fee,
-            pubkey,
+            sender_spend_pub,
             fee_proof,
         )
         .await

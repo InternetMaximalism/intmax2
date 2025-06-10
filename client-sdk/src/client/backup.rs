@@ -4,10 +4,7 @@ use intmax2_interfaces::{
         data_type::DataType, encryption::BlsEncryption, meta_data::MetaData,
         transfer_data::TransferData,
     },
-    utils::{
-        digest::get_digest,
-        key::{PrivateKey, ViewPair},
-    },
+    utils::{digest::get_digest, key::ViewPair},
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 
@@ -65,7 +62,7 @@ pub async fn make_history_backup(
 
     // fetch sender proof set
     for transfer_data in transfer_data.iter() {
-        let sender_proof_set_key = PrivateKey(transfer_data.sender_proof_set_ephemeral_key);
+        let sender_proof_set_key = transfer_data.sender_proof_set_ephemeral_key;
         let sender_proof_set_data = client
             .store_vault_server
             .get_snapshot(sender_proof_set_key, &DataType::SenderProofSet.to_topic())
