@@ -12,7 +12,7 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::{
     common::{
-        generic_address::GenericAddress, salt::Salt, transfer::Transfer, tx::Tx,
+        generic_address::GenericAddress, transfer::Transfer, tx::Tx,
         witness::spent_witness::SpentWitness,
     },
     ethereum_types::{
@@ -95,7 +95,7 @@ impl TransferRequest {
             None
         };
         let inner_salt = if payment_id.is_some() || self.description.is_some() {
-            Some(Salt::rand(&mut rng))
+            Some(Bytes32::rand(&mut rng))
         } else {
             None
         };

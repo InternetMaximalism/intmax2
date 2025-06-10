@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct ExtraData {
     pub payment_id: Option<PaymentId>,
     pub description_hash: Option<Bytes32>,
-    pub inner_salt: Option<Salt>,
+    pub inner_salt: Option<Bytes32>,
 }
 
 impl ExtraData {
@@ -22,25 +22,25 @@ impl ExtraData {
             return None;
         }
         // otherwise, create a salt from the fields
-        let mut data: Vec<u64> = Vec::new();
+        let mut data: Vec<u32> = Vec::new();
         // Fields flag indicates which fields are present
         let mut fields_flag = 0;
         if let Some(payment_id) = &self.payment_id {
             fields_flag += 1;
-            data.extend_from_slice(&payment_id.to_u64_vec());
+            data.extend_from_slice(&payment_id.to_u32_vec());
         }
         if let Some(description_hash) = &self.description_hash {
             fields_flag += 2;
-            data.extend_from_slice(&description_hash.to_u64_vec());
+            data.extend_from_slice(&description_hash.to_u32_vec());
         }
         if let Some(inner_salt) = &self.inner_salt {
             fields_flag += 4;
-            data.extend_from_slice(&inner_salt.to_u64_vec());
+            data.extend_from_slice(&inner_salt.to_u32_vec());
         }
         // Add the fields flag to the data for length padding
-        data.push(fields_flag as u64);
+        data.push(fields_flag as u32);
         // Use Poseidon hash for ZKP compatibility in the future
-        let hash = PoseidonHashOut::hash_inputs_u64(&data);
+        let hash = PoseidonHashOut::hash_inputs_u32(&data);
         Some(Salt(hash))
     }
 }
@@ -50,7 +50,7 @@ pub struct FullExtraData {
     pub payment_id: Option<PaymentId>,
     pub description: Option<String>,
     pub description_salt: Option<Bytes32>,
-    pub inner_salt: Option<Salt>,
+    pub inner_salt: Option<Bytes32>,
 }
 
 impl FullExtraData {

@@ -3,10 +3,12 @@ use intmax2_client_sdk::client::{
     types::{FeeQuote, TransferFeeQuote},
 };
 use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
-use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait as _};
+use intmax2_zkp::ethereum_types::{address::Address, u32limb_trait::U32LimbTrait as _};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
-use super::{common::JsTransfer, utils::parse_u256};
+use crate::js_types::client::JsTransferRequest;
+
+use super::utils::parse_u256;
 
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
@@ -134,7 +136,7 @@ impl From<BlockBuilderFeeInfo> for JsFeeInfo {
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsWithdrawalTransfers {
-    pub transfers: Vec<JsTransfer>,
+    pub transfer_requests: Vec<JsTransferRequest>,
     pub withdrawal_fee_transfer_index: Option<u32>,
     pub claim_fee_transfer_index: Option<u32>,
 }
@@ -142,10 +144,10 @@ pub struct JsWithdrawalTransfers {
 impl From<WithdrawalTransferRequests> for JsWithdrawalTransfers {
     fn from(withdrawal_transfers: WithdrawalTransferRequests) -> Self {
         Self {
-            transfers: withdrawal_transfers
+            transfer_requests: withdrawal_transfers
                 .transfer_requests
                 .into_iter()
-                .map(JsTransfer::from)
+                .map(JsTransferRequest::from)
                 .collect(),
             withdrawal_fee_transfer_index: withdrawal_transfers.withdrawal_fee_transfer_index,
             claim_fee_transfer_index: withdrawal_transfers.claim_fee_transfer_index,
@@ -159,7 +161,7 @@ impl TryFrom<JsWithdrawalTransfers> for WithdrawalTransferRequests {
     fn try_from(js_withdrawal_transfers: JsWithdrawalTransfers) -> Result<Self, JsError> {
         Ok(WithdrawalTransferRequests {
             transfer_requests: js_withdrawal_transfers
-                .transfers
+                .transfer_requests
                 .into_iter()
                 .map(|t| t.try_into())
                 .collect::<Result<_, _>>()?,
@@ -178,7 +180,7 @@ mod fee_tests {
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
     use crate::js_types::{
-        common::{JsGenericAddress, JsTransfer},
+        client::JsTransferRequest,
         fee::{JsFee, JsFeeInfo, JsFeeQuote, JsWithdrawalTransfers},
     };
 
@@ -189,15 +191,12 @@ mod fee_tests {
         }
     }
 
-    fn dummy_js_transfer() -> JsTransfer {
-        JsTransfer {
-            recipient: JsGenericAddress {
-                is_pubkey: false,
-                data: "0x0000000000000000000000000000000000000000".to_string(),
-            },
+    fn dummy_js_transfer_request() -> JsTransferRequest {
+        JsTransferRequest {
+            recipient: "0x0000000000000000000000000000000000000000".to_string(),
             token_index: 0,
             amount: "0".to_string(),
-            salt: "0x00".to_string(),
+            description: None,
         }
     }
 
@@ -216,9 +215,7 @@ mod fee_tests {
     #[test]
     fn test_feequote_to_jsfeequote() {
         let quote = FeeQuote {
-            beneficiary: Some(
-                U256::from_str("0x1111111111111111111111111111111111111111").unwrap(),
-            ),
+            beneficiary: "X7p9827sHEvXEePM2bLy8UQvB3Gx6FXZw65u3YFtaZE6Sm4mVYrZ7s6dAu1Sbg1Kg2b4SPHZqadsw4h3vkjdDG37A5TzZq8".parse().unwrap(),
             fee: Some(fee("100", 1)),
             collateral_fee: Some(fee("200", 2)),
         };
@@ -227,7 +224,7 @@ mod fee_tests {
 
         assert_eq!(
             js_quote.beneficiary,
-            Some("0x0000000000000000000000001111111111111111111111111111111111111111".to_string())
+           "X7p9827sHEvXEePM2bLy8UQvB3Gx6FXZw65u3YFtaZE6Sm4mVYrZ7s6dAu1Sbg1Kg2b4SPHZqadsw4h3vkjdDG37A5TzZq8",
         );
         assert_eq!(js_quote.fee.as_ref().unwrap().amount, "100");
         assert_eq!(js_quote.fee.as_ref().unwrap().token_index, 1);
@@ -238,9 +235,7 @@ mod fee_tests {
     #[test]
     fn test_blockbuilderfeeinfo_to_jsfeeinfo() {
         let info = BlockBuilderFeeInfo {
-            beneficiary: Some(
-                U256::from_str("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
-            ),
+            beneficiary: "X7p9827sHEvXEePM2bLy8UQvB3Gx6FXZw65u3YFtaZE6Sm4mVYrZ7s6dAu1Sbg1Kg2b4SPHZqadsw4h3vkjdDG37A5TzZq8".parse().unwrap(),
             registration_fee: Some(vec![fee("10", 0), fee("20", 1)]),
             non_registration_fee: None,
             registration_collateral_fee: Some(vec![fee("30", 2)]),
@@ -252,7 +247,7 @@ mod fee_tests {
 
         assert_eq!(
             js_info.beneficiary,
-            Some("0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string())
+          "X7p9827sHEvXEePM2bLy8UQvB3Gx6FXZw65u3YFtaZE6Sm4mVYrZ7s6dAu1Sbg1Kg2b4SPHZqadsw4h3vkjdDG37A5TzZq8",
         );
 
         let reg_fees = js_info.registration_fee.unwrap();
@@ -267,9 +262,9 @@ mod fee_tests {
 
     #[test]
     fn test_withdrawaltransfers_conversion_roundtrip() {
-        let js_transfer = dummy_js_transfer();
+        let js_transfer_request = dummy_js_transfer_request();
         let js_transfers = JsWithdrawalTransfers {
-            transfers: vec![js_transfer],
+            transfer_requests: vec![js_transfer_request],
             withdrawal_fee_transfer_index: Some(0),
             claim_fee_transfer_index: Some(1),
         };
@@ -280,7 +275,7 @@ mod fee_tests {
         assert_eq!(wt.claim_fee_transfer_index, Some(1));
 
         let js_back = JsWithdrawalTransfers::from(wt);
-        assert_eq!(js_back.transfers.len(), 1);
+        assert_eq!(js_back.transfer_requests.len(), 1);
         assert_eq!(js_back.withdrawal_fee_transfer_index, Some(0));
         assert_eq!(js_back.claim_fee_transfer_index, Some(1));
     }

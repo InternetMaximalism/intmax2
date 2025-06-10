@@ -1,6 +1,6 @@
-use intmax2_client_sdk::client::types::{DepositResult, TxResult};
 use intmax2_interfaces::data::{
     deposit_data::DepositData,
+    extra_data::{ExtraData, FullExtraData},
     meta_data::MetaData,
     transfer_data::TransferData,
     tx_data::TxData,
@@ -51,6 +51,7 @@ impl From<DepositData> for JsDepositData {
 pub struct JsTransferData {
     pub sender: String,
     pub transfer: JsTransfer,
+    pub extra_data: JsExtraData,
 }
 
 impl From<TransferData> for JsTransferData {
@@ -58,6 +59,7 @@ impl From<TransferData> for JsTransferData {
         Self {
             sender: transfer_data.sender.to_string(),
             transfer: transfer_data.transfer.into(),
+            extra_data: JsExtraData::from(transfer_data.extra_data),
         }
     }
 }
@@ -71,6 +73,7 @@ pub struct JsTxData {
     pub transfers: Vec<JsTransfer>,
     pub transfer_digests: Vec<String>,
     pub transfer_types: Vec<String>,
+    pub full_extra_data: Vec<JsFullExtraData>,
 }
 
 impl From<TxData> for JsTxData {
@@ -88,6 +91,11 @@ impl From<TxData> for JsTxData {
             .into_iter()
             .map(|digest| digest.to_hex())
             .collect();
+        let full_extra_data = tx_data
+            .full_extra_data
+            .into_iter()
+            .map(JsFullExtraData::from)
+            .collect();
         Self {
             tx,
             tx_index: tx_data.tx_index,
@@ -95,50 +103,45 @@ impl From<TxData> for JsTxData {
             transfers,
             transfer_digests,
             transfer_types: tx_data.transfer_types,
+            full_extra_data,
         }
     }
 }
 
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
-pub struct JsDepositResult {
-    pub deposit_data: JsDepositData,
-    pub deposit_digest: String,
-    pub backup_csv: String,
+pub struct JsFullExtraData {
+    pub payment_id: Option<String>,
+    pub description: Option<String>,
+    pub description_salt: Option<String>,
+    pub inner_salt: Option<String>,
 }
 
-impl From<DepositResult> for JsDepositResult {
-    fn from(deposit_result: DepositResult) -> Self {
+impl From<FullExtraData> for JsFullExtraData {
+    fn from(full_extra_data: FullExtraData) -> Self {
         Self {
-            deposit_data: deposit_result.deposit_data.into(),
-            deposit_digest: deposit_result.deposit_digest.to_string(),
-            backup_csv: deposit_result.backup_csv,
+            payment_id: full_extra_data.payment_id.map(|id| id.to_hex()),
+            description: full_extra_data.description,
+            description_salt: full_extra_data.description_salt.map(|salt| salt.to_hex()),
+            inner_salt: full_extra_data.inner_salt.map(|salt| salt.to_hex()),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
-pub struct JsTxResult {
-    pub tx_tree_root: String,
-    pub tx_digest: String,
-    pub tx_data: JsTxData,
-    pub transfer_data_vec: Vec<JsTransferData>,
-    pub backup_csv: String,
+pub struct JsExtraData {
+    pub payment_id: Option<String>,
+    pub description_hash: Option<String>,
+    pub inner_salt: Option<String>,
 }
 
-impl From<TxResult> for JsTxResult {
-    fn from(tx_result: TxResult) -> Self {
+impl From<ExtraData> for JsExtraData {
+    fn from(extra_data: ExtraData) -> Self {
         Self {
-            tx_tree_root: tx_result.tx_tree_root.to_hex(),
-            tx_digest: tx_result.tx_digest.to_hex(),
-            tx_data: tx_result.tx_data.into(),
-            transfer_data_vec: tx_result
-                .transfer_data_vec
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            backup_csv: tx_result.backup_csv,
+            payment_id: extra_data.payment_id.map(|id| id.to_hex()),
+            description_hash: extra_data.description_hash.map(|hash| hash.to_hex()),
+            inner_salt: extra_data.inner_salt.map(|salt| salt.to_hex()),
         }
     }
 }
