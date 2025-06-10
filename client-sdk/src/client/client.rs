@@ -51,7 +51,7 @@ use super::{
     config::ClientConfig,
     error::ClientError,
     fee_payment::{
-        quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers, CLAIM_FEE_MEMO,
+        quote_claim_fee, quote_withdrawal_fee, WithdrawalTransferRequests, CLAIM_FEE_MEMO,
         WITHDRAWAL_FEE_MEMO,
     },
     fee_proof::{generate_fee_proof, quote_transfer_fee},
@@ -206,7 +206,7 @@ pub struct TransferFeeQuote {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeQuote {
-    pub beneficiary: Option<U256>,
+    pub beneficiary: IntmaxAddress,
     pub fee: Option<Fee>,
     pub collateral_fee: Option<Fee>,
 }
@@ -912,14 +912,14 @@ impl Client {
 
     pub async fn generate_withdrawal_transfers(
         &self,
-        withdrawal_transfer: &Transfer,
+        withdrawal_transfer_request: &TransferRequest,
         fee_token_index: u32,
         with_claim_fee: bool,
-    ) -> Result<WithdrawalTransfers, ClientError> {
+    ) -> Result<WithdrawalTransferRequests, ClientError> {
         let withdrawal_transfers = generate_withdrawal_transfers(
             self.withdrawal_server.as_ref(),
             &self.withdrawal_contract,
-            withdrawal_transfer,
+            withdrawal_transfer_request,
             fee_token_index,
             with_claim_fee,
         )

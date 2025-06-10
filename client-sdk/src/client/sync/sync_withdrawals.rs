@@ -1,20 +1,20 @@
-use intmax2_interfaces::{
-    api::{
-        block_builder::interface::Fee,
-        withdrawal_server::interface::{FeeResult, WithdrawalFeeInfo},
-    },
-    data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData}, utils::key::ViewPair,
-};
-use intmax2_zkp::{
-    common::witness::{transfer_witness::TransferWitness, withdrawal_witness::WithdrawalWitness},
-    ethereum_types::{bytes32::Bytes32, u256::U256},
-};
-
 use crate::client::{
     client::Client,
     fee_payment::{consume_payment, select_unused_fees, FeeType},
     strategy::strategy::determine_withdrawals,
     sync::{balance_logic::update_send_by_receiver, utils::quote_withdrawal_claim_fee},
+};
+use intmax2_interfaces::{
+    api::{
+        block_builder::interface::Fee,
+        withdrawal_server::interface::{FeeResult, WithdrawalFeeInfo},
+    },
+    data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData},
+    utils::{address::IntmaxAddress, key::ViewPair},
+};
+use intmax2_zkp::{
+    common::witness::{transfer_witness::TransferWitness, withdrawal_witness::WithdrawalWitness},
+    ethereum_types::bytes32::Bytes32,
 };
 
 use super::error::SyncError;
@@ -27,12 +27,6 @@ impl Client {
         withdrawal_fee: &WithdrawalFeeInfo,
         fee_token_index: u32,
     ) -> Result<(), SyncError> {
-        if (withdrawal_fee.direct_withdrawal_fee.is_some()
-            || withdrawal_fee.claimable_withdrawal_fee.is_some())
-            && withdrawal_fee.beneficiary.is_none()
-        {
-            return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
-        }
         let fee_beneficiary = withdrawal_fee.beneficiary;
         let (withdrawals, pending) = determine_withdrawals(
             self.store_vault_server.as_ref(),
@@ -65,7 +59,7 @@ impl Client {
         view_pair: ViewPair,
         meta: MetaDataWithBlockNumber,
         withdrawal_data: &TransferData,
-        fee_beneficiary: Option<U256>,
+        fee_beneficiary: IntmaxAddress,
         fee_token_index: u32,
         direct_withdrawal_fee: Option<Vec<Fee>>,
         claimable_withdrawal_fee: Option<Vec<Fee>>,
@@ -120,7 +114,7 @@ impl Client {
 
         let collected_fees = match &fee {
             Some(fee) => {
-                let fee_beneficiary = fee_beneficiary.unwrap(); // already validated
+                let fee_beneficiary = fee_beneficiary.public_spend.0;
                 select_unused_fees(
                     self.store_vault_server.as_ref(),
                     self.validity_prover.as_ref(),
@@ -164,8 +158,13 @@ impl Client {
             _ => {
                 let reason = format!("fee error at the request: {fee_result:?}");
                 for used_fee in &collected_fees {
-                    consume_payment(self.store_vault_server.as_ref(), view_pair, used_fee, &reason)
-                        .await?;
+                    consume_payment(
+                        self.store_vault_server.as_ref(),
+                        view_pair,
+                        used_fee,
+                        &reason,
+                    )
+                    .await?;
                 }
                 return Err(SyncError::FeeError(format!(
                     "invalid fee at the request: {fee_result:?}"
@@ -189,7 +188,8 @@ impl Client {
         user_data.withdrawal_status.process(meta.meta);
 
         // save user data
-        self.save_user_data(view_pair, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
 
         Ok(())
     }
@@ -206,7 +206,8 @@ impl Client {
         let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         user_data.withdrawal_status.pending_digests = pending_withdrawal_digests;
         // save user data
-        self.save_user_data(view_pair, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
         Ok(())
     }
 }

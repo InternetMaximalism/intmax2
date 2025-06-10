@@ -1,6 +1,6 @@
 use intmax2_client_sdk::client::{
     client::{FeeQuote, TransferFeeQuote},
-    fee_payment::WithdrawalTransfers,
+    fee_payment::WithdrawalTransferRequests,
 };
 use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
 use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait as _};
@@ -140,11 +140,11 @@ pub struct JsWithdrawalTransfers {
     pub claim_fee_transfer_index: Option<u32>,
 }
 
-impl From<WithdrawalTransfers> for JsWithdrawalTransfers {
-    fn from(withdrawal_transfers: WithdrawalTransfers) -> Self {
+impl From<WithdrawalTransferRequests> for JsWithdrawalTransfers {
+    fn from(withdrawal_transfers: WithdrawalTransferRequests) -> Self {
         Self {
             transfers: withdrawal_transfers
-                .transfers
+                .transfer_requests
                 .into_iter()
                 .map(JsTransfer::from)
                 .collect(),
@@ -154,12 +154,12 @@ impl From<WithdrawalTransfers> for JsWithdrawalTransfers {
     }
 }
 
-impl TryFrom<JsWithdrawalTransfers> for WithdrawalTransfers {
+impl TryFrom<JsWithdrawalTransfers> for WithdrawalTransferRequests {
     type Error = JsError;
 
     fn try_from(js_withdrawal_transfers: JsWithdrawalTransfers) -> Result<Self, JsError> {
-        Ok(WithdrawalTransfers {
-            transfers: js_withdrawal_transfers
+        Ok(WithdrawalTransferRequests {
+            transfer_requests: js_withdrawal_transfers
                 .transfers
                 .into_iter()
                 .map(|t| t.try_into())
@@ -174,7 +174,7 @@ impl TryFrom<JsWithdrawalTransfers> for WithdrawalTransfers {
 mod fee_tests {
     use std::str::FromStr;
 
-    use intmax2_client_sdk::client::{client::FeeQuote, fee_payment::WithdrawalTransfers};
+    use intmax2_client_sdk::client::{client::FeeQuote, fee_payment::WithdrawalTransferRequests};
     use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
@@ -275,8 +275,8 @@ mod fee_tests {
             claim_fee_transfer_index: Some(1),
         };
 
-        let wt: WithdrawalTransfers = js_transfers.clone().try_into().unwrap();
-        assert_eq!(wt.transfers.len(), 1);
+        let wt: WithdrawalTransferRequests = js_transfers.clone().try_into().unwrap();
+        assert_eq!(wt.transfer_requests.len(), 1);
         assert_eq!(wt.withdrawal_fee_transfer_index, Some(0));
         assert_eq!(wt.claim_fee_transfer_index, Some(1));
 

@@ -131,7 +131,7 @@ impl Client {
 
             let collected_fees = match &fee {
                 Some(fee) => {
-                    let fee_beneficiary = fee_info.beneficiary.unwrap(); // already validated
+                    let fee_beneficiary = fee_info.beneficiary.public_spend.0;
                     select_unused_fees(
                         self.store_vault_server.as_ref(),
                         self.validity_prover.as_ref(),

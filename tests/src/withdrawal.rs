@@ -82,7 +82,7 @@ pub async fn single_withdrawal(
         .generate_withdrawal_transfers(&withdrawal_transfer, fee_token_index, with_claim_fee)
         .await?;
     let payment_memos = generate_fee_payment_memo(
-        &withdrawal_transfers.transfers,
+        &withdrawal_transfers.transfer_requests,
         withdrawal_transfers.withdrawal_fee_transfer_index,
         withdrawal_transfers.claim_fee_transfer_index,
     )?;
@@ -99,7 +99,7 @@ pub async fn single_withdrawal(
             config,
             client,
             key,
-            &withdrawal_transfers.transfers,
+            &withdrawal_transfers.transfer_requests,
             &payment_memos,
             fee_token_index,
         )

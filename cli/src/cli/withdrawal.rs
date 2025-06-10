@@ -29,7 +29,7 @@ pub async fn send_withdrawal(
         .await?;
     if let Some(withdrawal_fee_index) = withdrawal_transfers.withdrawal_fee_transfer_index {
         let withdrawal_fee_transfer =
-            &withdrawal_transfers.transfers[withdrawal_fee_index as usize];
+            &withdrawal_transfers.transfer_requests[withdrawal_fee_index as usize];
         log::info!(
             "Withdrawal fee: {} #{}",
             withdrawal_fee_transfer.amount,
@@ -37,7 +37,7 @@ pub async fn send_withdrawal(
         );
     }
     if let Some(claim_fee_index) = withdrawal_transfers.claim_fee_transfer_index {
-        let claim_fee_transfer = &withdrawal_transfers.transfers[claim_fee_index as usize];
+        let claim_fee_transfer = &withdrawal_transfers.transfer_requests[claim_fee_index as usize];
         log::info!(
             "Claim fee: {} #{}",
             claim_fee_transfer.amount,
@@ -46,13 +46,13 @@ pub async fn send_withdrawal(
     }
 
     let payment_memos = generate_fee_payment_memo(
-        &withdrawal_transfers.transfers,
+        &withdrawal_transfers.transfer_requests,
         withdrawal_transfers.withdrawal_fee_transfer_index,
         withdrawal_transfers.claim_fee_transfer_index,
     )?;
     send_transfers(
         key,
-        &withdrawal_transfers.transfers,
+        &withdrawal_transfers.transfer_requests,
         payment_memos,
         fee_token_index,
         wait,
