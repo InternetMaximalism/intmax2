@@ -30,7 +30,7 @@ impl FromStr for PaymentId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_hex(s).map_err(|e| {
-            EthereumTypeError::HexParseError(format!("Failed to parse PaymentId: {}", e))
+            EthereumTypeError::HexParseError(format!("Failed to parse PaymentId: {e}"))
         })
     }
 }

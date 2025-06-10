@@ -43,8 +43,8 @@ pub enum GenericRecipient {
 impl fmt::Display for GenericRecipient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GenericRecipient::IntmaxAddress(intmax_address) => write!(f, "{}", intmax_address),
-            GenericRecipient::Address(address) => write!(f, "{}", address),
+            GenericRecipient::IntmaxAddress(intmax_address) => write!(f, "{intmax_address}"),
+            GenericRecipient::Address(address) => write!(f, "{address}"),
         }
     }
 }

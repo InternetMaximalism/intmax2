@@ -1,9 +1,13 @@
-use intmax2_client_sdk::client::{fee_payment::generate_fee_payment_memo, types::{GenericRecipient, TransferRequest}};
+use intmax2_client_sdk::client::{
+    fee_payment::generate_fee_payment_memo,
+    types::{GenericRecipient, TransferRequest},
+};
 use intmax2_interfaces::utils::key::KeyPair;
 use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
 use super::{client::get_client, error::CliError, send::send_transfers};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn send_withdrawal(
     key_pair: KeyPair,
     to: Address,

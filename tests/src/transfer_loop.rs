@@ -1,3 +1,5 @@
+use std::slice;
+
 use alloy::primitives::B256;
 use intmax2_client_sdk::{
     self,
@@ -46,7 +48,7 @@ pub async fn transfer_loop(
                 ));
             }
             let result =
-                send_transfers(config, client, key_pair, &[transfer.clone()], &[], 0).await;
+                send_transfers(config, client, key_pair, slice::from_ref(&transfer), &[], 0).await;
             match result {
                 Ok(_) => break,
                 Err(e) => {
