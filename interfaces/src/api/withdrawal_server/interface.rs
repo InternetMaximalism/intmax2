@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     api::{block_builder::interface::Fee, error::ServerError},
-    utils::key::ViewPair,
+    utils::{address::IntmaxAddress, key::ViewPair},
 };
 
 type F = GoldilocksField;
@@ -24,7 +24,7 @@ const D: usize = 2;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalFeeInfo {
-    pub beneficiary: Option<U256>,
+    pub beneficiary: IntmaxAddress,
     pub direct_withdrawal_fee: Option<Vec<Fee>>,
     pub claimable_withdrawal_fee: Option<Vec<Fee>>,
 }
@@ -32,7 +32,7 @@ pub struct WithdrawalFeeInfo {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaimFeeInfo {
-    pub beneficiary: Option<U256>,
+    pub beneficiary: IntmaxAddress,
     pub fee: Option<Vec<Fee>>,
 }
 

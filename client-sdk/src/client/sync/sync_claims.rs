@@ -30,9 +30,6 @@ impl Client {
         fee_token_index: u32,
     ) -> Result<(), SyncError> {
         let fee = quote_withdrawal_claim_fee(Some(fee_token_index), fee_info.fee.clone())?;
-        if fee.is_some() && fee_info.beneficiary.is_none() {
-            return Err(SyncError::FeeError("fee beneficiary is needed".to_string()));
-        }
         let minings = determine_claims(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),

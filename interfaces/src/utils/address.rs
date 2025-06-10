@@ -1,6 +1,6 @@
 use base58_monero::base58;
 use intmax2_zkp::ethereum_types::{u32limb_trait::U32LimbTrait, EthereumTypeError};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use tiny_keccak::{Hasher as _, Keccak};
 
 use crate::utils::{
@@ -103,7 +103,9 @@ impl AddressType {
 }
 
 /// A complete Monero typed address valid for a specific network.
-#[derive(Default, Debug, PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(
+    Default, Debug, PartialEq, Eq, Hash, Copy, Clone, SerializeDisplay, DeserializeFromStr,
+)]
 pub struct IntmaxAddress {
     pub network: Network,
     pub addr_type: AddressType,
@@ -250,25 +252,6 @@ impl FromStr for IntmaxAddress {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_bytes(&base58::decode(s)?)
-    }
-}
-
-impl Serialize for IntmaxAddress {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for IntmaxAddress {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        IntmaxAddress::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

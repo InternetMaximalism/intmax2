@@ -1,4 +1,5 @@
 use alloy::primitives::{Address, B256};
+use intmax2_interfaces::utils::key::ViewPair;
 use serde::Deserialize;
 
 pub mod api;
@@ -20,8 +21,8 @@ pub struct Env {
     pub withdrawal_contract_address: Address,
 
     pub is_faster_mining: bool,
-    pub withdrawal_beneficiary_private_key: Option<B256>,
-    pub claim_beneficiary_private_key: Option<B256>,
+    pub withdrawal_beneficiary_view_keypair: ViewPair,
+    pub claim_beneficiary_view_keypair: ViewPair,
     pub direct_withdrawal_fee: Option<String>,
     pub claimable_withdrawal_fee: Option<String>,
     pub claim_fee: Option<String>,

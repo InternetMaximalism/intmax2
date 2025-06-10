@@ -6,7 +6,8 @@ use intmax2_zkp::{
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use rand::Rng;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -17,7 +18,7 @@ pub enum Error {
     EthereumTypeError(#[from] intmax2_zkp::ethereum_types::EthereumTypeError),
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct PublicKey(pub U256);
 
 impl Default for PublicKey {
@@ -68,26 +69,7 @@ impl TryFrom<&[u8]> for PublicKey {
     }
 }
 
-impl Serialize for PublicKey {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        PublicKey::from_str(&s).map_err(serde::de::Error::custom)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct PrivateKey(pub U256);
 
 impl PrivateKey {

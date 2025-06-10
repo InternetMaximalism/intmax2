@@ -40,7 +40,7 @@ use intmax2_interfaces::{
         },
     },
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
-    utils::circuit_verifiers::CircuitVerifiers,
+    utils::{circuit_verifiers::CircuitVerifiers, key::ViewPair},
 };
 use intmax2_zkp::{
     common::{
@@ -63,8 +63,8 @@ const D: usize = 2;
 
 struct Config {
     is_faster_mining: bool,
-    withdrawal_beneficiary_key: Option<KeySet>,
-    claim_beneficiary_key: Option<KeySet>,
+    withdrawal_beneficiary_key: ViewPair,
+    claim_beneficiary_key: ViewPair,
     direct_withdrawal_fee: Option<Vec<Fee>>,
     claimable_withdrawal_fee: Option<Vec<Fee>>,
     claim_fee: Option<Vec<Fee>>,
@@ -72,37 +72,15 @@ struct Config {
 
 impl Config {
     pub fn from_env(env: &Env) -> Result<Self, WithdrawalServerError> {
-        let withdrawal_beneficiary_key = env
-            .withdrawal_beneficiary_private_key
-            .as_ref()
-            .map(|&key| privkey_to_keyset(key));
-
         let direct_withdrawal_fee = parse_optional_fee_str(&env.direct_withdrawal_fee)?;
         let claimable_withdrawal_fee: Option<Vec<Fee>> =
             parse_optional_fee_str(&env.claimable_withdrawal_fee)?;
-        if (direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some())
-            && withdrawal_beneficiary_key.is_none()
-        {
-            return Err(WithdrawalServerError::ConfigError(
-                "Withdrawal fee beneficiary is needed".to_string(),
-            ));
-        }
-
-        let claim_beneficiary_key: Option<KeySet> = env
-            .claim_beneficiary_private_key
-            .as_ref()
-            .map(|&s| privkey_to_keyset(s));
         let claim_fee: Option<Vec<Fee>> = parse_optional_fee_str(&env.claim_fee)?;
-        if claim_fee.is_some() && claim_beneficiary_key.is_none() {
-            return Err(WithdrawalServerError::ConfigError(
-                "Claim fee beneficiary is needed".to_string(),
-            ));
-        }
 
         Ok(Self {
             is_faster_mining: env.is_faster_mining,
-            withdrawal_beneficiary_key,
-            claim_beneficiary_key,
+            withdrawal_beneficiary_key: env.withdrawal_beneficiary_view_keypair,
+            claim_beneficiary_key: env.claim_beneficiary_view_keypair,
             direct_withdrawal_fee,
             claimable_withdrawal_fee,
             claim_fee,
@@ -165,7 +143,7 @@ impl WithdrawalServer {
 
     pub fn get_withdrawal_fee(&self) -> WithdrawalFeeInfo {
         WithdrawalFeeInfo {
-            beneficiary: self.config.withdrawal_beneficiary_key.map(|k| k.pubkey),
+            beneficiary: self.config.withdrawal_beneficiary_key,
             direct_withdrawal_fee: self.config.direct_withdrawal_fee.clone(),
             claimable_withdrawal_fee: self.config.claimable_withdrawal_fee.clone(),
         }
@@ -173,7 +151,7 @@ impl WithdrawalServer {
 
     pub fn get_claim_fee(&self) -> ClaimFeeInfo {
         ClaimFeeInfo {
-            beneficiary: self.config.claim_beneficiary_key.map(|k| k.pubkey),
+            beneficiary: self.config.claim_beneficiary_key,
             fee: self.config.claim_fee.clone(),
         }
     }
