@@ -3,17 +3,29 @@ use alloy::{
     providers::Provider,
 };
 use intmax2_client_sdk::{
-    client::{client::Client, key_from_eth::generate_intmax_account_from_eth_key},
+    client::client::Client,
     external_api::{
-        contract::utils::{get_address_from_private_key, NormalProvider},
+        contract::{
+            convert::convert_b256_to_bytes32,
+            utils::{get_address_from_private_key, NormalProvider},
+        },
         indexer::IndexerClient,
     },
 };
-use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
+use intmax2_interfaces::{
+    api::indexer::interface::IndexerClientInterface,
+    utils::{
+        address::IntmaxAddress,
+        key::{KeyPair, ViewPair},
+        key_derivation::{derive_keypair_from_spend_key, derive_spend_key_from_bytes32},
+    },
 };
+use intmax2_zkp::ethereum_types::u256::U256;
+
+pub fn get_keypair_from_eth_key(eth_private_key: B256) -> KeyPair {
+    let spend_key = derive_spend_key_from_bytes32(convert_b256_to_bytes32(eth_private_key));
+    derive_keypair_from_spend_key(spend_key, false)
+}
 
 pub async fn calculate_balance_with_gas_deduction(
     provider: &NormalProvider,
@@ -35,8 +47,8 @@ pub async fn calculate_balance_with_gas_deduction(
     Ok(new_balance)
 }
 
-pub async fn get_balance_on_intmax(client: &Client, key: KeySet) -> anyhow::Result<U256> {
-    let balance = client.get_user_data(key).await?.balances();
+pub async fn get_balance_on_intmax(client: &Client, view_pair: ViewPair) -> anyhow::Result<U256> {
+    let balance = client.get_user_data(view_pair).await?.balances();
     let eth_balance = balance.0.get(&0).map_or(U256::default(), |b| b.amount);
     Ok(eth_balance)
 }
@@ -48,8 +60,8 @@ pub async fn get_block_builder_url(indexer_url: &str) -> anyhow::Result<String> 
 }
 
 pub async fn print_info(client: &Client, eth_private_key: B256) -> anyhow::Result<()> {
-    let key = generate_intmax_account_from_eth_key(eth_private_key);
-    client.sync(key).await?;
+    let key_pair = get_keypair_from_eth_key(eth_private_key);
+    client.sync(key_pair.into()).await?;
 
     let eth_address = get_address_from_private_key(eth_private_key);
     let eth_balance = client
@@ -59,8 +71,9 @@ pub async fn print_info(client: &Client, eth_private_key: B256) -> anyhow::Resul
         .await?;
     println!("ETH Address: {eth_address}");
     println!("ETH Balance: {eth_balance}");
-    let balance = get_balance_on_intmax(client, key).await?;
-    println!("Intmax Address: {}", key.pubkey.to_hex());
+    let balance = get_balance_on_intmax(client, key_pair.into()).await?;
+    let intmax_address = IntmaxAddress::from_keypair(client.config.network, &key_pair);
+    println!("Intmax Address: {intmax_address}");
     println!("Intmax Balance: {balance}");
     Ok(())
 }

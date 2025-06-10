@@ -4,7 +4,6 @@ use chrono::{Local, TimeZone as _, Utc};
 use intmax2_client_sdk::{
     client::{
         client::Client,
-        key_from_eth::generate_intmax_account_from_eth_key,
         strategy::mining::{Mining, MiningStatus},
     },
     external_api::{
@@ -15,10 +14,9 @@ use intmax2_client_sdk::{
         utils::time::sleep_for,
     },
 };
-use intmax2_interfaces::api::withdrawal_server::interface::ClaimStatus;
+use intmax2_interfaces::{api::withdrawal_server::interface::ClaimStatus, utils::key::ViewPair};
 use intmax2_zkp::{
     circuits::claim::utils::get_mining_deposit_nullifier,
-    common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u256::U256},
 };
 use num_bigint::BigUint;
@@ -26,7 +24,7 @@ use num_bigint::BigUint;
 use crate::{
     config::TestConfig,
     deposit::single_deposit,
-    utils::{calculate_balance_with_gas_deduction, print_info},
+    utils::{calculate_balance_with_gas_deduction, get_keypair_from_eth_key, print_info},
     withdrawal::single_withdrawal,
 };
 
@@ -40,7 +38,7 @@ pub async fn mining_loop(
     let deposit_amount: U256 = BigUint::from(10u32).pow(17).try_into().unwrap();
 
     let recipient = convert_address_to_intmax(get_address_from_private_key(eth_private_key));
-    let key = generate_intmax_account_from_eth_key(eth_private_key);
+    let key_pair = get_keypair_from_eth_key(eth_private_key);
 
     loop {
         let depositor = get_address_from_private_key(eth_private_key);
@@ -64,7 +62,8 @@ pub async fn mining_loop(
             .context("Failed to perform deposit")?;
         log::info!("Deposit completed",);
 
-        let mining_info = get_mining_info(client, key, deposit_data.pubkey_salt_hash).await?;
+        let mining_info =
+            get_mining_info(client, key_pair.into(), deposit_data.pubkey_salt_hash).await?;
         let maturity = mining_info.maturity.ok_or(anyhow::anyhow!(
             "No maturity found for the corresponding mining info"
         ))?;
@@ -86,7 +85,8 @@ pub async fn mining_loop(
                     retry
                 ));
             }
-            let mining_info = get_mining_info(client, key, deposit_data.pubkey_salt_hash).await?;
+            let mining_info =
+                get_mining_info(client, key_pair.into(), deposit_data.pubkey_salt_hash).await?;
             if matches!(mining_info.status, MiningStatus::Claimable(_)) {
                 break;
             }
@@ -104,7 +104,9 @@ pub async fn mining_loop(
         log::info!("Withdrawal completed");
 
         let fee_info = client.withdrawal_server.get_claim_fee().await?;
-        client.sync_claims(key, recipient, &fee_info, 0).await?;
+        client
+            .sync_claims(key_pair.into(), recipient, &fee_info, 0)
+            .await?;
         log::info!(
             "Claim synced, sleep for {} seconds",
             config.claim_check_wait_time
@@ -123,7 +125,7 @@ pub async fn mining_loop(
                     retries
                 ));
             }
-            let claim_info = client.get_claim_info(key).await?;
+            let claim_info = client.get_claim_info(key_pair.into()).await?;
             let corresponding_claim_info = claim_info
                 .iter()
                 .find(|w| w.claim.nullifier == nullifier)
@@ -148,10 +150,10 @@ pub async fn mining_loop(
 
 async fn get_mining_info(
     client: &Client,
-    key: KeySet,
+    view_pair: ViewPair,
     pubkey_salt_hash: Bytes32,
 ) -> anyhow::Result<Mining> {
-    let mining_info = client.get_mining_list(key).await?;
+    let mining_info = client.get_mining_list(view_pair).await?;
     let corresponding_mining_info = mining_info
         .into_iter()
         .find(|info| info.deposit_data.pubkey_salt_hash == pubkey_salt_hash)

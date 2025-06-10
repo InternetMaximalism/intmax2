@@ -1,5 +1,7 @@
 use super::utils::query::post_request;
-use crate::external_api::contract::{convert::convert_b256_to_bytes32, utils::get_address_from_private_key};
+use crate::external_api::contract::{
+    convert::convert_b256_to_bytes32, utils::get_address_from_private_key,
+};
 use alloy::{
     primitives::{Address, B256},
     signers::{
@@ -12,13 +14,16 @@ use alloy::{
     },
 };
 use async_trait::async_trait;
-use intmax2_interfaces::{api::{
-    error::ServerError,
-    wallet_key_vault::{
-        interface::WalletKeyVaultClientInterface,
-        types::{ChallengeRequest, ChallengeResponse, LoginRequest, LoginResponse},
+use intmax2_interfaces::{
+    api::{
+        error::ServerError,
+        wallet_key_vault::{
+            interface::WalletKeyVaultClientInterface,
+            types::{ChallengeRequest, ChallengeResponse, LoginRequest, LoginResponse},
+        },
     },
-}, utils::{key::PrivateKey, key_derivation::derive_spend_key_from_bytes32}};
+    utils::{key::PrivateKey, key_derivation::derive_spend_key_from_bytes32},
+};
 use sha2::Digest;
 
 #[derive(Debug, Clone)]
@@ -144,13 +149,10 @@ pub fn mnemonic_to_spend_key(
 
 #[cfg(test)]
 mod tests {
-
-    use alloy::primitives::B256;
-    use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
-
     use crate::external_api::{
         contract::utils::get_address_from_private_key, wallet_key_vault::mnemonic_to_spend_key,
     };
+    use alloy::primitives::B256;
 
     fn get_client() -> super::WalletKeyVaultClient {
         let base_url = std::env::var("WALLET_KEY_VAULT_BASE_URL")
@@ -173,10 +175,10 @@ mod tests {
             .get_mnemonic(private_key, hashed_signature)
             .await
             .unwrap();
-        let keyset = mnemonic_to_spend_key(&mnemonic, 0, 0);
+        let private_key = mnemonic_to_spend_key(&mnemonic, 0, 0);
         // dev environment
         assert_eq!(
-            keyset.privkey.to_hex(),
+            private_key.to_string(),
             "0x03d97b592378ca1f7877087494f08fea97eeaea0a5ae65b3ea52c563370cb550"
         );
     }

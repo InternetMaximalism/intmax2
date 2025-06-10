@@ -1,14 +1,14 @@
 use crate::{
     config::TestConfig,
     send::send_transfers,
-    utils::{get_balance_on_intmax, get_block_builder_url},
+    utils::{get_balance_on_intmax, get_block_builder_url, get_keypair_from_eth_key},
 };
 use alloy::{primitives::B256, providers::Provider as _};
 use anyhow::Context;
 use intmax2_client_sdk::{
     client::{
-        client::Client, fee_payment::generate_fee_payment_memo,
-        key_from_eth::generate_intmax_account_from_eth_key,
+        client::{Client, GenericRecipient, TransferRequest},
+        fee_payment::generate_fee_payment_memo,
     },
     external_api::{
         contract::{
@@ -20,7 +20,7 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::api::withdrawal_server::interface::WithdrawalStatus;
 use intmax2_zkp::{
-    common::{salt::Salt, transfer::Transfer, withdrawal::get_withdrawal_nullifier},
+    common::withdrawal::get_withdrawal_nullifier,
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use std::time::Duration;
@@ -32,8 +32,10 @@ pub async fn single_withdrawal(
     with_claim_fee: bool,
     wait_for_completion: bool,
 ) -> anyhow::Result<()> {
-    let key = generate_intmax_account_from_eth_key(eth_private_key);
-    let intmax_balance = get_balance_on_intmax(client, key).await?;
+    let key_pair = get_keypair_from_eth_key(eth_private_key);
+    let spend_pub = key_pair.spend.to_public_key();
+
+    let intmax_balance = get_balance_on_intmax(client, key_pair.into()).await?;
     let ethereum_address = get_address_from_private_key(eth_private_key);
     let fee_token_index = 0;
 
@@ -41,7 +43,7 @@ pub async fn single_withdrawal(
 
     // fetch transfer fee
     let transfer_fee_quote = client
-        .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
+        .quote_transfer_fee(&block_builder_url, spend_pub.0, fee_token_index)
         .await?;
     let transfer_fee = transfer_fee_quote
         .fee
@@ -72,11 +74,11 @@ pub async fn single_withdrawal(
     log::info!(
         "Withdrawal amount: {withdrawal_amount}, transfer fee: {transfer_fee}, withdraw fee: {withdraw_fee}, claim fee: {claim_fee}"
     );
-    let withdrawal_transfer = Transfer {
-        recipient: convert_address_to_intmax(ethereum_address).into(),
+    let withdrawal_transfer = TransferRequest {
+        recipient: GenericRecipient::Address(convert_address_to_intmax(ethereum_address)),
         token_index: 0,
         amount: withdrawal_amount,
-        salt: Salt::rand(&mut rand::thread_rng()),
+        description: None,
     };
     let withdrawal_transfers = client
         .generate_withdrawal_transfers(&withdrawal_transfer, fee_token_index, with_claim_fee)
@@ -88,7 +90,7 @@ pub async fn single_withdrawal(
     )?;
 
     let mut retries = 0;
-    loop {
+    let withdrawal_transfer_data = loop {
         if retries >= config.tx_resend_retries {
             return Err(anyhow::anyhow!(
                 "Failed to send withdrawal after {} retries",
@@ -98,14 +100,14 @@ pub async fn single_withdrawal(
         let result = send_transfers(
             config,
             client,
-            key,
+            key_pair,
             &withdrawal_transfers.transfer_requests,
             &payment_memos,
             fee_token_index,
         )
         .await;
         match result {
-            Ok(_) => break,
+            Ok(result) => break result.transfer_data_vec[0].clone(),
             Err(e) => {
                 log::warn!("Failed to send withdrawal: {e}");
             }
@@ -113,12 +115,12 @@ pub async fn single_withdrawal(
         log::warn!("Retrying...");
         sleep_for(config.tx_resend_interval).await;
         retries += 1;
-    }
+    };
 
     // execute withdrawal
     let withdrawal_fee_info = client.withdrawal_server.get_withdrawal_fee().await?;
     client
-        .sync_withdrawals(key, &withdrawal_fee_info, fee_token_index)
+        .sync_withdrawals(key_pair.into(), &withdrawal_fee_info, fee_token_index)
         .await
         .context("Failed to sync withdrawals")?;
     if !wait_for_completion {
@@ -126,7 +128,7 @@ pub async fn single_withdrawal(
         return Ok(());
     }
 
-    let nullifier = get_withdrawal_nullifier(&withdrawal_transfer);
+    let nullifier = get_withdrawal_nullifier(&withdrawal_transfer_data.transfer);
     let mut retries = 0;
     loop {
         if retries >= config.withdrawal_check_retries {
@@ -136,7 +138,7 @@ pub async fn single_withdrawal(
             ));
         }
         let withdrawal_info = client
-            .get_withdrawal_info(key)
+            .get_withdrawal_info(key_pair.into())
             .await
             .context("Failed to get withdrawal info")?;
         let corresponding_withdrawal_info = withdrawal_info
