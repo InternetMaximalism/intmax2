@@ -2,16 +2,22 @@ use alloy::{
     primitives::{utils::parse_ether, B256},
     providers::Provider,
 };
-use intmax2_client_sdk::external_api::{
-    contract::{
-        block_builder_registry::BlockBuilderRegistryContract,
-        convert::{convert_address_to_alloy, convert_address_to_intmax, convert_u256_to_intmax},
-        rollup_contract::RollupContract,
-        utils::{get_address_from_private_key, NormalProvider},
+use intmax2_client_sdk::{
+    client::config::network_from_env,
+    external_api::{
+        contract::{
+            block_builder_registry::BlockBuilderRegistryContract,
+            convert::{
+                convert_address_to_alloy, convert_address_to_intmax, convert_b256_to_bytes32,
+                convert_u256_to_intmax,
+            },
+            rollup_contract::RollupContract,
+            utils::{get_address_from_private_key, NormalProvider},
+        },
+        s3_store_vault::S3StoreVaultClient,
+        store_vault_server::StoreVaultServerClient,
+        validity_prover::ValidityProverClient,
     },
-    s3_store_vault::S3StoreVaultClient,
-    store_vault_server::StoreVaultServerClient,
-    validity_prover::ValidityProverClient,
 };
 use intmax2_interfaces::{
     api::{
@@ -19,7 +25,11 @@ use intmax2_interfaces::{
         store_vault_server::interface::StoreVaultClientInterface,
         validity_prover::interface::{AccountInfo, ValidityProverClientInterface},
     },
-    utils::address::IntmaxAddress,
+    utils::{
+        address::IntmaxAddress,
+        key_derivation::{derive_keypair_from_spend_key, derive_spend_key_from_bytes32},
+        network::Network,
+    },
 };
 use intmax2_zkp::{
     common::{
@@ -46,6 +56,7 @@ pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub network: Network,
     pub block_builder_url: String,
     pub block_builder_private_key: B256,
     pub block_builder_address: Address,
@@ -145,16 +156,18 @@ impl BlockBuilder {
                 "Collateral fee is set but fee is not set".to_string(),
             ));
         }
-
+        let network = network_from_env();
         let beneficiary = env.beneficiary.unwrap_or_else(|| {
-            // generate from eth private key
-            // let key = generate_intmax_account_from_eth_key(env.block_builder_private_key);
-            // todo
-            todo!("Implement beneficiary address generation from eth private key");
+            let spend_key = derive_spend_key_from_bytes32(convert_b256_to_bytes32(
+                env.block_builder_private_key,
+            ));
+            let key_pair = derive_keypair_from_spend_key(spend_key, false);
+            IntmaxAddress::from_keypair(network, &key_pair)
         });
         let block_builder_address =
             convert_address_to_intmax(get_address_from_private_key(env.block_builder_private_key));
         // log configuration
+        log::info!("network: {}", network);
         log::info!("block_builder_address: {block_builder_address}");
         log::info!("block_builder_url: {}", env.block_builder_url);
         log::info!(
@@ -166,6 +179,7 @@ impl BlockBuilder {
         log::info!("use_collateral_fee: {use_collateral_fee}");
         log::info!("beneficiary: {beneficiary}");
         let config = Config {
+            network,
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
             block_builder_address,

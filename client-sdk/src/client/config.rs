@@ -28,11 +28,15 @@ impl Default for ClientConfig {
     }
 }
 
-pub fn network_from_env() -> Network {
-    match get_env_type() {
+pub fn env_type_to_network(env_type: EnvType) -> Network {
+    match env_type {
         EnvType::Local => Network::Testnet,
         EnvType::Dev => Network::Testnet,
         EnvType::Staging => Network::Stagenet,
         EnvType::Prod => Network::Mainnet,
     }
+}
+
+pub fn network_from_env() -> Network {
+    env_type_to_network(get_env_type())
 }
