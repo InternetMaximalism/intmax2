@@ -1,3 +1,5 @@
+use std::{fmt, str::FromStr};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -46,6 +48,29 @@ impl Network {
             246 | 247 => Ok(Network::Mainnet),
             192 | 193 => Ok(Network::Stagenet),
             180 | 181 => Ok(Network::Testnet),
+            _ => Err(Error::InvalidMagicByte),
+        }
+    }
+}
+
+impl fmt::Display for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Network::Mainnet => write!(f, "mainnet"),
+            Network::Stagenet => write!(f, "stagenet"),
+            Network::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+impl FromStr for Network {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "mainnet" => Ok(Network::Mainnet),
+            "stagenet" => Ok(Network::Stagenet),
+            "testnet" => Ok(Network::Testnet),
             _ => Err(Error::InvalidMagicByte),
         }
     }

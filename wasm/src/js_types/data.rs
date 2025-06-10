@@ -56,7 +56,7 @@ pub struct JsTransferData {
 impl From<TransferData> for JsTransferData {
     fn from(transfer_data: TransferData) -> Self {
         Self {
-            sender: transfer_data.sender.to_hex(),
+            sender: transfer_data.sender.to_string(),
             transfer: transfer_data.transfer.into(),
         }
     }

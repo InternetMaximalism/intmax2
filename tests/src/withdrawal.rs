@@ -7,8 +7,9 @@ use alloy::{primitives::B256, providers::Provider as _};
 use anyhow::Context;
 use intmax2_client_sdk::{
     client::{
-        client::{Client, GenericRecipient, TransferRequest},
+        client::Client,
         fee_payment::generate_fee_payment_memo,
+        types::{GenericRecipient, TransferRequest},
     },
     external_api::{
         contract::{

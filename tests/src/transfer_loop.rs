@@ -1,7 +1,10 @@
 use alloy::primitives::B256;
 use intmax2_client_sdk::{
     self,
-    client::client::{Client, GenericRecipient, TransferRequest},
+    client::{
+        client::Client,
+        types::{GenericRecipient, TransferRequest},
+    },
     external_api::utils::time::sleep_for,
 };
 use intmax2_interfaces::utils::address::IntmaxAddress;

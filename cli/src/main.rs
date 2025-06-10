@@ -22,10 +22,7 @@ use intmax2_cli::{
     },
     format::{format_token_info, privkey_to_keypair},
 };
-use intmax2_client_sdk::client::{
-    client::{GenericRecipient, TransferRequest},
-    config::network_from_env,
-};
+use intmax2_client_sdk::client::{config::network_from_env, types::{GenericRecipient, TransferRequest}};
 use intmax2_interfaces::utils::{
     address::IntmaxAddress,
     key::{KeyPair, ViewPair},

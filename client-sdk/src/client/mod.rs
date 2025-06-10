@@ -12,3 +12,4 @@ pub mod receipt;
 pub mod receive_validation;
 pub mod strategy;
 pub mod sync;
+pub mod types;

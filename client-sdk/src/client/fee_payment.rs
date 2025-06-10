@@ -15,16 +15,11 @@ use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait as _};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    client::{
-        client::{GenericRecipient, TransferRequest},
-        misc::payment_memo::PaymentMemo,
-        receive_validation::validate_receive,
-    },
+    client::{misc::payment_memo::PaymentMemo, receive_validation::validate_receive, types::{GenericRecipient, PaymentMemoEntry, TransferRequest}},
     external_api::contract::withdrawal_contract::WithdrawalContract,
 };
 
 use super::{
-    client::PaymentMemoEntry,
     misc::payment_memo::{get_all_payment_memos, payment_memo_topic},
     receive_validation::ReceiveValidationError,
     sync::{error::SyncError, utils::quote_withdrawal_claim_fee},

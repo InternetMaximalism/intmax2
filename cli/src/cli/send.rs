@@ -1,8 +1,5 @@
 use intmax2_client_sdk::{
-    client::{
-        client::{PaymentMemoEntry, TransferRequest},
-        strategy::tx_status::TxStatus,
-    },
+    client::{strategy::tx_status::TxStatus, types::{PaymentMemoEntry, TransferRequest}},
     external_api::{indexer::IndexerClient, utils::time::sleep_for},
 };
 use intmax2_interfaces::{api::indexer::interface::IndexerClientInterface, utils::key::KeyPair};

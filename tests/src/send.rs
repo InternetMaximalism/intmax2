@@ -2,8 +2,9 @@ use crate::{config::TestConfig, utils::get_block_builder_url};
 use anyhow::Context as _;
 use intmax2_client_sdk::{
     client::{
-        client::{Client, PaymentMemoEntry, TransferRequest, TxResult},
+        client::Client,
         strategy::tx_status::TxStatus,
+        types::{PaymentMemoEntry, TransferRequest, TxResult},
     },
     external_api::utils::time::sleep_for,
 };
