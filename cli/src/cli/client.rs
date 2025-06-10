@@ -1,7 +1,10 @@
 use std::{path::PathBuf, sync::Arc};
 
 use intmax2_client_sdk::{
-    client::{client::Client, config::ClientConfig},
+    client::{
+        client::Client,
+        config::{network_from_env, ClientConfig},
+    },
     external_api::{
         balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
@@ -97,8 +100,10 @@ pub fn get_client() -> Result<Client, CliError> {
         l2_provider,
         convert_address_to_alloy(env.withdrawal_contract_address),
     );
+    let network = network_from_env();
 
     let config = ClientConfig {
+        network,
         deposit_timeout: env.deposit_timeout,
         tx_timeout: env.tx_timeout,
         block_builder_query_wait_time: env.block_builder_query_wait_time,

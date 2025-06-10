@@ -7,9 +7,10 @@ use intmax2_interfaces::{
         deposit_data::DepositData, meta_data::MetaData, transfer_data::TransferData,
         tx_data::TxData,
     },
+    utils::{address::IntmaxAddress, key::ViewPair, network::Network},
 };
 use intmax2_zkp::{
-    common::{signature_content::key_set::KeySet, transfer::Transfer},
+    common::transfer::Transfer,
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
 };
 
@@ -18,7 +19,7 @@ use crate::cli::client::get_client;
 use super::error::CliError;
 
 pub async fn history(
-    key: KeySet,
+    view_pair: ViewPair,
     order: CursorOrder,
     from_timestamp: Option<u64>,
 ) -> Result<(), CliError> {
@@ -32,9 +33,9 @@ pub async fn history(
     };
 
     let client = get_client()?;
-    let (deposit_history, _) = client.fetch_deposit_history(key, &cursor).await?;
-    let (transfer_history, _) = client.fetch_transfer_history(key, &cursor).await?;
-    let (tx_history, _) = client.fetch_tx_history(key, &cursor).await?;
+    let (deposit_history, _) = client.fetch_deposit_history(view_pair, &cursor).await?;
+    let (transfer_history, _) = client.fetch_transfer_history(view_pair, &cursor).await?;
+    let (tx_history, _) = client.fetch_tx_history(view_pair, &cursor).await?;
 
     let mut history: Vec<HistoryEum> = Vec::new();
     for entry in deposit_history {
@@ -70,7 +71,7 @@ pub async fn history(
 
     println!("History:");
     for entry in history {
-        print_history_entry(&entry)?;
+        print_history_entry(client.config.network, &entry)?;
         println!();
     }
     Ok(())
@@ -127,7 +128,7 @@ enum HistoryEum {
     },
 }
 
-fn print_history_entry(entry: &HistoryEum) -> Result<(), CliError> {
+fn print_history_entry(network: Network, entry: &HistoryEum) -> Result<(), CliError> {
     match entry {
         HistoryEum::Deposit {
             deposit,
@@ -177,7 +178,12 @@ fn print_history_entry(entry: &HistoryEum) -> Result<(), CliError> {
             );
             println!("  Digest: {}", meta.digest);
             println!("  Status: {}", format_status(status));
-            println!("  From: {}", transfer.sender.to_hex().yellow());
+            println!(
+                "  From: {}",
+                IntmaxAddress::from_public_keypair(network, &transfer.sender)
+                    .to_string()
+                    .yellow()
+            );
             println!(
                 "  Token Index: {}",
                 transfer.transfer.token_index.to_string().white()

@@ -1,6 +1,6 @@
 use crate::env_var::EnvVar;
 use intmax2_client_sdk::external_api::local_backup_store_vault::local_store_vault::LocalStoreVaultClient;
-use intmax2_zkp::common::signature_content::key_set::KeySet;
+use intmax2_interfaces::utils::key::ViewPair;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -19,10 +19,14 @@ pub fn incorporate_backup(file_path: &Path) -> Result<(), CliError> {
     Ok(())
 }
 
-pub async fn make_history_backup(key: KeySet, dir: &Path, from: u64) -> Result<(), CliError> {
+pub async fn make_history_backup(
+    view_pair: ViewPair,
+    dir: &Path,
+    from: u64,
+) -> Result<(), CliError> {
     let client = get_client()?;
     let csvs = client
-        .make_history_backup(key, from, BACKUP_CHUNK_SIZE)
+        .make_history_backup(view_pair, from, BACKUP_CHUNK_SIZE)
         .await?;
     for csv_str in csvs.iter() {
         let id = Uuid::new_v4().to_string()[..8].to_string();

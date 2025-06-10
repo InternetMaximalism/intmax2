@@ -1,23 +1,22 @@
 use colored::Colorize;
 use intmax2_client_sdk::client::misc::payment_memo::get_all_payment_memos;
-use intmax2_interfaces::data::deposit_data::TokenType;
+use intmax2_interfaces::{data::deposit_data::TokenType, utils::key::ViewPair};
 use intmax2_zkp::{
-    common::{signature_content::key_set::KeySet, trees::asset_tree::AssetLeaf},
-    ethereum_types::u32limb_trait::U32LimbTrait,
+    common::trees::asset_tree::AssetLeaf, ethereum_types::u32limb_trait::U32LimbTrait,
 };
 
 use crate::cli::{client::get_client, history::format_timestamp};
 
 use super::error::CliError;
 
-pub async fn balance(key: KeySet, sync: bool) -> Result<(), CliError> {
+pub async fn balance(view_pair: ViewPair, sync: bool) -> Result<(), CliError> {
     let client = get_client()?;
     let balances = if sync {
-        client.sync(key).await?;
-        let user_data = client.get_user_data(key).await?;
+        client.sync(view_pair).await?;
+        let user_data = client.get_user_data(view_pair).await?;
         user_data.balances()
     } else {
-        client.get_balances_without_sync(key).await?
+        client.get_balances_without_sync(view_pair).await?
     };
     let mut balances: Vec<(u32, AssetLeaf)> = balances.0.into_iter().collect();
     balances.sort_by_key(|(i, _leaf)| *i);
@@ -47,9 +46,9 @@ pub async fn balance(key: KeySet, sync: bool) -> Result<(), CliError> {
     Ok(())
 }
 
-pub async fn withdrawal_status(key: KeySet) -> Result<(), CliError> {
+pub async fn withdrawal_status(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let withdrawal_info = client.get_withdrawal_info(key).await?;
+    let withdrawal_info = client.get_withdrawal_info(view_pair).await?;
     println!("Withdrawal status:");
     for (i, withdrawal_info) in withdrawal_info.iter().enumerate() {
         let withdrawal = withdrawal_info.contract_withdrawal.clone();
@@ -69,9 +68,9 @@ pub async fn withdrawal_status(key: KeySet) -> Result<(), CliError> {
     Ok(())
 }
 
-pub async fn mining_list(key: KeySet) -> Result<(), CliError> {
+pub async fn mining_list(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let minings = client.get_mining_list(key).await?;
+    let minings = client.get_mining_list(view_pair).await?;
     println!("Mining list:");
     for (i, mining) in minings.iter().enumerate() {
         let block_number = mining
@@ -87,9 +86,9 @@ pub async fn mining_list(key: KeySet) -> Result<(), CliError> {
     Ok(())
 }
 
-pub async fn claim_status(key: KeySet) -> Result<(), CliError> {
+pub async fn claim_status(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let claim_info = client.get_claim_info(key).await?;
+    let claim_info = client.get_claim_info(view_pair).await?;
     println!("Claim status:");
     for (i, claim_info) in claim_info.iter().enumerate() {
         let claim = claim_info.claim.clone();
@@ -113,10 +112,10 @@ pub async fn check_validity_prover() -> Result<(), CliError> {
     Ok(())
 }
 
-pub async fn get_payment_memos(key: KeySet, name: &str) -> Result<(), CliError> {
+pub async fn get_payment_memos(view_pair: ViewPair, name: &str) -> Result<(), CliError> {
     let client = get_client()?;
     let payment_memos =
-        get_all_payment_memos(client.store_vault_server.as_ref(), key, name).await?;
+        get_all_payment_memos(client.store_vault_server.as_ref(), view_pair.view, name).await?;
     println!("Payment memos:");
     for (i, memo) in payment_memos.iter().enumerate() {
         println!(
@@ -130,9 +129,9 @@ pub async fn get_payment_memos(key: KeySet, name: &str) -> Result<(), CliError> 
     Ok(())
 }
 
-pub async fn get_user_data(key: KeySet) -> Result<(), CliError> {
+pub async fn get_user_data(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let user_data = client.get_user_data(key).await?;
+    let user_data = client.get_user_data(view_pair).await?;
     println!(
         "{}: {:?}\n",
         "Nullifiers".bright_magenta(),

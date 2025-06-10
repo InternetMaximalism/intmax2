@@ -1,15 +1,14 @@
 use intmax2_client_sdk::client::{
-    fee_payment::generate_fee_payment_memo, sync::utils::generate_salt,
+    client::{GenericRecipient, TransferRequest},
+    fee_payment::generate_fee_payment_memo,
 };
-use intmax2_zkp::{
-    common::{signature_content::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{address::Address, u256::U256},
-};
+use intmax2_interfaces::utils::key::KeyPair;
+use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
 use super::{client::get_client, error::CliError, send::send_transfers};
 
 pub async fn send_withdrawal(
-    key: KeySet,
+    key_pair: KeyPair,
     to: Address,
     amount: U256,
     token_index: u32,
@@ -18,14 +17,14 @@ pub async fn send_withdrawal(
     wait: bool,
 ) -> Result<(), CliError> {
     let client = get_client()?;
-    let withdrawal_transfer = Transfer {
-        recipient: to.into(),
+    let withdrawal_transfer_req = TransferRequest {
+        recipient: GenericRecipient::Address(to),
         token_index,
         amount,
-        salt: generate_salt(),
+        description: None,
     };
     let withdrawal_transfers = client
-        .generate_withdrawal_transfers(&withdrawal_transfer, fee_token_index, with_claim_fee)
+        .generate_withdrawal_transfers(&withdrawal_transfer_req, fee_token_index, with_claim_fee)
         .await?;
     if let Some(withdrawal_fee_index) = withdrawal_transfers.withdrawal_fee_transfer_index {
         let withdrawal_fee_transfer =
@@ -51,7 +50,7 @@ pub async fn send_withdrawal(
         withdrawal_transfers.claim_fee_transfer_index,
     )?;
     send_transfers(
-        key,
+        key_pair,
         &withdrawal_transfers.transfer_requests,
         payment_memos,
         fee_token_index,

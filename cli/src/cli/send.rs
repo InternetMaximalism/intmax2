@@ -1,13 +1,12 @@
 use intmax2_client_sdk::{
-    client::{client::PaymentMemoEntry, strategy::tx_status::TxStatus},
+    client::{
+        client::{PaymentMemoEntry, TransferRequest},
+        strategy::tx_status::TxStatus,
+    },
     external_api::{indexer::IndexerClient, utils::time::sleep_for},
 };
-use intmax2_interfaces::api::indexer::interface::IndexerClientInterface;
-use intmax2_zkp::{
-    common::{signature_content::key_set::KeySet, transfer::Transfer},
-    constants::NUM_TRANSFERS_IN_TX,
-    ethereum_types::u32limb_trait::U32LimbTrait,
-};
+use intmax2_interfaces::{api::indexer::interface::IndexerClientInterface, utils::key::KeyPair};
+use intmax2_zkp::constants::NUM_TRANSFERS_IN_TX;
 
 use crate::{cli::client::get_client, env_var::EnvVar};
 
@@ -17,14 +16,16 @@ const TX_STATUS_POLLING_INTERVAL: u64 = 5;
 const BLOCK_SYNC_MARGIN: u64 = 30;
 
 pub async fn send_transfers(
-    key: KeySet,
-    transfers: &[Transfer],
+    key_pair: KeyPair,
+    transfer_requests: &[TransferRequest],
     payment_memos: Vec<PaymentMemoEntry>,
     fee_token_index: u32,
     wait: bool,
 ) -> Result<(), CliError> {
-    if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
-        return Err(CliError::TooManyTransfer(transfers.len()));
+    let spend_pub = key_pair.spend.to_public_key();
+
+    if transfer_requests.len() > NUM_TRANSFERS_IN_TX - 1 {
+        return Err(CliError::TooManyTransfer(transfer_requests.len()));
     }
     let env = envy::from_env::<EnvVar>()?;
     let client = get_client()?;
@@ -40,10 +41,10 @@ pub async fn send_transfers(
     log::info!("Block Builder URL: {block_builder_url}",);
 
     let fee_quote = client
-        .quote_transfer_fee(&block_builder_url, key.pubkey, fee_token_index)
+        .quote_transfer_fee(&block_builder_url, spend_pub.0, fee_token_index)
         .await?;
     if let Some(fee) = &fee_quote.fee {
-        log::info!("beneficiary: {}", fee_quote.beneficiary.unwrap().to_hex());
+        log::info!("beneficiary: {}", fee_quote.beneficiary);
         log::info!("Fee: {} (token# {})", fee.amount, fee.token_index);
     }
     if let Some(collateral_fee) = &fee_quote.collateral_fee {
@@ -56,8 +57,8 @@ pub async fn send_transfers(
     let memo = client
         .send_tx_request(
             &block_builder_url,
-            key,
-            transfers,
+            key_pair,
+            transfer_requests,
             &payment_memos,
             &fee_quote,
         )
@@ -75,7 +76,7 @@ pub async fn send_transfers(
 
     log::info!("Finalizing tx");
     let result = client
-        .finalize_tx(&block_builder_url, key, &memo, &proposal)
+        .finalize_tx(&block_builder_url, key_pair, &memo, &proposal)
         .await?;
 
     let expiry: u64 = proposal.block_sign_payload.expiry.into();
@@ -93,9 +94,7 @@ pub async fn send_transfers(
                 log::error!("tx expired");
                 break;
             }
-            let status = client
-                .get_tx_status(key.pubkey, result.tx_tree_root)
-                .await?;
+            let status = client.get_tx_status(spend_pub, result.tx_tree_root).await?;
             match status {
                 TxStatus::Pending => {
                     log::info!("tx pending");
