@@ -267,13 +267,13 @@ pub async fn collect_fee(
         let signature = fee_collection
             .signatures
             .iter()
-            .find(|s| s.pubkey == request.pubkey);
+            .find(|s| s.pubkey == request.spend_pub());
         if signature.is_some() {
             // fee will be paid
             let transfer_data = TransferData {
                 sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
                 sender_proof_set: None,
-                sender: request.pubkey,
+                sender: request.sender,
                 extra_data: ExtraData::default(),
                 tx: request.tx,
                 tx_index: proposal.tx_index,
@@ -284,12 +284,12 @@ pub async fn collect_fee(
                 transfer_merkle_proof: fee_proof.fee_transfer_witness.transfer_merkle_proof.clone(),
             };
             transfer_data_vec.push(transfer_data);
-            log::info!("sender {}'s fee is collected", request.pubkey);
+            log::info!("sender {}'s fee is collected", request.spend_pub());
         } else {
             if !fee_collection.use_collateral {
                 log::warn!(
                     "sender {} did not return the signature for the fee but collateral is not enabled",
-                    request.pubkey
+                    request.spend_pub()
                 );
                 continue;
             }
@@ -303,7 +303,7 @@ pub async fn collect_fee(
                     ))?;
 
             let transfer_data = &collateral_block.fee_transfer_data;
-            let mut pubkeys = vec![request.pubkey];
+            let mut pubkeys = vec![request.spend_pub()];
             pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
             let pubkey_hash = get_pubkey_hash(&pubkeys);
             let account_ids = request.account_id.map(|id| {
@@ -312,7 +312,7 @@ pub async fn collect_fee(
                 AccountIdPacked::pack(&account_ids)
             });
             let signature = UserSignature {
-                pubkey: request.pubkey,
+                pubkey: request.spend_pub(),
                 signature: collateral_block.signature.clone(),
             };
             let block_sign_payload = BlockSignPayload {
@@ -342,7 +342,10 @@ pub async fn collect_fee(
                 block_id: Uuid::new_v4().to_string(),
             };
             block_post_tasks.push(block_post);
-            log::warn!("sender {}'s collateral block is queued", request.pubkey);
+            log::warn!(
+                "sender {}'s collateral block is queued",
+                request.spend_pub()
+            );
         }
     }
 
