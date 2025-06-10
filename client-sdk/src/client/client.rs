@@ -25,6 +25,7 @@ use intmax2_interfaces::{
         user_data::{Balances, ProcessStatus, UserData},
     },
     utils::{
+        address::{AddressType, IntmaxAddress},
         circuit_verifiers::CircuitVerifiers,
         digest::get_digest,
         key::{KeyPair, PrivateKey, PublicKey, PublicKeyPair, ViewPair},
@@ -36,34 +37,14 @@ use intmax2_zkp::{
     circuits::validity::validity_pis::ValidityPublicInputs,
     common::{
         block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
-        generic_address::GenericAddress, salt::Salt, signature_content::key_set::KeySet,
-        transfer::Transfer, trees::transfer_tree::TransferTree, tx::Tx,
-        witness::spent_witness::SpentWitness,
+        generic_address::GenericAddress, salt::Salt, transfer::Transfer,
+        trees::transfer_tree::TransferTree, tx::Tx, witness::spent_witness::SpentWitness,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
 };
 
 use serde::{Deserialize, Serialize};
-
-use crate::{
-    client::{
-        fee_payment::generate_withdrawal_transfers,
-        receipt::generate_transfer_receipt,
-        strategy::{
-            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
-        },
-        sync::utils::generate_salt,
-    },
-    external_api::{
-        contract::{
-            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
-            withdrawal_contract::WithdrawalContract,
-        },
-        local_backup_store_vault::diff_data_client::make_backup_csv_from_entries,
-        utils::time::sleep_for,
-    },
-};
 
 use super::{
     backup::make_history_backup,
@@ -84,6 +65,24 @@ use super::{
         tx_status::{get_tx_status, TxStatus},
     },
     sync::utils::{generate_spent_witness, get_balance_proof},
+};
+use crate::{
+    client::{
+        fee_payment::generate_withdrawal_transfers,
+        receipt::generate_transfer_receipt,
+        strategy::{
+            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
+        },
+        sync::utils::generate_salt,
+    },
+    external_api::{
+        contract::{
+            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+            withdrawal_contract::WithdrawalContract,
+        },
+        local_backup_store_vault::diff_data_client::make_backup_csv_from_entries,
+        utils::time::sleep_for,
+    },
 };
 
 // Buffer time for the expiry of the block proposal
@@ -107,7 +106,7 @@ pub struct Client {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum GenericRecipient {
-    PublicKeyPair(PublicKeyPair),
+    IntmaxAddress(IntmaxAddress),
     Address(Address),
 }
 
@@ -117,15 +116,20 @@ pub struct TransferRequest {
     pub recipient: GenericRecipient,
     pub token_index: u32,
     pub amount: U256,
-    pub payment_id: Option<PaymentId>,
     pub description: Option<String>,
 }
 
 impl TransferRequest {
     pub fn to_transfer_and_full_extra_data(&self) -> (Transfer, FullExtraData) {
-        let recipient: GenericAddress = match self.recipient {
-            GenericRecipient::PublicKeyPair(pubkey_pair) => pubkey_pair.spend.0.into(),
-            GenericRecipient::Address(address) => address.into(),
+        let (recipient, payment_id): (GenericAddress, Option<PaymentId>) = match self.recipient {
+            GenericRecipient::IntmaxAddress(intmax_address) => {
+                let payment_id = match intmax_address.addr_type {
+                    AddressType::Standard => None,
+                    AddressType::Integrated(payment_id) => Some(payment_id),
+                };
+                (intmax_address.public_spend.0.into(), payment_id)
+            }
+            GenericRecipient::Address(address) => (address.into(), None),
         };
         let mut rng = default_rng();
         let description_salt = if self.description.is_some() {
@@ -133,13 +137,13 @@ impl TransferRequest {
         } else {
             None
         };
-        let inner_salt = if self.payment_id.is_some() || self.description.is_some() {
+        let inner_salt = if payment_id.is_some() || self.description.is_some() {
             Some(Salt::rand(&mut rng))
         } else {
             None
         };
         let full_extra_data = FullExtraData {
-            payment_id: self.payment_id,
+            payment_id,
             description: self.description.clone(),
             description_salt,
             inner_salt,
@@ -193,7 +197,7 @@ pub struct DepositResult {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferFeeQuote {
-    pub beneficiary: Option<PublicKeyPair>,
+    pub beneficiary: IntmaxAddress,
     pub fee: Option<Fee>,
     pub collateral_fee: Option<Fee>,
     pub block_builder_address: Address,
@@ -295,11 +299,6 @@ impl Client {
                 "transfers is too many".to_string(),
             ));
         }
-        if fee_quote.fee.is_some() && fee_quote.beneficiary.is_none() {
-            return Err(ClientError::BlockBuilderFeeError(
-                "fee_beneficiary is required".to_string(),
-            ));
-        }
         // balance check
         let mut transfer_amounts = transfer_requests
             .iter()
@@ -390,7 +389,7 @@ impl Client {
             "send_tx_request: spend pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
            spend_pub,
             transfer_requests.len(),
-            fee_quote.beneficiary.map_or("N/A".to_string(), |b| b.to_hex()),
+            fee_quote.beneficiary,
             fee_quote.fee,
             fee_quote.collateral_fee
         );
@@ -412,45 +411,39 @@ impl Client {
             .get_account_info(view_pair.spend.0)
             .await?;
         let is_registration_block = account_info.account_id.is_none();
-
-        let fee_transfer = fee_quote.fee.clone().map(|fee| Transfer {
-            recipient: fee_quote.beneficiary.unwrap().into(),
-            amount: fee.amount,
-            token_index: fee.token_index,
-            salt: generate_salt(),
-        });
-        let collateral_transfer = fee_quote.collateral_fee.clone().map(|fee| Transfer {
-            recipient: fee_quote.beneficiary.unwrap().into(),
-            amount: fee.amount,
-            token_index: fee.token_index,
-            salt: generate_salt(),
-        });
-
-        let (mut transfers, mut full_extra_data): (Vec<Transfer>, Vec<FullExtraData>) =
-            transfer_requests
-                .iter()
-                .map(|t| t.to_transfer_and_full_extra_data())
-                .unzip();
-        let mut recipients = transfer_requests
-            .iter()
-            .map(|t| t.recipient.clone())
-            .collect::<Vec<_>>();
-
-        // add fee transfer to the end
-        if let Some(fee_transfer) = fee_transfer {
-            full_extra_data.push(FullExtraData::default());
-            transfers.push(fee_transfer);
-            recipients.push(GenericRecipient::PublicKeyPair(todo!()));
+        let mut transfer_requests = transfer_requests.to_vec();
+        if let Some(fee) = &fee_quote.fee {
+            // if fee is specified, add fee transfer request
+            transfer_requests.push(TransferRequest {
+                recipient: GenericRecipient::IntmaxAddress(fee_quote.beneficiary),
+                token_index: fee.token_index,
+                amount: fee.amount,
+                description: None,
+            });
         }
-        let fee_index = if fee_transfer.is_some() {
-            Some(transfers.len() as u32 - 1)
+        let fee_index = if fee_quote.fee.is_some() {
+            // the fee transfer is the last one
+            Some(transfer_requests.len() as u32 - 1)
         } else {
             None
         };
 
+        let collateral_transfer = fee_quote.collateral_fee.clone().map(|fee| Transfer {
+            recipient: fee_quote.beneficiary.public_spend.0.into(),
+            amount: fee.amount,
+            token_index: fee.token_index,
+            salt: generate_salt(),
+        });
+        let (transfers, full_extra_data): (Vec<Transfer>, Vec<FullExtraData>) = transfer_requests
+            .iter()
+            .map(|t| t.to_transfer_and_full_extra_data())
+            .unzip();
+        let recipients = transfer_requests
+            .iter()
+            .map(|t| t.recipient.clone())
+            .collect::<Vec<_>>();
         let balance_proof =
             get_balance_proof(&user_data)?.ok_or(ClientError::CannotSendTxByZeroBalanceAccount)?;
-
         // generate spent proof
         let tx_nonce = user_data.full_private_state.nonce;
         let spent_witness =
@@ -512,11 +505,8 @@ impl Client {
             request_id,
             is_registration_block,
             tx,
-            transfers: transfers.to_vec(),
-            recipients: transfer_requests
-                .iter()
-                .map(|t| t.recipient.clone())
-                .collect(),
+            transfers,
+            recipients,
             spent_witness,
             sender_proof_set_ephemeral_key: ephemeral_key.0,
             fee_index,
@@ -559,10 +549,14 @@ impl Client {
     pub async fn finalize_tx(
         &self,
         block_builder_url: &str,
-        view_pair: ViewPair,
+        key_pair: KeyPair,
         memo: &TxRequestMemo,
         proposal: &BlockProposal,
     ) -> Result<TxResult, ClientError> {
+        let view_pair: ViewPair = key_pair.into();
+        let sender_priv = key_pair.spend;
+        let sender_pub = key_pair.spend.to_public_key();
+
         // verify proposal
         proposal
             .verify(memo.tx)
@@ -593,12 +587,10 @@ impl Client {
         }
 
         let mut transfer_data_and_encrypted_data = Vec::new();
-        for (i, (transfer, full_extra_data)) in memo
-            .transfers
-            .iter()
-            .zip(memo.full_extra_data.iter())
-            .enumerate()
-        {
+        for i in 0..memo.transfers.len() {
+            let transfer = &memo.transfers[i];
+            let full_extra_data = &memo.full_extra_data[i];
+            let recipient = &memo.recipients[i];
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
             let transfer_data = TransferData {
                 sender: view_pair.into(),
@@ -618,22 +610,26 @@ impl Client {
             } else {
                 DataType::Withdrawal
             };
-            let receiver = if transfer.recipient.is_pubkey {
-                // todo: use view key
-                transfer.recipient.to_pubkey().unwrap()
-            } else {
-                key.pubkey
+            let receiver_view_pub = match recipient {
+                GenericRecipient::IntmaxAddress(intmax_address) => {
+                    // use view key for IntmaxAddress
+                    intmax_address.public_view
+                }
+                GenericRecipient::Address(_) => {
+                    // use the sender's view key for withdrawals
+                    view_pair.view.to_public_key()
+                }
             };
             let sender_key = if data_type == DataType::Withdrawal {
                 Some(view_pair.view)
             } else {
                 None
             };
-            let encrypted_data = transfer_data.encrypt(receiver, sender_key)?;
+            let encrypted_data = transfer_data.encrypt(receiver_view_pub, sender_key)?;
             let digest = get_digest(&encrypted_data);
             transfer_data_and_encrypted_data.push((
                 data_type,
-                receiver,
+                receiver_view_pub,
                 transfer_data,
                 encrypted_data,
                 digest,
@@ -687,7 +683,7 @@ impl Client {
             }
             entries.push(SaveDataEntry {
                 topic: data_type.to_topic(),
-                pubkey: *receiver,
+                pubkey: receiver.0,
                 data: encrypted_data.clone(),
             });
         }
@@ -702,25 +698,26 @@ impl Client {
             transfer_types,
             sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
         };
-        let tx_data_encrypted = tx_data.encrypt(key.pubkey, Some(key))?;
+        let tx_data_encrypted =
+            tx_data.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?;
         let tx_digest = get_digest(&tx_data_encrypted);
         entries.push(SaveDataEntry {
             topic: DataType::Tx.to_topic(),
-            pubkey: key.pubkey,
+            pubkey: view_pair.view.to_public_key().0,
             data: tx_data_encrypted,
         });
 
         self.store_vault_server
-            .save_data_batch(key, &entries)
+            .save_data_batch(view_pair.view, &entries)
             .await?;
 
         // sign and post signature
-        let signature = proposal.sign(key);
+        let signature = proposal.sign(sender_priv.to_key_set());
         self.block_builder
             .post_signature(
                 block_builder_url,
                 &memo.request_id,
-                key.pubkey,
+                sender_pub.0,
                 signature.signature,
             )
             .await?;
@@ -751,13 +748,13 @@ impl Client {
             };
             let entry = SaveDataEntry {
                 topic: memo_entry.topic.clone(),
-                pubkey: key.pubkey,
-                data: payment_memo.encrypt(key.pubkey, Some(key))?,
+                pubkey: view_pair.view.to_public_key().0,
+                data: payment_memo.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?,
             };
             misc_entries.push(entry);
         }
         self.store_vault_server
-            .save_data_batch(key, &misc_entries)
+            .save_data_batch(view_pair.view, &misc_entries)
             .await?;
 
         let all_entries = entries
@@ -866,11 +863,6 @@ impl Client {
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
         let (fee, collateral_fee) =
             quote_transfer_fee(is_registration_block, fee_token_index, &fee_info)?;
-        if fee_info.beneficiary.is_none() && fee.is_some() {
-            return Err(ClientError::BlockBuilderFeeError(
-                "beneficiary is required".to_string(),
-            ));
-        }
         if fee.is_none() && collateral_fee.is_some() {
             return Err(ClientError::BlockBuilderFeeError(
                 "collateral fee is required but fee is not found".to_string(),

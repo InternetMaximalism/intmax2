@@ -185,7 +185,6 @@ pub(crate) fn quote_transfer_fee(
         .as_ref()
         .map(|fee_list| get_fee(fee_token_index, fee_list))
         .transpose()?;
-
     let collateral_fee_list = if is_registration_block {
         &fee_info.registration_collateral_fee
     } else {

@@ -8,7 +8,9 @@ use intmax2_zkp::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{api::error::ServerError, data::transfer_data::TransferData};
+use crate::{
+    api::error::ServerError, data::transfer_data::TransferData, utils::address::IntmaxAddress,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,7 +49,7 @@ pub struct Fee {
 #[serde(rename_all = "camelCase")]
 pub struct BlockBuilderFeeInfo {
     pub block_builder_address: Address,
-    pub beneficiary: Option<U256>,
+    pub beneficiary: IntmaxAddress,
     pub registration_fee: Option<Vec<Fee>>,
     pub non_registration_fee: Option<Vec<Fee>>,
     pub registration_collateral_fee: Option<Vec<Fee>>,
