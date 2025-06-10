@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+
 use intmax2_interfaces::{api::block_builder::interface::FeeProof, utils::key::PublicKeyPair};
 use intmax2_zkp::{
     common::{
@@ -81,7 +83,7 @@ impl ProposalMemo {
 
         let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
         let mut sorted_and_padded_txs = tx_requests.to_vec();
-        sorted_and_padded_txs.sort_by_key(|tx| tx.spend_pub());
+        sorted_and_padded_txs.sort_by_key(|tx| Reverse(tx.spend_pub()));
         sorted_and_padded_txs.resize(NUM_SENDERS_IN_BLOCK, TxRequest::default());
 
         let pubkeys = sorted_and_padded_txs
