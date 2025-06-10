@@ -21,8 +21,8 @@ pub struct Env {
     pub withdrawal_contract_address: Address,
 
     pub is_faster_mining: bool,
-    pub withdrawal_beneficiary_view_keypair: ViewPair,
-    pub claim_beneficiary_view_keypair: ViewPair,
+    pub withdrawal_beneficiary_view_pair: ViewPair,
+    pub claim_beneficiary_view_pair: ViewPair,
     pub direct_withdrawal_fee: Option<String>,
     pub claimable_withdrawal_fee: Option<String>,
     pub claim_fee: Option<String>,

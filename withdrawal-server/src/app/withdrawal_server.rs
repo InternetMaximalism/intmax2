@@ -83,8 +83,8 @@ impl Config {
         Ok(Self {
             network,
             is_faster_mining: env.is_faster_mining,
-            withdrawal_beneficiary_key: env.withdrawal_beneficiary_view_keypair,
-            claim_beneficiary_key: env.claim_beneficiary_view_keypair,
+            withdrawal_beneficiary_key: env.withdrawal_beneficiary_view_pair,
+            claim_beneficiary_key: env.claim_beneficiary_view_pair,
             direct_withdrawal_fee,
             claimable_withdrawal_fee,
             claim_fee,
@@ -800,8 +800,8 @@ mod tests {
             )
             .unwrap(),
             is_faster_mining: true,
-            withdrawal_beneficiary_view_keypair:"viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
-            claim_beneficiary_view_keypair: "viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
+            withdrawal_beneficiary_view_pair:"viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
+            claim_beneficiary_view_pair: "viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
             direct_withdrawal_fee: Some("0:100".to_string()),
             claimable_withdrawal_fee: Some("0:10".to_string()),
             claim_fee: Some("0:100".to_string()),

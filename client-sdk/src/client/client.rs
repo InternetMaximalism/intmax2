@@ -296,7 +296,7 @@ impl Client {
         let sender_address = self.get_address(view_pair.into());
         let spend_pub = key_pair.spend.to_public_key();
         log::info!(
-            "send_tx_request: spend pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
+            "send_tx_request: spend_pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
            spend_pub,
             transfer_requests.len(),
             fee_quote.beneficiary,
