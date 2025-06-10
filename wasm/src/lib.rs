@@ -1,7 +1,7 @@
 use crate::{
     js_types::{
         client::{JsDepositResult, JsTransferRequest, JsTxResult},
-        utils::{parse_intmax_address, parse_public_key},
+        utils::{parse_intmax_address, parse_network, parse_public_key},
     },
     utils::str_to_key_pair,
 };
@@ -13,7 +13,6 @@ use intmax2_interfaces::{
         address::IntmaxAddress,
         key::ViewPair,
         key_derivation::{derive_keypair_from_spend_key, derive_spend_key_from_bytes32},
-        network::Network,
     },
 };
 use intmax2_zkp::{
@@ -51,19 +50,16 @@ pub struct IntmaxAccount {
 /// Generate a new key pair from the given ethereum private key (32bytes hex string).
 #[wasm_bindgen]
 pub async fn generate_intmax_account_from_eth_key(
-    config: &Config,
+    network: &str,
     eth_private_key: &str,
     is_legacy: bool,
 ) -> Result<IntmaxAccount, JsError> {
     init_logger();
+    let network = parse_network(network)?;
     let eth_private_key = parse_bytes32(eth_private_key)?;
     let spend_key = derive_spend_key_from_bytes32(eth_private_key);
     let key_pair = derive_keypair_from_spend_key(spend_key, is_legacy);
     let view_pair: ViewPair = key_pair.into();
-    let network: Network = config
-        .network
-        .parse()
-        .map_err(|e| JsError::new(&format!("Invalid network: {e}")))?;
     let address = IntmaxAddress::from_viewpair(network, &view_pair);
 
     Ok(IntmaxAccount {
