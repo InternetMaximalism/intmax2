@@ -6,13 +6,15 @@ use intmax2_zkp::{
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Invalid length")]
     InvalidLength,
+
+    #[error("Invalid prefix for key: {0}")]
+    InvalidPrefix(String),
 
     #[error(transparent)]
     EthereumTypeError(#[from] intmax2_zkp::ethereum_types::EthereumTypeError),
@@ -120,16 +122,62 @@ impl TryFrom<&[u8]> for PrivateKey {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct KeyPair {
     pub view: PrivateKey,
     pub spend: PrivateKey,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+impl fmt::Display for KeyPair {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "keypair/{}/{}", self.view, self.spend)
+    }
+}
+
+impl FromStr for KeyPair {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('/').collect();
+        if parts.len() != 3 {  
+            return Err(Error::InvalidLength);
+        }
+        if parts[0] != "keypair" { 
+            return Err(Error::InvalidPrefix(parts[0].to_string()));
+        }
+        let view = PrivateKey::from_str(parts[1])?;
+        let spend = PrivateKey::from_str(parts[2])?;
+        Ok(KeyPair { view, spend })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct ViewPair {
     pub view: PrivateKey,
     pub spend: PublicKey,
+}
+
+impl fmt::Display for ViewPair {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "viewpair/{}/{}", self.view, self.spend)
+    }
+}
+
+impl FromStr for ViewPair {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('/').collect();
+        if parts.len() != 3 {
+            return Err(Error::InvalidLength);
+        }
+        if parts[0] != "viewpair" {
+            return Err(Error::InvalidPrefix(parts[0].to_string()));
+        }
+        let view = PrivateKey::from_str(parts[1])?;
+        let spend = PublicKey::from_str(parts[2])?;
+        Ok(ViewPair { view, spend })
+    }
 }
 
 impl From<KeyPair> for ViewPair {
@@ -152,11 +200,35 @@ impl From<&KeyPair> for ViewPair {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Eq, Copy, Clone, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct PublicKeyPair {
     pub view: PublicKey,
     pub spend: PublicKey,
 }
+
+impl fmt::Display for PublicKeyPair {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "pubkeypair/{}/{}", self.view, self.spend)
+    }
+}
+
+impl FromStr for PublicKeyPair {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('/').collect();
+        if parts.len() != 3 {
+            return Err(Error::InvalidLength);
+        }
+        if parts[0] != "pubkeypair" {
+            return Err(Error::InvalidPrefix(parts[0].to_string()));
+        }
+        let view = PublicKey::from_str(parts[1])?;
+        let spend = PublicKey::from_str(parts[2])?;
+        Ok(PublicKeyPair { view, spend })
+    }
+}
+
 
 impl From<ViewPair> for PublicKeyPair {
     fn from(k: ViewPair) -> PublicKeyPair {
