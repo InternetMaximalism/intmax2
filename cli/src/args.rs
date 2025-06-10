@@ -50,16 +50,16 @@ pub enum Commands {
         #[clap(long, default_value = "false")]
         wait: bool,
     },
-    // BatchTransfer {
-    //     #[clap(long)]
-    //     private_key: Bytes32,
-    //     #[clap(long)]
-    //     csv_path: String,
-    //     #[clap(long)]
-    //     fee_token_index: Option<u32>,
-    //     #[clap(long, default_value = "false")]
-    //     wait: bool,
-    // },
+    BatchTransfer {
+        #[clap(long)]
+        private_key: Bytes32,
+        #[clap(long)]
+        csv_path: String,
+        #[clap(long)]
+        fee_token_index: Option<u32>,
+        #[clap(long, default_value = "false")]
+        wait: bool,
+    },
     Deposit {
         #[clap(long)]
         eth_private_key: Bytes32,

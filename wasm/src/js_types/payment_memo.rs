@@ -1,4 +1,4 @@
-use intmax2_client_sdk::client::client::PaymentMemoEntry;
+use intmax2_client_sdk::client::types::PaymentMemoEntry;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 

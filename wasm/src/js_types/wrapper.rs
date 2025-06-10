@@ -1,4 +1,4 @@
-use intmax2_client_sdk::client::client::TxRequestMemo;
+use intmax2_client_sdk::client::types::TxRequestMemo;
 use intmax2_zkp::common::block_builder::BlockProposal;
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 

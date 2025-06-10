@@ -4,23 +4,67 @@ use intmax2_interfaces::{
         deposit_data::DepositData, extra_data::FullExtraData, transfer_data::TransferData,
         tx_data::TxData,
     },
-    utils::{address::{AddressType, IntmaxAddress}, payment_id::PaymentId, random::default_rng},
+    utils::{
+        address::{AddressType, IntmaxAddress},
+        payment_id::PaymentId,
+        random::default_rng,
+    },
 };
 use intmax2_zkp::{
     common::{
-        generic_address::GenericAddress, salt::Salt, transfer::Transfer, tx::Tx, witness::spent_witness::SpentWitness
+        generic_address::GenericAddress, salt::Salt, transfer::Transfer, tx::Tx,
+        witness::spent_witness::SpentWitness,
     },
-    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _},
+    ethereum_types::{
+        address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _,
+    },
 };
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use std::{fmt, str::FromStr};
 
 use crate::client::sync::utils::generate_salt;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum GenericAddressError {
+    #[error("Invalid address {0}")]
+    InvalidAddress(String),
+
+    #[error("Invalid Intmax address: {0}")]
+    InvalidIntmaxAddress(String),
+}
+
+#[derive(Debug, Clone, SerializeDisplay, DeserializeFromStr)]
 pub enum GenericRecipient {
     IntmaxAddress(IntmaxAddress),
     Address(Address),
+}
+
+impl fmt::Display for GenericRecipient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GenericRecipient::IntmaxAddress(intmax_address) => write!(f, "{}", intmax_address),
+            GenericRecipient::Address(address) => write!(f, "{}", address),
+        }
+    }
+}
+
+impl FromStr for GenericRecipient {
+    type Err = GenericAddressError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with("0x") {
+            // Assuming the string is an Ethereum address
+            let address = Address::from_str(s)
+                .map_err(|e| GenericAddressError::InvalidAddress(e.to_string()))?;
+            Ok(GenericRecipient::Address(address))
+        } else {
+            // Assuming the string is an Intmax address
+            let intmax_address = IntmaxAddress::from_str(s)
+                .map_err(|e| GenericAddressError::InvalidIntmaxAddress(e.to_string()))?;
+            Ok(GenericRecipient::IntmaxAddress(intmax_address))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

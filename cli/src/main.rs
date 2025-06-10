@@ -22,7 +22,10 @@ use intmax2_cli::{
     },
     format::{format_token_info, privkey_to_keypair},
 };
-use intmax2_client_sdk::client::{config::network_from_env, types::{GenericRecipient, TransferRequest}};
+use intmax2_client_sdk::client::{
+    config::network_from_env,
+    types::{GenericRecipient, TransferRequest},
+};
 use intmax2_interfaces::utils::{
     address::IntmaxAddress,
     key::{KeyPair, ViewPair},
@@ -31,7 +34,7 @@ use intmax2_interfaces::utils::{
 };
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait};
 
-// const MAX_BATCH_TRANSFER: usize = 63;
+const MAX_BATCH_TRANSFER: usize = 63;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -115,37 +118,31 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             )
             .await?;
         }
-        // Commands::BatchTransfer {
-        //     private_key,
-        //     csv_path,
-        //     fee_token_index,
-        //     wait,
-        // } => {
-        //     let key_pair = privkey_to_keypair(private_key);
-        //     let mut reader = csv::Reader::from_path(csv_path)?;
-        //     let mut transfers = vec![];
-        //     for result in reader.deserialize() {
-        //         let transfer_input: TransferInput = result?;
-        //         transfers.push(Transfer {
-        //             recipient: parse_generic_address(&transfer_input.recipient)
-        //                 .map_err(|e| CliError::ParseError(e.to_string()))?,
-        //             amount: transfer_input.amount,
-        //             token_index: transfer_input.token_index,
-        //             salt: generate_salt(),
-        //         });
-        //     }
-        //     if transfers.len() > MAX_BATCH_TRANSFER {
-        //         return Err(CliError::TooManyTransfer(transfers.len()));
-        //     }
-        //     send_transfers(
-        //         key_pair,
-        //         &transfers,
-        //         vec![],
-        //         fee_token_index.unwrap_or_default(),
-        //         wait,
-        //     )
-        //     .await?;
-        // }
+        Commands::BatchTransfer {
+            private_key,
+            csv_path,
+            fee_token_index,
+            wait,
+        } => {
+            let key_pair = privkey_to_keypair(private_key);
+            let mut reader = csv::Reader::from_path(csv_path)?;
+            let mut transfer_requests = vec![];
+            for result in reader.deserialize() {
+                let transfer_request: TransferRequest = result?;
+                transfer_requests.push(transfer_request);
+            }
+            if transfer_requests.len() > MAX_BATCH_TRANSFER {
+                return Err(CliError::TooManyTransfer(transfer_requests.len()));
+            }
+            send_transfers(
+                key_pair,
+                &transfer_requests,
+                vec![],
+                fee_token_index.unwrap_or_default(),
+                wait,
+            )
+            .await?;
+        }
         Commands::Deposit {
             eth_private_key,
             private_key,

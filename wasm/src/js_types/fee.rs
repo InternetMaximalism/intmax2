@@ -1,6 +1,6 @@
 use intmax2_client_sdk::client::{
-    client::{FeeQuote, TransferFeeQuote},
     fee_payment::WithdrawalTransferRequests,
+    types::{FeeQuote, TransferFeeQuote},
 };
 use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
 use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait as _};
@@ -50,7 +50,7 @@ impl From<Fee> for JsFee {
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTransferFeeQuote {
-    pub beneficiary: Option<String>,
+    pub beneficiary: String,
     pub fee: Option<JsFee>,
     pub collateral_fee: Option<JsFee>,
     pub block_builder_address: String,
@@ -59,7 +59,7 @@ pub struct JsTransferFeeQuote {
 impl From<TransferFeeQuote> for JsTransferFeeQuote {
     fn from(fee_quote: TransferFeeQuote) -> Self {
         Self {
-            beneficiary: fee_quote.beneficiary.map(|b| b.to_hex()),
+            beneficiary: fee_quote.beneficiary.to_string(),
             fee: fee_quote.fee.map(JsFee::from),
             collateral_fee: fee_quote.collateral_fee.map(JsFee::from),
             block_builder_address: fee_quote.block_builder_address.to_hex(),
@@ -74,8 +74,7 @@ impl TryFrom<JsTransferFeeQuote> for TransferFeeQuote {
         Ok(TransferFeeQuote {
             beneficiary: js_fee_quote
                 .beneficiary
-                .map(|b| U256::from_hex(&b))
-                .transpose()
+                .parse()
                 .map_err(|e| JsError::new(&format!("Invalid beneficiary address: {e}")))?,
             fee: js_fee_quote.fee.map(JsFee::try_into).transpose()?,
             collateral_fee: js_fee_quote
@@ -91,7 +90,7 @@ impl TryFrom<JsTransferFeeQuote> for TransferFeeQuote {
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsFeeQuote {
-    pub beneficiary: Option<String>,
+    pub beneficiary: String,
     pub fee: Option<JsFee>,
     pub collateral_fee: Option<JsFee>,
 }
@@ -99,7 +98,7 @@ pub struct JsFeeQuote {
 impl From<FeeQuote> for JsFeeQuote {
     fn from(fee_quote: FeeQuote) -> Self {
         Self {
-            beneficiary: fee_quote.beneficiary.map(|b| b.to_hex()),
+            beneficiary: fee_quote.beneficiary.to_string(),
             fee: fee_quote.fee.map(JsFee::from),
             collateral_fee: fee_quote.collateral_fee.map(JsFee::from),
         }
@@ -109,7 +108,7 @@ impl From<FeeQuote> for JsFeeQuote {
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsFeeInfo {
-    pub beneficiary: Option<String>,
+    pub beneficiary: String,
     pub registration_fee: Option<Vec<JsFee>>,
     pub non_registration_fee: Option<Vec<JsFee>>,
     pub registration_collateral_fee: Option<Vec<JsFee>>,
@@ -123,7 +122,7 @@ fn convert_fees(fees: Option<Vec<Fee>>) -> Option<Vec<JsFee>> {
 impl From<BlockBuilderFeeInfo> for JsFeeInfo {
     fn from(fee_info: BlockBuilderFeeInfo) -> Self {
         Self {
-            beneficiary: fee_info.beneficiary.map(|b| b.to_hex()),
+            beneficiary: fee_info.beneficiary.to_string(),
             registration_fee: convert_fees(fee_info.registration_fee),
             non_registration_fee: convert_fees(fee_info.non_registration_fee),
             registration_collateral_fee: convert_fees(fee_info.registration_collateral_fee),
@@ -174,7 +173,7 @@ impl TryFrom<JsWithdrawalTransfers> for WithdrawalTransferRequests {
 mod fee_tests {
     use std::str::FromStr;
 
-    use intmax2_client_sdk::client::{client::FeeQuote, fee_payment::WithdrawalTransferRequests};
+    use intmax2_client_sdk::client::{fee_payment::WithdrawalTransferRequests, types::FeeQuote};
     use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 

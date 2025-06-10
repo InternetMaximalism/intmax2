@@ -1,4 +1,4 @@
-use intmax2_client_sdk::client::client::{DepositResult, TxResult};
+use intmax2_client_sdk::client::types::{DepositResult, TxResult};
 use intmax2_interfaces::data::{
     deposit_data::DepositData,
     meta_data::MetaData,
