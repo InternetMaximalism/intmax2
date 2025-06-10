@@ -7,3 +7,4 @@ pub mod payment_id;
 pub mod random;
 pub mod serializer;
 pub mod signature;
+pub mod key_derivation;
