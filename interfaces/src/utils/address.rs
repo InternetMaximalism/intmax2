@@ -103,7 +103,7 @@ impl AddressType {
 }
 
 /// A complete Monero typed address valid for a specific network.
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Default, Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct IntmaxAddress {
     pub network: Network,
     pub addr_type: AddressType,

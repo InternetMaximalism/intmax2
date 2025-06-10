@@ -1,5 +1,5 @@
 use alloy::primitives::{Address, B256};
-use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use intmax2_interfaces::utils::address::IntmaxAddress;
 use serde::Deserialize;
 
 pub mod api;
@@ -31,7 +31,7 @@ pub struct EnvVar {
     pub heart_beat_interval: u64,
     pub nonce_waiting_time: Option<u64>,
 
-    pub beneficiary_pubkey: Option<Bytes32>,
+    pub beneficiary: Option<IntmaxAddress>,
     pub registration_fee: Option<String>,
     pub non_registration_fee: Option<String>,
     pub registration_collateral_fee: Option<String>,

@@ -292,7 +292,7 @@ impl Storage for InMemoryStorage {
         };
         let block_post_tasks = collect_fee(
             store_vault_server_client,
-            self.config.fee_beneficiary,
+            self.config.beneficiary,
             &fee_collection,
         )
         .await?;
@@ -396,6 +396,7 @@ mod tests {
     use intmax2_client_sdk::external_api::contract::{
         convert::convert_address_to_alloy, rollup_contract::RollupContract,
     };
+    use intmax2_interfaces::utils::address::IntmaxAddress;
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
     async fn create_storage() -> InMemoryStorage {
@@ -403,7 +404,7 @@ mod tests {
             use_fee: false,
             use_collateral: false,
             block_builder_address: Address::default(),
-            fee_beneficiary: U256::default(),
+            beneficiary: IntmaxAddress::default(),
             tx_timeout: 60,
             accepting_tx_interval: 10,
             proposing_block_interval: 10,

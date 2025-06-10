@@ -17,7 +17,7 @@ pub enum Error {
     EthereumTypeError(#[from] intmax2_zkp::ethereum_types::EthereumTypeError),
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Default, Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub struct PublicKey(pub U256);
 
 impl PublicKey {

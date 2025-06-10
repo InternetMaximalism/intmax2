@@ -2,35 +2,31 @@ use alloy::{
     primitives::{utils::parse_ether, B256},
     providers::Provider,
 };
-use intmax2_client_sdk::{
-    client::key_from_eth::generate_intmax_account_from_eth_key,
-    external_api::{
-        contract::{
-            block_builder_registry::BlockBuilderRegistryContract,
-            convert::{
-                convert_address_to_alloy, convert_address_to_intmax, convert_u256_to_intmax,
-            },
-            rollup_contract::RollupContract,
-            utils::{get_address_from_private_key, NormalProvider},
-        },
-        s3_store_vault::S3StoreVaultClient,
-        store_vault_server::StoreVaultServerClient,
-        validity_prover::ValidityProverClient,
+use intmax2_client_sdk::external_api::{
+    contract::{
+        block_builder_registry::BlockBuilderRegistryContract,
+        convert::{convert_address_to_alloy, convert_address_to_intmax, convert_u256_to_intmax},
+        rollup_contract::RollupContract,
+        utils::{get_address_from_private_key, NormalProvider},
     },
+    s3_store_vault::S3StoreVaultClient,
+    store_vault_server::StoreVaultServerClient,
+    validity_prover::ValidityProverClient,
 };
-use intmax2_interfaces::api::{
-    block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
-    store_vault_server::interface::StoreVaultClientInterface,
-    validity_prover::interface::{AccountInfo, ValidityProverClientInterface},
+use intmax2_interfaces::{
+    api::{
+        block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
+        store_vault_server::interface::StoreVaultClientInterface,
+        validity_prover::interface::{AccountInfo, ValidityProverClientInterface},
+    },
+    utils::address::IntmaxAddress,
 };
 use intmax2_zkp::{
     common::{
         block_builder::{BlockProposal, UserSignature},
         tx::Tx,
     },
-    ethereum_types::{
-        account_id::AccountId, address::Address, u256::U256, u32limb_trait::U32LimbTrait,
-    },
+    ethereum_types::{account_id::AccountId, address::Address, u256::U256},
 };
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
@@ -60,7 +56,7 @@ pub struct Config {
     pub heart_beat_interval: u64,
 
     // fees
-    pub beneficiary_pubkey: Option<U256>,
+    pub beneficiary: IntmaxAddress,
     pub use_fee: bool,
     pub use_collateral: bool,
     pub registration_fee: Option<HashMap<u32, U256>>,
@@ -149,17 +145,13 @@ impl BlockBuilder {
                 "Collateral fee is set but fee is not set".to_string(),
             ));
         }
-        let beneficiary_pubkey = if use_fee {
-            if let Some(beneficiary_pubkey) = env.beneficiary_pubkey.as_ref() {
-                Some((*beneficiary_pubkey).into())
-            } else {
-                // generate from eth private key
-                let key = generate_intmax_account_from_eth_key(env.block_builder_private_key);
-                Some(key.pubkey)
-            }
-        } else {
-            None
-        };
+
+        let beneficiary = env.beneficiary.unwrap_or_else(|| {
+            // generate from eth private key
+            // let key = generate_intmax_account_from_eth_key(env.block_builder_private_key);
+            // todo
+            todo!("Implement beneficiary address generation from eth private key");
+        });
         let block_builder_address =
             convert_address_to_intmax(get_address_from_private_key(env.block_builder_private_key));
         // log configuration
@@ -172,10 +164,7 @@ impl BlockBuilder {
         log::info!("eth_allowance_for_block: {eth_allowance_for_block}");
         log::info!("use_fee: {use_fee}");
         log::info!("use_collateral_fee: {use_collateral_fee}");
-        log::info!(
-            "beneficiary_pubkey: {}",
-            beneficiary_pubkey.map(|b| b.to_hex()).unwrap_or_default()
-        );
+        log::info!("beneficiary: {beneficiary}");
         let config = Config {
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
@@ -184,7 +173,7 @@ impl BlockBuilder {
             eth_allowance_for_block,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
-            beneficiary_pubkey,
+            beneficiary,
             use_fee,
             use_collateral: use_collateral_fee,
             registration_fee,
@@ -205,7 +194,7 @@ impl BlockBuilder {
             use_fee: config.use_fee,
             use_collateral: config.use_collateral,
             block_builder_address: config.block_builder_address,
-            fee_beneficiary: config.beneficiary_pubkey.unwrap_or_default(),
+            beneficiary: config.beneficiary,
             tx_timeout: env.tx_timeout,
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
@@ -223,7 +212,7 @@ impl BlockBuilder {
     pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
         BlockBuilderFeeInfo {
             block_builder_address: self.config.block_builder_address,
-            beneficiary: self.config.beneficiary_pubkey,
+            beneficiary: self.config.beneficiary,
             registration_fee: convert_fee_vec(&self.config.registration_fee),
             non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
             registration_collateral_fee: convert_fee_vec(&self.config.registration_collateral_fee),
@@ -329,7 +318,7 @@ impl BlockBuilder {
 
         validate_fee_proof(
             self.store_vault_server_client.as_ref().as_ref(),
-            self.config.beneficiary_pubkey,
+            self.config.beneficiary,
             self.config.block_builder_address,
             required_fee,
             required_collateral_fee,
@@ -411,7 +400,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,
@@ -425,7 +414,7 @@ mod tests {
             info.block_builder_address,
             block_builder.config.block_builder_address
         );
-        assert_eq!(info.beneficiary, block_builder.config.beneficiary_pubkey);
+        assert_eq!(info.beneficiary, block_builder.config.beneficiary);
         assert_eq!(
             info.registration_fee,
             convert_fee_vec(&block_builder.config.registration_fee)
@@ -463,7 +452,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,
@@ -506,7 +495,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,
@@ -552,7 +541,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,

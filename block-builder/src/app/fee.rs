@@ -8,18 +8,16 @@ use intmax2_interfaces::{
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
-        data_type::DataType, encryption::BlsEncryption, sender_proof_set::SenderProofSet,
-        transfer_data::TransferData, validation::Validation,
+        data_type::DataType, encryption::BlsEncryption, extra_data::ExtraData,
+        sender_proof_set::SenderProofSet, transfer_data::TransferData, validation::Validation,
     },
-    utils::random::default_rng,
+    utils::{address::IntmaxAddress, key::PrivateKey, random::default_rng},
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
     common::{
         block_builder::UserSignature,
-        signature_content::{
-            block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
-        },
+        signature_content::{block_sign_payload::BlockSignPayload, utils::get_pubkey_hash},
         witness::transfer_witness::TransferWitness,
     },
     constants::NUM_SENDERS_IN_BLOCK,
@@ -36,7 +34,7 @@ use uuid::Uuid;
 /// Validate fee proof
 pub async fn validate_fee_proof(
     store_vault_server_client: &dyn StoreVaultClientInterface,
-    beneficiary_pubkey: Option<U256>,
+    beneficiary: IntmaxAddress,
     block_builder_address: Address,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
@@ -55,19 +53,15 @@ pub async fn validate_fee_proof(
     let fee_proof = fee_proof
         .as_ref()
         .ok_or(FeeError::InvalidFee("Fee proof is missing".to_string()))?;
-    let beneficiary_pubkey = beneficiary_pubkey.ok_or(FeeError::InvalidFee(
-        "Beneficiary pubkey is missing".to_string(),
-    ))?;
-
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server_client,
-        fee_proof.sender_proof_set_ephemeral_key,
+        PrivateKey(fee_proof.sender_proof_set_ephemeral_key),
     )
     .await?;
 
     // validate main fee
     validate_fee_single(
-        beneficiary_pubkey,
+        beneficiary,
         required_fee,
         &sender_proof_set,
         &fee_proof.fee_transfer_witness,
@@ -85,7 +79,7 @@ pub async fn validate_fee_proof(
                 ))?;
         // validate transfer data
         let transfer_data = &collateral_block.fee_transfer_data;
-        match transfer_data.validate(U256::dummy_pubkey()) {
+        match transfer_data.validate() {
             Ok(_) => {}
             Err(e) => {
                 log::error!("Failed to validate transfer data: {e}");
@@ -122,7 +116,7 @@ pub async fn validate_fee_proof(
             })?;
         let sender_proof_set = fetch_sender_proof_set(
             store_vault_server_client,
-            collateral_block.sender_proof_set_ephemeral_key,
+            PrivateKey(collateral_block.sender_proof_set_ephemeral_key),
         )
         .await?;
 
@@ -133,7 +127,7 @@ pub async fn validate_fee_proof(
             transfer_merkle_proof: transfer_data.transfer_merkle_proof.clone(),
         };
         validate_fee_single(
-            beneficiary_pubkey,
+            beneficiary,
             collateral_fee,
             &sender_proof_set,
             &transfer_witness,
@@ -145,16 +139,14 @@ pub async fn validate_fee_proof(
 
 /// common function to validate fee and collateral fee
 async fn validate_fee_single(
-    beneficiary_pubkey: U256,
+    beneficiary: IntmaxAddress,
     required_fee: &HashMap<u32, U256>, // token index -> fee amount
     sender_proof_set: &SenderProofSet,
     transfer_witness: &TransferWitness,
 ) -> Result<(), FeeError> {
-    sender_proof_set
-        .validate(U256::dummy_pubkey())
-        .map_err(|e| {
-            FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {e}"))
-        })?;
+    sender_proof_set.validate().map_err(|e| {
+        FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {e}"))
+    })?;
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
@@ -195,7 +187,7 @@ async fn validate_fee_single(
         ));
     }
     let recipient = recipient.to_pubkey().unwrap();
-    if recipient != beneficiary_pubkey {
+    if recipient != beneficiary.public_spend.0 {
         return Err(FeeError::InvalidRecipient(
             "Recipient is not the beneficiary".to_string(),
         ));
@@ -253,7 +245,7 @@ pub struct FeeCollection {
 /// Collect fee from the senders
 pub async fn collect_fee(
     store_vault_server_client: &dyn StoreVaultClientInterface,
-    beneficiary_pubkey: U256,
+    beneficiary: IntmaxAddress,
     fee_collection: &FeeCollection,
 ) -> Result<Vec<BlockPostTask>, FeeError> {
     let mut block_post_tasks = Vec::new();
@@ -282,6 +274,7 @@ pub async fn collect_fee(
                 sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
                 sender_proof_set: None,
                 sender: request.pubkey,
+                extra_data: ExtraData::default(),
                 tx: request.tx,
                 tx_index: proposal.tx_index,
                 tx_merkle_proof: proposal.tx_merkle_proof.clone(),
@@ -363,12 +356,12 @@ pub async fn collect_fee(
     for transfer_data in transfer_data_vec {
         let entry = SaveDataEntry {
             topic: DataType::Transfer.to_topic(),
-            pubkey: beneficiary_pubkey,
-            data: transfer_data.encrypt(beneficiary_pubkey, None)?,
+            pubkey: beneficiary.public_view.0,
+            data: transfer_data.encrypt(beneficiary.public_view, None)?,
         };
         entries.push(entry);
     }
-    let dummy_key = KeySet::rand(&mut default_rng());
+    let dummy_key = PrivateKey::rand(&mut default_rng());
     let _digests = store_vault_server_client
         .save_data_batch(dummy_key, &entries)
         .await?;

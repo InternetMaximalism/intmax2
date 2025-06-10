@@ -664,7 +664,7 @@ impl Storage for RedisStorage {
             // Process the fee collection
             let block_post_tasks = collect_fee(
                 store_vault_server_client,
-                self.config.fee_beneficiary,
+                self.config.beneficiary,
                 &fee_collection,
             )
             .await?;
@@ -946,7 +946,8 @@ mod tests {
             rollup_contract::{Rollup, RollupContract},
         },
     };
-    use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait};
+    use intmax2_interfaces::utils::address::IntmaxAddress;
+    use intmax2_zkp::ethereum_types::{address::Address, u32limb_trait::U32LimbTrait};
     use uuid::Uuid;
 
     use test_redis_helper::{assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker};
@@ -956,7 +957,7 @@ mod tests {
             use_fee: true,
             use_collateral: true,
             block_builder_address: Address::zero(),
-            fee_beneficiary: U256::default(),
+            beneficiary: IntmaxAddress::default(),
             tx_timeout: 80,
             accepting_tx_interval: 40,
             proposing_block_interval: 10,
