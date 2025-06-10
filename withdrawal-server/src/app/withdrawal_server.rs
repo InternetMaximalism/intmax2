@@ -799,20 +799,9 @@ mod tests {
                 "0x8a791620dd6260079bf849dc5567adc3f2fdc318",
             )
             .unwrap(),
-
             is_faster_mining: true,
-            withdrawal_beneficiary_private_key: Some(
-                B256::from_str(
-                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
-                )
-                .unwrap(),
-            ),
-            claim_beneficiary_private_key: Some(
-                B256::from_str(
-                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
-                )
-                .unwrap(),
-            ),
+            withdrawal_beneficiary_view_keypair:"viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
+            claim_beneficiary_view_keypair: "viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
             direct_withdrawal_fee: Some("0:100".to_string()),
             claimable_withdrawal_fee: Some("0:10".to_string()),
             claim_fee: Some("0:100".to_string()),
@@ -857,26 +846,11 @@ mod tests {
             // Here and later I use is_some() || is_some() and not && as an additional check of initializing WithdrawalServer.
             // If only one variable is Some and another one is not, test will fail, so there is should be some error in WithdrawalServer new method.
             let claim_fee = server.get_claim_fee();
-            if env.claim_beneficiary_private_key.is_some() || claim_fee.beneficiary.is_some() {
-                let claim_keyset = privkey_to_keyset(env.claim_beneficiary_private_key.unwrap());
-                assert_and_stop(cont_name, || {
-                    assert_eq!(claim_fee.beneficiary.unwrap(), claim_keyset.pubkey)
-                });
-            }
             if env.claim_fee.is_some() {
                 let fee = parse_fee_str(&env.claim_fee.unwrap()).unwrap();
                 assert_and_stop(cont_name, || assert_eq!(claim_fee.fee.unwrap(), fee));
             }
-
             let withdrawal_fee = server.get_withdrawal_fee();
-            if withdrawal_fee.beneficiary.is_some()
-                || env.withdrawal_beneficiary_private_key.is_some()
-            {
-                let ben_keyset = privkey_to_keyset(env.withdrawal_beneficiary_private_key.unwrap());
-                assert_and_stop(cont_name, || {
-                    assert_eq!(withdrawal_fee.beneficiary.unwrap(), ben_keyset.pubkey)
-                });
-            }
             if withdrawal_fee.direct_withdrawal_fee.is_some() {
                 assert_and_stop(cont_name, || {
                     assert_eq!(withdrawal_fee.direct_withdrawal_fee.unwrap().len(), 1)
