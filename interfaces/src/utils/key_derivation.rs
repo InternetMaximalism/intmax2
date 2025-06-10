@@ -1,3 +1,4 @@
+use crate::utils::key::{KeyPair, PrivateKey};
 use ark_bn254::Fr;
 use hkdf::Hkdf;
 use intmax2_zkp::{
@@ -8,7 +9,19 @@ use num_bigint::BigUint;
 use num_traits::identities::Zero;
 use sha2::{Digest, Sha512};
 
-use crate::utils::key::PrivateKey;
+/// Derives a keypair (spend key and view key) from a spend key.
+/// If `is_legacy` is true, it uses the spend key as the view key.
+pub fn derive_keypair_from_spend_key(spend_key: PrivateKey, is_legacy: bool) -> KeyPair {
+    let view_key = if is_legacy {
+        spend_key
+    } else {
+        derive_view_key_from_spend_key(&spend_key)
+    };
+    KeyPair {
+        spend: spend_key,
+        view: view_key,
+    }
+}
 
 /// Derives a spend key from a 32-byte input using SHA-512 hashing.
 pub fn derive_spend_key_from_bytes32(input: Bytes32) -> PrivateKey {
