@@ -35,18 +35,18 @@ pub struct SignContent {
 
 impl Auth {
     pub fn sign(private_key: PrivateKey, time_to_expiry: u64, content: &[u8]) -> Self {
+        let key = private_key.to_key_set();
         let expiry = current_time() + time_to_expiry;
-        let pubkey = private_key.to_public_key();
         let sign_content = SignContent {
-            pubkey: pubkey.0,
+            pubkey: key.pubkey,
             content: content.to_vec(),
             expiry,
         };
         let serialized = bincode::serialize(&sign_content).unwrap();
         let digest = sha2::Sha256::digest(&serialized);
-        let signature = sign_message(private_key.0, &digest).into();
+        let signature = sign_message(key.privkey, &digest).into();
         Auth {
-            pubkey: pubkey.0,
+            pubkey: key.pubkey,
             expiry,
             signature,
         }

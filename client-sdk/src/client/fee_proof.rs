@@ -89,6 +89,7 @@ pub async fn generate_fee_proof(
                 &sender_proof_set.encrypt(ephemeral_key.to_public_key(), Some(ephemeral_key))?,
             )
             .await?;
+
         let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
         transfer_tree.push(collateral_transfer);
         let transfer_index = 0u32;

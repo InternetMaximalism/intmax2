@@ -127,7 +127,8 @@ impl PrivateKey {
     }
 
     pub fn rand<R: Rng>(rng: &mut R) -> PrivateKey {
-        PrivateKey(U256::rand(rng))
+        let key = KeySet::rand(rng);
+        PrivateKey(key.privkey)
     }
 }
 
