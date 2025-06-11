@@ -1,6 +1,5 @@
 use crate::utils::key::{KeyPair, PrivateKey};
 use ark_bn254::Fr;
-use hkdf::Hkdf;
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
     ethereum_types::{bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
@@ -23,11 +22,10 @@ pub fn derive_keypair_from_spend_key(spend_key: PrivateKey, is_legacy: bool) -> 
     }
 }
 
-/// Derives a spend key from a 32-byte input using SHA-512 hashing.
-pub fn derive_spend_key_from_bytes32(input: Bytes32) -> PrivateKey {
+fn derive_next_key(input: Bytes32, info: &[u8]) -> PrivateKey {
     let mut hasher = Sha512::new();
     loop {
-        hasher.update(b"INTMAX");
+        hasher.update(info);
         hasher.update(input.to_bytes_be());
         let digest = hasher.clone().finalize();
         let provisional_private_key: Fr = BigUint::from_bytes_be(&digest).into();
@@ -41,17 +39,12 @@ pub fn derive_spend_key_from_bytes32(input: Bytes32) -> PrivateKey {
     }
 }
 
-// Derives a view key from a spend key using HKDF with SHA-512.
+pub fn derive_spend_key_from_bytes32(input: Bytes32) -> PrivateKey {
+    derive_next_key(input, b"INTMAX")
+}
+
 pub fn derive_view_key_from_spend_key(spend_key: &PrivateKey) -> PrivateKey {
-    let salt = [0u8; 32];
-    let info = b"spend-key-to-view-key";
-    let hk = Hkdf::<Sha512>::new(Some(&salt), &spend_key.to_bytes());
-    let mut derived_key = [0u8; 64];
-    hk.expand(info, &mut derived_key).unwrap();
-    let derived_key: Fr = BigUint::from_bytes_be(&derived_key).into();
-    let derived_key: U256 = BigUint::from(derived_key).try_into().unwrap();
-    let key = KeySet::new(derived_key);
-    PrivateKey(key.privkey)
+    derive_next_key(spend_key.0.into(), b"spend-key-to-view-key")
 }
 
 #[cfg(test)]
@@ -119,7 +112,7 @@ mod test {
                 input: "0x0000000000000000000000000000000000000000000000000000000000000000"
                     .parse()
                     .unwrap(),
-                output: "0x1c5420b19f9e87e8c96fac0a0e3a0dfc3d262c029a58ce048f25e0249ad48cf2"
+                output: "0x037189fbab9e972a87d436801b039848be7caafe56935d674a9ab4e4b0bb83ea"
                     .parse()
                     .unwrap(),
             },
@@ -127,7 +120,7 @@ mod test {
                 input: "0x8b7623aee520e739189eaf541558a97e28b413befdc19e0bbaf7002e30cf2a15"
                     .parse()
                     .unwrap(),
-                output: "0x0831e6a88f10d27f934113b7b3cfadfea281059e63eac2d4cb71b808added243"
+                output: "0x2fe3b781f0b224e83b74eb736caf2ea562d242871126dd8e4967f6c56959d80e"
                     .parse()
                     .unwrap(),
             },
