@@ -19,7 +19,7 @@ serde = { workspace = true }
 chrono = { workspace = true }
 env_logger = { workspace = true }
 thiserror = "2.0.12"
-hashbrown = "0.15.2"
+hashbrown = "0.15.4"
 log = "0.4.27"
 rand = { workspace = true }
 envy = "0.4.2"
