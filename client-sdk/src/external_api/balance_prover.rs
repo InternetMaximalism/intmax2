@@ -1,23 +1,24 @@
 use async_trait::async_trait;
-use intmax2_interfaces::{api::{
-    balance_prover::{
-        interface::BalanceProverClientInterface,
-        types::{
-            ProveReceiveDepositRequest, ProveReceiveTransferRequest, ProveResponse,
-            ProveSendRequest, ProveSingleClaimRequest, ProveSingleWithdrawalRequest,
-            ProveSpentRequest, ProveUpdateRequest,
+use intmax2_interfaces::{
+    api::{
+        balance_prover::{
+            interface::BalanceProverClientInterface,
+            types::{
+                ProveReceiveDepositRequest, ProveReceiveTransferRequest, ProveResponse,
+                ProveSendRequest, ProveSingleClaimRequest, ProveSingleWithdrawalRequest,
+                ProveSpentRequest, ProveUpdateRequest,
+            },
         },
+        error::ServerError,
     },
-    error::ServerError,
-}, utils::key::PrivateKey};
+    utils::key::PrivateKey,
+};
 use intmax2_zkp::{
-    common::{
-        witness::{
-            claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
-            receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,
-            tx_witness::TxWitness, update_witness::UpdateWitness,
-            withdrawal_witness::WithdrawalWitness,
-        },
+    common::witness::{
+        claim_witness::ClaimWitness, receive_deposit_witness::ReceiveDepositWitness,
+        receive_transfer_witness::ReceiveTransferWitness, spent_witness::SpentWitness,
+        tx_witness::TxWitness, update_witness::UpdateWitness,
+        withdrawal_witness::WithdrawalWitness,
     },
     ethereum_types::u256::U256,
 };

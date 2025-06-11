@@ -12,11 +12,10 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         tx_data::TxData,
         user_data::ProcessStatus,
-    }, utils::key::ViewPair,
+    },
+    utils::key::ViewPair,
 };
-use intmax2_zkp::{
-    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _},
-};
+use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _};
 
 #[derive(Debug, Clone)]
 pub struct TxInfo {
