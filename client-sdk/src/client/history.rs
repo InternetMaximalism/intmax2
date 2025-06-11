@@ -6,11 +6,9 @@ use intmax2_interfaces::{
         transfer_data::TransferData,
         tx_data::TxData,
     },
+    utils::key::ViewPair,
 };
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
-};
+use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -48,20 +46,20 @@ impl EntryStatus {
 
 pub async fn fetch_deposit_history(
     client: &Client,
-    key: KeySet,
+    view_pair: ViewPair,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
     // We don't need to check validity prover's sync status like in strategy
     // because fetching history is not a critical operation.
     let current_time = chrono::Utc::now().timestamp() as u64;
-    let user_data = client.get_user_data(key).await?;
+    let user_data = client.get_user_data(view_pair).await?;
 
     let mut history = Vec::new();
     let (all_deposit_info, cursor_response) = fetch_deposit_info(
         client.store_vault_server.as_ref(),
         client.validity_prover.as_ref(),
         &client.liquidity_contract,
-        key,
+        view_pair,
         current_time,
         &[],
         &[],
@@ -104,17 +102,17 @@ pub async fn fetch_deposit_history(
 
 pub async fn fetch_transfer_history(
     client: &Client,
-    key: KeySet,
+    view_pair: ViewPair,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
     let current_time = chrono::Utc::now().timestamp() as u64;
-    let user_data = client.get_user_data(key).await?;
+    let user_data = client.get_user_data(view_pair).await?;
 
     let mut history = Vec::new();
     let (all_transfers_info, cursor_response) = fetch_transfer_info(
         client.store_vault_server.as_ref(),
         client.validity_prover.as_ref(),
-        key,
+        view_pair,
         current_time,
         &[],
         &[],
@@ -157,17 +155,17 @@ pub async fn fetch_transfer_history(
 
 pub async fn fetch_tx_history(
     client: &Client,
-    key: KeySet,
+    view_pair: ViewPair,
     cursor: &MetaDataCursor,
 ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
     let current_time = chrono::Utc::now().timestamp() as u64;
-    let user_data = client.get_user_data(key).await?;
+    let user_data = client.get_user_data(view_pair).await?;
 
     let mut history = Vec::new();
     let (all_tx_info, cursor_response) = fetch_tx_info(
         client.store_vault_server.as_ref(),
         client.validity_prover.as_ref(),
-        key,
+        view_pair,
         current_time,
         &[],
         &[],

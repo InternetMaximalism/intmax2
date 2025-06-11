@@ -10,18 +10,63 @@ use intmax2_zkp::{
     utils::poseidon_hash_out::PoseidonHashOut,
 };
 
+use crate::{
+    data::{encryption::errors::BlsEncryptionError, extra_data::ExtraData},
+    utils::key::{PrivateKey, PublicKey, PublicKeyPair},
+};
+
 use super::{encryption::BlsEncryption, sender_proof_set::SenderProofSet, validation::Validation};
+
+/// Backup data for receiving transfers
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyTransferData {
+    // Ephemeral key to query the sender proof set
+    pub sender_proof_set_ephemeral_key: U256,
+    // After fetching sender proof set, this will be filled
+    pub sender_proof_set: Option<SenderProofSet>,
+    pub sender: U256,
+    pub tx: Tx,
+    pub tx_index: u32,
+    pub tx_merkle_proof: TxMerkleProof,
+    pub tx_tree_root: Bytes32,
+    pub transfer: Transfer,
+    pub transfer_index: u32,
+    pub transfer_merkle_proof: TransferMerkleProof,
+}
+
+impl LegacyTransferData {
+    fn into_latest(self) -> TransferData {
+        let sender = PublicKeyPair {
+            view: PublicKey(self.sender), // use the same key as spend key for migration
+            spend: PublicKey(self.sender),
+        };
+        TransferData {
+            sender_proof_set_ephemeral_key: PrivateKey(self.sender_proof_set_ephemeral_key),
+            sender_proof_set: self.sender_proof_set,
+            sender,
+            extra_data: ExtraData::default(), // legacy data does not have extra data
+            tx: self.tx,
+            tx_index: self.tx_index,
+            tx_merkle_proof: self.tx_merkle_proof,
+            tx_tree_root: self.tx_tree_root,
+            transfer: self.transfer,
+            transfer_index: self.transfer_index,
+            transfer_merkle_proof: self.transfer_merkle_proof,
+        }
+    }
+}
 
 /// Backup data for receiving transfers
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferData {
     // Ephemeral key to query the sender proof set
-    pub sender_proof_set_ephemeral_key: U256,
+    pub sender_proof_set_ephemeral_key: PrivateKey,
     // After fetching sender proof set, this will be filled
     pub sender_proof_set: Option<SenderProofSet>,
-
-    pub sender: U256,
+    pub sender: PublicKeyPair,
+    pub extra_data: ExtraData,
     pub tx: Tx,
     pub tx_index: u32,
     pub tx_merkle_proof: TxMerkleProof,
@@ -37,10 +82,30 @@ impl TransferData {
     }
 }
 
-impl BlsEncryption for TransferData {}
+impl BlsEncryption for TransferData {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 => {
+                let legacy_data: LegacyTransferData = bincode::deserialize(bytes)?;
+                Ok(legacy_data.into_latest())
+            }
+            2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 impl Validation for TransferData {
-    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
+    fn validate(&self) -> anyhow::Result<()> {
+        if let Some(extra_data_salt) = self.extra_data.to_salt() {
+            if extra_data_salt != self.transfer.salt {
+                return Err(anyhow::anyhow!(
+                    "Extra data salt does not match transfer salt: {} != {}",
+                    extra_data_salt,
+                    self.transfer.salt
+                ));
+            }
+        }
         let tx_tree_root: PoseidonHashOut = self.tx_tree_root.try_into()?;
         self.tx_merkle_proof
             .verify(&self.tx, self.tx_index as u64, tx_tree_root)?;

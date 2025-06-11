@@ -242,15 +242,13 @@ impl Storage for InMemoryStorage {
 
             log::info!("num signatures: {}", signatures.len());
 
-            // if there is no signature, skip
-            if signatures.is_empty() {
-                continue;
+            // if signature are not empty, create a BlockPostTask
+            if !signatures.is_empty() {
+                // add to block_post_tasks_hi
+                let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
+                let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
+                block_post_tasks_hi.push_back(block_post_task);
             }
-
-            // add to block_post_tasks_hi
-            let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
-            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
-            block_post_tasks_hi.push_back(block_post_task);
 
             // add fee collection task
             if self.config.use_fee {
@@ -292,7 +290,7 @@ impl Storage for InMemoryStorage {
         };
         let block_post_tasks = collect_fee(
             store_vault_server_client,
-            self.config.fee_beneficiary,
+            self.config.beneficiary,
             &fee_collection,
         )
         .await?;
@@ -396,14 +394,15 @@ mod tests {
     use intmax2_client_sdk::external_api::contract::{
         convert::convert_address_to_alloy, rollup_contract::RollupContract,
     };
-    use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
+    use intmax2_interfaces::utils::{address::IntmaxAddress, key::PublicKeyPair};
+    use intmax2_zkp::ethereum_types::address::Address;
 
     async fn create_storage() -> InMemoryStorage {
         let config = StorageConfig {
             use_fee: false,
             use_collateral: false,
             block_builder_address: Address::default(),
-            fee_beneficiary: U256::default(),
+            beneficiary: IntmaxAddress::default(),
             tx_timeout: 60,
             accepting_tx_interval: 10,
             proposing_block_interval: 10,
@@ -434,7 +433,7 @@ mod tests {
     fn dummy_tx_request(request_id: &str) -> TxRequest {
         TxRequest {
             request_id: request_id.to_string(),
-            pubkey: U256::from(1),
+            sender: PublicKeyPair::default(),
             account_id: None,
             tx: Default::default(), // assuming Tx: Default
             fee_proof: None,

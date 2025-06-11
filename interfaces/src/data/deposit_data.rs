@@ -2,13 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
 use intmax2_zkp::{
-    common::{
-        deposit::{get_pubkey_salt_hash, Deposit},
-        salt::Salt,
-    },
+    common::{deposit::Deposit, salt::Salt},
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
     utils::leafable::Leafable,
 };
+
+use crate::data::encryption::errors::BlsEncryptionError;
 
 use super::{encryption::BlsEncryption, validation::Validation};
 
@@ -101,13 +100,21 @@ impl DepositData {
     }
 }
 
-impl BlsEncryption for DepositData {}
+impl BlsEncryption for DepositData {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 impl Validation for DepositData {
-    fn validate(&self, pubkey: U256) -> anyhow::Result<()> {
-        if self.pubkey_salt_hash != get_pubkey_salt_hash(pubkey, self.deposit_salt) {
-            anyhow::bail!("Invalid pubkey_salt_hash");
-        }
+    fn validate(&self) -> anyhow::Result<()> {
+        // todo: consider validating the pubkey salt hash
+        // if self.pubkey_salt_hash != get_pubkey_salt_hash(pubkey, self.deposit_salt) {
+        //     anyhow::bail!("Invalid pubkey_salt_hash");
+        // }
         Ok(())
     }
 }

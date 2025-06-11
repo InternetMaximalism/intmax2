@@ -1,8 +1,11 @@
-use crate::{config::TestConfig, utils::get_balance_on_intmax};
+use crate::{
+    config::TestConfig,
+    utils::{get_balance_on_intmax, get_keypair_from_eth_key},
+};
 use alloy::primitives::B256;
 use intmax2_cli::cli::deposit::fetch_predicate_permission;
 use intmax2_client_sdk::{
-    client::{client::Client, key_from_eth::generate_intmax_account_from_eth_key},
+    client::client::Client,
     external_api::contract::{
         convert::convert_address_to_intmax, utils::get_address_from_private_key,
     },
@@ -17,13 +20,13 @@ pub async fn single_deposit(
     eth_private_key: B256,
     amount: U256,
 ) -> anyhow::Result<DepositData> {
-    let key = generate_intmax_account_from_eth_key(eth_private_key);
+    let key_pair = get_keypair_from_eth_key(eth_private_key);
     let depositor = get_address_from_private_key(eth_private_key);
     let depositor = convert_address_to_intmax(depositor);
     let deposit_result = client
         .prepare_deposit(
             depositor,
-            key.pubkey,
+            key_pair.into(),
             amount,
             TokenType::NATIVE,
             Address::default(),
@@ -109,10 +112,10 @@ pub async fn single_deposit(
     log::info!("Deposit is relayed to L2");
 
     // sync balance
-    client.sync(key).await?;
+    client.sync(key_pair.into()).await?;
     log::info!("Synced balance");
 
-    let intmax_balance = get_balance_on_intmax(client, key).await?;
+    let intmax_balance = get_balance_on_intmax(client, key_pair.into()).await?;
     if intmax_balance < deposit_data.amount {
         return Err(anyhow::anyhow!(
             "Deposit is not reflected in the balance: {}",

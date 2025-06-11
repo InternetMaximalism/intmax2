@@ -16,18 +16,18 @@ use intmax2_client_sdk::{
         predicate::{PermissionRequest, PredicateClient},
     },
 };
-use intmax2_interfaces::data::deposit_data::{DepositData, TokenType};
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
+use intmax2_interfaces::{
+    data::deposit_data::{DepositData, TokenType},
+    utils::key::PublicKeyPair,
 };
+use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 
 use crate::env_var::EnvVar;
 
 use super::{client::get_client, error::CliError, utils::is_local};
 
 pub async fn deposit(
-    key: KeySet,
+    public_keypair: PublicKeyPair,
     eth_private_key: Bytes32,
     token_type: TokenType,
     amount: U256,
@@ -54,7 +54,7 @@ pub async fn deposit(
     let deposit_result = client
         .prepare_deposit(
             depositor,
-            key.pubkey,
+            public_keypair,
             amount,
             token_type,
             token_address,

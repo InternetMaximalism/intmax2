@@ -55,6 +55,9 @@ pub enum ClientError {
     #[error("Invalid transfer len: {0}")]
     TransferLenError(String),
 
+    #[error("Network mismatch: {0}")]
+    NetworkMismatch(String),
+
     #[error("Cannot send tx by zero balance account")]
     CannotSendTxByZeroBalanceAccount,
 

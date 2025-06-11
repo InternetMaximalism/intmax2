@@ -1782,7 +1782,7 @@ dependencies = [
 
 [[package]]
 name = "balance-prover"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1816,6 +1816,15 @@ name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
+
+[[package]]
+name = "base58-monero"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978e81a45367d2409ecd33369a45dda2e9a3ca516153ec194de1fbda4b9fb79d"
+dependencies = [
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "base64"
@@ -1959,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "block-builder"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -2303,7 +2312,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "serde",
 ]
@@ -3856,7 +3865,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-cli"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "alloy",
  "anyhow",
@@ -3891,7 +3900,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-client-sdk"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "aes-gcm",
  "alloy",
@@ -3940,7 +3949,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3952,15 +3961,19 @@ dependencies = [
  "ark-serialize 0.4.2",
  "ark-std 0.5.0",
  "async-trait",
+ "base58-monero",
  "bincode",
  "chrono",
  "concat-kdf",
  "ctr",
  "hashbrown 0.15.3",
+ "hex",
+ "hkdf",
  "hmac",
  "intmax2-zkp",
  "js-sys",
  "log",
+ "num-bigint 0.4.6",
  "num-traits",
  "plonky2",
  "plonky2_bn254",
@@ -3973,12 +3986,13 @@ dependencies = [
  "serde_with",
  "sha2",
  "thiserror 2.0.12",
+ "tiny-keccak",
  "tokio",
 ]
 
 [[package]]
 name = "intmax2-wasm-lib"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4216,7 +4230,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "legacy-store-vault-server"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6095,7 +6109,7 @@ dependencies = [
 
 [[package]]
 name = "server-common"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-web",
  "common",
@@ -6501,7 +6515,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "store-vault-server"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6681,7 +6695,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "tests"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "alloy",
  "anyhow",
@@ -7284,7 +7298,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7322,7 +7336,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover-worker"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -7917,7 +7931,7 @@ dependencies = [
 
 [[package]]
 name = "withdrawal-server"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",

@@ -8,18 +8,16 @@ use intmax2_interfaces::{
         rw_rights::WriteRights, sender_proof_set::SenderProofSet, user_data::UserData,
         validation::Validation,
     },
+    utils::key::{PrivateKey, ViewPair},
 };
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u256::U256},
-};
+use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use itertools::Itertools as _;
 
 use super::error::StrategyError;
 
 pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
     store_vault_server: &dyn StoreVaultClientInterface,
-    key: KeySet,
+    view_priv: PrivateKey,
     data_type: DataType,
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
@@ -27,12 +25,12 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
 ) -> Result<(Vec<(MetaData, T)>, MetaDataCursorResponse), StrategyError> {
     // fetch pending data
     let encrypted_included_data_with_meta = store_vault_server
-        .get_data_batch(key, &data_type.to_topic(), included_digests)
+        .get_data_batch(view_priv, &data_type.to_topic(), included_digests)
         .await?;
 
     // fetch unprocessed data
     let (encrypted_unprocessed_data_with_meta, cursor_response) = store_vault_server
-        .get_data_sequence(key, &data_type.to_topic(), cursor)
+        .get_data_sequence(view_priv, &data_type.to_topic(), cursor)
         .await?;
 
     // decrypt
@@ -47,13 +45,13 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
                 return None;
             }
             let enc_sender = match data_type.rw_rights().write_rights {
-                WriteRights::SingleAuthWrite => Some(key.pubkey),
-                WriteRights::AuthWrite => Some(key.pubkey),
+                WriteRights::SingleAuthWrite => Some(view_priv.to_public_key()),
+                WriteRights::AuthWrite => Some(view_priv.to_public_key()),
                 WriteRights::SingleOpenWrite => None,
                 WriteRights::OpenWrite => None,
             };
-            match T::decrypt(key, enc_sender, &data) {
-                Ok(data) => match data.validate(key.pubkey) {
+            match T::decrypt(view_priv, enc_sender, &data) {
+                Ok(data) => match data.validate() {
                     Ok(_) => Some((meta, data)),
                     Err(e) => {
                         log::warn!("failed to validate {data_type}: {e}");
@@ -72,51 +70,51 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
 
 pub async fn fetch_sender_proof_set(
     store_vault_server: &dyn StoreVaultClientInterface,
-    ephemeral_key: U256,
+    ephemeral_key: PrivateKey,
 ) -> Result<SenderProofSet, StrategyError> {
-    let key = KeySet::new(ephemeral_key);
     let encrypted_sender_proof_set = store_vault_server
-        .get_snapshot(key, &DataType::SenderProofSet.to_topic())
+        .get_snapshot(ephemeral_key, &DataType::SenderProofSet.to_topic())
         .await?
         .ok_or(StrategyError::SenderProofSetNotFound)?;
     let enc_sender = match DataType::SenderProofSet.rw_rights().write_rights {
-        WriteRights::SingleAuthWrite => Some(key.pubkey),
-        WriteRights::AuthWrite => Some(key.pubkey),
+        WriteRights::SingleAuthWrite => Some(ephemeral_key.to_public_key()),
+        WriteRights::AuthWrite => Some(ephemeral_key.to_public_key()),
         WriteRights::SingleOpenWrite => None,
         WriteRights::OpenWrite => None,
     };
-    let sender_proof_set = SenderProofSet::decrypt(key, enc_sender, &encrypted_sender_proof_set)?;
+    let sender_proof_set =
+        SenderProofSet::decrypt(ephemeral_key, enc_sender, &encrypted_sender_proof_set)?;
     Ok(sender_proof_set)
 }
 
 pub async fn fetch_user_data(
     store_vault_server: &dyn StoreVaultClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
 ) -> Result<UserData, StrategyError> {
     let enc_sender = match DataType::UserData.rw_rights().write_rights {
-        WriteRights::SingleAuthWrite => Some(key.pubkey),
-        WriteRights::AuthWrite => Some(key.pubkey),
+        WriteRights::SingleAuthWrite => Some(view_pair.view.to_public_key()),
+        WriteRights::AuthWrite => Some(view_pair.view.to_public_key()),
         WriteRights::SingleOpenWrite => None,
         WriteRights::OpenWrite => None,
     };
     let user_data = store_vault_server
-        .get_snapshot(key, &DataType::UserData.to_topic())
+        .get_snapshot(view_pair.view, &DataType::UserData.to_topic())
         .await?
-        .map(|encrypted| UserData::decrypt(key, enc_sender, &encrypted))
+        .map(|encrypted| UserData::decrypt(view_pair.view, enc_sender, &encrypted))
         .transpose()
         .map_err(|e| StrategyError::UserDataDecryptionError(e.to_string()))?
-        .unwrap_or(UserData::new(key.pubkey));
+        .unwrap_or(UserData::new(view_pair.spend));
     Ok(user_data)
 }
 
 pub async fn fetch_single_data<T: BlsEncryption + Validation>(
     store_vault_server: &dyn StoreVaultClientInterface,
-    key: KeySet,
+    view_priv: PrivateKey,
     data_type: DataType,
     digest: Bytes32,
 ) -> Result<(MetaData, T), StrategyError> {
     let data_with_meta = store_vault_server
-        .get_data_batch(key, &data_type.to_topic(), &[digest])
+        .get_data_batch(view_priv, &data_type.to_topic(), &[digest])
         .await?;
     if data_with_meta.len() != 1 {
         return Err(StrategyError::UnexpectedError(format!(
@@ -127,13 +125,13 @@ pub async fn fetch_single_data<T: BlsEncryption + Validation>(
     }
     let DataWithMetaData { meta, data } = data_with_meta.into_iter().next().unwrap();
     let enc_sender = match data_type.rw_rights().write_rights {
-        WriteRights::SingleAuthWrite => Some(key.pubkey),
-        WriteRights::AuthWrite => Some(key.pubkey),
+        WriteRights::SingleAuthWrite => Some(view_priv.to_public_key()),
+        WriteRights::AuthWrite => Some(view_priv.to_public_key()),
         WriteRights::SingleOpenWrite => None,
         WriteRights::OpenWrite => None,
     };
-    let (meta, data) = match T::decrypt(key, enc_sender, &data) {
-        Ok(data) => match data.validate(key.pubkey) {
+    let (meta, data) = match T::decrypt(view_priv, enc_sender, &data) {
+        Ok(data) => match data.validate() {
             Ok(_) => (meta, data),
             Err(e) => {
                 return Err(StrategyError::ValidationError(format!(

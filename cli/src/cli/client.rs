@@ -1,7 +1,10 @@
 use std::{path::PathBuf, sync::Arc};
 
 use intmax2_client_sdk::{
-    client::{client::Client, config::ClientConfig},
+    client::{
+        client::Client,
+        config::{network_from_env, ClientConfig},
+    },
     external_api::{
         balance_prover::BalanceProverClient,
         block_builder::BlockBuilderClient,
@@ -39,8 +42,10 @@ pub fn get_client() -> Result<Client, CliError> {
     let balance_prover = build_balance_prover(&env)?;
     let withdrawal_server = Box::new(WithdrawalServerClient::new(&env.withdrawal_server_base_url));
     let (liquidity_contract, rollup_contract, withdrawal_contract) = build_contracts(&env)?;
+    let network = network_from_env();
 
     let config = ClientConfig {
+        network,
         deposit_timeout: env.deposit_timeout,
         tx_timeout: env.tx_timeout,
         block_builder_query_wait_time: env.block_builder_query_wait_time,

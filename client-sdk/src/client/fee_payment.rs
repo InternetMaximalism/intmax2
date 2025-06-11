@@ -6,23 +6,24 @@ use intmax2_interfaces::{
         withdrawal_server::interface::WithdrawalServerClientInterface,
     },
     data::encryption::BlsEncryption,
+    utils::{
+        address::IntmaxAddress,
+        key::{PublicKey, ViewPair},
+    },
 };
-use intmax2_zkp::{
-    common::{signature_content::key_set::KeySet, transfer::Transfer},
-    ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait as _},
-};
+use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait as _};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
-        misc::payment_memo::PaymentMemo, receive_validation::validate_receive,
-        sync::utils::generate_salt,
+        misc::payment_memo::PaymentMemo,
+        receive_validation::validate_receive,
+        types::{GenericRecipient, PaymentMemoEntry, TransferRequest},
     },
     external_api::contract::withdrawal_contract::WithdrawalContract,
 };
 
 use super::{
-    client::PaymentMemoEntry,
     misc::payment_memo::{get_all_payment_memos, payment_memo_topic},
     receive_validation::ReceiveValidationError,
     sync::{error::SyncError, utils::quote_withdrawal_claim_fee},
@@ -58,8 +59,8 @@ pub struct UsedOrInvalidMemo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WithdrawalTransfers {
-    pub transfers: Vec<Transfer>,
+pub struct WithdrawalTransferRequests {
+    pub transfer_requests: Vec<TransferRequest>,
     pub withdrawal_fee_transfer_index: Option<u32>,
     pub claim_fee_transfer_index: Option<u32>,
 }
@@ -70,7 +71,7 @@ pub(crate) async fn quote_withdrawal_fee(
     withdrawal_contract: &WithdrawalContract,
     withdrawal_token_index: u32,
     fee_token_index: u32,
-) -> Result<(Option<U256>, Option<Fee>), SyncError> {
+) -> Result<(IntmaxAddress, Option<Fee>), SyncError> {
     let fee_info = withdrawal_server.get_withdrawal_fee().await?;
     let direct_withdrawal_indices = withdrawal_contract
         .get_direct_withdrawal_token_indices()
@@ -88,7 +89,7 @@ pub(crate) async fn quote_withdrawal_fee(
 pub(crate) async fn quote_claim_fee(
     withdrawal_server: &dyn WithdrawalServerClientInterface,
     fee_token_index: u32,
-) -> Result<(Option<U256>, Option<Fee>), SyncError> {
+) -> Result<(IntmaxAddress, Option<Fee>), SyncError> {
     let fee_info = withdrawal_server.get_claim_fee().await?;
     let fee = quote_withdrawal_claim_fee(Some(fee_token_index), fee_info.fee)?;
     Ok((fee_info.beneficiary, fee))
@@ -96,22 +97,22 @@ pub(crate) async fn quote_claim_fee(
 
 /// generate fee payment memos for withdrawal and claim fee
 pub fn generate_fee_payment_memo(
-    transfers: &[Transfer],
+    transfer_requests: &[TransferRequest],
     withdrawal_fee_transfer_index: Option<u32>,
     claim_fee_transfer_index: Option<u32>,
 ) -> Result<Vec<PaymentMemoEntry>, SyncError> {
     let mut payment_memos = vec![];
 
     if let Some(withdrawal_fee_transfer_index) = withdrawal_fee_transfer_index {
-        if withdrawal_fee_transfer_index >= transfers.len() as u32 {
+        if withdrawal_fee_transfer_index >= transfer_requests.len() as u32 {
             return Err(SyncError::FeeError(
                 "withdrawal_fee_transfer_index is out of range".to_string(),
             ));
         }
-        let fee_transfer = &transfers[withdrawal_fee_transfer_index as usize];
+        let fee_transfer_req = &transfer_requests[withdrawal_fee_transfer_index as usize];
         let fee = Fee {
-            token_index: fee_transfer.token_index,
-            amount: fee_transfer.amount,
+            token_index: fee_transfer_req.token_index,
+            amount: fee_transfer_req.amount,
         };
         let withdrawal_fee_memo = WithdrawalFeeMemo { fee };
         let payment_memo = PaymentMemoEntry {
@@ -123,15 +124,15 @@ pub fn generate_fee_payment_memo(
     }
 
     if let Some(claim_fee_transfer_index) = claim_fee_transfer_index {
-        if claim_fee_transfer_index >= transfers.len() as u32 {
+        if claim_fee_transfer_index >= transfer_requests.len() as u32 {
             return Err(SyncError::FeeError(
                 "claim_fee_transfer_index is out of range".to_string(),
             ));
         }
-        let fee_transfer = &transfers[claim_fee_transfer_index as usize];
+        let fee_transfer_req = &transfer_requests[claim_fee_transfer_index as usize];
         let fee = Fee {
-            token_index: fee_transfer.token_index,
-            amount: fee_transfer.amount,
+            token_index: fee_transfer_req.token_index,
+            amount: fee_transfer_req.amount,
         };
         let claim_fee_memo = ClaimFeeMemo { fee };
         let payment_memo = PaymentMemoEntry {
@@ -149,16 +150,16 @@ pub fn generate_fee_payment_memo(
 pub async fn generate_withdrawal_transfers(
     withdrawal_server: &dyn WithdrawalServerClientInterface,
     withdrawal_contract: &WithdrawalContract,
-    withdrawal_transfer: &Transfer,
+    withdrawal_transfer_request: &TransferRequest,
     fee_token_index: u32,
     with_claim_fee: bool,
-) -> Result<WithdrawalTransfers, SyncError> {
-    let mut transfers = if withdrawal_transfer.amount == U256::zero() {
+) -> Result<WithdrawalTransferRequests, SyncError> {
+    let mut transfer_requests = if withdrawal_transfer_request.amount == U256::zero() {
         // if withdrawal_transfer.amount is zero, ignore withdrawal_transfer
         // and only generate fee transfers
         vec![]
     } else {
-        vec![*withdrawal_transfer]
+        vec![withdrawal_transfer_request.clone()]
     };
 
     let mut withdrawal_fee_transfer_index = None;
@@ -167,42 +168,36 @@ pub async fn generate_withdrawal_transfers(
     let (withdrawal_beneficiary, withdrawal_fee) = quote_withdrawal_fee(
         withdrawal_server,
         withdrawal_contract,
-        withdrawal_transfer.token_index,
+        withdrawal_transfer_request.token_index,
         fee_token_index,
     )
     .await?;
     if let Some(withdrawal_fee) = &withdrawal_fee {
-        let withdrawal_beneficiary = withdrawal_beneficiary.ok_or(SyncError::FeeError(
-            "withdrawal_beneficiary is not set".to_string(),
-        ))?;
-        let withdrawal_fee_transfer = Transfer {
+        let withdrawal_fee_transfer = TransferRequest {
             token_index: withdrawal_fee.token_index,
-            recipient: withdrawal_beneficiary.into(),
+            recipient: GenericRecipient::IntmaxAddress(withdrawal_beneficiary),
             amount: withdrawal_fee.amount,
-            salt: generate_salt(),
+            description: None,
         };
-        withdrawal_fee_transfer_index = Some(transfers.len() as u32);
-        transfers.push(withdrawal_fee_transfer);
+        withdrawal_fee_transfer_index = Some(transfer_requests.len() as u32);
+        transfer_requests.push(withdrawal_fee_transfer);
     }
     if with_claim_fee {
         let (claim_beneficiary, claim_fee) =
             quote_claim_fee(withdrawal_server, fee_token_index).await?;
         if let Some(claim_fee) = claim_fee {
-            let claim_beneficiary = claim_beneficiary.ok_or(SyncError::FeeError(
-                "claim_beneficiary is not set".to_string(),
-            ))?;
-            let claim_fee_transfer = Transfer {
+            let claim_fee_transfer = TransferRequest {
                 token_index: claim_fee.token_index,
-                recipient: claim_beneficiary.into(),
+                recipient: GenericRecipient::IntmaxAddress(claim_beneficiary),
                 amount: claim_fee.amount,
-                salt: generate_salt(),
+                description: None,
             };
-            claim_fee_transfer_index = Some(transfers.len() as u32);
-            transfers.push(claim_fee_transfer);
+            claim_fee_transfer_index = Some(transfer_requests.len() as u32);
+            transfer_requests.push(claim_fee_transfer);
         }
     }
-    Ok(WithdrawalTransfers {
-        transfers,
+    Ok(WithdrawalTransferRequests {
+        transfer_requests,
         withdrawal_fee_transfer_index,
         claim_fee_transfer_index,
     })
@@ -211,15 +206,16 @@ pub async fn generate_withdrawal_transfers(
 /// get unused payment memos
 pub async fn get_unused_payments(
     store_vault_server: &dyn StoreVaultClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     fee_type: FeeType,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
     let memo_name = match fee_type {
         FeeType::Withdrawal => WITHDRAWAL_FEE_MEMO,
         FeeType::Claim => CLAIM_FEE_MEMO,
     };
-    let memos = get_all_payment_memos(store_vault_server, key, memo_name).await?;
-    let used_memos = get_all_payment_memos(store_vault_server, key, USED_OR_INVALID_MEMO).await?;
+    let memos = get_all_payment_memos(store_vault_server, view_pair.view, memo_name).await?;
+    let used_memos =
+        get_all_payment_memos(store_vault_server, view_pair.view, USED_OR_INVALID_MEMO).await?;
     let unused_memos = memos
         .into_iter()
         .filter(|memo| {
@@ -234,7 +230,7 @@ pub async fn get_unused_payments(
 /// consume payment memo
 pub async fn consume_payment(
     store_vault_server: &dyn StoreVaultClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     payment_memo: &PaymentMemo,
     reason: &str,
 ) -> Result<(), SyncError> {
@@ -249,10 +245,12 @@ pub async fn consume_payment(
     };
     let entry = SaveDataEntry {
         topic,
-        pubkey: key.pubkey,
-        data: payment_memo.encrypt(key.pubkey, Some(key))?,
+        pubkey: view_pair.view.to_public_key().0,
+        data: payment_memo.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?,
     };
-    store_vault_server.save_data_batch(key, &[entry]).await?;
+    store_vault_server
+        .save_data_batch(view_pair.view, &[entry])
+        .await?;
     Ok(())
 }
 
@@ -260,13 +258,13 @@ pub async fn consume_payment(
 pub async fn select_unused_fees(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     fee_beneficiary: U256,
     fee: Fee,
     fee_type: FeeType,
     tx_timeout: u64,
 ) -> Result<Vec<PaymentMemo>, SyncError> {
-    let unused_fees = get_unused_payments(store_vault_server, key, fee_type).await?;
+    let unused_fees = get_unused_payments(store_vault_server, view_pair, fee_type).await?;
     // Extract only those whose fee.token_index and recipient matches and sort by fee.amount
     let mut sorted_fee_memo = unused_fees
         .into_iter()
@@ -284,7 +282,7 @@ pub async fn select_unused_fees(
         match validate_receive(
             store_vault_server,
             validity_prover,
-            memo.transfer_data.transfer.recipient.to_pubkey().unwrap(),
+            PublicKey(memo.transfer_data.transfer.recipient.to_pubkey().unwrap()),
             memo.meta.timestamp,
             &memo.transfer_data,
         )
@@ -296,14 +294,14 @@ pub async fn select_unused_fees(
             }
             Err(ReceiveValidationError::TxIsNotSettled(timestamp)) => {
                 if timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
-                    consume_payment(store_vault_server, key, &memo, "tx is timeout").await?;
+                    consume_payment(store_vault_server, view_pair, &memo, "tx is timeout").await?;
                 }
                 log::info!("fee: {} is not settled yet", memo.meta.digest);
                 continue;
             }
             Err(e) => {
                 log::warn!("invalid fee: {} reason: {}", memo.meta.digest, e,);
-                consume_payment(store_vault_server, key, &memo, &e.to_string()).await?;
+                consume_payment(store_vault_server, view_pair, &memo, &e.to_string()).await?;
             }
         }
         if collected_total_fee >= fee.amount {

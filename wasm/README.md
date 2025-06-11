@@ -17,3 +17,9 @@ wasm-pack build --target web
 ```
 wasm-pack build --target nodejs --out-dir js-test/pkg
 ```
+
+## Test
+
+```
+wasm-pack test --node --release
+```

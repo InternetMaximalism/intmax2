@@ -12,7 +12,7 @@ use intmax2_interfaces::{
         },
     },
     data::meta_data::MetaData,
-    utils::{digest::get_digest, signature::Auth},
+    utils::{digest::get_digest, key::PrivateKey, signature::Auth},
 };
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet,
@@ -253,11 +253,12 @@ impl From<LocalStoreVaultError> for ServerError {
 impl StoreVaultClientInterface for LocalStoreVaultClient {
     async fn save_snapshot(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         topic: &str,
         prev_digest: Option<Bytes32>,
         data: &[u8],
     ) -> Result<(), ServerError> {
+        let key = view_key.to_key_set();
         let stored_prev_digest = self.local_get_prev_snapshot_digest(key, topic)?;
         if stored_prev_digest != prev_digest {
             return Err(LocalStoreVaultError::LockError(format!(
@@ -273,14 +274,19 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
         Ok(())
     }
 
-    async fn get_snapshot(&self, key: KeySet, topic: &str) -> Result<Option<Vec<u8>>, ServerError> {
+    async fn get_snapshot(
+        &self,
+        view_key: PrivateKey,
+        topic: &str,
+    ) -> Result<Option<Vec<u8>>, ServerError> {
+        let key = view_key.to_key_set();
         let data = self.local_get_snapshot(key.pubkey, topic)?;
         Ok(data)
     }
 
     async fn save_data_batch(
         &self,
-        _key: KeySet,
+        _view_key: PrivateKey,
         entries: &[SaveDataEntry],
     ) -> Result<Vec<Bytes32>, ServerError> {
         let mut entries_with_meta = Vec::new();
@@ -300,20 +306,22 @@ impl StoreVaultClientInterface for LocalStoreVaultClient {
 
     async fn get_data_batch(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         topic: &str,
         digests: &[Bytes32],
     ) -> Result<Vec<DataWithMetaData>, ServerError> {
+        let key = view_key.to_key_set();
         let data_with_meta = self.local_get_data_batch(key.pubkey, topic, digests)?;
         Ok(data_with_meta)
     }
 
     async fn get_data_sequence(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
         topic: &str,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<DataWithMetaData>, MetaDataCursorResponse), ServerError> {
+        let key = view_key.to_key_set();
         let (data_with_meta, cursor_response) =
             self.local_get_data_sequence(key.pubkey, topic, cursor)?;
         Ok((data_with_meta, cursor_response))

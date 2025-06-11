@@ -8,18 +8,20 @@ use intmax2_interfaces::{
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
-        data_type::DataType, encryption::BlsEncryption, sender_proof_set::SenderProofSet,
-        transfer_data::TransferData, validation::Validation,
+        data_type::DataType, encryption::BlsEncryption, extra_data::ExtraData,
+        sender_proof_set::SenderProofSet, transfer_data::TransferData, validation::Validation,
     },
-    utils::random::default_rng,
+    utils::{
+        address::IntmaxAddress,
+        key::{PrivateKey, PublicKey},
+        random::default_rng,
+    },
 };
 use intmax2_zkp::{
     circuits::balance::send::spent_circuit::SpentPublicInputs,
     common::{
         block_builder::UserSignature,
-        signature_content::{
-            block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
-        },
+        signature_content::{block_sign_payload::BlockSignPayload, utils::get_pubkey_hash},
         witness::transfer_witness::TransferWitness,
     },
     constants::NUM_SENDERS_IN_BLOCK,
@@ -36,11 +38,11 @@ use uuid::Uuid;
 /// Validate fee proof
 pub async fn validate_fee_proof(
     store_vault_server_client: &dyn StoreVaultClientInterface,
-    beneficiary_pubkey: Option<U256>,
+    beneficiary: IntmaxAddress,
     block_builder_address: Address,
     required_fee: Option<&HashMap<u32, U256>>,
     required_collateral_fee: Option<&HashMap<u32, U256>>,
-    sender: U256,
+    sender_spend_pub: PublicKey,
     fee_proof: &Option<FeeProof>,
 ) -> Result<(), FeeError> {
     log::info!(
@@ -55,10 +57,6 @@ pub async fn validate_fee_proof(
     let fee_proof = fee_proof
         .as_ref()
         .ok_or(FeeError::InvalidFee("Fee proof is missing".to_string()))?;
-    let beneficiary_pubkey = beneficiary_pubkey.ok_or(FeeError::InvalidFee(
-        "Beneficiary pubkey is missing".to_string(),
-    ))?;
-
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server_client,
         fee_proof.sender_proof_set_ephemeral_key,
@@ -67,7 +65,7 @@ pub async fn validate_fee_proof(
 
     // validate main fee
     validate_fee_single(
-        beneficiary_pubkey,
+        beneficiary,
         required_fee,
         &sender_proof_set,
         &fee_proof.fee_transfer_witness,
@@ -83,9 +81,15 @@ pub async fn validate_fee_proof(
                 .ok_or(FeeError::FeeVerificationError(
                     "Collateral block is missing".to_string(),
                 ))?;
+        // validate block builder address
+        if collateral_block.block_builder_address != block_builder_address {
+            return Err(FeeError::FeeVerificationError(
+                "Invalid block builder address in collateral block".to_string(),
+            ));
+        }
         // validate transfer data
         let transfer_data = &collateral_block.fee_transfer_data;
-        match transfer_data.validate(U256::dummy_pubkey()) {
+        match transfer_data.validate() {
             Ok(_) => {}
             Err(e) => {
                 log::error!("Failed to validate transfer data: {e}");
@@ -102,10 +106,10 @@ pub async fn validate_fee_proof(
 
         // validate signature
         let user_signature = UserSignature {
-            pubkey: sender,
+            pubkey: sender_spend_pub.0,
             signature: collateral_block.signature.clone(),
         };
-        let mut pubkeys = vec![sender];
+        let mut pubkeys = vec![sender_spend_pub.0];
         pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
         let pubkey_hash = get_pubkey_hash(&pubkeys);
         let block_sign_payload = BlockSignPayload {
@@ -133,7 +137,7 @@ pub async fn validate_fee_proof(
             transfer_merkle_proof: transfer_data.transfer_merkle_proof.clone(),
         };
         validate_fee_single(
-            beneficiary_pubkey,
+            beneficiary,
             collateral_fee,
             &sender_proof_set,
             &transfer_witness,
@@ -143,18 +147,16 @@ pub async fn validate_fee_proof(
     Ok(())
 }
 
-/// common function to validate fee and collateral fee
+/// common function to validate fee
 async fn validate_fee_single(
-    beneficiary_pubkey: U256,
+    beneficiary: IntmaxAddress,
     required_fee: &HashMap<u32, U256>, // token index -> fee amount
     sender_proof_set: &SenderProofSet,
     transfer_witness: &TransferWitness,
 ) -> Result<(), FeeError> {
-    sender_proof_set
-        .validate(U256::dummy_pubkey())
-        .map_err(|e| {
-            FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {e}"))
-        })?;
+    sender_proof_set.validate().map_err(|e| {
+        FeeError::FeeVerificationError(format!("Failed to validate sender proof set: {e}"))
+    })?;
 
     // validate spent proof pis
     let spent_proof = sender_proof_set.spent_proof.decompress()?;
@@ -195,7 +197,7 @@ async fn validate_fee_single(
         ));
     }
     let recipient = recipient.to_pubkey().unwrap();
-    if recipient != beneficiary_pubkey {
+    if recipient != beneficiary.public_spend.0 {
         return Err(FeeError::InvalidRecipient(
             "Recipient is not the beneficiary".to_string(),
         ));
@@ -253,7 +255,7 @@ pub struct FeeCollection {
 /// Collect fee from the senders
 pub async fn collect_fee(
     store_vault_server_client: &dyn StoreVaultClientInterface,
-    beneficiary_pubkey: U256,
+    beneficiary: IntmaxAddress,
     fee_collection: &FeeCollection,
 ) -> Result<Vec<BlockPostTask>, FeeError> {
     let mut block_post_tasks = Vec::new();
@@ -275,13 +277,14 @@ pub async fn collect_fee(
         let signature = fee_collection
             .signatures
             .iter()
-            .find(|s| s.pubkey == request.pubkey);
+            .find(|s| s.pubkey == request.spend_pub());
         if signature.is_some() {
             // fee will be paid
             let transfer_data = TransferData {
                 sender_proof_set_ephemeral_key: fee_proof.sender_proof_set_ephemeral_key,
                 sender_proof_set: None,
-                sender: request.pubkey,
+                sender: request.sender,
+                extra_data: ExtraData::default(),
                 tx: request.tx,
                 tx_index: proposal.tx_index,
                 tx_merkle_proof: proposal.tx_merkle_proof.clone(),
@@ -291,12 +294,12 @@ pub async fn collect_fee(
                 transfer_merkle_proof: fee_proof.fee_transfer_witness.transfer_merkle_proof.clone(),
             };
             transfer_data_vec.push(transfer_data);
-            log::info!("sender {}'s fee is collected", request.pubkey);
+            log::info!("sender {}'s fee is collected", request.spend_pub());
         } else {
             if !fee_collection.use_collateral {
                 log::warn!(
                     "sender {} did not return the signature for the fee but collateral is not enabled",
-                    request.pubkey
+                    request.spend_pub()
                 );
                 continue;
             }
@@ -310,7 +313,7 @@ pub async fn collect_fee(
                     ))?;
 
             let transfer_data = &collateral_block.fee_transfer_data;
-            let mut pubkeys = vec![request.pubkey];
+            let mut pubkeys = vec![request.spend_pub()];
             pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
             let pubkey_hash = get_pubkey_hash(&pubkeys);
             let account_ids = request.account_id.map(|id| {
@@ -319,14 +322,14 @@ pub async fn collect_fee(
                 AccountIdPacked::pack(&account_ids)
             });
             let signature = UserSignature {
-                pubkey: request.pubkey,
+                pubkey: request.spend_pub(),
                 signature: collateral_block.signature.clone(),
             };
             let block_sign_payload = BlockSignPayload {
                 is_registration_block: collateral_block.is_registration_block,
                 tx_tree_root: transfer_data.tx_tree_root,
                 expiry: collateral_block.expiry.into(),
-                block_builder_address: collateral_block.block_builder_address, // todo: check address
+                block_builder_address: collateral_block.block_builder_address,
                 block_builder_nonce: 0,
             };
             // validate signature again
@@ -341,7 +344,7 @@ pub async fn collect_fee(
 
             let block_post = BlockPostTask {
                 force_post: false,
-                block_sign_payload: memo.block_sign_payload.clone(),
+                block_sign_payload,
                 pubkeys,
                 account_ids,
                 pubkey_hash,
@@ -349,7 +352,10 @@ pub async fn collect_fee(
                 block_id: Uuid::new_v4().to_string(),
             };
             block_post_tasks.push(block_post);
-            log::warn!("sender {}'s collateral block is queued", request.pubkey);
+            log::warn!(
+                "sender {}'s collateral block is queued",
+                request.spend_pub()
+            );
         }
     }
 
@@ -363,12 +369,12 @@ pub async fn collect_fee(
     for transfer_data in transfer_data_vec {
         let entry = SaveDataEntry {
             topic: DataType::Transfer.to_topic(),
-            pubkey: beneficiary_pubkey,
-            data: transfer_data.encrypt(beneficiary_pubkey, None)?,
+            pubkey: beneficiary.public_view.0,
+            data: transfer_data.encrypt(beneficiary.public_view, None)?,
         };
         entries.push(entry);
     }
-    let dummy_key = KeySet::rand(&mut default_rng());
+    let dummy_key = PrivateKey::rand(&mut default_rng());
     let _digests = store_vault_server_client
         .save_data_batch(dummy_key, &entries)
         .await?;

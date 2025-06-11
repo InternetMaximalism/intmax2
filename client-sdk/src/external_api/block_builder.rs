@@ -1,13 +1,16 @@
 use async_trait::async_trait;
-use intmax2_interfaces::api::{
-    block_builder::{
-        interface::{BlockBuilderClientInterface, BlockBuilderFeeInfo, FeeProof},
-        types::{
-            PostSignatureRequest, QueryProposalRequest, QueryProposalResponse, TxRequestRequest,
-            TxRequestResponse,
+use intmax2_interfaces::{
+    api::{
+        block_builder::{
+            interface::{BlockBuilderClientInterface, BlockBuilderFeeInfo, FeeProof},
+            types::{
+                PostSignatureRequest, QueryProposalRequest, QueryProposalResponse,
+                TxRequestRequest, TxRequestResponse,
+            },
         },
+        error::ServerError,
     },
-    error::ServerError,
+    utils::address::IntmaxAddress,
 };
 use intmax2_zkp::{
     common::{block_builder::BlockProposal, signature_content::flatten::FlatG2, tx::Tx},
@@ -47,13 +50,13 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
         &self,
         block_builder_url: &str,
         is_registration_block: bool,
-        pubkey: U256,
+        sender: IntmaxAddress,
         tx: Tx,
         fee_proof: Option<FeeProof>,
     ) -> Result<String, ServerError> {
         let request = TxRequestRequest {
             is_registration_block,
-            pubkey,
+            sender,
             tx,
             fee_proof,
         };

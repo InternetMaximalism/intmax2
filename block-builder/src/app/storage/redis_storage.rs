@@ -519,13 +519,7 @@ impl Storage for RedisStorage {
                 let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await?;
 
                 let memo = match serialized_memo {
-                    Some(serialized) => match serde_json::from_str::<ProposalMemo>(&serialized) {
-                        Ok(memo) => memo,
-                        Err(e) => {
-                            log::error!("Failed to deserialize memo for block_id {block_id}: {e}");
-                            continue;
-                        }
-                    },
+                    Some(serialized) => serde_json::from_str::<ProposalMemo>(&serialized)?,
                     None => continue,
                 };
 
@@ -538,45 +532,37 @@ impl Storage for RedisStorage {
                 let signatures_key = format!("{}:{}", self.signatures_key, block_id);
                 let serialized_signatures: Vec<String> =
                     conn.lrange(&signatures_key, 0, -1).await?;
-
-                // Skip if no signatures
-                if serialized_signatures.is_empty() {
-                    continue;
-                }
-
                 // Deserialize signatures
                 let mut signatures = Vec::with_capacity(serialized_signatures.len());
                 for serialized in serialized_signatures {
-                    match serde_json::from_str::<UserSignature>(&serialized) {
-                        Ok(sig) => signatures.push(sig),
-                        Err(e) => {
-                            log::error!("Failed to deserialize signature: {e}");
-                            continue;
-                        }
-                    }
+                    let sig = serde_json::from_str::<UserSignature>(&serialized)?;
+                    signatures.push(sig);
                 }
 
-                // Create block post task
-                let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
-                let serialized_task = match serde_json::to_string(&block_post_task) {
-                    Ok(task) => task,
-                    Err(e) => {
-                        log::error!("Failed to serialize block post task: {e}");
+                // Post task only if we have non-empty signatures
+                if !signatures.is_empty() {
+                    let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
+                    let serialized_task = serde_json::to_string(&block_post_task)?;
+                    let mut pipe = redis::pipe();
+                    pipe.atomic();
+                    // Add to high priority queue
+                    pipe.rpush(&self.block_post_tasks_hi_key, &serialized_task);
+                    // Set TTL for high priority queue
+                    pipe.expire(
+                        &self.block_post_tasks_hi_key,
+                        GENERAL_KEY_TTL_SECONDS as i64,
+                    );
+                    if let Err(e) = pipe.query_async::<()>(&mut conn).await {
+                        log::error!(
+                            "Failed to execute queue post block task for block_id {block_id}: {e}"
+                        );
                         continue;
                     }
-                };
+                }
 
                 // Use a transaction to ensure atomicity
                 let mut pipe = redis::pipe();
                 pipe.atomic();
-
-                // Add to high priority queue
-                pipe.rpush(&self.block_post_tasks_hi_key, &serialized_task);
-                // Set TTL for high priority queue
-                pipe.expire(
-                    &self.block_post_tasks_hi_key,
-                    GENERAL_KEY_TTL_SECONDS as i64,
-                );
 
                 // Add fee collection task if needed
                 if self.config.use_fee {
@@ -585,15 +571,7 @@ impl Storage for RedisStorage {
                         memo: memo.clone(),
                         signatures: signatures.clone(),
                     };
-
-                    let serialized_fee_collection = match serde_json::to_string(&fee_collection) {
-                        Ok(collection) => collection,
-                        Err(e) => {
-                            log::error!("Failed to serialize fee collection: {e}");
-                            continue;
-                        }
-                    };
-
+                    let serialized_fee_collection = serde_json::to_string(&fee_collection)?;
                     pipe.rpush(&self.fee_collection_tasks_key, &serialized_fee_collection);
                     // Set TTL for fee collection tasks queue
                     pipe.expire(
@@ -664,7 +642,7 @@ impl Storage for RedisStorage {
             // Process the fee collection
             let block_post_tasks = collect_fee(
                 store_vault_server_client,
-                self.config.fee_beneficiary,
+                self.config.beneficiary,
                 &fee_collection,
             )
             .await?;
@@ -946,7 +924,8 @@ mod tests {
             rollup_contract::{Rollup, RollupContract},
         },
     };
-    use intmax2_zkp::ethereum_types::{address::Address, u256::U256, u32limb_trait::U32LimbTrait};
+    use intmax2_interfaces::utils::address::IntmaxAddress;
+    use intmax2_zkp::ethereum_types::{address::Address, u32limb_trait::U32LimbTrait};
     use uuid::Uuid;
 
     use test_redis_helper::{assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker};
@@ -956,7 +935,7 @@ mod tests {
             use_fee: true,
             use_collateral: true,
             block_builder_address: Address::zero(),
-            fee_beneficiary: U256::default(),
+            beneficiary: IntmaxAddress::default(),
             tx_timeout: 80,
             accepting_tx_interval: 40,
             proposing_block_interval: 10,

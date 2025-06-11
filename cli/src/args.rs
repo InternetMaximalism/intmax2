@@ -2,6 +2,7 @@ use alloy::primitives::B256;
 use clap::{Parser, Subcommand};
 use intmax2_interfaces::{
     api::store_vault_server::types::CursorOrder, data::deposit_data::TokenType,
+    utils::address::IntmaxAddress,
 };
 use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 use std::path::PathBuf;
@@ -20,11 +21,13 @@ pub enum Commands {
         #[clap(long)]
         private_key: Bytes32,
         #[clap(long)]
-        to: Bytes32,
+        to: IntmaxAddress,
         #[clap(long)]
         amount: U256,
         #[clap(long)]
         token_index: u32,
+        #[clap(long)]
+        description: Option<String>,
         #[clap(long)]
         fee_token_index: Option<u32>,
         #[clap(long, default_value_t = false)]
@@ -39,6 +42,8 @@ pub enum Commands {
         amount: U256,
         #[clap(long)]
         token_index: u32,
+        #[clap(long)]
+        description: Option<String>,
         #[clap(long)]
         fee_token_index: Option<u32>,
         #[clap(long, default_value_t = false)]
@@ -166,6 +171,6 @@ pub enum Commands {
     },
     KeyFromBackupKey {
         #[clap(long)]
-        backup_key: B256,
+        backup_key: Bytes32,
     },
 }

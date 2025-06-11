@@ -12,11 +12,9 @@ use intmax2_interfaces::{
         meta_data::{MetaData, MetaDataWithBlockNumber},
         user_data::ProcessStatus,
     },
+    utils::key::ViewPair,
 };
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
-};
+use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait};
 
 use crate::external_api::contract::liquidity_contract::LiquidityContract;
 
@@ -34,7 +32,7 @@ pub async fn fetch_deposit_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
@@ -46,7 +44,7 @@ pub async fn fetch_deposit_info(
     let mut timeout = Vec::new();
     let (data_with_meta, cursor_response) = fetch_decrypt_validate::<DepositData>(
         store_vault_server,
-        key,
+        view_pair.view,
         DataType::Deposit,
         included_digests,
         excluded_digests,
@@ -130,7 +128,7 @@ pub async fn fetch_all_unprocessed_deposit_info(
     store_vault_server: &dyn StoreVaultClientInterface,
     validity_prover: &dyn ValidityProverClientInterface,
     liquidity_contract: &LiquidityContract,
-    key: KeySet,
+    view_pair: ViewPair,
     current_time: u64,
     process_status: &ProcessStatus,
     deposit_timeout: u64,
@@ -157,7 +155,7 @@ pub async fn fetch_all_unprocessed_deposit_info(
             store_vault_server,
             validity_prover,
             liquidity_contract,
-            key,
+            view_pair,
             current_time,
             &included_digests,
             &process_status.processed_digests,

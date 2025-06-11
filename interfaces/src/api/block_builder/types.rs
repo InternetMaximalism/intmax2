@@ -1,16 +1,16 @@
+use super::interface::FeeProof;
+use crate::utils::address::IntmaxAddress;
 use intmax2_zkp::{
     common::{block_builder::BlockProposal, signature_content::flatten::FlatG2, tx::Tx},
     ethereum_types::u256::U256,
 };
 use serde::{Deserialize, Serialize};
 
-use super::interface::FeeProof;
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxRequestRequest {
     pub is_registration_block: bool,
-    pub pubkey: U256,
+    pub sender: IntmaxAddress,
     pub tx: Tx,
     pub fee_proof: Option<FeeProof>,
 }

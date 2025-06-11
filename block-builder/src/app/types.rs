@@ -1,4 +1,6 @@
-use intmax2_interfaces::api::block_builder::interface::FeeProof;
+use std::cmp::Reverse;
+
+use intmax2_interfaces::{api::block_builder::interface::FeeProof, utils::key::PublicKeyPair};
 use intmax2_zkp::{
     common::{
         block_builder::BlockProposal,
@@ -20,7 +22,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxRequest {
     pub request_id: String,
-    pub pubkey: U256,
+    pub sender: PublicKeyPair,
     pub account_id: Option<AccountId>,
     pub tx: Tx,
     pub fee_proof: Option<FeeProof>,
@@ -30,11 +32,18 @@ impl Default for TxRequest {
     fn default() -> Self {
         Self {
             request_id: Uuid::default().to_string(),
-            pubkey: U256::dummy_pubkey(),
+            sender: PublicKeyPair::default(),
             account_id: Some(AccountId::dummy()),
             tx: Tx::default(),
             fee_proof: None,
         }
+    }
+}
+
+impl TxRequest {
+    /// Get the spend public key of the sender.
+    pub fn spend_pub(&self) -> U256 {
+        self.sender.spend.0
     }
 }
 
@@ -74,12 +83,12 @@ impl ProposalMemo {
 
         let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
         let mut sorted_and_padded_txs = tx_requests.to_vec();
-        sorted_and_padded_txs.sort_by(|a, b| b.pubkey.cmp(&a.pubkey));
+        sorted_and_padded_txs.sort_by_key(|tx| Reverse(tx.spend_pub()));
         sorted_and_padded_txs.resize(NUM_SENDERS_IN_BLOCK, TxRequest::default());
 
         let pubkeys = sorted_and_padded_txs
             .iter()
-            .map(|tx| tx.pubkey)
+            .map(|tx| tx.sender.spend.0)
             .collect::<Vec<_>>();
         let pubkey_hash = get_pubkey_hash(&pubkeys);
 
@@ -98,10 +107,10 @@ impl ProposalMemo {
         };
         let mut proposals = Vec::new();
         for r in tx_requests {
-            let pubkey = r.pubkey;
+            let pubkey = r.spend_pub();
             let tx_index = sorted_and_padded_txs
                 .iter()
-                .position(|r| r.pubkey == pubkey)
+                .position(|r| r.spend_pub() == pubkey)
                 .unwrap() as u32;
             let tx_merkle_proof = tx_tree.prove(tx_index as u64);
             proposals.push(BlockProposal {
@@ -132,7 +141,7 @@ impl ProposalMemo {
         let position = self
             .tx_requests
             .iter()
-            .position(|r| r.pubkey == pubkey && r.tx == tx);
+            .position(|r| r.spend_pub() == pubkey && r.tx == tx);
         position.map(|pos| self.proposals[pos].clone())
     }
 
@@ -146,7 +155,7 @@ impl ProposalMemo {
         }
         self.tx_requests
             .iter()
-            .find(|r| r.pubkey == pubkey)
+            .find(|r| r.spend_pub() == pubkey)
             .and_then(|r| r.account_id)
     }
 
@@ -168,18 +177,26 @@ impl ProposalMemo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use intmax2_interfaces::utils::key::PublicKey;
     use intmax2_zkp::{
         common::tx::Tx, constants::NUM_SENDERS_IN_BLOCK, ethereum_types::u256::U256,
     };
 
     use num_bigint::BigUint;
 
+    fn gen_sender(i: u32) -> PublicKeyPair {
+        PublicKeyPair {
+            spend: PublicKey(U256::from(i)),
+            view: PublicKey(U256::from(i)),
+        }
+    }
+
     #[test]
     fn test_basic_from_tx_requests() {
-        let pubkey = U256::from(1);
+        let sender = gen_sender(1);
         let tx = Tx::default();
         let tx_requests = vec![TxRequest {
-            pubkey,
+            sender,
             tx,
             ..Default::default()
         }];
@@ -189,22 +206,22 @@ mod tests {
         assert_eq!(memo.tx_requests.len(), 1);
         assert_eq!(memo.pubkeys.len(), NUM_SENDERS_IN_BLOCK);
         assert_eq!(memo.proposals.len(), 1);
-        assert_eq!(memo.pubkeys[0], pubkey);
+        assert_eq!(memo.pubkeys[0], sender.spend.0);
     }
 
     #[test]
     fn test_pubkey_sorting() {
         let tx_requests = vec![
             TxRequest {
-                pubkey: U256::from(5),
+                sender: gen_sender(5),
                 ..Default::default()
             },
             TxRequest {
-                pubkey: U256::from(10),
+                sender: gen_sender(10),
                 ..Default::default()
             },
             TxRequest {
-                pubkey: U256::from(1),
+                sender: gen_sender(1),
                 ..Default::default()
             },
         ];
@@ -220,7 +237,7 @@ mod tests {
     #[test]
     fn test_padding_to_num_senders() {
         let tx_requests = vec![TxRequest {
-            pubkey: U256::from(2),
+            sender: gen_sender(2),
             ..Default::default()
         }];
 
@@ -237,11 +254,11 @@ mod tests {
     fn test_tx_index_proposal() {
         let tx_requests = vec![
             TxRequest {
-                pubkey: U256::from(3),
+                sender: gen_sender(3),
                 ..Default::default()
             },
             TxRequest {
-                pubkey: U256::from(5),
+                sender: gen_sender(5),
                 ..Default::default()
             },
         ];
@@ -262,19 +279,19 @@ mod tests {
 
     #[test]
     fn test_get_proposal() {
-        let pubkey = U256::from(42);
+        let sender = gen_sender(42);
         let tx = Tx::default();
         let tx_requests = vec![TxRequest {
-            pubkey,
+            sender,
             tx,
             ..Default::default()
         }];
 
         let memo = ProposalMemo::from_tx_requests(false, Address::default(), 0, &tx_requests, 1000);
 
-        let proposal = memo.get_proposal(pubkey, tx);
+        let proposal = memo.get_proposal(sender.spend.0, tx);
         assert!(proposal.is_some());
-        assert_eq!(proposal.unwrap().pubkeys[0], pubkey);
+        assert_eq!(proposal.unwrap().pubkeys[0], sender.spend.0);
     }
 
     #[test]
@@ -289,18 +306,18 @@ mod tests {
 
     #[test]
     fn test_duplicate_pubkeys() {
-        let pubkey = U256::from(123);
+        let sender = gen_sender(123);
         let tx1 = Tx::default();
         let tx2 = Tx::default();
 
         let tx_requests = vec![
             TxRequest {
-                pubkey,
+                sender,
                 tx: tx1,
                 ..Default::default()
             },
             TxRequest {
-                pubkey,
+                sender,
                 tx: tx2,
                 ..Default::default()
             },
@@ -321,7 +338,7 @@ mod tests {
     fn test_full_tx_requests_in_block() {
         let tx_requests: Vec<TxRequest> = (0..(NUM_SENDERS_IN_BLOCK))
             .map(|i| TxRequest {
-                pubkey: U256::try_from(BigUint::from(i)).unwrap(),
+                sender: gen_sender(i as u32),
                 ..Default::default()
             })
             .collect();
@@ -345,7 +362,7 @@ mod tests {
     fn test_exceeding_tx_requests_in_block() {
         let tx_requests: Vec<TxRequest> = (0..(NUM_SENDERS_IN_BLOCK + 1))
             .map(|i| TxRequest {
-                pubkey: U256::try_from(BigUint::from(i)).unwrap(),
+                sender: gen_sender(i as u32),
                 ..Default::default()
             })
             .collect();

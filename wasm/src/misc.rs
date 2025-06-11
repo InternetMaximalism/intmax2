@@ -5,7 +5,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 use crate::{
     client::{get_client, Config},
     init_logger,
-    utils::str_privkey_to_keyset,
+    utils::str_to_view_pair,
 };
 use intmax2_interfaces::{
     api::store_vault_server::{
@@ -51,11 +51,13 @@ fn derive_path_topic() -> String {
 #[wasm_bindgen]
 pub async fn save_derive_path(
     config: &Config,
-    private_key: &str,
+    view_pair: &str,
     derive: &JsDerive,
 ) -> Result<String, JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
+    let view_pair = str_to_view_pair(view_pair)?;
+    let view_pub = view_pair.view.to_public_key();
+
     let client = get_client(config);
     let generic_misc_data = GenericMiscData {
         data: bincode::serialize(derive).unwrap(),
@@ -63,12 +65,12 @@ pub async fn save_derive_path(
 
     let entry = SaveDataEntry {
         topic: derive_path_topic(),
-        pubkey: key.pubkey,
-        data: generic_misc_data.encrypt(key.pubkey, Some(key))?,
+        pubkey: view_pub.0,
+        data: generic_misc_data.encrypt(view_pub, Some(view_pair.view))?,
     };
     let digests = client
         .store_vault_server
-        .save_data_batch(key, &[entry])
+        .save_data_batch(view_pair.view, &[entry])
         .await?;
     Ok(digests[0].to_hex())
 }
@@ -76,10 +78,11 @@ pub async fn save_derive_path(
 #[wasm_bindgen]
 pub async fn get_derive_path_list(
     config: &Config,
-    private_key: &str,
+    view_pair: &str,
 ) -> Result<Vec<JsDerive>, JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
+    let view_pair = str_to_view_pair(view_pair)?;
+    let view_pub = view_pair.view.to_public_key();
     let client = get_client(config);
 
     let mut encrypted_data = vec![];
@@ -91,7 +94,7 @@ pub async fn get_derive_path_list(
     loop {
         let (encrypted_data_partial, cursor_response) = client
             .store_vault_server
-            .get_data_sequence(key, &derive_path_topic(), &cursor)
+            .get_data_sequence(view_pair.view, &derive_path_topic(), &cursor)
             .await?;
         encrypted_data.extend(encrypted_data_partial);
         if !cursor_response.has_more {
@@ -101,7 +104,8 @@ pub async fn get_derive_path_list(
     }
     let mut derive_list: Vec<JsDerive> = Vec::new();
     for data in encrypted_data {
-        let generic_misc_data = GenericMiscData::decrypt(key, Some(key.pubkey), &data.data)?;
+        let generic_misc_data =
+            GenericMiscData::decrypt(view_pair.view, Some(view_pub), &data.data)?;
         derive_list.push(bincode::deserialize(&generic_misc_data.data).unwrap());
     }
     Ok(derive_list)

@@ -8,12 +8,13 @@ use intmax2_interfaces::{
         deposit_data::DepositData, meta_data::MetaDataWithBlockNumber, transfer_data::TransferData,
         tx_data::TxData, user_data::Balances,
     },
+    utils::key::ViewPair,
 };
 use itertools::Itertools;
 
 use intmax2_zkp::{
     circuits::claim::utils::get_mining_deposit_nullifier,
-    common::{signature_content::key_set::KeySet, withdrawal::get_withdrawal_nullifier},
+    common::withdrawal::get_withdrawal_nullifier,
     ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait},
 };
 
@@ -79,7 +80,7 @@ pub async fn determine_sequence(
     validity_prover: &dyn ValidityProverClientInterface,
     rollup_contract: &RollupContract,
     liquidity_contract: &LiquidityContract,
-    key: KeySet,
+    view_pair: ViewPair,
     deposit_timeout: u64,
     tx_timeout: u64,
 ) -> Result<(Vec<Action>, Balances, PendingInfo), StrategyError> {
@@ -90,7 +91,7 @@ pub async fn determine_sequence(
     let onchain_block_number = rollup_contract.get_latest_block_number().await?;
     wait_till_validity_prover_synced(validity_prover, false, onchain_block_number).await?;
 
-    let user_data = fetch_user_data(store_vault_server, key).await?;
+    let user_data = fetch_user_data(store_vault_server, view_pair).await?;
     let mut nonce = user_data.full_private_state.nonce;
     let mut balances = user_data.balances();
     if balances.is_insufficient() {
@@ -100,7 +101,7 @@ pub async fn determine_sequence(
     let tx_info = fetch_all_unprocessed_tx_info(
         store_vault_server,
         validity_prover,
-        key,
+        view_pair,
         current_time,
         &user_data.tx_status,
         tx_timeout,
@@ -120,7 +121,7 @@ pub async fn determine_sequence(
         store_vault_server,
         validity_prover,
         liquidity_contract,
-        key,
+        view_pair,
         current_time,
         &user_data.deposit_status,
         deposit_timeout,
@@ -129,7 +130,7 @@ pub async fn determine_sequence(
     let transfer_info = fetch_all_unprocessed_transfer_info(
         store_vault_server,
         validity_prover,
-        key,
+        view_pair,
         current_time,
         &user_data.transfer_status,
         tx_timeout,
@@ -158,7 +159,8 @@ pub async fn determine_sequence(
     let mut sequence = Vec::new();
     for (tx_meta, tx_data) in tx_info.settled.iter() {
         // validate tx status
-        let tx_status = get_tx_status(validity_prover, key.pubkey, tx_data.tx_tree_root).await?;
+        let tx_status =
+            get_tx_status(validity_prover, view_pair.spend, tx_data.tx_tree_root).await?;
         if tx_status != TxStatus::Success {
             log::warn!("tx {} is not success: {}", tx_meta.meta.digest, tx_status);
             continue;
@@ -300,7 +302,7 @@ pub async fn determine_withdrawals(
     validity_prover: &dyn ValidityProverClientInterface,
     withdrawal_server: &dyn WithdrawalServerClientInterface,
     rollup_contract: &RollupContract,
-    key: KeySet,
+    view_pair: ViewPair,
     tx_timeout: u64,
 ) -> Result<
     (
@@ -316,11 +318,11 @@ pub async fn determine_withdrawals(
     let onchain_block_number = rollup_contract.get_latest_block_number().await?;
     wait_till_validity_prover_synced(validity_prover, false, onchain_block_number).await?;
 
-    let user_data = fetch_user_data(store_vault_server, key).await?;
+    let user_data = fetch_user_data(store_vault_server, view_pair).await?;
     let withdrawal_info = fetch_all_unprocessed_withdrawal_info(
         store_vault_server,
         validity_prover,
-        key,
+        view_pair,
         current_time,
         &user_data.withdrawal_status,
         tx_timeout,
@@ -333,7 +335,9 @@ pub async fn determine_withdrawals(
         .collect();
 
     // fetch requested withdrawals
-    let requested_withdrawal_info = withdrawal_server.get_withdrawal_info(key).await?;
+    let requested_withdrawal_info = withdrawal_server
+        .get_withdrawal_info(view_pair.view)
+        .await?;
     let requested_withdrawal_nullifiers = requested_withdrawal_info
         .iter()
         .map(|info| info.contract_withdrawal.nullifier)
@@ -360,7 +364,7 @@ pub async fn determine_claims(
     rollup_contract: &RollupContract,
     liquidity_contract: &LiquidityContract,
     is_faster_mining: bool,
-    key: KeySet,
+    view_pair: ViewPair,
     tx_timeout: u64,
     deposit_timeout: u64,
 ) -> Result<Vec<Mining>, StrategyError> {
@@ -371,12 +375,12 @@ pub async fn determine_claims(
     let onchain_block_number = rollup_contract.get_latest_block_number().await?;
     wait_till_validity_prover_synced(validity_prover, false, onchain_block_number).await?;
 
-    let user_data = fetch_user_data(store_vault_server, key).await?;
+    let user_data = fetch_user_data(store_vault_server, view_pair).await?;
     let minings = fetch_mining_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
-        key,
+        view_pair,
         is_faster_mining,
         current_time,
         &user_data.claim_status,
@@ -390,7 +394,7 @@ pub async fn determine_claims(
         .collect::<Vec<_>>();
 
     // fetch requested claims
-    let requested_claim_info = withdrawal_server.get_claim_info(key).await?;
+    let requested_claim_info = withdrawal_server.get_claim_info(view_pair.view).await?;
     let requested_claim_nullifiers = requested_claim_info
         .iter()
         .map(|info| info.claim.nullifier)
