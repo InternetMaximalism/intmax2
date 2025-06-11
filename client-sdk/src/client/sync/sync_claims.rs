@@ -154,7 +154,7 @@ impl Client {
             let fee_result = self
                 .withdrawal_server
                 .request_claim(
-                    view_pair,
+                    view_pair.view,
                     &single_claim_proof,
                     Some(fee_token_index),
                     &fee_transfer_digests,
@@ -176,8 +176,13 @@ impl Client {
                 _ => {
                     let reason = format!("fee error at the request: {fee_result:?}");
                     for used_fee in &collected_fees {
-                        consume_payment(self.store_vault_server.as_ref(),  view_pair, used_fee, &reason)
-                            .await?;
+                        consume_payment(
+                            self.store_vault_server.as_ref(),
+                            view_pair,
+                            used_fee,
+                            &reason,
+                        )
+                        .await?;
                     }
                     return Err(SyncError::FeeError(format!(
                         "invalid fee at the request: {fee_result:?}"

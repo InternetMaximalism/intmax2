@@ -139,7 +139,7 @@ pub async fn single_withdrawal(
             ));
         }
         let withdrawal_info = client
-            .get_withdrawal_info(key_pair.into())
+            .get_withdrawal_info(key_pair.view)
             .await
             .context("Failed to get withdrawal info")?;
         let corresponding_withdrawal_info = withdrawal_info

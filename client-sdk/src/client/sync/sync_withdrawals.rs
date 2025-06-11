@@ -137,7 +137,7 @@ impl Client {
         let fee_result = self
             .withdrawal_server
             .request_withdrawal(
-                view_pair,
+                view_pair.view,
                 &single_withdrawal_proof,
                 Some(fee_token_index),
                 &fee_transfer_digests,

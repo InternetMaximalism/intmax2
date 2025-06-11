@@ -696,12 +696,9 @@ impl Client {
 
     pub async fn get_withdrawal_info(
         &self,
-        view_pair: ViewPair,
+        view_key: PrivateKey,
     ) -> Result<Vec<WithdrawalInfo>, ClientError> {
-        let withdrawal_info = self
-            .withdrawal_server
-            .get_withdrawal_info(view_pair)
-            .await?;
+        let withdrawal_info = self.withdrawal_server.get_withdrawal_info(view_key).await?;
         Ok(withdrawal_info)
     }
 
@@ -733,8 +730,11 @@ impl Client {
         Ok(minings)
     }
 
-    pub async fn get_claim_info(&self, view_pair: ViewPair) -> Result<Vec<ClaimInfo>, ClientError> {
-        let claim_info = self.withdrawal_server.get_claim_info(view_pair).await?;
+    pub async fn get_claim_info(
+        &self,
+        view_key: PrivateKey,
+    ) -> Result<Vec<ClaimInfo>, ClientError> {
+        let claim_info = self.withdrawal_server.get_claim_info(view_key).await?;
         Ok(claim_info)
     }
 

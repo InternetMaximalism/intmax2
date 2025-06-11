@@ -317,7 +317,7 @@ pub async fn get_withdrawal_info(
     init_logger();
     let view_pair = str_to_view_pair(view_pair)?;
     let client = get_client(config);
-    let info = client.get_withdrawal_info(view_pair).await?;
+    let info = client.get_withdrawal_info(view_pair.view).await?;
     let js_info = info.into_iter().map(JsWithdrawalInfo::from).collect();
     Ok(js_info)
 }
@@ -350,7 +350,7 @@ pub async fn get_claim_info(config: &Config, view_pair: &str) -> Result<Vec<JsCl
     init_logger();
     let view_pair = str_to_view_pair(view_pair)?;
     let client = get_client(config);
-    let info = client.get_claim_info(view_pair).await?;
+    let info = client.get_claim_info(view_pair.view).await?;
     let js_info = info.into_iter().map(JsClaimInfo::from).collect();
     Ok(js_info)
 }

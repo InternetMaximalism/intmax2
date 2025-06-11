@@ -125,7 +125,7 @@ pub async fn mining_loop(
                     retries
                 ));
             }
-            let claim_info = client.get_claim_info(key_pair.into()).await?;
+            let claim_info = client.get_claim_info(key_pair.view).await?;
             let corresponding_claim_info = claim_info
                 .iter()
                 .find(|w| w.claim.nullifier == nullifier)

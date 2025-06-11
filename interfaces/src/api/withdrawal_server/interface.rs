@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     api::{block_builder::interface::Fee, error::ServerError},
-    utils::{address::IntmaxAddress, key::ViewPair},
+    utils::{address::IntmaxAddress, key::PrivateKey},
 };
 
 type F = GoldilocksField;
@@ -136,7 +136,7 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
 
     async fn request_withdrawal(
         &self,
-        view_pair: ViewPair,
+        view_key: PrivateKey,
         single_withdrawal_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
@@ -144,7 +144,7 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
 
     async fn request_claim(
         &self,
-        view_pair: ViewPair,
+        view_key: PrivateKey,
         single_claim_proof: &ProofWithPublicInputs<F, C, D>,
         fee_token_index: Option<u32>,
         fee_transfer_digests: &[Bytes32],
@@ -152,7 +152,7 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
 
     async fn get_withdrawal_info(
         &self,
-        view_pair: ViewPair,
+        view_key: PrivateKey,
     ) -> Result<Vec<WithdrawalInfo>, ServerError>;
 
     async fn get_withdrawal_info_by_recipient(
@@ -160,5 +160,5 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
         recipient: Address,
     ) -> Result<Vec<WithdrawalInfo>, ServerError>;
 
-    async fn get_claim_info(&self, view_pair: ViewPair) -> Result<Vec<ClaimInfo>, ServerError>;
+    async fn get_claim_info(&self, view_key: PrivateKey) -> Result<Vec<ClaimInfo>, ServerError>;
 }

@@ -48,7 +48,7 @@ pub async fn balance(view_pair: ViewPair, sync: bool) -> Result<(), CliError> {
 
 pub async fn withdrawal_status(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let withdrawal_info = client.get_withdrawal_info(view_pair).await?;
+    let withdrawal_info = client.get_withdrawal_info(view_pair.view).await?;
     println!("Withdrawal status:");
     for (i, withdrawal_info) in withdrawal_info.iter().enumerate() {
         let withdrawal = withdrawal_info.contract_withdrawal.clone();
@@ -88,7 +88,7 @@ pub async fn mining_list(view_pair: ViewPair) -> Result<(), CliError> {
 
 pub async fn claim_status(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let claim_info = client.get_claim_info(view_pair).await?;
+    let claim_info = client.get_claim_info(view_pair.view).await?;
     println!("Claim status:");
     for (i, claim_info) in claim_info.iter().enumerate() {
         let claim = claim_info.claim.clone();

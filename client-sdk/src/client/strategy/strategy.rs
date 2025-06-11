@@ -335,7 +335,9 @@ pub async fn determine_withdrawals(
         .collect();
 
     // fetch requested withdrawals
-    let requested_withdrawal_info = withdrawal_server.get_withdrawal_info(view_pair).await?;
+    let requested_withdrawal_info = withdrawal_server
+        .get_withdrawal_info(view_pair.view)
+        .await?;
     let requested_withdrawal_nullifiers = requested_withdrawal_info
         .iter()
         .map(|info| info.contract_withdrawal.nullifier)
@@ -392,7 +394,7 @@ pub async fn determine_claims(
         .collect::<Vec<_>>();
 
     // fetch requested claims
-    let requested_claim_info = withdrawal_server.get_claim_info(view_pair).await?;
+    let requested_claim_info = withdrawal_server.get_claim_info(view_pair.view).await?;
     let requested_claim_nullifiers = requested_claim_info
         .iter()
         .map(|info| info.claim.nullifier)

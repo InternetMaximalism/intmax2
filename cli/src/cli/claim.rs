@@ -19,7 +19,7 @@ pub async fn claim_withdrawals(
 ) -> Result<(), CliError> {
     let signer_private_key = convert_bytes32_to_b256(eth_private_key);
     let client = get_client()?;
-    let withdrawal_info = client.get_withdrawal_info(view_pair).await?;
+    let withdrawal_info = client.get_withdrawal_info(view_pair.view).await?;
     let mut claim_withdrawals = Vec::new();
     for withdrawal_info in withdrawal_info.iter() {
         let withdrawal = withdrawal_info.contract_withdrawal.clone();
