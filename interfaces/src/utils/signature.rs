@@ -1,13 +1,14 @@
 use intmax2_zkp::{
     common::signature_content::{
         flatten::FlatG2,
-        key_set::KeySet,
         sign_tools::{sign_message, verify_signature},
     },
     ethereum_types::u256::U256,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+
+use crate::utils::key::PrivateKey;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -33,18 +34,19 @@ pub struct SignContent {
 }
 
 impl Auth {
-    pub fn sign(key: KeySet, time_to_expiry: u64, content: &[u8]) -> Self {
+    pub fn sign(private_key: PrivateKey, time_to_expiry: u64, content: &[u8]) -> Self {
         let expiry = current_time() + time_to_expiry;
+        let pubkey = private_key.to_public_key();
         let sign_content = SignContent {
-            pubkey: key.pubkey,
+            pubkey: pubkey.0,
             content: content.to_vec(),
             expiry,
         };
         let serialized = bincode::serialize(&sign_content).unwrap();
         let digest = sha2::Sha256::digest(&serialized);
-        let signature = sign_message(key.privkey, &digest).into();
+        let signature = sign_message(private_key.0, &digest).into();
         Auth {
-            pubkey: key.pubkey,
+            pubkey: pubkey.0,
             expiry,
             signature,
         }
@@ -69,8 +71,8 @@ impl Auth {
 pub trait Signable: Sized {
     fn content(&self) -> Vec<u8>;
 
-    fn sign(self, key: KeySet, time_to_expiry: u64) -> WithAuth<Self> {
-        let auth = Auth::sign(key, time_to_expiry, &self.content());
+    fn sign(self, private_key: PrivateKey, time_to_expiry: u64) -> WithAuth<Self> {
+        let auth = Auth::sign(private_key, time_to_expiry, &self.content());
         WithAuth { inner: self, auth }
     }
 
@@ -85,7 +87,7 @@ pub fn current_time() -> u64 {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::random::default_rng;
+    use crate::utils::{key::PrivateKey, random::default_rng};
 
     use super::{sign_message, verify_signature};
     use intmax2_zkp::{
@@ -105,7 +107,7 @@ mod test {
     #[test]
     fn test_auth_verify() {
         let mut rnd = default_rng();
-        let key = KeySet::rand(&mut rnd);
+        let key = PrivateKey::rand(&mut rnd);
         let content = b"test";
         let auth = super::Auth::sign(key, 10, content);
         assert!(auth.verify(content).is_ok());

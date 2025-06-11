@@ -73,7 +73,7 @@ impl PublicKey {
             // If y is odd, the public key is invalid
             return false;
         }
-        return true;
+        true
     }
 }
 

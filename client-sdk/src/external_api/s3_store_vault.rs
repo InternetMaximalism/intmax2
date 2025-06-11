@@ -55,7 +55,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             topic: topic.to_string(),
             digest,
         };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: S3PreSaveSnapshotResponse = post_request(
             &self.base_url,
             "/s3-store-vault/pre-save-snapshot",
@@ -73,7 +73,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             prev_digest,
             digest,
         };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let () = post_request(
             &self.base_url,
             "/s3-store-vault/save-snapshot",
@@ -94,7 +94,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             topic: topic.to_string(),
             pubkey: key.pubkey,
         };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: S3GetSnapshotResponse = post_request(
             &self.base_url,
             "/s3-store-vault/get-snapshot",
@@ -116,7 +116,6 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         view_key: PrivateKey,
         entries: &[SaveDataEntry],
     ) -> Result<Vec<Bytes32>, ServerError> {
-        let key = view_key.to_key_set();
         let mut all_digests = vec![];
 
         for chunk in entries.chunks(MAX_BATCH_SIZE) {
@@ -130,7 +129,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
                 .collect::<Vec<_>>();
             let digests = data.iter().map(|entry| entry.digest).collect::<Vec<_>>();
             let request = S3SaveDataBatchRequest { data };
-            let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+            let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: S3SaveDataBatchResponse = post_request(
                 &self.base_url,
                 "/s3-store-vault/save-data-batch",
@@ -163,7 +162,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
                 digests: chunk.to_vec(),
                 pubkey: key.pubkey,
             };
-            let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+            let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: S3GetDataBatchResponse = post_request(
                 &self.base_url,
                 "/s3-store-vault/get-data-batch",
@@ -336,17 +335,16 @@ async fn batch_download_s3(urls: &[String]) -> Result<Vec<Vec<u8>>, ServerError>
 }
 
 pub fn generate_auth_for_get_data_sequence_s3(view_key: PrivateKey) -> Auth {
-    let key = view_key.to_key_set();
     // because auth is not dependent on the topic and cursor, we can use a dummy request
     let dummy_request = S3GetDataSequenceRequest {
         topic: "dummy".to_string(),
-        pubkey: key.pubkey,
+        pubkey: view_key.to_public_key().0,
         cursor: MetaDataCursor {
             cursor: None,
             order: CursorOrder::Asc,
             limit: None,
         },
     };
-    let dummy_request_with_auth = dummy_request.sign(key, TIME_TO_EXPIRY_READONLY);
+    let dummy_request_with_auth = dummy_request.sign(view_key, TIME_TO_EXPIRY_READONLY);
     dummy_request_with_auth.auth
 }

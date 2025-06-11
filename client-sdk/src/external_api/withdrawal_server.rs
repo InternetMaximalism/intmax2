@@ -68,7 +68,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             fee_token_index,
             fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
-        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_pair.view, TIME_TO_EXPIRY);
         let result: RequestWithdrawalResponse = post_request(
             &self.base_url,
             "/withdrawal-server/request-withdrawal",
@@ -90,7 +90,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             fee_token_index,
             fee_transfer_digests: fee_transfer_digests.to_vec(),
         };
-        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_pair.view, TIME_TO_EXPIRY);
         let result: RequestClaimResponse = post_request(
             &self.base_url,
             "/withdrawal-server/request-claim",
@@ -105,7 +105,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         view_pair: ViewPair,
     ) -> Result<Vec<WithdrawalInfo>, ServerError> {
         let request = GetWithdrawalInfoRequest;
-        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_pair.view, TIME_TO_EXPIRY);
         let response: GetWithdrawalInfoResponse = post_request(
             &self.base_url,
             "/withdrawal-server/get-withdrawal-info",
@@ -131,7 +131,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
 
     async fn get_claim_info(&self, view_pair: ViewPair) -> Result<Vec<ClaimInfo>, ServerError> {
         let request = GetClaimInfoRequest;
-        let request_with_auth = request.sign(view_pair.view.to_key_set(), TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_pair.view, TIME_TO_EXPIRY);
         let response: GetClaimInfoResponse = post_request(
             &self.base_url,
             "/withdrawal-server/get-claim-info",

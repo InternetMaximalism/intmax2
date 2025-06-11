@@ -53,7 +53,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             topic: topic.to_string(),
             prev_digest,
         };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         post_request::<_, ()>(
             &self.base_url,
             "/store-vault-server/save-snapshot",
@@ -73,7 +73,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             topic: topic.to_string(),
             pubkey: key.pubkey,
         };
-        let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+        let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: GetSnapshotResponse = post_request(
             &self.base_url,
             "/store-vault-server/get-snapshot",
@@ -88,14 +88,13 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         view_key: PrivateKey,
         entries: &[SaveDataEntry],
     ) -> Result<Vec<Bytes32>, ServerError> {
-        let key = view_key.to_key_set();
         let mut all_digests = vec![];
 
         for chunk in entries.chunks(MAX_BATCH_SIZE) {
             let request = SaveDataBatchRequest {
                 data: chunk.to_vec(),
             };
-            let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+            let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: SaveDataBatchResponse = post_request(
                 &self.base_url,
                 "/store-vault-server/save-data-batch",
@@ -121,7 +120,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
                 digests: chunk.to_vec(),
                 pubkey: key.pubkey,
             };
-            let request_with_auth = request.sign(key, TIME_TO_EXPIRY);
+            let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: GetDataBatchResponse = post_request(
                 &self.base_url,
                 "/store-vault-server/get-data-batch",
@@ -195,17 +194,16 @@ impl StoreVaultServerClient {
 }
 
 pub fn generate_auth_for_get_data_sequence(view_key: PrivateKey) -> Auth {
-    let key = view_key.to_key_set();
     // because auth is not dependent on the datatype and cursor, we can use a dummy request
     let dummy_request = GetDataSequenceRequest {
         topic: "dummy".to_string(),
-        pubkey: key.pubkey,
+        pubkey: view_key.to_key_set().pubkey,
         cursor: MetaDataCursor {
             cursor: None,
             order: CursorOrder::Asc,
             limit: None,
         },
     };
-    let dummy_request_with_auth = dummy_request.sign(key, TIME_TO_EXPIRY_READONLY);
+    let dummy_request_with_auth = dummy_request.sign(view_key, TIME_TO_EXPIRY_READONLY);
     dummy_request_with_auth.auth
 }
