@@ -176,7 +176,7 @@ impl Client {
         Ok(())
     }
 
-    // sync deposit without updating the timestamp
+    // sync transfer without updating the timestamp
     async fn sync_transfer(
         &self,
         view_pair: ViewPair,
