@@ -20,7 +20,7 @@ use intmax2_cli::{
         sync::{resync, sync_claims, sync_withdrawals},
         withdrawal::send_withdrawal,
     },
-    format::{format_token_info, privkey_to_keypair},
+    format::{format_token_info, privkey_to_keypair, TokenInput},
 };
 use intmax2_client_sdk::client::{
     config::network_from_env,
@@ -153,8 +153,14 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             mining,
         } => {
             let key_pair = privkey_to_keypair(private_key);
-            let (amount, token_address, token_id) =
-                format_token_info(token_type, amount, token_address, token_id)?;
+            let token_input = TokenInput {
+                token_type,
+                amount,
+                token_address,
+                token_id,
+            };
+
+            let (amount, token_address, token_id) = format_token_info(token_input)?;
             deposit(
                 key_pair.into(),
                 eth_private_key,

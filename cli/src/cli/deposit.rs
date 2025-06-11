@@ -1,4 +1,4 @@
-use alloy::providers::Provider;
+use alloy::{primitives::B256, providers::Provider};
 use intmax2_client_sdk::{
     client::client::Client,
     external_api::{
@@ -16,7 +16,10 @@ use intmax2_client_sdk::{
         predicate::{PermissionRequest, PredicateClient},
     },
 };
-use intmax2_interfaces::{data::deposit_data::TokenType, utils::key::PublicKeyPair};
+use intmax2_interfaces::{
+    data::deposit_data::{DepositData, TokenType},
+    utils::key::PublicKeyPair,
+};
 use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 
 use crate::env_var::EnvVar;
@@ -33,9 +36,11 @@ pub async fn deposit(
     is_mining: bool,
 ) -> Result<(), CliError> {
     let client = get_client()?;
-    let liquidity_contract = client.liquidity_contract.clone();
+    let signer_private_key = convert_bytes32_to_b256(eth_private_key);
+    let depositor = convert_address_to_intmax(get_address_from_private_key(signer_private_key));
+
     balance_check_and_approve(
-        &liquidity_contract,
+        &client.liquidity_contract,
         eth_private_key,
         amount,
         token_type,
@@ -44,11 +49,7 @@ pub async fn deposit(
     )
     .await?;
 
-    log::info!("Balance check done");
-
-    let signer_private_key = convert_bytes32_to_b256(eth_private_key);
-    let depositor = get_address_from_private_key(signer_private_key);
-    let depositor = convert_address_to_intmax(depositor);
+    log::info!("Balance check and approval completed");
 
     let deposit_result = client
         .prepare_deposit(
@@ -61,7 +62,7 @@ pub async fn deposit(
             is_mining,
         )
         .await?;
-    let deposit_data = deposit_result.deposit_data;
+    let mut deposit_data = deposit_result.deposit_data;
 
     let aml_permission = fetch_predicate_permission(
         &client,
@@ -73,84 +74,27 @@ pub async fn deposit(
         token_id,
     )
     .await?;
-    let eligibility_permission = vec![];
 
-    match token_type {
-        TokenType::NATIVE => {
-            liquidity_contract
-                .deposit_native(
-                    signer_private_key,
-                    None,
-                    deposit_data.pubkey_salt_hash,
-                    deposit_data.amount,
-                    &aml_permission,
-                    &eligibility_permission,
-                )
-                .await?;
-        }
-        TokenType::ERC20 => {
-            liquidity_contract
-                .deposit_erc20(
-                    signer_private_key,
-                    None,
-                    deposit_data.pubkey_salt_hash,
-                    deposit_data.amount,
-                    deposit_data.token_address,
-                    &aml_permission,
-                    &eligibility_permission,
-                )
-                .await?;
-        }
-        TokenType::ERC721 => {
-            liquidity_contract
-                .deposit_erc721(
-                    signer_private_key,
-                    None,
-                    deposit_data.pubkey_salt_hash,
-                    deposit_data.token_address,
-                    deposit_data.token_id,
-                    &aml_permission,
-                    &eligibility_permission,
-                )
-                .await?;
-        }
-        TokenType::ERC1155 => {
-            liquidity_contract
-                .deposit_erc1155(
-                    signer_private_key,
-                    None,
-                    deposit_data.pubkey_salt_hash,
-                    deposit_data.token_address,
-                    deposit_data.token_id,
-                    deposit_data.amount,
-                    &aml_permission,
-                    &eligibility_permission,
-                )
-                .await?;
-        }
-    }
+    perform_deposit_with_type(
+        &client.liquidity_contract,
+        token_type,
+        signer_private_key,
+        &deposit_data,
+        &aml_permission,
+    )
+    .await?;
 
     // relay deposits by self if local
     if is_local()? {
-        log::info!("get token index");
-        let token_index = liquidity_contract
-            .get_token_index(token_type, token_address, token_id)
-            .await?
-            .ok_or(CliError::UnexpectedError(
-                "Cloud not find token index".to_string(),
-            ))?;
-        log::info!("token index: {token_index}");
-        let mut deposit_data = deposit_data;
-        deposit_data.set_token_index(token_index);
-        client
-            .rollup_contract
-            .process_deposits(
-                signer_private_key,
-                None,
-                0,
-                &[deposit_data.deposit_hash().unwrap()],
-            )
-            .await?;
+        relay_deposit(
+            &client,
+            &mut deposit_data,
+            token_type,
+            token_address,
+            token_id,
+            signer_private_key,
+        )
+        .await?;
     }
 
     Ok(())
@@ -308,4 +252,103 @@ pub async fn fetch_predicate_permission(
         .get_deposit_permission(from, aml_permitter_address, value, request)
         .await?;
     Ok(permission)
+}
+
+async fn perform_deposit_with_type(
+    liquidity_contract: &LiquidityContract,
+    token_type: TokenType,
+    signer_key: B256,
+    deposit_data: &DepositData, // You may define a simplified struct if needed
+    aml_permission: &[u8],
+) -> Result<(), CliError> {
+    let eligibility_permission = vec![];
+    match token_type {
+        TokenType::NATIVE => {
+            liquidity_contract
+                .deposit_native(
+                    signer_key,
+                    None,
+                    deposit_data.pubkey_salt_hash,
+                    deposit_data.amount,
+                    aml_permission,
+                    &eligibility_permission,
+                )
+                .await?;
+        }
+        TokenType::ERC20 => {
+            liquidity_contract
+                .deposit_erc20(
+                    signer_key,
+                    None,
+                    deposit_data.pubkey_salt_hash,
+                    deposit_data.amount,
+                    deposit_data.token_address,
+                    aml_permission,
+                    &eligibility_permission,
+                )
+                .await?;
+        }
+        TokenType::ERC721 => {
+            liquidity_contract
+                .deposit_erc721(
+                    signer_key,
+                    None,
+                    deposit_data.pubkey_salt_hash,
+                    deposit_data.token_address,
+                    deposit_data.token_id,
+                    aml_permission,
+                    &eligibility_permission,
+                )
+                .await?;
+        }
+        TokenType::ERC1155 => {
+            liquidity_contract
+                .deposit_erc1155(
+                    signer_key,
+                    None,
+                    deposit_data.pubkey_salt_hash,
+                    deposit_data.token_address,
+                    deposit_data.token_id,
+                    deposit_data.amount,
+                    aml_permission,
+                    &eligibility_permission,
+                )
+                .await?;
+        }
+    };
+    Ok(())
+}
+
+async fn relay_deposit(
+    client: &Client,
+    deposit_data: &mut DepositData,
+    token_type: TokenType,
+    token_address: Address,
+    token_id: U256,
+    signer_private_key: B256,
+) -> Result<(), CliError> {
+    log::info!("Fetching token index for relay");
+
+    let token_index = client
+        .liquidity_contract
+        .get_token_index(token_type, token_address, token_id)
+        .await?
+        .ok_or(CliError::UnexpectedError(
+            "Cloud not find token index".to_string(),
+        ))?;
+    log::info!("token index: {token_index}");
+    deposit_data.set_token_index(token_index);
+
+    let deposit_hash = deposit_data
+        .deposit_hash()
+        .ok_or(CliError::UnexpectedError(
+            "Failed to compute deposit hash".to_string(),
+        ))?;
+
+    client
+        .rollup_contract
+        .process_deposits(signer_private_key, None, 0, &[deposit_hash])
+        .await?;
+
+    Ok(())
 }

@@ -7,7 +7,7 @@ use intmax2_interfaces::{
         deposit_data::DepositData, meta_data::MetaData, transfer_data::TransferData,
         tx_data::TxData,
     },
-    utils::{address::IntmaxAddress, key::ViewPair, network::Network},
+    utils::key::ViewPair,
 };
 use intmax2_zkp::{
     common::transfer::Transfer,
@@ -17,6 +17,24 @@ use intmax2_zkp::{
 use crate::cli::client::get_client;
 
 use super::error::CliError;
+
+enum HistoryEntry {
+    Deposit {
+        deposit: DepositData,
+        status: EntryStatus,
+        meta: MetaData,
+    },
+    Receive {
+        transfer: TransferData,
+        status: EntryStatus,
+        meta: MetaData,
+    },
+    Send {
+        tx: TxData,
+        status: EntryStatus,
+        meta: MetaData,
+    },
+}
 
 pub async fn history(
     view_pair: ViewPair,
@@ -37,49 +55,59 @@ pub async fn history(
     let (transfer_history, _) = client.fetch_transfer_history(view_pair, &cursor).await?;
     let (tx_history, _) = client.fetch_tx_history(view_pair, &cursor).await?;
 
-    let mut history: Vec<HistoryEum> = Vec::new();
-    for entry in deposit_history {
-        history.push(HistoryEum::Deposit {
+    let mut history: Vec<HistoryEntry> = deposit_history
+        .into_iter()
+        .map(|entry| HistoryEntry::Deposit {
             deposit: entry.data,
             status: entry.status,
             meta: entry.meta,
-        });
-    }
-    for entry in transfer_history {
-        history.push(HistoryEum::Receive {
-            transfer: entry.data,
-            status: entry.status,
-            meta: entry.meta,
-        });
-    }
-    for entry in tx_history {
-        history.push(HistoryEum::Send {
+        })
+        .chain(
+            transfer_history
+                .into_iter()
+                .map(|entry| HistoryEntry::Receive {
+                    transfer: entry.data,
+                    status: entry.status,
+                    meta: entry.meta,
+                }),
+        )
+        .chain(tx_history.into_iter().map(|entry| HistoryEntry::Send {
             tx: entry.data,
             status: entry.status,
             meta: entry.meta,
-        });
-    }
+        }))
+        .collect();
 
-    history.sort_by_key(|entry| match entry {
-        HistoryEum::Deposit { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
-        HistoryEum::Receive { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
-        HistoryEum::Send { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
+    history.sort_by(|a, b| {
+        let a_key = match a {
+            HistoryEntry::Deposit { meta, .. }
+            | HistoryEntry::Receive { meta, .. }
+            | HistoryEntry::Send { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
+        };
+        let b_key = match b {
+            HistoryEntry::Deposit { meta, .. }
+            | HistoryEntry::Receive { meta, .. }
+            | HistoryEntry::Send { meta, .. } => (meta.timestamp, meta.digest.to_hex()),
+        };
+        match order {
+            CursorOrder::Asc => a_key.cmp(&b_key),
+            CursorOrder::Desc => b_key.cmp(&a_key),
+        }
     });
-    if order == CursorOrder::Desc {
-        history.reverse();
-    }
 
     println!("History:");
     for entry in history {
-        print_history_entry(client.config.network, &entry)?;
+        print_history_entry(&entry)?;
         println!();
     }
     Ok(())
 }
 
 pub fn format_timestamp(timestamp: u64) -> String {
-    let naive = DateTime::from_timestamp(timestamp as i64, 0).unwrap();
-    naive.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+    match DateTime::from_timestamp(timestamp as i64, 0) {
+        Some(dt) => dt.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+        None => format!("Invalid timestamp: {timestamp}"),
+    }
 }
 
 fn format_status(status: &EntryStatus) -> ColoredString {
@@ -110,119 +138,94 @@ fn format_transfer(transfer: &Transfer, transfer_type: &str, transfer_digest: By
     )
 }
 
-enum HistoryEum {
-    Deposit {
-        deposit: DepositData,
-        status: EntryStatus,
-        meta: MetaData,
-    },
-    Receive {
-        transfer: TransferData,
-        status: EntryStatus,
-        meta: MetaData,
-    },
-    Send {
-        tx: TxData,
-        status: EntryStatus,
-        meta: MetaData,
-    },
-}
-
-fn print_history_entry(network: Network, entry: &HistoryEum) -> Result<(), CliError> {
+fn print_history_entry(entry: &HistoryEntry) -> Result<(), CliError> {
     match entry {
-        HistoryEum::Deposit {
+        HistoryEntry::Deposit {
             deposit,
             status,
             meta,
-        } => {
-            let time = format_timestamp(meta.timestamp);
-            println!(
-                "{} [{}]",
-                "DEPOSIT".bright_green().bold(),
-                time.bright_blue(),
-            );
-            println!("  Digest: {}", meta.digest);
-            println!("  Status: {}", format_status(status));
-            println!("  Token: {}", deposit.token_type.to_string().yellow(),);
-            println!(
-                "      Address: {}",
-                deposit.token_address.to_string().cyan()
-            );
-            println!("      ID: {}", deposit.token_id.to_string().white());
-            println!(
-                "      Index: {}",
-                deposit
-                    .token_index
-                    .map_or("N/A".to_string(), |idx| idx.to_string())
-                    .white()
-            );
-            println!("  Amount: {}", deposit.amount.to_string().bright_green());
-            println!(
-                "  Deposit Hash: {}",
-                deposit
-                    .deposit_hash()
-                    .map_or("N/A".to_string(), |h| h.to_string())
-            );
-        }
-        HistoryEum::Receive {
+        } => print_deposit_entry(deposit, status, meta),
+        HistoryEntry::Receive {
             transfer,
             status,
             meta,
-        } => {
-            let time = format_timestamp(meta.timestamp);
-
-            println!(
-                "{} [{}]",
-                "RECEIVE".bright_purple().bold(),
-                time.bright_blue(),
-            );
-            println!("  Digest: {}", meta.digest);
-            println!("  Status: {}", format_status(status));
-            println!(
-                "  From: {}",
-                IntmaxAddress::from_public_keypair(network, &transfer.sender)
-                    .to_string()
-                    .yellow()
-            );
-            println!(
-                "  Token Index: {}",
-                transfer.transfer.token_index.to_string().white()
-            );
-            println!(
-                "  Amount: {}",
-                transfer.transfer.amount.to_string().bright_green()
-            );
-        }
-        HistoryEum::Send { tx, status, meta } => {
-            let time = format_timestamp(meta.timestamp);
-            println!("{} [{}]", "SEND".bright_red().bold(), time.bright_blue(),);
-            println!("  Digest: {}", meta.digest);
-            println!("  Status: {}", format_status(status));
-            println!(
-                "  Tx Nonce: {}",
-                tx.spent_witness.tx.nonce.to_string().cyan()
-            );
-            println!("  Transfers:");
-            let transfers = tx
-                .spent_witness
-                .transfers
-                .iter()
-                .filter(|transfer| transfer != &&Transfer::default())
-                .collect::<Vec<_>>();
-
-            for (i, ((transfer, transfer_type), transfer_digest)) in transfers
-                .iter()
-                .zip(tx.transfer_types.iter())
-                .zip(tx.transfer_digests.iter())
-                .enumerate()
-            {
-                println!(
-                    "    {}: {}",
-                    i,
-                    format_transfer(transfer, transfer_type, *transfer_digest).white()
-                );
-            }
-        }
+        } => print_receive_entry(transfer, status, meta),
+        HistoryEntry::Send { tx, status, meta } => print_send_entry(tx, status, meta),
     }
     Ok(())
+}
+
+fn print_digest_status(meta: &MetaData, status: &EntryStatus, label: &str) {
+    let time = format_timestamp(meta.timestamp);
+    println!("{} [{}]", label, time.bright_blue());
+    println!("  Digest: {}", meta.digest);
+    println!("  Status: {}", format_status(status));
+}
+
+fn print_deposit_entry(deposit: &DepositData, status: &EntryStatus, meta: &MetaData) {
+    print_digest_status(meta, status, &"DEPOSIT".bright_green().bold());
+
+    println!("  Token: {}", deposit.token_type.to_string().yellow(),);
+    println!(
+        "      Address: {}",
+        deposit.token_address.to_string().cyan()
+    );
+    println!("      ID: {}", deposit.token_id.to_string().white());
+    println!(
+        "      Index: {}",
+        deposit
+            .token_index
+            .map_or("N/A".to_string(), |idx| idx.to_string())
+            .white()
+    );
+    println!("  Amount: {}", deposit.amount.to_string().bright_green());
+    println!(
+        "  Deposit Hash: {}",
+        deposit
+            .deposit_hash()
+            .map_or("N/A".to_string(), |h| h.to_string())
+    );
+}
+
+fn print_receive_entry(transfer: &TransferData, status: &EntryStatus, meta: &MetaData) {
+    print_digest_status(meta, status, &"RECEIVE".bright_purple().bold());
+
+    println!("  From: {}", transfer.sender.to_string().yellow());
+    println!(
+        "  Token Index: {}",
+        transfer.transfer.token_index.to_string().white()
+    );
+    println!(
+        "  Amount: {}",
+        transfer.transfer.amount.to_string().bright_green()
+    );
+}
+
+fn print_send_entry(tx: &TxData, status: &EntryStatus, meta: &MetaData) {
+    print_digest_status(meta, status, &"SEND".bright_red().bold());
+
+    println!(
+        "  Tx Nonce: {}",
+        tx.spent_witness.tx.nonce.to_string().cyan()
+    );
+    println!("  Transfers:");
+    let transfers = tx
+        .spent_witness
+        .transfers
+        .iter()
+        .filter(|transfer| transfer != &&Transfer::default())
+        .collect::<Vec<_>>();
+
+    for (i, ((transfer, transfer_type), transfer_digest)) in transfers
+        .iter()
+        .zip(tx.transfer_types.iter())
+        .zip(tx.transfer_digests.iter())
+        .enumerate()
+    {
+        println!(
+            "    {}: {}",
+            i,
+            format_transfer(transfer, transfer_type, *transfer_digest).white()
+        );
+    }
 }

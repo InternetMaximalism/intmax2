@@ -57,6 +57,9 @@ pub enum CliError {
     #[error("Failed to get proposal")]
     FailedToGetProposal,
 
+    #[error("Failed to send transfer fee: {0}")]
+    FailedToSendFee(String),
+
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
 

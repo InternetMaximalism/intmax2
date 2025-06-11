@@ -1,7 +1,8 @@
 use alloy::primitives::B256;
 use clap::{Parser, Subcommand};
 use intmax2_interfaces::{
-    api::store_vault_server::types::CursorOrder, data::deposit_data::TokenType, utils::address::IntmaxAddress,
+    api::store_vault_server::types::CursorOrder, data::deposit_data::TokenType,
+    utils::address::IntmaxAddress,
 };
 use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32, u256::U256};
 use std::path::PathBuf;
@@ -29,7 +30,7 @@ pub enum Commands {
         description: Option<String>,
         #[clap(long)]
         fee_token_index: Option<u32>,
-        #[clap(long, default_value = "false")]
+        #[clap(long, default_value_t = false)]
         wait: bool,
     },
     Withdrawal {
@@ -45,9 +46,9 @@ pub enum Commands {
         description: Option<String>,
         #[clap(long)]
         fee_token_index: Option<u32>,
-        #[clap(long, default_value = "false")]
+        #[clap(long, default_value_t = false)]
         with_claim_fee: bool,
-        #[clap(long, default_value = "false")]
+        #[clap(long, default_value_t = false)]
         wait: bool,
     },
     BatchTransfer {
@@ -57,7 +58,7 @@ pub enum Commands {
         csv_path: String,
         #[clap(long)]
         fee_token_index: Option<u32>,
-        #[clap(long, default_value = "false")]
+        #[clap(long, default_value_t = false)]
         wait: bool,
     },
     Deposit {
@@ -73,7 +74,7 @@ pub enum Commands {
         token_address: Option<Address>,
         #[clap(long)]
         token_id: Option<U256>,
-        #[clap(long, default_value = "false")]
+        #[clap(long, default_value_t = false)]
         mining: bool,
     },
     SyncWithdrawals {
@@ -93,7 +94,7 @@ pub enum Commands {
     Balance {
         #[clap(long)]
         private_key: Bytes32,
-        #[clap(long, default_value = "false")]
+        #[clap(long, default_value_t = false)]
         without_sync: bool,
     },
     UserData {
@@ -139,7 +140,7 @@ pub enum Commands {
     Resync {
         #[clap(long)]
         private_key: Bytes32,
-        #[clap(long, default_value = "false")]
+        #[clap(long, default_value_t = false)]
         deep: bool,
     },
     MakeBackup {
