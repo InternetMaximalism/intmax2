@@ -38,7 +38,7 @@ pub fn parse_public_key(input: &str) -> Result<PublicKey, JsError> {
 pub fn parse_network(input: &str) -> Result<Network, JsError> {
     js_err(
         input.parse(),
-        "Failed to parse as Network. Expected 'mainnet', 'stagenet', or 'testnet'",
+        "Failed to parse as Network. Expected 'mainnet', 'testnet', or 'devnet'",
     )
 }
 
