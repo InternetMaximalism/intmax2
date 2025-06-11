@@ -1782,7 +1782,7 @@ dependencies = [
 
 [[package]]
 name = "balance-prover"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -1968,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "block-builder"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -2312,7 +2312,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "serde",
 ]
@@ -3865,7 +3865,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-cli"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "alloy",
  "anyhow",
@@ -3900,7 +3900,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-client-sdk"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "aes-gcm",
  "alloy",
@@ -3949,7 +3949,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3992,7 +3992,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-wasm-lib"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4230,7 +4230,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "legacy-store-vault-server"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6109,7 +6109,7 @@ dependencies = [
 
 [[package]]
 name = "server-common"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-web",
  "common",
@@ -6515,7 +6515,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "store-vault-server"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -6695,7 +6695,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "tests"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "alloy",
  "anyhow",
@@ -7298,7 +7298,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -7336,7 +7336,7 @@ dependencies = [
 
 [[package]]
 name = "validity-prover-worker"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -7931,7 +7931,7 @@ dependencies = [
 
 [[package]]
 name = "withdrawal-server"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "actix-cors",
  "actix-web",
