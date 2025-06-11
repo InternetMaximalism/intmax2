@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use intmax2_interfaces::utils::{address::IntmaxAddress, key::PublicKey, network::Network};
 use intmax2_zkp::{
     common::salt::Salt,
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
@@ -27,10 +28,31 @@ pub fn parse_bytes32(input: &str) -> Result<Bytes32, JsError> {
     )
 }
 
+pub fn parse_public_key(input: &str) -> Result<PublicKey, JsError> {
+    js_err(
+        input.parse(),
+        "Failed to parse as PublicKey. Expected 0x-prefixed hex string",
+    )
+}
+
+pub fn parse_network(input: &str) -> Result<Network, JsError> {
+    js_err(
+        input.parse(),
+        "Failed to parse as Network. Expected 'mainnet', 'testnet', or 'devnet'",
+    )
+}
+
 pub fn parse_address(input: &str) -> Result<Address, JsError> {
     js_err(
         Address::from_hex(input),
         "Failed to parse as Address. Expected 0x-prefixed hex Ethereum address",
+    )
+}
+
+pub fn parse_intmax_address(input: &str) -> Result<IntmaxAddress, JsError> {
+    js_err(
+        input.parse(),
+        "Failed to parse as IntmaxAddress. Expected Intmax address string",
     )
 }
 

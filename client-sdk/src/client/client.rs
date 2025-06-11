@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::{BlockBuilderClientInterface, Fee},
+        block_builder::interface::BlockBuilderClientInterface,
         store_vault_server::{
             interface::{SaveDataEntry, StoreVaultClientInterface},
             types::{MetaDataCursor, MetaDataCursorResponse},
@@ -15,6 +15,7 @@ use intmax2_interfaces::{
         data_type::DataType,
         deposit_data::{DepositData, TokenType},
         encryption::BlsEncryption as _,
+        extra_data::FullExtraData,
         meta_data::MetaData,
         proof_compression::{CompressedBalanceProof, CompressedSpentProof},
         sender_proof_set::SenderProofSet,
@@ -23,38 +24,22 @@ use intmax2_interfaces::{
         tx_data::TxData,
         user_data::{Balances, ProcessStatus, UserData},
     },
-    utils::{circuit_verifiers::CircuitVerifiers, digest::get_digest, random::default_rng},
+    utils::{
+        address::IntmaxAddress,
+        circuit_verifiers::CircuitVerifiers,
+        digest::get_digest,
+        key::{KeyPair, PrivateKey, PublicKey, PublicKeyPair, ViewPair},
+        random::default_rng,
+    },
 };
 use intmax2_zkp::{
     circuits::validity::validity_pis::ValidityPublicInputs,
     common::{
-        block_builder::BlockProposal, deposit::get_pubkey_salt_hash,
-        signature_content::key_set::KeySet, transfer::Transfer, trees::transfer_tree::TransferTree,
-        tx::Tx, witness::spent_witness::SpentWitness,
+        block_builder::BlockProposal, deposit::get_pubkey_salt_hash, transfer::Transfer,
+        trees::transfer_tree::TransferTree,
     },
     constants::{NUM_TRANSFERS_IN_TX, TRANSFER_TREE_HEIGHT},
-    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
-};
-
-use serde::{Deserialize, Serialize};
-
-use crate::{
-    client::{
-        fee_payment::generate_withdrawal_transfers,
-        receipt::generate_transfer_receipt,
-        strategy::{
-            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
-        },
-        sync::utils::generate_salt,
-    },
-    external_api::{
-        contract::{
-            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
-            withdrawal_contract::WithdrawalContract,
-        },
-        local_backup_store_vault::diff_data_client::make_backup_csv_from_entries,
-        utils::time::sleep_for,
-    },
+    ethereum_types::{address::Address, bytes32::Bytes32, u256::U256},
 };
 
 use super::{
@@ -62,7 +47,7 @@ use super::{
     config::ClientConfig,
     error::ClientError,
     fee_payment::{
-        quote_claim_fee, quote_withdrawal_fee, WithdrawalTransfers, CLAIM_FEE_MEMO,
+        quote_claim_fee, quote_withdrawal_fee, WithdrawalTransferRequests, CLAIM_FEE_MEMO,
         WITHDRAWAL_FEE_MEMO,
     },
     fee_proof::{generate_fee_proof, quote_transfer_fee},
@@ -76,6 +61,28 @@ use super::{
         tx_status::{get_tx_status, TxStatus},
     },
     sync::utils::{generate_spent_witness, get_balance_proof},
+};
+use crate::{
+    client::{
+        fee_payment::generate_withdrawal_transfers,
+        receipt::generate_transfer_receipt,
+        strategy::{
+            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
+        },
+        sync::utils::generate_salt,
+        types::{
+            DepositResult, FeeQuote, GenericRecipient, PaymentMemoEntry, TransferFeeQuote,
+            TransferRequest, TxRequestMemo, TxResult,
+        },
+    },
+    external_api::{
+        contract::{
+            liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
+            withdrawal_contract::WithdrawalContract,
+        },
+        local_backup_store_vault::diff_data_client::make_backup_csv_from_entries,
+        utils::time::sleep_for,
+    },
 };
 
 // Buffer time for the expiry of the block proposal
@@ -96,68 +103,17 @@ pub struct Client {
     pub withdrawal_contract: WithdrawalContract,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PaymentMemoEntry {
-    pub transfer_index: u32,
-    pub topic: String,
-    pub memo: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TxRequestMemo {
-    pub request_id: String,
-    pub is_registration_block: bool,
-    pub tx: Tx,
-    pub transfers: Vec<Transfer>,
-    pub spent_witness: SpentWitness,
-    pub sender_proof_set_ephemeral_key: U256,
-    pub payment_memos: Vec<PaymentMemoEntry>,
-    pub fee_index: Option<u32>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DepositResult {
-    pub deposit_data: DepositData,
-    pub deposit_digest: Bytes32,
-    pub backup_csv: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TransferFeeQuote {
-    pub beneficiary: Option<U256>,
-    pub fee: Option<Fee>,
-    pub collateral_fee: Option<Fee>,
-    pub block_builder_address: Address,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FeeQuote {
-    pub beneficiary: Option<U256>,
-    pub fee: Option<Fee>,
-    pub collateral_fee: Option<Fee>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TxResult {
-    pub tx_tree_root: Bytes32,
-    pub tx_digest: Bytes32,
-    pub tx_data: TxData,
-    pub transfer_data_vec: Vec<TransferData>,
-    pub backup_csv: String,
-}
-
 impl Client {
+    pub fn get_address(&self, public_keypair: PublicKeyPair) -> IntmaxAddress {
+        IntmaxAddress::from_public_keypair(self.config.network, &public_keypair)
+    }
+
     /// Back up deposit information before calling the contract's deposit function
     #[allow(clippy::too_many_arguments)]
     pub async fn prepare_deposit(
         &self,
         depositor: Address,
-        pubkey: U256,
+        public_keypair: PublicKeyPair,
         amount: U256,
         token_type: TokenType,
         token_address: Address,
@@ -165,7 +121,8 @@ impl Client {
         is_mining: bool,
     ) -> Result<DepositResult, ClientError> {
         log::info!(
-            "prepare_deposit: pubkey {pubkey}, amount {amount}, token_type {token_type:?}, token_address {token_address}, token_id {token_id}"
+            "prepare_deposit: spend pub {}, amount {amount}, token_type {token_type:?}, token_address {token_address}, token_id {token_id}",
+            public_keypair.spend,
         );
         if is_mining && !validate_mining_deposit_criteria(token_type, amount) {
             return Err(ClientError::InvalidMiningDepositCriteria);
@@ -174,7 +131,7 @@ impl Client {
         let deposit_salt = generate_salt();
 
         // backup before contract call
-        let pubkey_salt_hash = get_pubkey_salt_hash(pubkey, deposit_salt);
+        let pubkey_salt_hash = get_pubkey_salt_hash(public_keypair.spend.0, deposit_salt);
         let deposit_data = DepositData {
             deposit_salt,
             depositor,
@@ -189,10 +146,10 @@ impl Client {
         };
         let save_entry = SaveDataEntry {
             topic: DataType::Deposit.to_topic(),
-            pubkey,
-            data: deposit_data.encrypt(pubkey, None)?,
+            pubkey: public_keypair.view.0,
+            data: deposit_data.encrypt(public_keypair.view, None)?,
         };
-        let ephemeral_key = KeySet::rand(&mut default_rng());
+        let ephemeral_key = PrivateKey::rand(&mut default_rng());
         let digests = self
             .store_vault_server
             .save_data_batch(ephemeral_key, std::slice::from_ref(&save_entry))
@@ -213,28 +170,46 @@ impl Client {
     /// Check balance and await for both balance proof and validity proof synced
     pub async fn await_tx_sendable(
         &self,
-        key: KeySet,
-        transfers: &[Transfer],
+        view_pair: ViewPair,
+        transfer_requests: &[TransferRequest],
         fee_quote: &TransferFeeQuote,
     ) -> Result<UserData, ClientError> {
         // input validation
-        if transfers.is_empty() {
+        if transfer_requests.is_empty() {
             return Err(ClientError::TransferLenError(
                 "transfers is empty".to_string(),
             ));
         }
-        if transfers.len() > NUM_TRANSFERS_IN_TX - 1 {
+        if transfer_requests.len() > NUM_TRANSFERS_IN_TX - 1 {
             return Err(ClientError::TransferLenError(
                 "transfers is too many".to_string(),
             ));
         }
-        if fee_quote.fee.is_some() && fee_quote.beneficiary.is_none() {
-            return Err(ClientError::BlockBuilderFeeError(
-                "fee_beneficiary is required".to_string(),
-            ));
+        // network validation
+        for transfer_request in transfer_requests {
+            match &transfer_request.recipient {
+                GenericRecipient::IntmaxAddress(intmax_address) => {
+                    if intmax_address.network != self.config.network {
+                        return Err(ClientError::NetworkMismatch(format!(
+                            "Recipient network {} does not match client network {}",
+                            intmax_address.network, self.config.network
+                        )));
+                    }
+                }
+                GenericRecipient::Address(_) => {
+                    // Address is not network specific, so no check needed
+                }
+            }
+        }
+        // fee quote validation
+        if fee_quote.beneficiary.network != self.config.network {
+            return Err(ClientError::NetworkMismatch(format!(
+                "Fee beneficiary network {} does not match client network {}",
+                fee_quote.beneficiary.network, self.config.network
+            )));
         }
         // balance check
-        let mut transfer_amounts = transfers
+        let mut transfer_amounts = transfer_requests
             .iter()
             .map(|t| (t.token_index, t.amount))
             .collect::<Vec<_>>();
@@ -246,7 +221,7 @@ impl Client {
         } else {
             vec![]
         };
-        let mut user_data = self.get_user_data(key).await?;
+        let mut user_data = self.get_user_data(view_pair).await?;
         let mut already_synced = false;
 
         match balance_check(&user_data.balances(), &transfer_amounts) {
@@ -254,9 +229,9 @@ impl Client {
             Err(_) => {
                 // if balance check failed, sync and retry
                 log::warn!("Balance for transfers is not enough, start to sync");
-                self.sync(key).await?;
+                self.sync(view_pair).await?;
                 already_synced = true;
-                user_data = self.get_user_data(key).await?;
+                user_data = self.get_user_data(view_pair).await?;
 
                 // check again
                 balance_check(&user_data.balances(), &transfer_amounts)?;
@@ -268,8 +243,8 @@ impl Client {
                 // if balance check failed, sync and retry
                 if !already_synced {
                     log::warn!("Balance for collateral transfer is not enough, start to sync");
-                    self.sync(key).await?;
-                    user_data = self.get_user_data(key).await?;
+                    self.sync(view_pair).await?;
+                    user_data = self.get_user_data(view_pair).await?;
                 }
                 // check again
                 balance_check(&user_data.balances(), &collateral_amounts)?;
@@ -289,7 +264,7 @@ impl Client {
         let tx_info = fetch_all_unprocessed_tx_info(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
-            key,
+            view_pair,
             current_time,
             &user_data.tx_status,
             self.config.tx_timeout,
@@ -302,8 +277,8 @@ impl Client {
                 ));
             }
             // error here is there are pending txs
-            self.sync(key).await?;
-            user_data = self.get_user_data(key).await?;
+            self.sync(view_pair).await?;
+            user_data = self.get_user_data(view_pair).await?;
         }
         Ok(user_data)
     }
@@ -312,69 +287,81 @@ impl Client {
     pub async fn send_tx_request(
         &self,
         block_builder_url: &str,
-        key: KeySet,
-        transfers: &[Transfer],
+        key_pair: KeyPair,
+        transfer_requests: &[TransferRequest],
         payment_memos: &[PaymentMemoEntry],
         fee_quote: &TransferFeeQuote,
     ) -> Result<TxRequestMemo, ClientError> {
+        let view_pair: ViewPair = key_pair.into();
+        let sender_address = self.get_address(view_pair.into());
+        let spend_pub = key_pair.spend.to_public_key();
         log::info!(
-            "send_tx_request: pubkey {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
-            key.pubkey.to_hex(),
-            transfers.len(),
-            fee_quote.beneficiary.map_or("N/A".to_string(), |b| b.to_hex()),
+            "send_tx_request: spend_pub {}, transfers {}, fee_beneficiary {}, fee {:?}, collateral_fee {:?}",
+           spend_pub,
+            transfer_requests.len(),
+            fee_quote.beneficiary,
             fee_quote.fee,
             fee_quote.collateral_fee
         );
         for e in payment_memos {
-            if e.transfer_index as usize >= transfers.len() {
+            if e.transfer_index as usize >= transfer_requests.len() {
                 return Err(ClientError::PaymentMemoError(
                     "memo.transfer_index is out of range".to_string(),
                 ));
             }
         }
-        let user_data = self.await_tx_sendable(key, transfers, fee_quote).await?;
+
+        let user_data = self
+            .await_tx_sendable(view_pair, transfer_requests, fee_quote)
+            .await?;
 
         // fetch if this is first time tx
-        let account_info = self.validity_prover.get_account_info(key.pubkey).await?;
+        let account_info = self
+            .validity_prover
+            .get_account_info(view_pair.spend.0)
+            .await?;
         let is_registration_block = account_info.account_id.is_none();
-
-        let fee_transfer = fee_quote.fee.clone().map(|fee| Transfer {
-            recipient: fee_quote.beneficiary.unwrap().into(),
-            amount: fee.amount,
-            token_index: fee.token_index,
-            salt: generate_salt(),
-        });
-        let collateral_transfer = fee_quote.collateral_fee.clone().map(|fee| Transfer {
-            recipient: fee_quote.beneficiary.unwrap().into(),
-            amount: fee.amount,
-            token_index: fee.token_index,
-            salt: generate_salt(),
-        });
-
-        // add fee transfer to the end
-        let transfers: Vec<Transfer> = if let Some(fee_transfer) = fee_transfer {
-            transfers
-                .iter()
-                .cloned()
-                .chain(std::iter::once(fee_transfer))
-                .collect()
-        } else {
-            transfers.to_vec()
-        };
-        let fee_index = if fee_transfer.is_some() {
-            Some(transfers.len() as u32 - 1)
+        let mut transfer_requests = transfer_requests.to_vec();
+        if let Some(fee) = &fee_quote.fee {
+            // if fee is specified, add fee transfer request
+            transfer_requests.push(TransferRequest {
+                recipient: GenericRecipient::IntmaxAddress(fee_quote.beneficiary),
+                token_index: fee.token_index,
+                amount: fee.amount,
+                description: None,
+            });
+        }
+        let fee_index = if fee_quote.fee.is_some() {
+            // the fee transfer is the last one
+            Some(transfer_requests.len() as u32 - 1)
         } else {
             None
         };
 
+        let collateral_transfer = fee_quote.collateral_fee.clone().map(|fee| Transfer {
+            recipient: fee_quote.beneficiary.public_spend.0.into(),
+            amount: fee.amount,
+            token_index: fee.token_index,
+            salt: generate_salt(),
+        });
+        let (transfers, full_extra_data): (Vec<Transfer>, Vec<FullExtraData>) = transfer_requests
+            .iter()
+            .map(|t| t.to_transfer_and_full_extra_data())
+            .unzip();
+        let recipients = transfer_requests
+            .iter()
+            .map(|t| t.recipient.clone())
+            .collect::<Vec<_>>();
         let balance_proof =
             get_balance_proof(&user_data)?.ok_or(ClientError::CannotSendTxByZeroBalanceAccount)?;
-
         // generate spent proof
         let tx_nonce = user_data.full_private_state.nonce;
         let spent_witness =
             generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers)?;
-        let spent_proof = self.balance_prover.prove_spent(key, &spent_witness).await?;
+        let spent_proof = self
+            .balance_prover
+            .prove_spent(view_pair.view, &spent_witness)
+            .await?;
         let tx = spent_witness.tx;
 
         // save sender proof set in advance to avoid delay
@@ -384,24 +371,23 @@ impl Client {
             spent_proof,
             prev_balance_proof,
         };
-        let ephemeral_key = KeySet::rand(&mut default_rng());
+        let ephemeral_key = PrivateKey::rand(&mut default_rng());
         self.store_vault_server
             .save_snapshot(
                 ephemeral_key,
                 &DataType::SenderProofSet.to_topic(),
                 None,
-                &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
+                &sender_proof_set.encrypt(ephemeral_key.to_public_key(), Some(ephemeral_key))?,
             )
             .await?;
-        let sender_proof_set_ephemeral_key: U256 = ephemeral_key.privkey;
         let fee_proof = if let Some(fee_index) = fee_index {
             let fee_proof = generate_fee_proof(
                 self.store_vault_server.as_ref(),
                 self.balance_prover.as_ref(),
                 self.config.tx_timeout,
-                key,
+                key_pair,
                 &user_data,
-                sender_proof_set_ephemeral_key,
+                ephemeral_key,
                 tx_nonce,
                 fee_index,
                 &transfers,
@@ -420,7 +406,7 @@ impl Client {
             .send_tx_request(
                 block_builder_url,
                 is_registration_block,
-                key.pubkey,
+                sender_address,
                 tx,
                 fee_proof.clone(),
             )
@@ -429,11 +415,13 @@ impl Client {
             request_id,
             is_registration_block,
             tx,
-            transfers: transfers.to_vec(),
+            transfers,
+            recipients,
             spent_witness,
-            sender_proof_set_ephemeral_key,
+            sender_proof_set_ephemeral_key: ephemeral_key,
             fee_index,
             payment_memos: payment_memos.to_vec(),
+            full_extra_data: full_extra_data.to_vec(),
         };
         Ok(memo)
     }
@@ -471,10 +459,14 @@ impl Client {
     pub async fn finalize_tx(
         &self,
         block_builder_url: &str,
-        key: KeySet,
+        key_pair: KeyPair,
         memo: &TxRequestMemo,
         proposal: &BlockProposal,
     ) -> Result<TxResult, ClientError> {
+        let view_pair: ViewPair = key_pair.into();
+        let sender_priv = key_pair.spend;
+        let sender_pub = key_pair.spend.to_public_key();
+
         // verify proposal
         proposal
             .verify(memo.tx)
@@ -505,15 +497,19 @@ impl Client {
         }
 
         let mut transfer_data_and_encrypted_data = Vec::new();
-        for (i, transfer) in memo.transfers.iter().enumerate() {
+        for i in 0..memo.transfers.len() {
+            let transfer = &memo.transfers[i];
+            let full_extra_data = &memo.full_extra_data[i];
+            let recipient = &memo.recipients[i];
             let transfer_merkle_proof = transfer_tree.prove(i as u64);
             let transfer_data = TransferData {
-                sender: key.pubkey,
+                sender: view_pair.into(),
                 transfer: *transfer,
                 transfer_index: i as u32,
                 transfer_merkle_proof,
                 sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
                 sender_proof_set: None,
+                extra_data: full_extra_data.to_extra_data(),
                 tx: memo.tx,
                 tx_index: proposal.tx_index,
                 tx_merkle_proof: proposal.tx_merkle_proof.clone(),
@@ -524,21 +520,26 @@ impl Client {
             } else {
                 DataType::Withdrawal
             };
-            let receiver = if transfer.recipient.is_pubkey {
-                transfer.recipient.to_pubkey().unwrap()
-            } else {
-                key.pubkey
+            let receiver_view_pub = match recipient {
+                GenericRecipient::IntmaxAddress(intmax_address) => {
+                    // use view key for IntmaxAddress
+                    intmax_address.public_view
+                }
+                GenericRecipient::Address(_) => {
+                    // use the sender's view key for withdrawals
+                    view_pair.view.to_public_key()
+                }
             };
             let sender_key = if data_type == DataType::Withdrawal {
-                Some(key)
+                Some(view_pair.view)
             } else {
                 None
             };
-            let encrypted_data = transfer_data.encrypt(receiver, sender_key)?;
+            let encrypted_data = transfer_data.encrypt(receiver_view_pub, sender_key)?;
             let digest = get_digest(&encrypted_data);
             transfer_data_and_encrypted_data.push((
                 data_type,
-                receiver,
+                receiver_view_pub,
                 transfer_data,
                 encrypted_data,
                 digest,
@@ -592,7 +593,7 @@ impl Client {
             }
             entries.push(SaveDataEntry {
                 topic: data_type.to_topic(),
-                pubkey: *receiver,
+                pubkey: receiver.0,
                 data: encrypted_data.clone(),
             });
         }
@@ -602,29 +603,31 @@ impl Client {
             tx_merkle_proof: proposal.tx_merkle_proof.clone(),
             tx_tree_root: proposal.block_sign_payload.tx_tree_root,
             spent_witness: memo.spent_witness.clone(),
+            full_extra_data: memo.full_extra_data.clone(),
             transfer_digests,
             transfer_types,
             sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
         };
-        let tx_data_encrypted = tx_data.encrypt(key.pubkey, Some(key))?;
+        let tx_data_encrypted =
+            tx_data.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?;
         let tx_digest = get_digest(&tx_data_encrypted);
         entries.push(SaveDataEntry {
             topic: DataType::Tx.to_topic(),
-            pubkey: key.pubkey,
+            pubkey: view_pair.view.to_public_key().0,
             data: tx_data_encrypted,
         });
 
         self.store_vault_server
-            .save_data_batch(key, &entries)
+            .save_data_batch(view_pair.view, &entries)
             .await?;
 
         // sign and post signature
-        let signature = proposal.sign(key);
+        let signature = proposal.sign(sender_priv.to_key_set());
         self.block_builder
             .post_signature(
                 block_builder_url,
                 &memo.request_id,
-                key.pubkey,
+                sender_pub.0,
                 signature.signature,
             )
             .await?;
@@ -655,13 +658,13 @@ impl Client {
             };
             let entry = SaveDataEntry {
                 topic: memo_entry.topic.clone(),
-                pubkey: key.pubkey,
-                data: payment_memo.encrypt(key.pubkey, Some(key))?,
+                pubkey: view_pair.view.to_public_key().0,
+                data: payment_memo.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?,
             };
             misc_entries.push(entry);
         }
         self.store_vault_server
-            .save_data_batch(key, &misc_entries)
+            .save_data_batch(view_pair.view, &misc_entries)
             .await?;
 
         let all_entries = entries
@@ -684,7 +687,7 @@ impl Client {
 
     pub async fn get_tx_status(
         &self,
-        sender: U256,
+        sender: PublicKey,
         tx_tree_root: Bytes32,
     ) -> Result<TxStatus, ClientError> {
         let status = get_tx_status(self.validity_prover.as_ref(), sender, tx_tree_root).await?;
@@ -693,9 +696,9 @@ impl Client {
 
     pub async fn get_withdrawal_info(
         &self,
-        key: KeySet,
+        view_key: PrivateKey,
     ) -> Result<Vec<WithdrawalInfo>, ClientError> {
-        let withdrawal_info = self.withdrawal_server.get_withdrawal_info(key).await?;
+        let withdrawal_info = self.withdrawal_server.get_withdrawal_info(view_key).await?;
         Ok(withdrawal_info)
     }
 
@@ -710,13 +713,13 @@ impl Client {
         Ok(withdrawal_info)
     }
 
-    pub async fn get_mining_list(&self, key: KeySet) -> Result<Vec<Mining>, ClientError> {
+    pub async fn get_mining_list(&self, view_pair: ViewPair) -> Result<Vec<Mining>, ClientError> {
         let current_time = chrono::Utc::now().timestamp() as u64;
         let minings = fetch_mining_info(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             &self.liquidity_contract,
-            key,
+            view_pair,
             self.config.is_faster_mining,
             current_time,
             &ProcessStatus::default(),
@@ -727,33 +730,36 @@ impl Client {
         Ok(minings)
     }
 
-    pub async fn get_claim_info(&self, key: KeySet) -> Result<Vec<ClaimInfo>, ClientError> {
-        let claim_info = self.withdrawal_server.get_claim_info(key).await?;
+    pub async fn get_claim_info(
+        &self,
+        view_key: PrivateKey,
+    ) -> Result<Vec<ClaimInfo>, ClientError> {
+        let claim_info = self.withdrawal_server.get_claim_info(view_key).await?;
         Ok(claim_info)
     }
 
     pub async fn fetch_deposit_history(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), ClientError> {
-        fetch_deposit_history(self, key, cursor).await
+        fetch_deposit_history(self, view_pair, cursor).await
     }
 
     pub async fn fetch_transfer_history(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), ClientError> {
-        fetch_transfer_history(self, key, cursor).await
+        fetch_transfer_history(self, view_pair, cursor).await
     }
 
     pub async fn fetch_tx_history(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
-        fetch_tx_history(self, key, cursor).await
+        fetch_tx_history(self, view_pair, cursor).await
     }
 
     pub async fn quote_transfer_fee(
@@ -767,11 +773,6 @@ impl Client {
         let fee_info = self.block_builder.get_fee_info(block_builder_url).await?;
         let (fee, collateral_fee) =
             quote_transfer_fee(is_registration_block, fee_token_index, &fee_info)?;
-        if fee_info.beneficiary.is_none() && fee.is_some() {
-            return Err(ClientError::BlockBuilderFeeError(
-                "beneficiary is required".to_string(),
-            ));
-        }
         if fee.is_none() && collateral_fee.is_some() {
             return Err(ClientError::BlockBuilderFeeError(
                 "collateral fee is required but fee is not found".to_string(),
@@ -816,14 +817,14 @@ impl Client {
 
     pub async fn generate_withdrawal_transfers(
         &self,
-        withdrawal_transfer: &Transfer,
+        withdrawal_transfer_request: &TransferRequest,
         fee_token_index: u32,
         with_claim_fee: bool,
-    ) -> Result<WithdrawalTransfers, ClientError> {
+    ) -> Result<WithdrawalTransferRequests, ClientError> {
         let withdrawal_transfers = generate_withdrawal_transfers(
             self.withdrawal_server.as_ref(),
             &self.withdrawal_contract,
-            withdrawal_transfer,
+            withdrawal_transfer_request,
             fee_token_index,
             with_claim_fee,
         )
@@ -833,38 +834,41 @@ impl Client {
 
     pub async fn make_history_backup(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         from: u64,
         chunk_size: usize,
     ) -> Result<Vec<String>, ClientError> {
-        let csvs = make_history_backup(self, key, from, chunk_size).await?;
+        let csvs = make_history_backup(self, view_pair, from, chunk_size).await?;
         Ok(csvs)
     }
 
     pub async fn generate_transfer_receipt(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         tx_digest: Bytes32,
         transfer_index: u32,
     ) -> Result<String, ClientError> {
-        generate_transfer_receipt(self, key, tx_digest, transfer_index).await
+        generate_transfer_receipt(self, view_pair, tx_digest, transfer_index).await
     }
 
     pub async fn validate_transfer_receipt(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         transfer_receipt: &str,
     ) -> Result<TransferData, ClientError> {
-        validate_transfer_receipt(self, key, transfer_receipt).await
+        validate_transfer_receipt(self, view_pair, transfer_receipt).await
     }
 
-    pub async fn get_balances_without_sync(&self, key: KeySet) -> Result<Balances, ClientError> {
+    pub async fn get_balances_without_sync(
+        &self,
+        view_pair: ViewPair,
+    ) -> Result<Balances, ClientError> {
         let (_, balances, _) = determine_sequence(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             &self.rollup_contract,
             &self.liquidity_contract,
-            key,
+            view_pair,
             self.config.deposit_timeout,
             self.config.tx_timeout,
         )

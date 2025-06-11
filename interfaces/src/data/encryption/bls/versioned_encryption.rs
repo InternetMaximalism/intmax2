@@ -1,7 +1,9 @@
-use intmax2_zkp::{common::signature_content::key_set::KeySet, ethereum_types::u256::U256};
 use serde::{Deserialize, Serialize};
 
-use crate::data::encryption::bls::v1::singed_encryption::V1SignedEncryption;
+use crate::{
+    data::encryption::bls::v1::singed_encryption::V1SignedEncryption,
+    utils::key::{PrivateKey, PublicKey},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum VersionedBlsEncryptionError {
@@ -27,13 +29,15 @@ pub struct VersionedBlsEncryption {
 impl VersionedBlsEncryption {
     pub fn encrypt(
         version: u8,
-        receiver: U256,
-        sender_key: Option<KeySet>,
+        receiver_view_pub: PublicKey,
+        sender_view_priv: Option<PrivateKey>,
         data: &[u8],
     ) -> Result<Self, VersionedBlsEncryptionError> {
         match version {
-            1 => {
-                let encrypted_data = V1SignedEncryption::encrypt(receiver, sender_key, data);
+            1 | 2 => {
+                let sender_key = sender_view_priv.map(|priv_key| priv_key.to_key_set());
+                let encrypted_data =
+                    V1SignedEncryption::encrypt(receiver_view_pub.0, sender_key, data);
                 Ok(Self {
                     version,
                     data: bincode::serialize(&encrypted_data)?,
@@ -45,14 +49,15 @@ impl VersionedBlsEncryption {
 
     pub fn decrypt(
         &self,
-        receiver_key: KeySet,
-        sender: Option<U256>,
+        receiver_view_priv: PrivateKey,
+        sender_view_pub: Option<PublicKey>,
     ) -> Result<Vec<u8>, VersionedBlsEncryptionError> {
         match self.version {
-            1 => {
+            1 | 2 => {
+                let sender = sender_view_pub.map(|pub_key| pub_key.0);
                 let encrypted_data: V1SignedEncryption = bincode::deserialize(&self.data)?;
                 let data = encrypted_data
-                    .decrypt(receiver_key, sender)
+                    .decrypt(receiver_view_priv.to_key_set(), sender)
                     .map_err(|e| VersionedBlsEncryptionError::DecryptionError(e.to_string()))?;
                 Ok(data)
             }

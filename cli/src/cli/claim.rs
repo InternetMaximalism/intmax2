@@ -4,20 +4,22 @@ use intmax2_client_sdk::external_api::contract::{
     convert::{convert_address_to_alloy, convert_bytes32_to_b256},
     utils::get_address_from_private_key,
 };
-use intmax2_interfaces::api::withdrawal_server::interface::WithdrawalStatus;
-use intmax2_zkp::{
-    common::signature_content::key_set::KeySet,
-    ethereum_types::{address::Address, bytes32::Bytes32},
+use intmax2_interfaces::{
+    api::withdrawal_server::interface::WithdrawalStatus, utils::key::ViewPair,
 };
+use intmax2_zkp::ethereum_types::{address::Address, bytes32::Bytes32};
 
 use crate::{cli::client::get_client, env_var::EnvVar};
 
 use super::error::CliError;
 
-pub async fn claim_withdrawals(key: KeySet, eth_private_key: Bytes32) -> Result<(), CliError> {
+pub async fn claim_withdrawals(
+    view_pair: ViewPair,
+    eth_private_key: Bytes32,
+) -> Result<(), CliError> {
     let signer_private_key = convert_bytes32_to_b256(eth_private_key);
     let client = get_client()?;
-    let withdrawal_infos = client.get_withdrawal_info(key).await?;
+    let withdrawal_infos = client.get_withdrawal_info(view_pair.view).await?;
 
     let mut claim_withdrawals = Vec::new();
 

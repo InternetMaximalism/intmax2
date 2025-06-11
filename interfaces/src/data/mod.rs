@@ -2,6 +2,7 @@ pub mod data_type;
 pub mod deposit_data;
 pub mod encryption;
 pub mod error;
+pub mod extra_data;
 pub mod generic_misc_data;
 pub mod meta_data;
 pub mod proof_compression;

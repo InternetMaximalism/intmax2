@@ -1,5 +1,6 @@
 #![cfg(target_arch = "wasm32")]
 
+use alloy::network;
 use intmax2_wasm_lib::{generate_intmax_account_from_eth_key, get_deposit_hash};
 use wasm_bindgen_test::*;
 
@@ -7,13 +8,15 @@ wasm_bindgen_test_configure!();
 
 #[wasm_bindgen_test]
 async fn test_generate_account_from_eth_key() {
+    let network = "mainnet";
     let eth_key = "0x0000000000000000000000000000000000000000000000000000000000000001";
-    let result = generate_intmax_account_from_eth_key(eth_key).await;
+    let is_legacy = false;
+    let result = generate_intmax_account_from_eth_key(network, eth_key, is_legacy).await;
     assert!(result.is_ok(), "Account generation failed");
 
     let account = result.unwrap();
-    assert!(!account.privkey.is_empty(), "Empty privkey");
-    assert!(!account.pubkey.is_empty(), "Empty pubkey");
+    assert!(!account.address.is_empty(), "Empty address");
+    assert!(!account.view_pair.is_empty(), "Empty view pair");
 }
 
 #[wasm_bindgen_test]

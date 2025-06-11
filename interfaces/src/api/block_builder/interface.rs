@@ -8,12 +8,16 @@ use intmax2_zkp::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{api::error::ServerError, data::transfer_data::TransferData};
+use crate::{
+    api::error::ServerError,
+    data::transfer_data::TransferData,
+    utils::{address::IntmaxAddress, key::PrivateKey},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeProof {
-    pub sender_proof_set_ephemeral_key: U256,
+    pub sender_proof_set_ephemeral_key: PrivateKey,
     pub fee_transfer_witness: TransferWitness,
     pub collateral_block: Option<CollateralBlock>,
 }
@@ -21,7 +25,7 @@ pub struct FeeProof {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CollateralBlock {
-    pub sender_proof_set_ephemeral_key: U256,
+    pub sender_proof_set_ephemeral_key: PrivateKey,
     pub fee_transfer_data: TransferData,
     pub is_registration_block: bool,
     pub expiry: u64,
@@ -47,7 +51,7 @@ pub struct Fee {
 #[serde(rename_all = "camelCase")]
 pub struct BlockBuilderFeeInfo {
     pub block_builder_address: Address,
-    pub beneficiary: Option<U256>,
+    pub beneficiary: IntmaxAddress,
     pub registration_fee: Option<Vec<Fee>>,
     pub non_registration_fee: Option<Vec<Fee>>,
     pub registration_collateral_fee: Option<Vec<Fee>>,
@@ -66,7 +70,7 @@ pub trait BlockBuilderClientInterface: Sync + Send {
         &self,
         block_builder_url: &str,
         is_registration_block: bool,
-        pubkey: U256,
+        sender: IntmaxAddress,
         tx: Tx,
         fee_proof: Option<FeeProof>,
     ) -> Result<String, ServerError>;

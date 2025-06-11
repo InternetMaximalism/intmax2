@@ -1,15 +1,20 @@
+use std::slice;
+
 use alloy::primitives::B256;
 use intmax2_client_sdk::{
     self,
-    client::{client::Client, key_from_eth::generate_intmax_account_from_eth_key},
+    client::{
+        client::Client,
+        types::{GenericRecipient, TransferRequest},
+    },
     external_api::utils::time::sleep_for,
 };
-use intmax2_zkp::common::{salt::Salt, transfer::Transfer};
+use intmax2_interfaces::utils::address::IntmaxAddress;
 
 use crate::{
     config::TestConfig,
     send::send_transfers,
-    utils::{get_balance_on_intmax, print_info},
+    utils::{get_balance_on_intmax, get_keypair_from_eth_key, print_info},
 };
 
 pub async fn transfer_loop(
@@ -18,20 +23,21 @@ pub async fn transfer_loop(
     eth_private_key: B256,
 ) -> anyhow::Result<()> {
     print_info(client, eth_private_key).await?;
-    let key = generate_intmax_account_from_eth_key(eth_private_key);
+    let key_pair = get_keypair_from_eth_key(eth_private_key);
+    let address = IntmaxAddress::from_keypair(client.config.network, &key_pair);
 
-    let balance = get_balance_on_intmax(client, key).await?;
+    let balance = get_balance_on_intmax(client, key_pair.into()).await?;
     if balance < 100.into() {
         log::warn!("Insufficient balance to perform transfers");
         return Ok(());
     }
 
     loop {
-        let transfer = Transfer {
-            recipient: key.pubkey.into(),
+        let transfer = TransferRequest {
+            recipient: GenericRecipient::IntmaxAddress(address),
             token_index: 0,
             amount: 1.into(),
-            salt: Salt::rand(&mut rand::thread_rng()),
+            description: None,
         };
         let mut retries = 0;
         loop {
@@ -41,7 +47,8 @@ pub async fn transfer_loop(
                     retries
                 ));
             }
-            let result = send_transfers(config, client, key, &[transfer], &[], 0).await;
+            let result =
+                send_transfers(config, client, key_pair, slice::from_ref(&transfer), &[], 0).await;
             match result {
                 Ok(_) => break,
                 Err(e) => {
@@ -52,7 +59,7 @@ pub async fn transfer_loop(
             sleep_for(config.tx_resend_interval).await;
             retries += 1;
         }
-        client.sync(key).await?;
+        client.sync(key_pair.into()).await?;
         log::info!(
             "Transfer completed. Sleeping for {} seconds",
             config.transfer_loop_wait_time

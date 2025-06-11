@@ -1,10 +1,11 @@
-use intmax2_zkp::{
-    circuits::balance::{balance_pis::BalancePublicInputs, send::spent_circuit::SpentPublicInputs},
-    ethereum_types::u256::U256,
+use intmax2_zkp::circuits::balance::{
+    balance_pis::BalancePublicInputs, send::spent_circuit::SpentPublicInputs,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::utils::circuit_verifiers::CircuitVerifiers;
+use crate::{
+    data::encryption::errors::BlsEncryptionError, utils::circuit_verifiers::CircuitVerifiers,
+};
 
 use super::{
     encryption::BlsEncryption,
@@ -20,10 +21,17 @@ pub struct SenderProofSet {
     pub prev_balance_proof: CompressedBalanceProof,
 }
 
-impl BlsEncryption for SenderProofSet {}
+impl BlsEncryption for SenderProofSet {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 impl Validation for SenderProofSet {
-    fn validate(&self, _pubkey: U256) -> anyhow::Result<()> {
+    fn validate(&self) -> anyhow::Result<()> {
         let verifiers = CircuitVerifiers::load();
         let spent_proof = self.spent_proof.decompress()?;
         verifiers.get_spent_vd().verify(spent_proof.clone())?;

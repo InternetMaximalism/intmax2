@@ -8,7 +8,7 @@ use plonky2::{
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
-use crate::data::encryption::{BlsEncryption, RsaEncryption};
+use crate::data::encryption::{errors::BlsEncryptionError, BlsEncryption, RsaEncryption};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -61,7 +61,14 @@ pub struct ProofResultWithError {
     pub error: Option<String>,
 }
 
-impl BlsEncryption for ProofResultWithError {}
+impl BlsEncryption for ProofResultWithError {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 // ----------------- api types -------------------
 

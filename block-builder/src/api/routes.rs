@@ -35,7 +35,7 @@ pub async fn tx_request(
         .block_builder
         .send_tx_request(
             request.is_registration_block,
-            request.pubkey,
+            request.sender,
             request.tx,
             &request.fee_proof,
         )

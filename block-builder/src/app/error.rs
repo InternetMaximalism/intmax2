@@ -4,8 +4,8 @@ use intmax2_client_sdk::{
 use intmax2_interfaces::{
     api::error::ServerError,
     data::{encryption::errors::BlsEncryptionError, proof_compression::ProofCompressionError},
+    utils::key::PublicKey,
 };
-use intmax2_zkp::ethereum_types::u256::U256;
 
 use super::storage::error::StorageError;
 
@@ -29,11 +29,11 @@ pub enum BlockBuilderError {
     #[error("Validity prover is not synced onchain:{0} validity prover:{1}")]
     ValidityProverIsNotSynced(u32, u32),
 
-    #[error("Account already registered pubkey: {0}, account_id: {1}")]
-    AccountAlreadyRegistered(U256, u64),
+    #[error("Account already registered spend_pub: {0}, account_id: {1}")]
+    AccountAlreadyRegistered(PublicKey, u64),
 
-    #[error("Account not found pubkey: {0}")]
-    AccountNotFound(U256),
+    #[error("Account not found for spend_pub: {0}")]
+    AccountNotFound(PublicKey),
 
     #[error("Block already expired")]
     AlreadyExpired,

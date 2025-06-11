@@ -25,6 +25,9 @@ use wasm_bindgen::prelude::wasm_bindgen;
 #[serde(rename_all = "camelCase")]
 #[wasm_bindgen(getter_with_clone)]
 pub struct Config {
+    /// Network of intmax2
+    pub network: String,
+
     /// URL of the store vault server
     pub store_vault_server_url: String,
 
@@ -85,6 +88,7 @@ impl Config {
     #[allow(clippy::too_many_arguments)]
     #[wasm_bindgen(constructor)]
     pub fn new(
+        network: String,
         store_vault_server_url: String,
         balance_prover_url: String,
         validity_prover_url: String,
@@ -109,6 +113,7 @@ impl Config {
         private_zkp_server_retry_interval: Option<u64>,
     ) -> Config {
         Config {
+            network,
             store_vault_server_url,
             balance_prover_url,
             validity_prover_url,
@@ -153,8 +158,9 @@ pub fn get_client(config: &Config) -> Client {
         Box::new(BalanceProverClient::new(&config.balance_prover_url))
     };
     let withdrawal_server = Box::new(WithdrawalServerClient::new(&config.withdrawal_server_url));
-
+    let network = config.network.parse().unwrap();
     let client_config = ClientConfig {
+        network,
         deposit_timeout: config.deposit_timeout,
         tx_timeout: config.tx_timeout,
         is_faster_mining: config.is_faster_mining,

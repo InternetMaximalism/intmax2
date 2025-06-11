@@ -14,7 +14,7 @@ use crate::{
         },
         utils::parse_bytes32,
     },
-    utils::str_privkey_to_keyset,
+    utils::{str_to_keyset, str_to_view_pair},
 };
 use intmax2_client_sdk::{
     client::multisig,
@@ -45,51 +45,48 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 /// Decrypt the deposit data.
 #[wasm_bindgen]
-pub async fn decrypt_deposit_data(
-    private_key: &str,
-    data: &[u8],
-) -> Result<JsDepositData, JsError> {
+pub async fn decrypt_deposit_data(view_pair: &str, data: &[u8]) -> Result<JsDepositData, JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let deposit_data =
-        DepositData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{e}")))?;
+    let view_pair = str_to_view_pair(view_pair)?;
+    let deposit_data = DepositData::decrypt(view_pair.view, None, data)
+        .map_err(|e| JsError::new(&format!("{e}")))?;
     Ok(deposit_data.into())
 }
 
 /// Decrypt the transfer data. This is also used to decrypt the withdrawal data.
 #[wasm_bindgen]
 pub async fn decrypt_transfer_data(
-    private_key: &str,
+    view_pair: &str,
     data: &[u8],
 ) -> Result<JsTransferData, JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let transfer_data =
-        TransferData::decrypt(key, None, data).map_err(|e| JsError::new(&format!("{e}")))?;
+    let view_pair = str_to_view_pair(view_pair)?;
+    let transfer_data = TransferData::decrypt(view_pair.view, None, data)
+        .map_err(|e| JsError::new(&format!("{e}")))?;
     Ok(transfer_data.into())
 }
 
 /// Decrypt the tx data.
 #[wasm_bindgen]
-pub async fn decrypt_tx_data(private_key: &str, data: &[u8]) -> Result<JsTxData, JsError> {
+pub async fn decrypt_tx_data(view_pair: &str, data: &[u8]) -> Result<JsTxData, JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
-    let tx_data =
-        TxData::decrypt(key, Some(key.pubkey), data).map_err(|e| JsError::new(&format!("{e}")))?;
+    let view_pair = str_to_view_pair(view_pair)?;
+    let tx_data = TxData::decrypt(view_pair.view, Some(view_pair.view.to_public_key()), data)
+        .map_err(|e| JsError::new(&format!("{e}")))?;
     Ok(tx_data.into())
 }
 
 #[wasm_bindgen]
 pub async fn generate_auth_for_store_vault(
-    private_key: &str,
+    view_pair: &str,
     use_s3: bool,
 ) -> Result<JsAuth, JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
+    let view_pair = str_to_view_pair(view_pair)?;
     let auth = if use_s3 {
-        generate_auth_for_get_data_sequence_s3(key)
+        generate_auth_for_get_data_sequence_s3(view_pair.view)
     } else {
-        generate_auth_for_get_data_sequence(key)
+        generate_auth_for_get_data_sequence(view_pair.view)
     };
     Ok(auth.into())
 }
@@ -168,7 +165,7 @@ pub async fn get_deposit_info(
 #[wasm_bindgen]
 pub async fn sign_message(private_key: &str, message: &[u8]) -> Result<JsFlatG2, JsError> {
     init_logger();
-    let key = str_privkey_to_keyset(private_key)?;
+    let key = str_to_keyset(private_key)?;
     let signature = signature_content::sign_tools::sign_message(key.privkey, message);
     Ok(FlatG2::from(signature).into())
 }
@@ -221,7 +218,7 @@ pub fn decrypt_bls_interaction_step1(
     encrypted_data: &[u8],
 ) -> Result<JsMultiEciesStep1Response, JsError> {
     init_logger();
-    let client_key = str_privkey_to_keyset(client_key)?;
+    let client_key = str_to_keyset(client_key)?;
     let response_step1 =
         multisig_encryption::decrypt_bls_interaction_step1(client_key, encrypted_data);
 
@@ -237,7 +234,7 @@ pub fn decrypt_bls_interaction_step2(
     step1_response: &JsMultiEciesStep1Response,
 ) -> Result<JsMultiEciesStep2Response, JsError> {
     init_logger();
-    let server_key = str_privkey_to_keyset(server_key)?;
+    let server_key = str_to_keyset(server_key)?;
     let response_step2 = multisig_encryption::decrypt_bls_interaction_step2(
         server_key,
         &step1_response.try_into().unwrap(),
@@ -254,7 +251,7 @@ pub fn decrypt_bls_interaction_step3(
     step2_response: &JsMultiEciesStep2Response,
 ) -> Result<JsMultiEciesStep3Response, JsError> {
     init_logger();
-    let client_key = str_privkey_to_keyset(client_key)?;
+    let client_key = str_to_keyset(client_key)?;
     let response_step3 = multisig_encryption::decrypt_bls_interaction_step3(
         client_key,
         &step1_response.try_into().unwrap(),
@@ -273,7 +270,7 @@ pub fn multi_signature_interaction_step1(
     message: &[u8],
 ) -> Result<JsMultisigStep1Response, JsError> {
     init_logger();
-    let client_key = str_privkey_to_keyset(client_private_key)?;
+    let client_key = str_to_keyset(client_private_key)?;
     let response_step1 = multisig::multi_signature_interaction_step1(client_key, message);
 
     Ok(JsMultisigStep1Response::from(response_step1))
@@ -285,7 +282,7 @@ pub fn multi_signature_interaction_step2(
     step1_response: &JsMultisigStep1Response,
 ) -> Result<JsMultisigStep2Response, JsError> {
     init_logger();
-    let server_key = str_privkey_to_keyset(server_private_key)?;
+    let server_key = str_to_keyset(server_private_key)?;
     let response_step2 = multisig::multi_signature_interaction_step2(
         server_key,
         &step1_response.try_into().unwrap(),
@@ -301,7 +298,7 @@ pub fn multi_signature_interaction_step3(
     step2_response: &JsMultisigStep2Response,
 ) -> Result<JsMultisigStep3Response, JsError> {
     init_logger();
-    let client_key = str_privkey_to_keyset(client_private_key)?;
+    let client_key = str_to_keyset(client_private_key)?;
     let response_step3 = multisig::multi_signature_interaction_step3(
         client_key,
         &step1_response.try_into().unwrap(),

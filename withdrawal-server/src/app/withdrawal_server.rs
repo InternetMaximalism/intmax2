@@ -13,11 +13,13 @@ use intmax2_interfaces::{
         encryption::{errors::BlsEncryptionError, BlsEncryption},
         transfer_data::TransferData,
     },
+    utils::{address::IntmaxAddress, network::Network},
 };
 
 use super::{error::WithdrawalServerError, fee::parse_optional_fee_str};
 use intmax2_client_sdk::{
     client::{
+        config::network_from_env,
         fee_payment::FeeType,
         receive_validation::{validate_receive, ReceiveValidationError},
         sync::utils::quote_withdrawal_claim_fee,
@@ -40,7 +42,7 @@ use intmax2_interfaces::{
         },
     },
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
-    utils::circuit_verifiers::CircuitVerifiers,
+    utils::{circuit_verifiers::CircuitVerifiers, key::ViewPair},
 };
 use intmax2_zkp::{
     common::{
@@ -62,9 +64,10 @@ type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
 struct Config {
+    network: Network,
     is_faster_mining: bool,
-    withdrawal_beneficiary_key: Option<KeySet>,
-    claim_beneficiary_key: Option<KeySet>,
+    withdrawal_beneficiary_key: ViewPair,
+    claim_beneficiary_key: ViewPair,
     direct_withdrawal_fee: Option<Vec<Fee>>,
     claimable_withdrawal_fee: Option<Vec<Fee>>,
     claim_fee: Option<Vec<Fee>>,
@@ -72,37 +75,16 @@ struct Config {
 
 impl Config {
     pub fn from_env(env: &Env) -> Result<Self, WithdrawalServerError> {
-        let withdrawal_beneficiary_key = env
-            .withdrawal_beneficiary_private_key
-            .as_ref()
-            .map(|&key| privkey_to_keyset(key));
-
         let direct_withdrawal_fee = parse_optional_fee_str(&env.direct_withdrawal_fee)?;
         let claimable_withdrawal_fee: Option<Vec<Fee>> =
             parse_optional_fee_str(&env.claimable_withdrawal_fee)?;
-        if (direct_withdrawal_fee.is_some() || claimable_withdrawal_fee.is_some())
-            && withdrawal_beneficiary_key.is_none()
-        {
-            return Err(WithdrawalServerError::ConfigError(
-                "Withdrawal fee beneficiary is needed".to_string(),
-            ));
-        }
-
-        let claim_beneficiary_key: Option<KeySet> = env
-            .claim_beneficiary_private_key
-            .as_ref()
-            .map(|&s| privkey_to_keyset(s));
         let claim_fee: Option<Vec<Fee>> = parse_optional_fee_str(&env.claim_fee)?;
-        if claim_fee.is_some() && claim_beneficiary_key.is_none() {
-            return Err(WithdrawalServerError::ConfigError(
-                "Claim fee beneficiary is needed".to_string(),
-            ));
-        }
-
+        let network = network_from_env();
         Ok(Self {
+            network,
             is_faster_mining: env.is_faster_mining,
-            withdrawal_beneficiary_key,
-            claim_beneficiary_key,
+            withdrawal_beneficiary_key: env.withdrawal_beneficiary_view_pair,
+            claim_beneficiary_key: env.claim_beneficiary_view_pair,
             direct_withdrawal_fee,
             claimable_withdrawal_fee,
             claim_fee,
@@ -165,7 +147,10 @@ impl WithdrawalServer {
 
     pub fn get_withdrawal_fee(&self) -> WithdrawalFeeInfo {
         WithdrawalFeeInfo {
-            beneficiary: self.config.withdrawal_beneficiary_key.map(|k| k.pubkey),
+            beneficiary: IntmaxAddress::from_viewpair(
+                self.config.network,
+                &self.config.withdrawal_beneficiary_key,
+            ),
             direct_withdrawal_fee: self.config.direct_withdrawal_fee.clone(),
             claimable_withdrawal_fee: self.config.claimable_withdrawal_fee.clone(),
         }
@@ -173,7 +158,10 @@ impl WithdrawalServer {
 
     pub fn get_claim_fee(&self) -> ClaimFeeInfo {
         ClaimFeeInfo {
-            beneficiary: self.config.claim_beneficiary_key.map(|k| k.pubkey),
+            beneficiary: IntmaxAddress::from_viewpair(
+                self.config.network,
+                &self.config.claim_beneficiary_key,
+            ),
             fee: self.config.claim_fee.clone(),
         }
     }
@@ -489,14 +477,18 @@ impl WithdrawalServer {
     ) -> Result<(Vec<Transfer>, FeeResult), WithdrawalServerError> {
         // check duplicated nullifiers
 
-        let key = match fee_type {
-            FeeType::Withdrawal => self.config.withdrawal_beneficiary_key.unwrap(),
-            FeeType::Claim => self.config.claim_beneficiary_key.unwrap(),
+        let view_pair = match fee_type {
+            FeeType::Withdrawal => self.config.withdrawal_beneficiary_key,
+            FeeType::Claim => self.config.claim_beneficiary_key,
         };
         // fetch transfer data
         let encrypted_transfer_data = self
             .store_vault_server
-            .get_data_batch(key, &DataType::Transfer.to_topic(), fee_transfer_digests)
+            .get_data_batch(
+                view_pair.view,
+                &DataType::Transfer.to_topic(),
+                fee_transfer_digests,
+            )
             .await?;
         if encrypted_transfer_data.len() != fee_transfer_digests.len() {
             return Err(WithdrawalServerError::InvalidFee(format!(
@@ -509,7 +501,7 @@ impl WithdrawalServer {
         let transfer_data_with_meta = encrypted_transfer_data
             .iter()
             .map(|data| {
-                let transfer_data = TransferData::decrypt(key, None, &data.data)?;
+                let transfer_data = TransferData::decrypt(view_pair.view, None, &data.data)?;
                 Ok((data.meta.clone(), transfer_data))
             })
             .collect::<Result<Vec<_>, BlsEncryptionError>>();
@@ -527,7 +519,7 @@ impl WithdrawalServer {
             let transfer = match validate_receive(
                 self.store_vault_server.as_ref(),
                 &self.validity_prover,
-                key.pubkey,
+                view_pair.spend,
                 meta.timestamp,
                 &transfer_data,
             )
@@ -807,20 +799,9 @@ mod tests {
                 "0x8a791620dd6260079bf849dc5567adc3f2fdc318",
             )
             .unwrap(),
-
             is_faster_mining: true,
-            withdrawal_beneficiary_private_key: Some(
-                B256::from_str(
-                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
-                )
-                .unwrap(),
-            ),
-            claim_beneficiary_private_key: Some(
-                B256::from_str(
-                    "0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447",
-                )
-                .unwrap(),
-            ),
+            withdrawal_beneficiary_view_pair:"viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
+            claim_beneficiary_view_pair: "viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
             direct_withdrawal_fee: Some("0:100".to_string()),
             claimable_withdrawal_fee: Some("0:10".to_string()),
             claim_fee: Some("0:100".to_string()),
@@ -865,26 +846,11 @@ mod tests {
             // Here and later I use is_some() || is_some() and not && as an additional check of initializing WithdrawalServer.
             // If only one variable is Some and another one is not, test will fail, so there is should be some error in WithdrawalServer new method.
             let claim_fee = server.get_claim_fee();
-            if env.claim_beneficiary_private_key.is_some() || claim_fee.beneficiary.is_some() {
-                let claim_keyset = privkey_to_keyset(env.claim_beneficiary_private_key.unwrap());
-                assert_and_stop(cont_name, || {
-                    assert_eq!(claim_fee.beneficiary.unwrap(), claim_keyset.pubkey)
-                });
-            }
             if env.claim_fee.is_some() {
                 let fee = parse_fee_str(&env.claim_fee.unwrap()).unwrap();
                 assert_and_stop(cont_name, || assert_eq!(claim_fee.fee.unwrap(), fee));
             }
-
             let withdrawal_fee = server.get_withdrawal_fee();
-            if withdrawal_fee.beneficiary.is_some()
-                || env.withdrawal_beneficiary_private_key.is_some()
-            {
-                let ben_keyset = privkey_to_keyset(env.withdrawal_beneficiary_private_key.unwrap());
-                assert_and_stop(cont_name, || {
-                    assert_eq!(withdrawal_fee.beneficiary.unwrap(), ben_keyset.pubkey)
-                });
-            }
             if withdrawal_fee.direct_withdrawal_fee.is_some() {
                 assert_and_stop(cont_name, || {
                     assert_eq!(withdrawal_fee.direct_withdrawal_fee.unwrap().len(), 1)

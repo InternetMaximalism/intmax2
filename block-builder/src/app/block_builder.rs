@@ -3,12 +3,13 @@ use alloy::{
     providers::Provider,
 };
 use intmax2_client_sdk::{
-    client::key_from_eth::generate_intmax_account_from_eth_key,
+    client::config::network_from_env,
     external_api::{
         contract::{
             block_builder_registry::BlockBuilderRegistryContract,
             convert::{
-                convert_address_to_alloy, convert_address_to_intmax, convert_u256_to_intmax,
+                convert_address_to_alloy, convert_address_to_intmax, convert_b256_to_bytes32,
+                convert_u256_to_intmax,
             },
             rollup_contract::RollupContract,
             utils::{get_address_from_private_key, NormalProvider},
@@ -18,19 +19,25 @@ use intmax2_client_sdk::{
         validity_prover::ValidityProverClient,
     },
 };
-use intmax2_interfaces::api::{
-    block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
-    store_vault_server::interface::StoreVaultClientInterface,
-    validity_prover::interface::{AccountInfo, ValidityProverClientInterface},
+use intmax2_interfaces::{
+    api::{
+        block_builder::interface::{BlockBuilderFeeInfo, FeeProof},
+        store_vault_server::interface::StoreVaultClientInterface,
+        validity_prover::interface::{AccountInfo, ValidityProverClientInterface},
+    },
+    utils::{
+        address::IntmaxAddress,
+        key::PublicKey,
+        key_derivation::{derive_keypair_from_spend_key, derive_spend_key_from_bytes32},
+        network::Network,
+    },
 };
 use intmax2_zkp::{
     common::{
         block_builder::{BlockProposal, UserSignature},
         tx::Tx,
     },
-    ethereum_types::{
-        account_id::AccountId, address::Address, u256::U256, u32limb_trait::U32LimbTrait,
-    },
+    ethereum_types::{account_id::AccountId, address::Address, u256::U256},
 };
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
@@ -50,6 +57,7 @@ pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub network: Network,
     pub block_builder_url: String,
     pub block_builder_private_key: B256,
     pub block_builder_address: Address,
@@ -60,7 +68,7 @@ pub struct Config {
     pub heart_beat_interval: u64,
 
     // fees
-    pub beneficiary_pubkey: Option<U256>,
+    pub beneficiary: IntmaxAddress,
     pub use_fee: bool,
     pub use_collateral: bool,
     pub registration_fee: Option<HashMap<u32, U256>>,
@@ -149,20 +157,18 @@ impl BlockBuilder {
                 "Collateral fee is set but fee is not set".to_string(),
             ));
         }
-        let beneficiary_pubkey = if use_fee {
-            if let Some(beneficiary_pubkey) = env.beneficiary_pubkey.as_ref() {
-                Some((*beneficiary_pubkey).into())
-            } else {
-                // generate from eth private key
-                let key = generate_intmax_account_from_eth_key(env.block_builder_private_key);
-                Some(key.pubkey)
-            }
-        } else {
-            None
-        };
+        let network = network_from_env();
+        let beneficiary = env.beneficiary.unwrap_or_else(|| {
+            let spend_key = derive_spend_key_from_bytes32(convert_b256_to_bytes32(
+                env.block_builder_private_key,
+            ));
+            let key_pair = derive_keypair_from_spend_key(spend_key, false);
+            IntmaxAddress::from_keypair(network, &key_pair)
+        });
         let block_builder_address =
             convert_address_to_intmax(get_address_from_private_key(env.block_builder_private_key));
         // log configuration
+        log::info!("network: {network}");
         log::info!("block_builder_address: {block_builder_address}");
         log::info!("block_builder_url: {}", env.block_builder_url);
         log::info!(
@@ -172,11 +178,9 @@ impl BlockBuilder {
         log::info!("eth_allowance_for_block: {eth_allowance_for_block}");
         log::info!("use_fee: {use_fee}");
         log::info!("use_collateral_fee: {use_collateral_fee}");
-        log::info!(
-            "beneficiary_pubkey: {}",
-            beneficiary_pubkey.map(|b| b.to_hex()).unwrap_or_default()
-        );
+        log::info!("beneficiary: {beneficiary}");
         let config = Config {
+            network,
             block_builder_url: env.block_builder_url.clone(),
             block_builder_private_key: env.block_builder_private_key,
             block_builder_address,
@@ -184,7 +188,7 @@ impl BlockBuilder {
             eth_allowance_for_block,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
-            beneficiary_pubkey,
+            beneficiary,
             use_fee,
             use_collateral: use_collateral_fee,
             registration_fee,
@@ -205,7 +209,7 @@ impl BlockBuilder {
             use_fee: config.use_fee,
             use_collateral: config.use_collateral,
             block_builder_address: config.block_builder_address,
-            fee_beneficiary: config.beneficiary_pubkey.unwrap_or_default(),
+            beneficiary: config.beneficiary,
             tx_timeout: env.tx_timeout,
             accepting_tx_interval: env.accepting_tx_interval,
             proposing_block_interval: env.proposing_block_interval,
@@ -223,7 +227,7 @@ impl BlockBuilder {
     pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
         BlockBuilderFeeInfo {
             block_builder_address: self.config.block_builder_address,
-            beneficiary: self.config.beneficiary_pubkey,
+            beneficiary: self.config.beneficiary,
             registration_fee: convert_fee_vec(&self.config.registration_fee),
             non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
             registration_collateral_fee: convert_fee_vec(&self.config.registration_collateral_fee),
@@ -258,25 +262,30 @@ impl BlockBuilder {
     pub async fn send_tx_request(
         &self,
         is_registration_block: bool,
-        pubkey: U256,
+        sender: IntmaxAddress,
         tx: Tx,
         fee_proof: &Option<FeeProof>,
     ) -> Result<String, BlockBuilderError> {
         log::info!("send_tx_request is_registration_block: {is_registration_block}");
+        let sender_spend_pub = sender.public_spend;
+
         // Verify account info
-        let account_info = self.validity_prover_client.get_account_info(pubkey).await?;
-        self.verify_account_info(is_registration_block, pubkey, &account_info)
+        let account_info = self
+            .validity_prover_client
+            .get_account_info(sender_spend_pub.0)
+            .await?;
+        self.verify_account_info(is_registration_block, sender_spend_pub, &account_info)
             .await?;
 
         // Verify fee proof
-        self.verify_fee_proof(is_registration_block, pubkey, fee_proof)
+        self.verify_fee_proof(is_registration_block, sender_spend_pub, fee_proof)
             .await?;
 
         // Create and add transaction request
         let request_id = Uuid::new_v4().to_string();
         let account_id = account_info.account_id.map(AccountId);
         let tx_request = TxRequest {
-            pubkey,
+            sender: sender.to_public_keypair(),
             account_id,
             tx,
             fee_proof: fee_proof.clone(),
@@ -292,18 +301,19 @@ impl BlockBuilder {
     async fn verify_account_info(
         &self,
         is_registration_block: bool,
-        pubkey: U256,
+        sender_spend_pub: PublicKey,
         account_info: &AccountInfo,
     ) -> Result<(), BlockBuilderError> {
         let account_id = account_info.account_id;
         if is_registration_block {
             if let Some(account_id) = account_id {
                 return Err(BlockBuilderError::AccountAlreadyRegistered(
-                    pubkey, account_id,
+                    sender_spend_pub,
+                    account_id,
                 ));
             }
         } else if account_id.is_none() {
-            return Err(BlockBuilderError::AccountNotFound(pubkey));
+            return Err(BlockBuilderError::AccountNotFound(sender_spend_pub));
         }
         Ok(())
     }
@@ -312,7 +322,7 @@ impl BlockBuilder {
     async fn verify_fee_proof(
         &self,
         is_registration_block: bool,
-        pubkey: U256,
+        sender_spend_pub: PublicKey,
         fee_proof: &Option<FeeProof>,
     ) -> Result<(), BlockBuilderError> {
         let required_fee = if is_registration_block {
@@ -329,11 +339,11 @@ impl BlockBuilder {
 
         validate_fee_proof(
             self.store_vault_server_client.as_ref().as_ref(),
-            self.config.beneficiary_pubkey,
+            self.config.beneficiary,
             self.config.block_builder_address,
             required_fee,
             required_collateral_fee,
-            pubkey,
+            sender_spend_pub,
             fee_proof,
         )
         .await
@@ -411,7 +421,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,
@@ -425,7 +435,7 @@ mod tests {
             info.block_builder_address,
             block_builder.config.block_builder_address
         );
-        assert_eq!(info.beneficiary, block_builder.config.beneficiary_pubkey);
+        assert_eq!(info.beneficiary, block_builder.config.beneficiary);
         assert_eq!(
             info.registration_fee,
             convert_fee_vec(&block_builder.config.registration_fee)
@@ -463,7 +473,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,
@@ -506,7 +516,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,
@@ -552,7 +562,7 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             heart_beat_interval: 86400,
             nonce_waiting_time: None,
-            beneficiary_pubkey: None,
+            beneficiary: None,
             registration_fee: Some("0:100,1:2000".to_string()),
             non_registration_fee: Some("0:100,1:2000".to_string()),
             registration_collateral_fee: None,

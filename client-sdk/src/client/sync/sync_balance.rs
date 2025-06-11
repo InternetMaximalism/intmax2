@@ -4,11 +4,10 @@ use intmax2_interfaces::{
         meta_data::MetaDataWithBlockNumber, proof_compression::CompressedBalanceProof,
         transfer_data::TransferData, tx_data::TxData, user_data::UserData,
     },
-    utils::digest::get_digest,
+    utils::{digest::get_digest, key::ViewPair},
 };
 use intmax2_zkp::{
-    circuits::balance::balance_pis::BalancePublicInputs,
-    common::signature_content::key_set::KeySet, ethereum_types::bytes32::Bytes32,
+    circuits::balance::balance_pis::BalancePublicInputs, ethereum_types::bytes32::Bytes32,
 };
 
 use crate::client::{
@@ -26,41 +25,48 @@ use crate::client::{
 use super::error::SyncError;
 
 impl Client {
-    pub async fn get_user_data(&self, key: KeySet) -> Result<UserData, SyncError> {
-        let (user_data, _) = self.get_user_data_and_digest(key).await?;
+    pub async fn get_user_data(&self, view_pair: ViewPair) -> Result<UserData, SyncError> {
+        let (user_data, _) = self.get_user_data_and_digest(view_pair).await?;
         Ok(user_data)
     }
 
     /// Get the latest user data from the data store server
     pub(super) async fn get_user_data_and_digest(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
     ) -> Result<(UserData, Option<Bytes32>), SyncError> {
         let encrypted_data = self
             .store_vault_server
-            .get_snapshot(key, &DataType::UserData.to_topic())
+            .get_snapshot(view_pair.view, &DataType::UserData.to_topic())
             .await?;
         let digest = encrypted_data
             .as_ref()
             .map(|encrypted| get_digest(encrypted));
         let user_data = encrypted_data
-            .map(|encrypted| UserData::decrypt(key, Some(key.pubkey), &encrypted))
+            .map(|encrypted| {
+                UserData::decrypt(
+                    view_pair.view,
+                    Some(view_pair.view.to_public_key()),
+                    &encrypted,
+                )
+            })
             .transpose()
             .map_err(|e| SyncError::DecryptionError(format!("failed to decrypt user data: {e}")))?
-            .unwrap_or(UserData::new(key.pubkey));
+            .unwrap_or(UserData::new(view_pair.spend));
         Ok((user_data, digest))
     }
 
     pub(super) async fn save_user_data(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         prev_digest: Option<Bytes32>,
         user_data: &UserData,
     ) -> Result<(), SyncError> {
-        let encrypted_data = user_data.encrypt(key.pubkey, Some(key))?;
+        let encrypted_data =
+            user_data.encrypt(view_pair.view.to_public_key(), Some(view_pair.view))?;
         self.store_vault_server
             .save_snapshot(
-                key,
+                view_pair.view,
                 &DataType::UserData.to_topic(),
                 prev_digest,
                 &encrypted_data,
@@ -70,19 +76,20 @@ impl Client {
     }
 
     /// Sync the client's balance proof with the latest block
-    pub async fn sync(&self, key: KeySet) -> Result<(), SyncError> {
+    pub async fn sync(&self, view_pair: ViewPair) -> Result<(), SyncError> {
         let (sequence, _, pending_info) = determine_sequence(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             &self.rollup_contract,
             &self.liquidity_contract,
-            key,
+            view_pair,
             self.config.deposit_timeout,
             self.config.tx_timeout,
         )
         .await?;
         // replaces pending receives with the new pending info
-        self.update_pending_receives(key, pending_info).await?;
+        self.update_pending_receives(view_pair, pending_info)
+            .await?;
 
         for action in sequence {
             match action {
@@ -94,22 +101,22 @@ impl Client {
                             .map(|r| r.meta().block_number)
                             .max()
                             .unwrap(); // safe to unwrap because receives is not empty
-                        self.update_no_send(key, largest_block_number).await?;
+                        self.update_no_send(view_pair, largest_block_number).await?;
 
                         for receive in receives {
                             match receive {
                                 ReceiveAction::Deposit(meta, data) => {
-                                    self.sync_deposit(key, meta, &data).await?;
+                                    self.sync_deposit(view_pair, meta, &data).await?;
                                 }
                                 ReceiveAction::Transfer(meta, data) => {
-                                    self.sync_transfer(key, meta, &data).await?;
+                                    self.sync_transfer(view_pair, meta, &data).await?;
                                 }
                             }
                         }
                     }
                 }
                 Action::Tx(meta, tx_data) => {
-                    self.sync_tx(key, meta, &tx_data).await?;
+                    self.sync_tx(view_pair, meta, &tx_data).await?;
                 }
             }
         }
@@ -119,12 +126,12 @@ impl Client {
     // sync deposit without updating the timestamp
     async fn sync_deposit(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         meta: MetaDataWithBlockNumber,
         deposit_data: &DepositData,
     ) -> Result<(), SyncError> {
         log::info!("sync_deposit: {meta:?}");
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         let nullifier: Bytes32 = deposit_data.deposit().unwrap().poseidon_hash().into();
         if user_data
             .full_private_state
@@ -145,7 +152,7 @@ impl Client {
         let new_balance_proof = receive_deposit(
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
-            key,
+            view_pair,
             &mut user_data.full_private_state,
             new_salt,
             &prev_balance_proof,
@@ -163,20 +170,21 @@ impl Client {
         let new_balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         user_data.balance_proof = Some(new_balance_proof);
         user_data.deposit_status.process(meta.meta);
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
 
         Ok(())
     }
 
-    // sync deposit without updating the timestamp
+    // sync transfer without updating the timestamp
     async fn sync_transfer(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         meta: MetaDataWithBlockNumber,
         transfer_data: &TransferData,
     ) -> Result<(), SyncError> {
         log::info!("sync_transfer: {meta:?}");
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         // nullifier check
         let nullifier = transfer_data.transfer.nullifier();
         if user_data
@@ -200,8 +208,8 @@ impl Client {
         let new_sender_balance_proof = match update_send_by_receiver(
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
-            key,
-            transfer_data.sender,
+            view_pair,
+            transfer_data.sender.spend,
             meta.block_number,
             transfer_data,
         )
@@ -223,7 +231,7 @@ impl Client {
         let new_balance_proof = receive_transfer(
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
-            key,
+            view_pair,
             &mut user_data.full_private_state,
             new_salt,
             &new_sender_balance_proof,
@@ -242,24 +250,25 @@ impl Client {
         let balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         user_data.balance_proof = Some(balance_proof);
         user_data.transfer_status.process(meta.meta);
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
 
         Ok(())
     }
 
     async fn sync_tx(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         meta: MetaDataWithBlockNumber,
         tx_data: &TxData,
     ) -> Result<(), SyncError> {
         log::info!("sync_tx: {meta:?}");
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         let prev_balance_proof = get_balance_proof(&user_data)?;
         let balance_proof = update_send_by_sender(
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
-            key,
+            view_pair,
             &mut user_data.full_private_state,
             &prev_balance_proof,
             meta.block_number,
@@ -284,18 +293,19 @@ impl Client {
         let balance_proof = CompressedBalanceProof::new(&balance_proof)?;
         user_data.balance_proof = Some(balance_proof);
         user_data.tx_status.process(meta.meta);
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
 
         Ok(())
     }
 
     pub(super) async fn update_no_send(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         to_block_number: u32,
     ) -> Result<(), SyncError> {
         log::info!("update_no_send: {to_block_number:?}");
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         let current_user_block_number = user_data.block_number()?;
         if current_user_block_number >= to_block_number {
             log::info!(
@@ -312,7 +322,7 @@ impl Client {
         let new_balance_proof = update_no_send(
             self.validity_prover.as_ref(),
             self.balance_prover.as_ref(),
-            key,
+            view_pair,
             &prev_balance_proof,
             to_block_number,
         )
@@ -334,14 +344,15 @@ impl Client {
         // update user data
         let balance_proof = CompressedBalanceProof::new(&new_balance_proof)?;
         user_data.balance_proof = Some(balance_proof);
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
 
         Ok(())
     }
 
     async fn update_pending_receives(
         &self,
-        key: KeySet,
+        view_pair: ViewPair,
         pending_info: PendingInfo,
     ) -> Result<(), SyncError> {
         if pending_info.pending_deposit_digests.is_empty()
@@ -350,28 +361,30 @@ impl Client {
             // // early return if there is no pending info
             return Ok(());
         }
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
         user_data.deposit_status.pending_digests = pending_info.pending_deposit_digests;
         user_data.transfer_status.pending_digests = pending_info.pending_transfer_digests;
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
         Ok(())
     }
 
     /// Reset user data and resync. `is_deep` is true if the user wants to reset completely.
     /// Otherwise, only the last processed meta data will be reset.
-    pub async fn resync(&self, key: KeySet, is_deep: bool) -> Result<(), SyncError> {
-        let (mut user_data, prev_digest) = self.get_user_data_and_digest(key).await?;
+    pub async fn resync(&self, view_pair: ViewPair, is_deep: bool) -> Result<(), SyncError> {
+        let (mut user_data, prev_digest) = self.get_user_data_and_digest(view_pair).await?;
 
         if is_deep {
-            user_data = UserData::new(key.pubkey);
+            user_data = UserData::new(view_pair.spend);
         } else {
             user_data.deposit_status.last_processed_meta_data = None;
             user_data.transfer_status.last_processed_meta_data = None;
             user_data.withdrawal_status.last_processed_meta_data = None;
         }
 
-        self.save_user_data(key, prev_digest, &user_data).await?;
+        self.save_user_data(view_pair, prev_digest, &user_data)
+            .await?;
 
-        self.sync(key).await
+        self.sync(view_pair).await
     }
 }

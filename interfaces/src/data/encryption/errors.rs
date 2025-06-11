@@ -4,6 +4,9 @@ use super::bls::versioned_encryption::VersionedBlsEncryptionError;
 
 #[derive(Debug, Error)]
 pub enum BlsEncryptionError {
+    #[error("Unsupported version: {0}")]
+    UnsupportedVersion(u8),
+
     #[error("{0}")]
     VersionedBlsEncryptionError(#[from] VersionedBlsEncryptionError),
 

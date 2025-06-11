@@ -3,11 +3,10 @@ import { env, config } from './setup';
 
 async function main() {
     const ethKey = env.USER_ETH_PRIVATE_KEY;
-    const key = await generate_intmax_account_from_eth_key(ethKey);
-    const privkey = key.privkey;
+    const account = await generate_intmax_account_from_eth_key(config.network, ethKey, false);
 
     // get auth for store vault using private key
-    const auth = await generate_auth_for_store_vault(privkey, env.USE_S3);
+    const auth = await generate_auth_for_store_vault(account.view_pair, env.USE_S3);
     console.log(`auth: pubkey ${auth.pubkey}, expiry ${auth.expiry}`);
 
     // get latest 10 encrypted data

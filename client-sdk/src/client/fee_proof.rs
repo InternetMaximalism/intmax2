@@ -5,17 +5,25 @@ use intmax2_interfaces::{
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
-        data_type::DataType, encryption::BlsEncryption, proof_compression::CompressedSpentProof,
-        sender_proof_set::SenderProofSet, transfer_data::TransferData, transfer_type::TransferType,
-        tx_data::TxData, user_data::UserData,
+        data_type::DataType,
+        encryption::BlsEncryption,
+        extra_data::{ExtraData, FullExtraData},
+        proof_compression::CompressedSpentProof,
+        sender_proof_set::SenderProofSet,
+        transfer_data::TransferData,
+        transfer_type::TransferType,
+        tx_data::TxData,
+        user_data::UserData,
     },
-    utils::{digest::get_digest, random::default_rng},
+    utils::{
+        digest::get_digest,
+        key::{KeyPair, PrivateKey},
+        random::default_rng,
+    },
 };
 use intmax2_zkp::{
     common::{
-        signature_content::{
-            block_sign_payload::BlockSignPayload, key_set::KeySet, utils::get_pubkey_hash,
-        },
+        signature_content::{block_sign_payload::BlockSignPayload, utils::get_pubkey_hash},
         transfer::Transfer,
         trees::{transfer_tree::TransferTree, tx_tree::TxTree},
         tx::Tx,
@@ -32,9 +40,9 @@ pub async fn generate_fee_proof(
     store_vault_server: &dyn StoreVaultClientInterface,
     balance_prover: &dyn BalanceProverClientInterface,
     tx_timeout: u64,
-    key: KeySet,
+    key_pair: KeyPair,
     user_data: &UserData,
-    sender_proof_set_ephemeral_key: U256,
+    sender_proof_set_ephemeral_key: PrivateKey,
     tx_nonce: u32,
     fee_index: u32,
     transfers: &[Transfer],
@@ -42,6 +50,8 @@ pub async fn generate_fee_proof(
     is_registration_block: bool,
     block_builder_address: Address,
 ) -> Result<FeeProof, ClientError> {
+    let spend_pub = key_pair.spend.to_public_key();
+    let view_key = key_pair.view;
     let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
     for transfer in transfers {
         transfer_tree.push(*transfer);
@@ -63,23 +73,22 @@ pub async fn generate_fee_proof(
             generate_spent_witness(&user_data.full_private_state, tx_nonce, &transfers)?;
         let tx = collateral_spent_witness.tx;
         let spent_proof = balance_prover
-            .prove_spent(key, &collateral_spent_witness)
+            .prove_spent(view_key, &collateral_spent_witness)
             .await?;
         let compressed_spent_proof = CompressedSpentProof::new(&spent_proof)?;
         let sender_proof_set = SenderProofSet {
             spent_proof: compressed_spent_proof,
             prev_balance_proof: user_data.balance_proof.clone().unwrap(), // unwrap is safe
         };
-        let ephemeral_key = KeySet::rand(&mut default_rng());
+        let ephemeral_key = PrivateKey::rand(&mut default_rng());
         store_vault_server
             .save_snapshot(
                 ephemeral_key,
                 &DataType::SenderProofSet.to_topic(),
                 None,
-                &sender_proof_set.encrypt(ephemeral_key.pubkey, Some(ephemeral_key))?,
+                &sender_proof_set.encrypt(ephemeral_key.to_public_key(), Some(ephemeral_key))?,
             )
             .await?;
-        let sender_proof_set_ephemeral_key = ephemeral_key.privkey;
 
         let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
         transfer_tree.push(collateral_transfer);
@@ -90,14 +99,15 @@ pub async fn generate_fee_proof(
         let tx_index = 0u32;
         let tx_merkle_proof = tx_tree.prove(tx_index as u64);
         let tx_tree_root: Bytes32 = tx_tree.get_root().into();
-        let mut pubkeys = vec![key.pubkey];
+        let mut pubkeys = vec![spend_pub.0];
         pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
         let pubkey_hash = get_pubkey_hash(&pubkeys);
 
         let fee_transfer_data = TransferData {
-            sender_proof_set_ephemeral_key,
+            sender_proof_set_ephemeral_key: ephemeral_key,
             sender_proof_set: None,
-            sender: key.pubkey,
+            sender: key_pair.into(),
+            extra_data: ExtraData::default(),
             tx,
             tx_index,
             tx_merkle_proof,
@@ -106,7 +116,9 @@ pub async fn generate_fee_proof(
             transfer_index,
             transfer_merkle_proof,
         };
-        let encrypted_fee_transfer_data = fee_transfer_data.encrypt(key.pubkey, Some(key))?;
+        // todo: check if this is needed
+        let encrypted_fee_transfer_data =
+            fee_transfer_data.encrypt(view_key.to_public_key(), Some(view_key))?;
         let encrypted_fee_transfer_digest = get_digest(&encrypted_fee_transfer_data);
 
         let expiry = tx_timeout + chrono::Utc::now().timestamp() as u64;
@@ -117,9 +129,9 @@ pub async fn generate_fee_proof(
             block_builder_address,
             block_builder_nonce: 0, // contract will ignore nonce checking
         };
-        let signature = block_sign_payload.sign(key.privkey, pubkey_hash);
+        let signature = block_sign_payload.sign(key_pair.spend.0, pubkey_hash);
         let collateral_block = CollateralBlock {
-            sender_proof_set_ephemeral_key,
+            sender_proof_set_ephemeral_key: ephemeral_key,
             fee_transfer_data,
             is_registration_block,
             expiry,
@@ -137,13 +149,16 @@ pub async fn generate_fee_proof(
             transfer_digests: vec![encrypted_fee_transfer_digest],
             transfer_types: vec![TransferType::TransferCollateralFee.to_string()],
             sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
+            full_extra_data: vec![FullExtraData::default()],
         };
         let entry = SaveDataEntry {
             topic: DataType::Tx.to_topic(),
-            pubkey: key.pubkey,
-            data: tx_data.encrypt(key.pubkey, Some(key))?,
+            pubkey: view_key.to_public_key().0,
+            data: tx_data.encrypt(view_key.to_public_key(), Some(view_key))?,
         };
-        store_vault_server.save_data_batch(key, &[entry]).await?;
+        store_vault_server
+            .save_data_batch(view_key, &[entry])
+            .await?;
 
         Some(collateral_block)
     } else {
@@ -171,7 +186,6 @@ pub(crate) fn quote_transfer_fee(
         .as_ref()
         .map(|fee_list| get_fee(fee_token_index, fee_list))
         .transpose()?;
-
     let collateral_fee_list = if is_registration_block {
         &fee_info.registration_collateral_fee
     } else {

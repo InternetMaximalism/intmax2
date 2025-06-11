@@ -1,10 +1,12 @@
-use intmax2_zkp::common::transfer::Transfer;
+use intmax2_client_sdk::client::types::TransferRequest;
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 use crate::{
     client::{get_client, Config},
     init_logger,
-    js_types::{common::JsTransfer, fee::JsWithdrawalTransfers, payment_memo::JsPaymentMemoEntry},
+    js_types::{
+        client::JsTransferRequest, fee::JsWithdrawalTransfers, payment_memo::JsPaymentMemoEntry,
+    },
 };
 
 // Quote the fee for withdrawal and claim fee (if with_claim_fee is true), and generate the corresponding transfers
@@ -14,13 +16,13 @@ use crate::{
 #[wasm_bindgen]
 pub async fn generate_withdrawal_transfers(
     config: &Config,
-    withdrawal_transfer: &JsTransfer,
+    withdrawal_transfer_request: &JsTransferRequest,
     fee_token_index: u32,
     with_claim_fee: bool,
 ) -> Result<JsWithdrawalTransfers, JsError> {
     init_logger();
     let client = get_client(config);
-    let withdrawal_transfer = Transfer::try_from(withdrawal_transfer.clone())?;
+    let withdrawal_transfer = TransferRequest::try_from(withdrawal_transfer_request.clone())?;
     let withdrawal_transfers =
         intmax2_client_sdk::client::fee_payment::generate_withdrawal_transfers(
             client.withdrawal_server.as_ref(),
@@ -36,15 +38,15 @@ pub async fn generate_withdrawal_transfers(
 /// Generate fee payment memo from given transfers and fee transfer indices
 #[wasm_bindgen]
 pub fn generate_fee_payment_memo(
-    transfers: Vec<JsTransfer>,
+    transfer_requests: Vec<JsTransferRequest>,
     withdrawal_fee_transfer_index: Option<u32>,
     claim_fee_transfer_index: Option<u32>,
 ) -> Result<Vec<JsPaymentMemoEntry>, JsError> {
     init_logger();
-    let transfers = transfers
+    let transfers = transfer_requests
         .into_iter()
         .map(|t| t.try_into())
-        .collect::<Result<Vec<Transfer>, _>>()?;
+        .collect::<Result<Vec<TransferRequest>, _>>()?;
     let payment_memos = intmax2_client_sdk::client::fee_payment::generate_fee_payment_memo(
         &transfers,
         withdrawal_fee_transfer_index,

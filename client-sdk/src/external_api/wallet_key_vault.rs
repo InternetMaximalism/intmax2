@@ -1,7 +1,6 @@
 use super::utils::query::post_request;
-use crate::{
-    client::key_from_eth::generate_intmax_account_from_eth_key,
-    external_api::contract::utils::get_address_from_private_key,
+use crate::external_api::contract::{
+    convert::convert_b256_to_bytes32, utils::get_address_from_private_key,
 };
 use alloy::{
     primitives::{Address, B256},
@@ -15,14 +14,16 @@ use alloy::{
     },
 };
 use async_trait::async_trait;
-use intmax2_interfaces::api::{
-    error::ServerError,
-    wallet_key_vault::{
-        interface::WalletKeyVaultClientInterface,
-        types::{ChallengeRequest, ChallengeResponse, LoginRequest, LoginResponse},
+use intmax2_interfaces::{
+    api::{
+        error::ServerError,
+        wallet_key_vault::{
+            interface::WalletKeyVaultClientInterface,
+            types::{ChallengeRequest, ChallengeResponse, LoginRequest, LoginResponse},
+        },
     },
+    utils::{key::PrivateKey, key_derivation::derive_spend_key_from_bytes32},
 };
-use intmax2_zkp::common::signature_content::key_set::KeySet;
 use sha2::Digest;
 
 #[derive(Debug, Clone)]
@@ -133,27 +134,25 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-pub fn mnemonic_to_keyset(
+pub fn mnemonic_to_spend_key(
     mnemonic: &Mnemonic<English>,
     redeposit_index: u32,
     wallet_index: u32,
-) -> KeySet {
+) -> PrivateKey {
     let derive_path = format!("m/44'/60'/{redeposit_index}'/0/{wallet_index}");
     let derived_priv_key = mnemonic.derive_key(derive_path.as_str(), None).unwrap();
     let key: &SigningKey = derived_priv_key.as_ref();
     let signing_key = PrivateKeySigner::from_signing_key(key.clone());
-    generate_intmax_account_from_eth_key(signing_key.to_bytes())
+    let signing_key_bytes32 = convert_b256_to_bytes32(signing_key.to_bytes());
+    derive_spend_key_from_bytes32(signing_key_bytes32)
 }
 
 #[cfg(test)]
 mod tests {
-
-    use alloy::primitives::B256;
-    use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
-
     use crate::external_api::{
-        contract::utils::get_address_from_private_key, wallet_key_vault::mnemonic_to_keyset,
+        contract::utils::get_address_from_private_key, wallet_key_vault::mnemonic_to_spend_key,
     };
+    use alloy::primitives::B256;
 
     fn get_client() -> super::WalletKeyVaultClient {
         let base_url = std::env::var("WALLET_KEY_VAULT_BASE_URL")
@@ -176,10 +175,10 @@ mod tests {
             .get_mnemonic(private_key, hashed_signature)
             .await
             .unwrap();
-        let keyset = mnemonic_to_keyset(&mnemonic, 0, 0);
+        let private_key = mnemonic_to_spend_key(&mnemonic, 0, 0);
         // dev environment
         assert_eq!(
-            keyset.privkey.to_hex(),
+            private_key.to_string(),
             "0x03d97b592378ca1f7877087494f08fea97eeaea0a5ae65b3ea52c563370cb550"
         );
     }

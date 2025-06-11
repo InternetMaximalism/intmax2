@@ -41,7 +41,23 @@ export const env = cleanEnv(process.env, {
     PRIVATE_ZKP_SERVER_RETRY_INTERVAL: num({ default: 5 }),
 });
 
+function getNetwork(env: string) {
+    switch (env) {
+        case 'local':
+            return 'devnet';
+        case 'dev':
+            return 'devnet';
+        case 'staging':
+            return 'testnet';
+        case 'prod':
+            return 'mainnet';
+        default:
+            throw new Error(`Unknown environment: ${env}`);
+    }
+}
+
 export const config = new Config(
+    getNetwork(env.ENV),
     env.STORE_VAULT_SERVER_BASE_URL,
     env.BALANCE_PROVER_BASE_URL,
     env.VALIDITY_PROVER_BASE_URL,

@@ -3,10 +3,8 @@ import { env, config } from './setup';
 
 async function main() {
     const ethKey = env.USER_ETH_PRIVATE_KEY;
-    const key = await generate_intmax_account_from_eth_key(ethKey);
-    const privkey = key.privkey;
-
-    const backup = await make_history_backup(config, privkey, 0n, 1000);
+    const account = await generate_intmax_account_from_eth_key(config.network, ethKey, false);
+    const backup = await make_history_backup(config, account.view_pair, 0n, 1000);
     console.log(backup);
 }
 

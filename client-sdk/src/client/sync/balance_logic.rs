@@ -4,6 +4,7 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData},
+    utils::key::{PublicKey, ViewPair},
 };
 use intmax2_zkp::{
     circuits::balance::{
@@ -13,7 +14,6 @@ use intmax2_zkp::{
     common::{
         private_state::FullPrivateState,
         salt::Salt,
-        signature_content::key_set::KeySet,
         witness::{
             deposit_witness::DepositWitness, private_transition_witness::PrivateTransitionWitness,
             receive_deposit_witness::ReceiveDepositWitness,
@@ -21,7 +21,7 @@ use intmax2_zkp::{
             tx_witness::TxWitness,
         },
     },
-    ethereum_types::{bytes32::Bytes32, u256::U256},
+    ethereum_types::bytes32::Bytes32,
     utils::leafable::Leafable as _,
 };
 use plonky2::{
@@ -42,13 +42,13 @@ const D: usize = 2;
 pub async fn receive_deposit(
     validity_prover: &dyn ValidityProverClientInterface,
     balance_prover: &dyn BalanceProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     full_private_state: &mut FullPrivateState,
     new_salt: Salt,
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
     deposit_data: &DepositData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     let receive_block_number = prev_balance_pis.public_state.block_number;
     // Generate witness
     let deposit_info = validity_prover
@@ -101,8 +101,8 @@ pub async fn receive_deposit(
     // prove deposit
     let balance_proof = balance_prover
         .prove_receive_deposit(
-            key,
-            key.pubkey,
+            view_pair.view,
+            view_pair.spend.0,
             &receive_deposit_witness,
             prev_balance_proof,
         )
@@ -115,7 +115,7 @@ pub async fn receive_deposit(
 pub async fn receive_transfer(
     validity_prover: &dyn ValidityProverClientInterface,
     balance_prover: &dyn BalanceProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     full_private_state: &mut FullPrivateState,
     new_salt: Salt,
     sender_balance_proof: &ProofWithPublicInputs<F, C, D>, /* sender's balance proof after
@@ -124,7 +124,7 @@ pub async fn receive_transfer(
                                                                   * proof */
     transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     let receive_block_number = prev_balance_pis.public_state.block_number;
     let sender_balance_pis = BalancePublicInputs::from_pis(&sender_balance_proof.public_inputs)?;
     if receive_block_number < prev_balance_pis.public_state.block_number {
@@ -180,8 +180,8 @@ pub async fn receive_transfer(
     // prove transfer
     let balance_proof = balance_prover
         .prove_receive_transfer(
-            key,
-            key.pubkey,
+            view_pair.view,
+            view_pair.spend.0,
             &receive_transfer_witness,
             prev_balance_proof,
         )
@@ -193,7 +193,7 @@ pub async fn receive_transfer(
 pub async fn update_send_by_sender(
     validity_prover: &dyn ValidityProverClientInterface,
     balance_prover: &dyn BalanceProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     full_private_state: &mut FullPrivateState,
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
     tx_block_number: u32,
@@ -201,7 +201,7 @@ pub async fn update_send_by_sender(
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     // sync check
     wait_till_validity_prover_synced(validity_prover, true, tx_block_number).await?;
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     if tx_block_number <= prev_balance_pis.public_state.block_number {
         return Err(SyncError::InternalError(
             "tx block number is not greater than prev balance proof".to_string(),
@@ -233,7 +233,7 @@ pub async fn update_send_by_sender(
     };
     let update_witness = validity_prover
         .get_update_witness(
-            key.pubkey,
+            view_pair.spend.0,
             tx_block_number,
             prev_balance_pis.public_state.block_number,
             true,
@@ -247,7 +247,7 @@ pub async fn update_send_by_sender(
 
     let sender_leaf = sender_leaves
         .iter()
-        .find(|leaf| leaf.sender == key.pubkey)
+        .find(|leaf| leaf.sender == view_pair.spend.0)
         .ok_or(SyncError::InternalError(
             "sender leaf not found in sender leaves".to_string(),
         ))?;
@@ -263,11 +263,13 @@ pub async fn update_send_by_sender(
             .update_private_state(full_private_state)
             .map_err(|e| SyncError::FailedToUpdatePrivateState(e.to_string()))?;
     }
-    let spent_proof = balance_prover.prove_spent(key, &spent_witness).await?;
+    let spent_proof = balance_prover
+        .prove_spent(view_pair.view, &spent_witness)
+        .await?;
     let balance_proof = balance_prover
         .prove_send(
-            key,
-            key.pubkey,
+            view_pair.view,
+            view_pair.spend.0,
             &tx_witness,
             &update_witness,
             &spent_proof,
@@ -289,8 +291,8 @@ pub async fn update_send_by_sender(
 pub async fn update_send_by_receiver(
     validity_prover: &dyn ValidityProverClientInterface,
     balance_prover: &dyn BalanceProverClientInterface,
-    key: KeySet,
-    sender: U256,
+    view_pair: ViewPair,
+    sender_spend_pub: PublicKey,
     tx_block_number: u32,
     transfer_data: &TransferData,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
@@ -342,7 +344,7 @@ pub async fn update_send_by_receiver(
     }
     let sender_leaf = sender_leaves
         .iter()
-        .find(|leaf| leaf.sender == sender)
+        .find(|leaf| leaf.sender == sender_spend_pub.0)
         .ok_or(SyncError::InvalidTransferError(
             "sender leaf not found in sender leaves".to_string(),
         ))?;
@@ -360,7 +362,7 @@ pub async fn update_send_by_receiver(
     };
     let update_witness = validity_prover
         .get_update_witness(
-            sender,
+            sender_spend_pub.0,
             tx_block_number,
             prev_balance_pis.public_state.block_number,
             true,
@@ -375,8 +377,8 @@ pub async fn update_send_by_receiver(
     // prove tx send
     let balance_proof = balance_prover
         .prove_send(
-            key,
-            sender,
+            view_pair.view,
+            sender_spend_pub.0,
             &tx_witness,
             &update_witness,
             &spent_proof,
@@ -393,12 +395,12 @@ pub async fn update_send_by_receiver(
 pub async fn update_no_send(
     validity_prover: &dyn ValidityProverClientInterface,
     balance_prover: &dyn BalanceProverClientInterface,
-    key: KeySet,
+    view_pair: ViewPair,
     prev_balance_proof: &Option<ProofWithPublicInputs<F, C, D>>,
     to_block_number: u32,
 ) -> Result<ProofWithPublicInputs<F, C, D>, SyncError> {
     wait_till_validity_prover_synced(validity_prover, true, to_block_number).await?;
-    let prev_balance_pis = get_prev_balance_pis(key.pubkey, prev_balance_proof)?;
+    let prev_balance_pis = get_prev_balance_pis(view_pair.spend.0, prev_balance_proof)?;
     let prev_block_number = prev_balance_pis.public_state.block_number;
     if to_block_number <= prev_block_number {
         // no need to update balance proof
@@ -408,7 +410,7 @@ pub async fn update_no_send(
     // get update witness
     let update_witness = validity_prover
         .get_update_witness(
-            key.pubkey,
+            view_pair.spend.0,
             to_block_number,
             prev_balance_pis.public_state.block_number,
             false,
@@ -421,7 +423,12 @@ pub async fn update_no_send(
         )));
     }
     let balance_proof = balance_prover
-        .prove_update(key, key.pubkey, &update_witness, prev_balance_proof)
+        .prove_update(
+            view_pair.view,
+            view_pair.spend.0,
+            &update_witness,
+            prev_balance_proof,
+        )
         .await?;
     Ok(balance_proof)
 }

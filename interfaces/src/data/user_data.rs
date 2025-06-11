@@ -12,12 +12,15 @@ use intmax2_zkp::{
     utils::poseidon_hash_out::PoseidonHashOut,
 };
 
-use super::{
-    deposit_data::DepositData, encryption::BlsEncryption, error::DataError, meta_data::MetaData,
-    proof_compression::CompressedBalanceProof, transfer_data::TransferData, tx_data::TxData,
+use crate::{
+    data::{encryption::errors::BlsEncryptionError, transfer_data::TransferData},
+    utils::key::PublicKey,
 };
 
-type Result<T> = std::result::Result<T, DataError>;
+use super::{
+    deposit_data::DepositData, encryption::BlsEncryption, error::DataError, meta_data::MetaData,
+    proof_compression::CompressedBalanceProof, tx_data::TxData,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,9 +53,9 @@ impl ProcessStatus {
 }
 
 impl UserData {
-    pub fn new(pubkey: U256) -> Self {
+    pub fn new(spend_pub: PublicKey) -> Self {
         Self {
-            pubkey,
+            pubkey: spend_pub.0,
             full_private_state: FullPrivateState::new(),
 
             balance_proof: None,
@@ -65,7 +68,7 @@ impl UserData {
         }
     }
 
-    pub fn block_number(&self) -> Result<u32> {
+    pub fn block_number(&self) -> Result<u32, DataError> {
         let balance_proof = self
             .balance_proof
             .as_ref()
@@ -95,7 +98,14 @@ impl UserData {
     }
 }
 
-impl BlsEncryption for UserData {}
+impl BlsEncryption for UserData {
+    fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
+        match version {
+            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
+        }
+    }
+}
 
 /// Token index -> AssetLeaf
 #[derive(Debug, Clone)]
