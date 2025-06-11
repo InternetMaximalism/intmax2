@@ -35,7 +35,7 @@ async function main() {
   const tokenAddress = "0x0000000000000000000000000000000000000000";
   const tokenId = "0"; // Use "0" for fungible tokens
   const amount = "1000000000000000"; // in wei
-  await depositWrapper(config, ethKey, ethAddress, account.spend_pub, amount, tokenType, tokenAddress, tokenId);
+  await depositWrapper(config, ethKey, ethAddress, account.address, amount, tokenType, tokenAddress, tokenId);
 
   // sync the account's balance proof and print the account's balance
   await syncAndPrintBalances(config, account);
@@ -92,8 +92,8 @@ async function main() {
   }
 }
 
-async function depositWrapper(config: Config, ethKey: string, ethAddress: string, spendPub: string, amount: string, tokenType: number, tokenAddress: string, tokenId: string) {
-  const depositResult = await prepare_deposit(config, ethAddress, spendPub, amount, tokenType, tokenAddress, tokenId, false);
+async function depositWrapper(config: Config, ethKey: string, ethAddress: string, recipient: string, amount: string, tokenType: number, tokenAddress: string, tokenId: string) {
+  const depositResult = await prepare_deposit(config, ethAddress, recipient, amount, tokenType, tokenAddress, tokenId, false);
   const pubkeySaltHash = depositResult.deposit_data.pubkey_salt_hash;
   await deposit(ethKey, env.L1_RPC_URL, env.LIQUIDITY_CONTRACT_ADDRESS, env.L2_RPC_URL, env.ROLLUP_CONTRACT_ADDRESS, BigInt(amount), tokenType, tokenAddress, tokenId, pubkeySaltHash, ethAddress);
   // wait for the validity prover syncs
