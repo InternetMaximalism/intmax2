@@ -31,9 +31,9 @@ impl Network {
                 AddressType::Integrated(_) => 247,
             },
             Network::Stagenet => match addr_type {
-                // starts from "Z" when encoded in base58
-                AddressType::Standard => 192,
-                AddressType::Integrated(_) => 193,
+                // starts from "T" when encoded in base58
+                AddressType::Standard => 156,
+                AddressType::Integrated(_) => 157,
             },
             Network::Testnet => match addr_type {
                 // starts from "X" when encoded in base58
@@ -46,7 +46,7 @@ impl Network {
     pub fn from_u8(byte: u8) -> Result<Network, Error> {
         match byte {
             246 | 247 => Ok(Network::Mainnet),
-            192 | 193 => Ok(Network::Stagenet),
+            156 | 157 => Ok(Network::Stagenet),
             180 | 181 => Ok(Network::Testnet),
             _ => Err(Error::InvalidMagicByte),
         }

@@ -86,8 +86,8 @@ impl AddressType {
                 _ => Err(Error::InvalidMagicByte),
             },
             Stagenet => match byte {
-                192 => Ok(Standard),
-                193 => {
+                156 => Ok(Standard),
+                157 => {
                     if bytes.len() < 73 {
                         return Err(Error::Encoding(
                             "from_slice: Not enough bytes to decode the AddressType (<73)",
