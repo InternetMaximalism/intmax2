@@ -242,15 +242,13 @@ impl Storage for InMemoryStorage {
 
             log::info!("num signatures: {}", signatures.len());
 
-            // if there is no signature, skip
-            if signatures.is_empty() {
-                continue;
+            // if signature are not empty, create a BlockPostTask
+            if !signatures.is_empty() {
+                // add to block_post_tasks_hi
+                let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
+                let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
+                block_post_tasks_hi.push_back(block_post_task);
             }
-
-            // add to block_post_tasks_hi
-            let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
-            let mut block_post_tasks_hi = self.block_post_tasks_hi.write().await;
-            block_post_tasks_hi.push_back(block_post_task);
 
             // add fee collection task
             if self.config.use_fee {

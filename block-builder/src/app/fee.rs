@@ -81,6 +81,12 @@ pub async fn validate_fee_proof(
                 .ok_or(FeeError::FeeVerificationError(
                     "Collateral block is missing".to_string(),
                 ))?;
+        // validate block builder address
+        if collateral_block.block_builder_address != block_builder_address {
+            return Err(FeeError::FeeVerificationError(
+                "Invalid block builder address in collateral block".to_string(),
+            ));
+        }
         // validate transfer data
         let transfer_data = &collateral_block.fee_transfer_data;
         match transfer_data.validate() {
@@ -141,7 +147,7 @@ pub async fn validate_fee_proof(
     Ok(())
 }
 
-/// common function to validate fee and collateral fee
+/// common function to validate fee
 async fn validate_fee_single(
     beneficiary: IntmaxAddress,
     required_fee: &HashMap<u32, U256>, // token index -> fee amount
@@ -323,7 +329,7 @@ pub async fn collect_fee(
                 is_registration_block: collateral_block.is_registration_block,
                 tx_tree_root: transfer_data.tx_tree_root,
                 expiry: collateral_block.expiry.into(),
-                block_builder_address: collateral_block.block_builder_address, // todo: check address
+                block_builder_address: collateral_block.block_builder_address,
                 block_builder_nonce: 0,
             };
             // validate signature again
@@ -338,7 +344,7 @@ pub async fn collect_fee(
 
             let block_post = BlockPostTask {
                 force_post: false,
-                block_sign_payload: memo.block_sign_payload.clone(),
+                block_sign_payload,
                 pubkeys,
                 account_ids,
                 pubkey_hash,
