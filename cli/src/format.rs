@@ -1,4 +1,3 @@
-use anyhow::{bail, ensure};
 use intmax2_interfaces::{
     data::deposit_data::TokenType,
     utils::{
@@ -6,11 +5,8 @@ use intmax2_interfaces::{
         key_derivation::derive_keypair_from_spend_key,
     },
 };
-use intmax2_zkp::{
-    common::generic_address::GenericAddress,
-    ethereum_types::{
-        address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _,
-    },
+use intmax2_zkp::ethereum_types::{
+    address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait as _,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -70,15 +66,4 @@ pub fn format_token_info(input: TokenInput) -> Result<(U256, Address, U256), For
 
 pub fn privkey_to_keypair(privkey: Bytes32) -> KeyPair {
     derive_keypair_from_spend_key(PrivateKey(privkey.into()), false)
-}
-
-pub fn parse_generic_address(address: &str) -> anyhow::Result<GenericAddress> {
-    ensure!(address.starts_with("0x"), "Invalid prefix");
-    let bytes = hex::decode(&address[2..])?;
-
-    match bytes.len() {
-        20 => Ok(Address::from_bytes_be(&bytes)?.into()),
-        32 => Ok(U256::from_bytes_be(&bytes)?.into()),
-        _ => bail!("Invalid length"),
-    }
 }
