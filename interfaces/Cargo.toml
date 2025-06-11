@@ -20,7 +20,7 @@ thiserror = { workspace = true }
 serde_with = { workspace = true }
 chrono = { workspace = true }
 anyhow = "1.0.98"
-hashbrown = "0.15.2"
+hashbrown = "0.15.4"
 async-trait = "0.1.88"
 rand = { workspace = true }
 num-traits = "0.2.19"
