@@ -2,7 +2,7 @@ use crate::js_types::data::{JsDepositData, JsTransferData, JsTxData};
 use intmax2_client_sdk::client::types::{
     DepositResult, GenericRecipient, TransferRequest, TxResult,
 };
-use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait as _;
+use intmax2_zkp::ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait as _};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -13,6 +13,30 @@ pub struct JsTransferRequest {
     pub token_index: u32,
     pub amount: String,
     pub description: Option<String>,
+}
+
+#[wasm_bindgen]
+impl JsTransferRequest {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        recipient: String,
+        token_index: u32,
+        amount: String,
+        description: Option<String>,
+    ) -> Result<Self, JsError> {
+        let _: GenericRecipient = recipient
+            .parse()
+            .map_err(|e| JsError::new(&format!("Invalid recipient: {e}")))?;
+        let _: U256 = amount
+            .parse()
+            .map_err(|e| JsError::new(&format!("Invalid amount: {e}")))?;
+        Ok(Self {
+            recipient,
+            token_index,
+            amount,
+            description,
+        })
+    }
 }
 
 impl From<TransferRequest> for JsTransferRequest {

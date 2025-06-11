@@ -45,6 +45,7 @@ pub struct IntmaxAccount {
     pub view_pair: String,
     pub key_pair: String,
     pub spend_key: String,
+    pub spend_pub: String,
 }
 
 /// Generate a new key pair from the given ethereum private key (32bytes hex string).
@@ -67,6 +68,7 @@ pub async fn generate_intmax_account_from_eth_key(
         view_pair: view_pair.to_string(),
         key_pair: key_pair.to_string(),
         spend_key: spend_key.to_string(),
+        spend_pub: view_pair.spend.to_string(),
     })
 }
 

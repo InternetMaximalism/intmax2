@@ -31,15 +31,14 @@ pub struct JsTxHistory {
 #[wasm_bindgen]
 pub async fn fetch_deposit_history(
     config: &Config,
-    private_key: &str,
+    view_pair: &str,
     cursor: &JsMetaDataCursor,
 ) -> Result<JsDepositHistory, JsError> {
     init_logger();
-
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
-    let key = str_to_view_pair(private_key)?;
+    let view_pair = str_to_view_pair(view_pair)?;
     let client = get_client(config);
-    let (history, cursor_response) = client.fetch_deposit_history(key, &cursor).await?;
+    let (history, cursor_response) = client.fetch_deposit_history(view_pair, &cursor).await?;
     let js_history = history.into_iter().map(JsDepositEntry::from).collect();
     let js_cursor_response = JsMetaDataCursorResponse::from(cursor_response);
     Ok(JsDepositHistory {
@@ -51,15 +50,15 @@ pub async fn fetch_deposit_history(
 #[wasm_bindgen]
 pub async fn fetch_transfer_history(
     config: &Config,
-    private_key: &str,
+    view_pair: &str,
     cursor: &JsMetaDataCursor,
 ) -> Result<JsTransferHistory, JsError> {
     init_logger();
 
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
-    let key = str_to_view_pair(private_key)?;
+    let view_pair = str_to_view_pair(view_pair)?;
     let client = get_client(config);
-    let (history, cursor_response) = client.fetch_transfer_history(key, &cursor).await?;
+    let (history, cursor_response) = client.fetch_transfer_history(view_pair, &cursor).await?;
     let js_history = history.into_iter().map(JsTransferEntry::from).collect();
     let js_cursor_response = JsMetaDataCursorResponse::from(cursor_response);
     Ok(JsTransferHistory {
@@ -71,15 +70,14 @@ pub async fn fetch_transfer_history(
 #[wasm_bindgen]
 pub async fn fetch_tx_history(
     config: &Config,
-    private_key: &str,
+    view_pair: &str,
     cursor: &JsMetaDataCursor,
 ) -> Result<JsTxHistory, JsError> {
     init_logger();
-
     let cursor: MetaDataCursor = cursor.clone().try_into()?;
-    let key = str_to_view_pair(private_key)?;
+    let view_pair = str_to_view_pair(view_pair)?;
     let client = get_client(config);
-    let (history, cursor_response) = client.fetch_tx_history(key, &cursor).await?;
+    let (history, cursor_response) = client.fetch_tx_history(view_pair, &cursor).await?;
     let js_history = history.into_iter().map(JsTxEntry::from).collect();
     let js_cursor_response = JsMetaDataCursorResponse::from(cursor_response);
     Ok(JsTxHistory {
