@@ -104,7 +104,8 @@ pub async fn get_derive_path_list(
     }
     let mut derive_list: Vec<JsDerive> = Vec::new();
     for data in encrypted_data {
-        let generic_misc_data = GenericMiscData::decrypt(view_pair.view, Some(view_pub), &data.data)?;
+        let generic_misc_data =
+            GenericMiscData::decrypt(view_pair.view, Some(view_pub), &data.data)?;
         derive_list.push(bincode::deserialize(&generic_misc_data.data).unwrap());
     }
     Ok(derive_list)
