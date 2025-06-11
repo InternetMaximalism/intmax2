@@ -65,5 +65,8 @@ pub fn format_token_info(input: TokenInput) -> Result<(U256, Address, U256), For
 }
 
 pub fn privkey_to_keypair(privkey: Bytes32) -> KeyPair {
-    derive_keypair_from_spend_key(PrivateKey(privkey.into()), false)
+    let is_legacy = std::env::var("LEGACY_ACCOUNT")
+        .map(|s| s == "true")
+        .unwrap_or(false);
+    derive_keypair_from_spend_key(PrivateKey(privkey.into()), is_legacy)
 }

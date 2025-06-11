@@ -78,7 +78,7 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
             fee_token_index,
             wait,
         } => {
-            let key_pair: intmax2_interfaces::utils::key::KeyPair = privkey_to_keypair(private_key);
+            let key_pair = privkey_to_keypair(private_key);
             let transfer_request = TransferRequest {
                 recipient: GenericRecipient::IntmaxAddress(to),
                 amount,
