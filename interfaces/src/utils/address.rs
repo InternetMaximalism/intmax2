@@ -72,7 +72,7 @@ impl AddressType {
                 }
                 _ => Err(Error::InvalidMagicByte),
             },
-            Testnet => match byte {
+            Devnet => match byte {
                 180 => Ok(Standard),
                 181 => {
                     if bytes.len() < 73 {
@@ -85,7 +85,7 @@ impl AddressType {
                 }
                 _ => Err(Error::InvalidMagicByte),
             },
-            Stagenet => match byte {
+            Testnet => match byte {
                 156 => Ok(Standard),
                 157 => {
                     if bytes.len() < 73 {

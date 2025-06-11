@@ -44,11 +44,11 @@ export const env = cleanEnv(process.env, {
 function getNetwork(env: string) {
     switch (env) {
         case 'local':
-            return 'testnet';
+            return 'devnet';
         case 'dev':
-            return 'testnet';
+            return 'devnet';
         case 'staging':
-            return 'stagenet';
+            return 'testnet';
         case 'prod':
             return 'mainnet';
         default:

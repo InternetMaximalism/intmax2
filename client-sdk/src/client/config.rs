@@ -30,9 +30,9 @@ impl Default for ClientConfig {
 
 pub fn env_type_to_network(env_type: EnvType) -> Network {
     match env_type {
-        EnvType::Local => Network::Testnet,
-        EnvType::Dev => Network::Testnet,
-        EnvType::Staging => Network::Stagenet,
+        EnvType::Local => Network::Devnet,
+        EnvType::Dev => Network::Devnet,
+        EnvType::Staging => Network::Testnet,
         EnvType::Prod => Network::Mainnet,
     }
 }

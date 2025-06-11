@@ -294,4 +294,5 @@ fn print_keys(key_pair: KeyPair) {
     println!("Address: {}", address.to_string().green());
     println!("View Only Key: {}", view_pair.to_string().green());
     println!("Spend Key: {}", key_pair.spend.to_string().green());
+    println!("Key Pair: {}", key_pair.to_string().green());
 }
