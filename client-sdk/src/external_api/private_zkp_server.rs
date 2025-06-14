@@ -34,10 +34,11 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
+use reqwest_middleware::ClientWithMiddleware;
 use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
 use serde::{Deserialize, Serialize};
 
-use crate::external_api::utils::time::sleep_for;
+use crate::external_api::utils::{query::build_client, time::sleep_for};
 
 use super::utils::query::{get_request, post_request};
 
@@ -53,6 +54,8 @@ pub struct PrivateZKPServerConfig {
 
 #[derive(Debug, Clone)]
 pub struct PrivateZKPServerClient {
+    client: ClientWithMiddleware,
+
     base_url: String,
 
     config: PrivateZKPServerConfig,
@@ -65,6 +68,7 @@ pub struct PrivateZKPServerClient {
 impl PrivateZKPServerClient {
     pub fn new(base_url: &str, config: &PrivateZKPServerConfig) -> Self {
         PrivateZKPServerClient {
+            client: build_client(),
             base_url: base_url.to_string(),
             config: config.clone(),
             pubkey: Arc::new(RwLock::new(None)),
@@ -82,7 +86,7 @@ impl PrivateZKPServerClient {
 
     async fn fetch_pubkey(&self) -> Result<RsaPublicKey, ServerError> {
         let response: GetPublicKeyResponse =
-            get_request::<(), _>(&self.base_url, "/v1/public-key", None).await?;
+            get_request::<(), _>(&self.client, &self.base_url, "/v1/public-key", None).await?;
         let public_key_bytes = BASE64_STANDARD.decode(&response.public_key).map_err(|e| {
             ServerError::DeserializationError(format!("Failed to decode public key: {e:?}"))
         })?;
@@ -276,8 +280,13 @@ impl PrivateZKPServerClient {
             ServerError::SerializeError(format!("Failed to serialize encrypted request: {e:?}"))
         })?;
         let request = CreateProveRequest { encrypted_data };
-        let response: CreateProofResponse =
-            post_request(&self.base_url, "/v1/proof/create", Some(&request)).await?;
+        let response: CreateProofResponse = post_request(
+            &self.client,
+            &self.base_url,
+            "/v1/proof/create",
+            Some(&request),
+        )
+        .await?;
         Ok(response.request_id)
     }
 
@@ -288,8 +297,13 @@ impl PrivateZKPServerClient {
         let query = ProofResultQuery {
             request_id: request_id.to_string(),
         };
-        let response: ProofResultResponse =
-            get_request(&self.base_url, "/v1/proof/result", Some(&query)).await?;
+        let response: ProofResultResponse = get_request(
+            &self.client,
+            &self.base_url,
+            "/v1/proof/result",
+            Some(&query),
+        )
+        .await?;
         Ok(response)
     }
 

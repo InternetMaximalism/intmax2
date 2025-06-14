@@ -1,3 +1,5 @@
+use crate::external_api::utils::query::build_client;
+
 use super::utils::query::{get_request, post_request};
 use async_trait::async_trait;
 use intmax2_interfaces::{
@@ -22,6 +24,7 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
+use reqwest_middleware::ClientWithMiddleware;
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute
 
@@ -31,12 +34,14 @@ const D: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct WithdrawalServerClient {
+    client: ClientWithMiddleware,
     base_url: String,
 }
 
 impl WithdrawalServerClient {
     pub fn new(base_url: &str) -> Self {
         WithdrawalServerClient {
+            client: build_client(),
             base_url: base_url.to_string(),
         }
     }
@@ -45,14 +50,24 @@ impl WithdrawalServerClient {
 #[async_trait(?Send)]
 impl WithdrawalServerClientInterface for WithdrawalServerClient {
     async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError> {
-        let response: WithdrawalFeeInfo =
-            get_request::<(), _>(&self.base_url, "/withdrawal-server/withdrawal-fee", None).await?;
+        let response: WithdrawalFeeInfo = get_request::<(), _>(
+            &self.client,
+            &self.base_url,
+            "/withdrawal-server/withdrawal-fee",
+            None,
+        )
+        .await?;
         Ok(response)
     }
 
     async fn get_claim_fee(&self) -> Result<ClaimFeeInfo, ServerError> {
-        let response: ClaimFeeInfo =
-            get_request::<(), _>(&self.base_url, "/withdrawal-server/claim-fee", None).await?;
+        let response: ClaimFeeInfo = get_request::<(), _>(
+            &self.client,
+            &self.base_url,
+            "/withdrawal-server/claim-fee",
+            None,
+        )
+        .await?;
         Ok(response)
     }
 
@@ -70,6 +85,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let result: RequestWithdrawalResponse = post_request(
+            &self.client,
             &self.base_url,
             "/withdrawal-server/request-withdrawal",
             Some(&request_with_auth),
@@ -92,6 +108,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let result: RequestClaimResponse = post_request(
+            &self.client,
             &self.base_url,
             "/withdrawal-server/request-claim",
             Some(&request_with_auth),
@@ -107,6 +124,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         let request = GetWithdrawalInfoRequest;
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: GetWithdrawalInfoResponse = post_request(
+            &self.client,
             &self.base_url,
             "/withdrawal-server/get-withdrawal-info",
             Some(&request_with_auth),
@@ -121,6 +139,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
     ) -> Result<Vec<WithdrawalInfo>, ServerError> {
         let query = GetWithdrawalInfoByRecipientQuery { recipient };
         let response: GetWithdrawalInfoResponse = get_request(
+            &self.client,
             &self.base_url,
             "/withdrawal-server/get-withdrawal-info-by-recipient",
             Some(query),
@@ -133,6 +152,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         let request = GetClaimInfoRequest;
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: GetClaimInfoResponse = post_request(
+            &self.client,
             &self.base_url,
             "/withdrawal-server/get-claim-info",
             Some(&request_with_auth),

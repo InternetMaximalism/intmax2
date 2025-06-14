@@ -16,17 +16,24 @@ use intmax2_zkp::{
     common::{block_builder::BlockProposal, signature_content::flatten::FlatG2, tx::Tx},
     ethereum_types::u256::U256,
 };
+use reqwest_middleware::ClientWithMiddleware;
+
+use crate::external_api::utils::query::build_client;
 
 use super::utils::query::{get_request, post_request};
 
 pub const DEFAULT_BLOCK_EXPIRY: u64 = 80;
 
 #[derive(Debug, Clone)]
-pub struct BlockBuilderClient;
+pub struct BlockBuilderClient {
+    client: ClientWithMiddleware,
+}
 
 impl BlockBuilderClient {
     pub fn new() -> Self {
-        BlockBuilderClient
+        BlockBuilderClient {
+            client: build_client(),
+        }
     }
 }
 
@@ -42,8 +49,13 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
         &self,
         block_builder_url: &str,
     ) -> Result<BlockBuilderFeeInfo, ServerError> {
-        get_request::<(), BlockBuilderFeeInfo>(block_builder_url, "/block-builder/fee-info", None)
-            .await
+        get_request::<(), BlockBuilderFeeInfo>(
+            &self.client,
+            block_builder_url,
+            "/block-builder/fee-info",
+            None,
+        )
+        .await
     }
 
     async fn send_tx_request(
@@ -61,6 +73,7 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
             fee_proof,
         };
         let response: TxRequestResponse = post_request(
+            &self.client,
             block_builder_url,
             "/block-builder/tx-request",
             Some(&request),
@@ -78,6 +91,7 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
             request_id: request_id.to_string(),
         };
         let response: QueryProposalResponse = post_request(
+            &self.client,
             block_builder_url,
             "/block-builder/query-proposal",
             Some(&request),
@@ -99,6 +113,7 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
             signature,
         };
         post_request::<_, ()>(
+            &self.client,
             block_builder_url,
             "/block-builder/post-signature",
             Some(&request),

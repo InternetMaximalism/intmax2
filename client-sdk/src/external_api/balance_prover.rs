@@ -26,6 +26,9 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
+use reqwest_middleware::ClientWithMiddleware;
+
+use crate::external_api::utils::query::build_client;
 
 use super::utils::query::post_request;
 
@@ -35,12 +38,14 @@ const D: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct BalanceProverClient {
+    client: ClientWithMiddleware,
     base_url: String,
 }
 
 impl BalanceProverClient {
     pub fn new(base_url: &str) -> Self {
         BalanceProverClient {
+            client: build_client(),
             base_url: base_url.to_string(),
         }
     }
@@ -57,6 +62,7 @@ impl BalanceProverClientInterface for BalanceProverClient {
             spent_witness: spent_witness.clone(),
         };
         let response: ProveResponse = post_request(
+            &self.client,
             &self.base_url,
             "/balance-prover/prove-spent",
             Some(&request),
@@ -81,8 +87,13 @@ impl BalanceProverClientInterface for BalanceProverClient {
             spent_proof: spent_proof.clone(),
             prev_proof: prev_proof.clone(),
         };
-        let response: ProveResponse =
-            post_request(&self.base_url, "/balance-prover/prove-send", Some(&request)).await?;
+        let response: ProveResponse = post_request(
+            &self.client,
+            &self.base_url,
+            "/balance-prover/prove-send",
+            Some(&request),
+        )
+        .await?;
         Ok(response.proof)
     }
 
@@ -99,6 +110,7 @@ impl BalanceProverClientInterface for BalanceProverClient {
             prev_proof: prev_proof.clone(),
         };
         let response: ProveResponse = post_request(
+            &self.client,
             &self.base_url,
             "/balance-prover/prove-update",
             Some(&request),
@@ -120,6 +132,7 @@ impl BalanceProverClientInterface for BalanceProverClient {
             prev_proof: prev_proof.clone(),
         };
         let response: ProveResponse = post_request(
+            &self.client,
             &self.base_url,
             "/balance-prover/prove-receive-transfer",
             Some(&request),
@@ -141,6 +154,7 @@ impl BalanceProverClientInterface for BalanceProverClient {
             prev_proof: prev_proof.clone(),
         };
         let response: ProveResponse = post_request(
+            &self.client,
             &self.base_url,
             "/balance-prover/prove-receive-deposit",
             Some(&request),
@@ -158,6 +172,7 @@ impl BalanceProverClientInterface for BalanceProverClient {
             withdrawal_witness: withdrawal_witness.clone(),
         };
         let response: ProveResponse = post_request(
+            &self.client,
             &self.base_url,
             "/balance-prover/prove-single-withdrawal",
             Some(&request),
@@ -177,6 +192,7 @@ impl BalanceProverClientInterface for BalanceProverClient {
             claim_witness: claim_witness.clone(),
         };
         let response: ProveResponse = post_request(
+            &self.client,
             &self.base_url,
             "/balance-prover/prove-single-claim",
             Some(&request),

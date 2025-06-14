@@ -18,6 +18,9 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
+use reqwest_middleware::ClientWithMiddleware;
+
+use crate::external_api::utils::query::build_client;
 
 use super::utils::query::post_request;
 
@@ -26,12 +29,14 @@ const TIME_TO_EXPIRY_READONLY: u64 = 60 * 60 * 24; // 24 hours for readonly
 
 #[derive(Debug, Clone)]
 pub struct StoreVaultServerClient {
+    client: ClientWithMiddleware,
     base_url: String,
 }
 
 impl StoreVaultServerClient {
     pub fn new(base_url: &str) -> Self {
         StoreVaultServerClient {
+            client: build_client(),
             base_url: base_url.to_string(),
         }
     }
@@ -55,6 +60,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         post_request::<_, ()>(
+            &self.client,
             &self.base_url,
             "/store-vault-server/save-snapshot",
             Some(&request_with_auth),
@@ -75,6 +81,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: GetSnapshotResponse = post_request(
+            &self.client,
             &self.base_url,
             "/store-vault-server/get-snapshot",
             Some(&request_with_auth),
@@ -96,6 +103,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: SaveDataBatchResponse = post_request(
+                &self.client,
                 &self.base_url,
                 "/store-vault-server/save-data-batch",
                 Some(&request_with_auth),
@@ -122,6 +130,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: GetDataBatchResponse = post_request(
+                &self.client,
                 &self.base_url,
                 "/store-vault-server/get-data-batch",
                 Some(&request_with_auth),
@@ -169,6 +178,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             auth: auth.clone(),
         };
         let response: GetDataSequenceResponse = post_request(
+            &self.client,
             &self.base_url,
             "/store-vault-server/get-data-sequence",
             Some(&request_with_auth),

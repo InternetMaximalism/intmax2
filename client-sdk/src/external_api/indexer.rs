@@ -3,17 +3,22 @@ use intmax2_interfaces::api::{
     error::ServerError,
     indexer::interface::{BlockBuilderInfo, IndexerClientInterface},
 };
+use reqwest_middleware::ClientWithMiddleware;
+
+use crate::external_api::utils::query::build_client;
 
 use super::utils::query::get_request;
 
 #[derive(Debug, Clone)]
 pub struct IndexerClient {
+    client: ClientWithMiddleware,
     base_url: String,
 }
 
 impl IndexerClient {
     pub fn new(base_url: &str) -> Self {
         IndexerClient {
+            client: build_client(),
             base_url: base_url.to_string(),
         }
     }
@@ -23,7 +28,8 @@ impl IndexerClient {
 impl IndexerClientInterface for IndexerClient {
     async fn get_block_builder_info(&self) -> Result<BlockBuilderInfo, ServerError> {
         let block_builders: Vec<BlockBuilderInfo> =
-            get_request::<(), _>(&self.base_url, "/v1/indexer/builders", None).await?;
+            get_request::<(), _>(&self.client, &self.base_url, "/v1/indexer/builders", None)
+                .await?;
         if block_builders.is_empty() {
             return Err(ServerError::InvalidResponse(
                 "No block builders found".to_string(),
