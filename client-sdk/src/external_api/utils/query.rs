@@ -14,7 +14,11 @@ struct ErrorResponse {
 
 pub fn build_client() -> ClientWithMiddleware {
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    ClientBuilder::new(reqwest::Client::new())
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("Failed to build reqwest client");
+    ClientBuilder::new(client)
         .with(TracingMiddleware::default())
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
         .build()
@@ -47,8 +51,6 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
         request = request.json(body);
     }
     let response = request
-        .try_clone()
-        .unwrap()
         .send()
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
