@@ -22,6 +22,9 @@ cargo install wasm-pack
 ```
 
 # Preparation 
+Copy env file 
+
+You need to run `cp .env.example .env` in each directory.
 
 Launch local network 
 ```bash
@@ -31,7 +34,7 @@ anvil
 Contract deployment
 ```bash
 cd tests
-cargo test -r -p tests deploy_contracts -- --nocapture
+cargo test -r -p tests deploy_contracts -- --nocapture --ignored
 ```
 
 Launch database
@@ -39,16 +42,12 @@ Launch database
 docker compose up -d db
 ```
 
-Copy env file 
-
-You need to run `cp .env.example .env` in each directory.
-
 # Start server
 
 1. Start Store-vault-server. 
 Example port: 9000
 ```bash
-cd store-vault-server && sqlx database setup && cargo run -r
+cd legacy-store-vault-server && sqlx database setup && cargo run -r
 ```
 
 2. Start balance-prover.
