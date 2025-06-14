@@ -2,12 +2,16 @@ use super::types::{
     BlockPostedEntry, BlockPostedsData, DepositLeafInsertedData, DepositLeafInsertedEntry,
     DepositedData, DepositedEntry, GraphQLResponse,
 };
-use intmax2_client_sdk::external_api::utils::query::post_request_with_bearer_token;
+use intmax2_client_sdk::external_api::utils::query::{
+    build_client, post_request_with_bearer_token,
+};
 use intmax2_interfaces::api::error::ServerError;
+use reqwest_middleware::ClientWithMiddleware;
 use serde_json::json;
 
 #[derive(Clone, Debug)]
 pub struct TheGraphQueryClient {
+    client: ClientWithMiddleware,
     pub l1_url: String,
     pub l1_bearer_token: Option<String>,
     pub l2_url: String,
@@ -22,6 +26,7 @@ impl TheGraphQueryClient {
         l2_bearer_token: Option<String>,
     ) -> Self {
         Self {
+            client: build_client(),
             l1_url,
             l1_bearer_token,
             l2_url,
@@ -59,6 +64,7 @@ impl TheGraphQueryClient {
         });
 
         let response: GraphQLResponse<BlockPostedsData> = post_request_with_bearer_token(
+            &self.client,
             &self.l2_url,
             "",
             self.l2_bearer_token.clone(),
@@ -94,6 +100,7 @@ impl TheGraphQueryClient {
             }
         });
         let response: GraphQLResponse<DepositLeafInsertedData> = post_request_with_bearer_token(
+            &self.client,
             &self.l2_url,
             "",
             self.l2_bearer_token.clone(),
@@ -134,6 +141,7 @@ impl TheGraphQueryClient {
             }
         });
         let response: GraphQLResponse<DepositedData> = post_request_with_bearer_token(
+            &self.client,
             &self.l1_url,
             "",
             self.l1_bearer_token.clone(),
