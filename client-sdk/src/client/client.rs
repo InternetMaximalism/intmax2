@@ -489,6 +489,12 @@ impl Client {
                 expiry, current_time, self.config.tx_timeout, EXPIRY_BUFFER
             )));
         }
+        // verify nonce
+        if proposal.block_sign_payload.block_builder_nonce == 0 {
+            return Err(ClientError::InvalidBlockProposal(
+                "block builder nonce 0 is not allowed".to_string(),
+            ));
+        }
 
         // save transfer data
         let mut transfer_tree = TransferTree::new(TRANSFER_TREE_HEIGHT);
