@@ -4,18 +4,10 @@ INTMAX2 is a stateless Layer 2 protocol on Ethereum, combining privacy, speed, a
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Services](#services)
 - [Development](#development)
-
-## Prerequisites
-
-Before you begin, ensure you have the following installed:
-
-- **Rust** 
-- **Docker** and **Docker Compose**
 
 ## Installation
 
