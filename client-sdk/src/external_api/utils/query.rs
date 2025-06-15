@@ -15,7 +15,6 @@ struct ErrorResponse {
 pub fn build_client() -> ClientWithMiddleware {
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
         .build()
         .expect("Failed to build reqwest client");
     ClientBuilder::new(client)
