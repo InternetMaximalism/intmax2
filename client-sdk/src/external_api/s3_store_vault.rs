@@ -1,3 +1,8 @@
+use super::utils::query::post_request;
+use crate::external_api::utils::{
+    query::{build_client, REQWEST_TIMEOUT},
+    retry::with_retry,
+};
 use async_trait::async_trait;
 use intmax2_interfaces::{
     api::{
@@ -20,20 +25,21 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
-
-use super::utils::{query::post_request, retry::with_retry};
+use reqwest::Client;
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute for normal requests
 const TIME_TO_EXPIRY_READONLY: u64 = 60 * 60 * 24; // 24 hours for readonly
 
 #[derive(Debug, Clone)]
 pub struct S3StoreVaultClient {
+    client: Client,
     base_url: String,
 }
 
 impl S3StoreVaultClient {
     pub fn new(base_url: &str) -> Self {
         S3StoreVaultClient {
+            client: build_client(),
             base_url: base_url.to_string(),
         }
     }
@@ -57,6 +63,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: S3PreSaveSnapshotResponse = post_request(
+            &self.client,
             &self.base_url,
             "/s3-store-vault/pre-save-snapshot",
             Some(&request_with_auth),
@@ -64,7 +71,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         .await?;
 
         // upload data to s3
-        upload_s3(&response.presigned_url, data).await?;
+        upload_s3(&self.client, &response.presigned_url, data).await?;
 
         // save snapshot
         let request = S3SaveSnapshotRequest {
@@ -75,6 +82,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let () = post_request(
+            &self.client,
             &self.base_url,
             "/s3-store-vault/save-snapshot",
             Some(&request_with_auth),
@@ -96,6 +104,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: S3GetSnapshotResponse = post_request(
+            &self.client,
             &self.base_url,
             "/s3-store-vault/get-snapshot",
             Some(&request_with_auth),
@@ -104,7 +113,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
 
         match response.presigned_url {
             Some(url) => {
-                let data = download_s3(&url).await?;
+                let data = download_s3(&self.client, &url).await?;
                 Ok(Some(data))
             }
             None => Ok(None),
@@ -131,6 +140,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             let request = S3SaveDataBatchRequest { data };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: S3SaveDataBatchResponse = post_request(
+                &self.client,
                 &self.base_url,
                 "/s3-store-vault/save-data-batch",
                 Some(&request_with_auth),
@@ -141,7 +151,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
                 .iter()
                 .map(|entry| entry.data.clone())
                 .collect::<Vec<_>>();
-            batch_upload_s3(&response.presigned_urls, &data).await?;
+            batch_upload_s3(&self.client, &response.presigned_urls, &data).await?;
 
             all_digests.extend(digests);
         }
@@ -164,6 +174,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
             let response: S3GetDataBatchResponse = post_request(
+                &self.client,
                 &self.base_url,
                 "/s3-store-vault/get-data-batch",
                 Some(&request_with_auth),
@@ -176,7 +187,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
                 .collect::<Vec<_>>();
 
             // download data
-            let data = batch_download_s3(&urls).await?;
+            let data = batch_download_s3(&self.client, &urls).await?;
             let data_with_meta = response
                 .presigned_urls_with_meta
                 .iter()
@@ -229,6 +240,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             auth: auth.clone(),
         };
         let response: S3GetDataSequenceResponse = post_request(
+            &self.client,
             &self.base_url,
             "/s3-store-vault/get-data-sequence",
             Some(&request_with_auth),
@@ -240,7 +252,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             .iter()
             .map(|x| x.presigned_url.clone())
             .collect::<Vec<_>>();
-        let data = batch_download_s3(&urls).await?;
+        let data = batch_download_s3(&self.client, &urls).await?;
         let data_with_meta = response
             .presigned_urls_with_meta
             .iter()
@@ -269,13 +281,13 @@ impl S3StoreVaultClient {
     }
 }
 
-async fn upload_s3(url: &str, data: &[u8]) -> Result<(), ServerError> {
-    let client = reqwest::Client::new();
+async fn upload_s3(client: &Client, url: &str, data: &[u8]) -> Result<(), ServerError> {
     let response = with_retry(|| async {
         client
             .put(url)
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
+            .timeout(REQWEST_TIMEOUT)
             .send()
             .await
     })
@@ -290,9 +302,8 @@ async fn upload_s3(url: &str, data: &[u8]) -> Result<(), ServerError> {
     Ok(())
 }
 
-async fn download_s3(url: &str) -> Result<Vec<u8>, ServerError> {
-    let client = reqwest::Client::new();
-    let response = with_retry(|| async { client.get(url).send().await })
+async fn download_s3(client: &Client, url: &str) -> Result<Vec<u8>, ServerError> {
+    let response = with_retry(|| async { client.get(url).timeout(REQWEST_TIMEOUT).send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
     if !response.status().is_success() {
@@ -308,11 +319,15 @@ async fn download_s3(url: &str) -> Result<Vec<u8>, ServerError> {
     Ok(response.to_vec())
 }
 
-async fn batch_upload_s3(urls: &[String], data: &[Vec<u8>]) -> Result<(), ServerError> {
+async fn batch_upload_s3(
+    client: &Client,
+    urls: &[String],
+    data: &[Vec<u8>],
+) -> Result<(), ServerError> {
     let upload_futures = urls
         .iter()
         .zip(data.iter())
-        .map(|(url, data)| async move { upload_s3(url, data).await })
+        .map(|(url, data)| async move { upload_s3(client, url, data).await })
         .collect::<Vec<_>>();
     let results = futures::future::join_all(upload_futures).await;
     for result in results {
@@ -321,10 +336,10 @@ async fn batch_upload_s3(urls: &[String], data: &[Vec<u8>]) -> Result<(), Server
     Ok(())
 }
 
-async fn batch_download_s3(urls: &[String]) -> Result<Vec<Vec<u8>>, ServerError> {
+async fn batch_download_s3(client: &Client, urls: &[String]) -> Result<Vec<Vec<u8>>, ServerError> {
     let download_futures = urls
         .iter()
-        .map(|url| async move { download_s3(url).await })
+        .map(|url| async move { download_s3(client, url).await })
         .collect::<Vec<_>>();
     let results = futures::future::join_all(download_futures).await;
     let mut all_data = Vec::new();

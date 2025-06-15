@@ -1,7 +1,15 @@
-use super::retry::with_retry;
+use std::time::Duration;
+
 use intmax2_interfaces::api::error::ServerError;
-use reqwest::{header, Response, Url};
+use reqwest::{header, Client, Response, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::external_api::utils::retry::with_retry;
+
+/// Timeout for reqwest requests.
+/// Because WASM only accepts timeout in the request builder, not the client builder,
+/// we set a timeout of 30 seconds for each request.
+pub const REQWEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Deserialize)]
 struct ErrorResponse {
@@ -10,15 +18,23 @@ struct ErrorResponse {
     message: Option<String>,
 }
 
+pub fn build_client() -> Client {
+    reqwest::Client::builder()
+        .build()
+        .expect("Failed to build reqwest client")
+}
+
 pub async fn post_request<B: Serialize, R: DeserializeOwned>(
+    client: &Client,
     base_url: &str,
     endpoint: &str,
     body: Option<&B>,
 ) -> Result<R, ServerError> {
-    post_request_with_bearer_token(base_url, endpoint, None, body).await
+    post_request_with_bearer_token(client, base_url, endpoint, None, body).await
 }
 
 pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
+    client: &Client,
     base_url: &str,
     endpoint: &str,
     bearer_token: Option<String>,
@@ -27,8 +43,7 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
     let url = format!("{base_url}{endpoint}");
     let _ = Url::parse(&url)
         .map_err(|e| ServerError::MalformedUrl(format!("Failed to parse URL {url}: {e}")))?;
-    let client = reqwest::Client::new();
-    let mut request = client.post(url.clone());
+    let mut request = client.post(url.clone()).timeout(REQWEST_TIMEOUT);
     if let Some(token) = bearer_token {
         request = request.header(header::AUTHORIZATION, token);
     }
@@ -54,6 +69,7 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
 }
 
 pub async fn get_request<Q, R>(
+    client: &Client,
     base_url: &str,
     endpoint: &str,
     query: Option<Q>,
@@ -75,8 +91,7 @@ where
     if query_str.is_some() {
         url = format!("{}?{}", url, query_str.as_ref().unwrap());
     }
-    let client = reqwest::Client::new();
-    let response = with_retry(|| async { client.get(&url).send().await })
+    let response = with_retry(|| async { client.get(&url).timeout(REQWEST_TIMEOUT).send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
     log::debug!("GET request url: {url}");

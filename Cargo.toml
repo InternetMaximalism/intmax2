@@ -36,7 +36,7 @@ tokio = { version = "1.45", features = [
     "sync",
     "time",
 ] }
-reqwest = { version = "0.12.19", features = ["json"] }
+reqwest = { version = "0.12.20", features = ["json"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.215", features = ["derive"] }
 alloy = { version = "1.0.9", features = ["rand", "signer-mnemonic"] }

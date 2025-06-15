@@ -4,9 +4,11 @@ use alloy::{
     sol_types::{SolCall, SolValue},
 };
 use intmax2_interfaces::api::error::ServerError;
+
+use reqwest::Client;
 use serde::Deserialize;
 
-use crate::external_api::utils::query::post_request;
+use crate::external_api::utils::query::{build_client, post_request};
 
 sol! {
     function depositNativeToken(bytes32 recipientSaltHash);
@@ -81,12 +83,16 @@ impl PermissionRequest {
 
 #[derive(Debug, Clone)]
 pub struct PredicateClient {
+    client: Client,
     base_url: String,
 }
 
 impl PredicateClient {
     pub fn new(base_url: String) -> Self {
-        PredicateClient { base_url }
+        PredicateClient {
+            client: build_client(),
+            base_url,
+        }
     }
 
     pub async fn get_deposit_permission(
@@ -113,8 +119,13 @@ impl PredicateClient {
             "data": "0x".to_string() + &hex::encode(encoded_data),
             "msg_value":format!("{:?}", value),
         });
-        let response: PredicateResponse =
-            post_request(&self.base_url, "/v1/predicate/evaluate-policy", Some(&body)).await?;
+        let response: PredicateResponse = post_request(
+            &self.client,
+            &self.base_url,
+            "/v1/predicate/evaluate-policy",
+            Some(&body),
+        )
+        .await?;
         Ok(encode_predicate_message(response))
     }
 }

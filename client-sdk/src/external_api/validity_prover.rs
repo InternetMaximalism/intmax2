@@ -28,6 +28,9 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
+use reqwest::Client;
+
+use crate::external_api::utils::query::build_client;
 
 use super::utils::query::{get_request, post_request};
 
@@ -37,18 +40,20 @@ const D: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct ValidityProverClient {
+    client: Client,
     base_url: String,
 }
 
 impl ValidityProverClient {
     pub fn new(base_url: &str) -> Self {
         ValidityProverClient {
+            client: build_client(),
             base_url: base_url.to_string(),
         }
     }
 
     pub async fn sync(&self) -> Result<(), ServerError> {
-        get_request::<(), ()>(&self.base_url, "/validity-prover/sync", None).await?;
+        get_request::<(), ()>(&self.client, &self.base_url, "/validity-prover/sync", None).await?;
         Ok(())
     }
 }
@@ -56,13 +61,19 @@ impl ValidityProverClient {
 #[async_trait(?Send)]
 impl ValidityProverClientInterface for ValidityProverClient {
     async fn get_block_number(&self) -> Result<u32, ServerError> {
-        let response: GetBlockNumberResponse =
-            get_request::<(), _>(&self.base_url, "/validity-prover/block-number", None).await?;
+        let response: GetBlockNumberResponse = get_request::<(), _>(
+            &self.client,
+            &self.base_url,
+            "/validity-prover/block-number",
+            None,
+        )
+        .await?;
         Ok(response.block_number)
     }
 
     async fn get_validity_proof_block_number(&self) -> Result<u32, ServerError> {
         let response: GetBlockNumberResponse = get_request::<(), _>(
+            &self.client,
             &self.base_url,
             "/validity-prover/validity-proof-block-number",
             None,
@@ -72,14 +83,19 @@ impl ValidityProverClientInterface for ValidityProverClient {
     }
 
     async fn get_next_deposit_index(&self) -> Result<u32, ServerError> {
-        let response: GetNextDepositIndexResponse =
-            get_request::<(), _>(&self.base_url, "/validity-prover/next-deposit-index", None)
-                .await?;
+        let response: GetNextDepositIndexResponse = get_request::<(), _>(
+            &self.client,
+            &self.base_url,
+            "/validity-prover/next-deposit-index",
+            None,
+        )
+        .await?;
         Ok(response.deposit_index)
     }
 
     async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ServerError> {
         let response: GetLatestIncludedDepositIndexResponse = get_request::<(), _>(
+            &self.client,
             &self.base_url,
             "/validity-prover/latest-included-deposit-index",
             None,
@@ -102,6 +118,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             is_prev_account_tree,
         };
         let response: GetUpdateWitnessResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-update-witness",
             Some(query),
@@ -116,6 +133,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
     ) -> Result<Option<DepositInfo>, ServerError> {
         let query = GetDepositInfoQuery { pubkey_salt_hash };
         let response: GetDepositInfoResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-deposit-info",
             Some(query),
@@ -136,6 +154,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             };
 
             let response: GetDepositInfoBatchResponse = post_request(
+                &self.client,
                 &self.base_url,
                 "/validity-prover/get-deposit-info-batch",
                 Some(&request),
@@ -154,6 +173,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
     ) -> Result<Option<u32>, ServerError> {
         let query = GetBlockNumberByTxTreeRootQuery { tx_tree_root };
         let response: GetBlockNumberByTxTreeRootResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-block-number-by-tx-tree-root",
             Some(query),
@@ -173,6 +193,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
                 tx_tree_roots: chunk.to_vec(),
             };
             let response: GetBlockNumberByTxTreeRootBatchResponse = post_request(
+                &self.client,
                 &self.base_url,
                 "/validity-prover/get-block-number-by-tx-tree-root-batch",
                 Some(&request),
@@ -190,6 +211,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
     ) -> Result<ValidityWitness, ServerError> {
         let query = GetValidityWitnessQuery { block_number };
         let response: GetValidityWitnessResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-validity-witness",
             Some(query),
@@ -204,6 +226,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let query = GetValidityProofQuery { block_number };
         let response: GetValidityProofResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-validity-proof",
             Some(query),
@@ -225,6 +248,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             leaf_block_number,
         };
         let response: GetBlockMerkleProofResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-block-merkle-proof",
             Some(query),
@@ -243,6 +267,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             deposit_index,
         };
         let response: GetDepositMerkleProofResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-deposit-merkle-proof",
             Some(query),
@@ -254,6 +279,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
     async fn get_account_info(&self, pubkey: U256) -> Result<AccountInfo, ServerError> {
         let query = GetAccountInfoQuery { pubkey };
         let response: GetAccountInfoResponse = get_request(
+            &self.client,
             &self.base_url,
             "/validity-prover/get-account-info",
             Some(query),
@@ -273,6 +299,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
                 pubkeys: chunk.to_vec(),
             };
             let response: GetAccountInfoBatchResponse = post_request(
+                &self.client,
                 &self.base_url,
                 "/validity-prover/get-account-info-batch",
                 Some(&request),

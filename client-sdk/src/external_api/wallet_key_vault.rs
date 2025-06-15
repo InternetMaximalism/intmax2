@@ -1,6 +1,7 @@
 use super::utils::query::post_request;
-use crate::external_api::contract::{
-    convert::convert_b256_to_bytes32, utils::get_address_from_private_key,
+use crate::external_api::{
+    contract::{convert::convert_b256_to_bytes32, utils::get_address_from_private_key},
+    utils::query::build_client,
 };
 use alloy::{
     primitives::{Address, B256},
@@ -24,10 +25,13 @@ use intmax2_interfaces::{
     },
     utils::{key::PrivateKey, key_derivation::derive_spend_key_from_bytes32},
 };
+
+use reqwest::Client;
 use sha2::Digest;
 
 #[derive(Debug, Clone)]
 pub struct WalletKeyVaultClient {
+    client: Client,
     pub base_url: String,
 }
 
@@ -47,7 +51,10 @@ impl WalletKeyVaultClientInterface for WalletKeyVaultClient {
 
 impl WalletKeyVaultClient {
     pub fn new(base_url: String) -> Self {
-        Self { base_url }
+        Self {
+            client: build_client(),
+            base_url,
+        }
     }
 
     async fn sign_message(
@@ -75,7 +82,7 @@ impl WalletKeyVaultClient {
             request_type: "login".to_string(),
         };
         let response: ChallengeResponse =
-            post_request(&self.base_url, "/challenge", Some(&request)).await?;
+            post_request(&self.client, &self.base_url, "/challenge", Some(&request)).await?;
         Ok(response.message)
     }
 
@@ -92,8 +99,13 @@ impl WalletKeyVaultClient {
             security_seed: encode_hex_with_prefix(&security_seed),
             challenge_signature: encode_hex_with_prefix(&signed_challenge_message),
         };
-        let response: LoginResponse =
-            post_request(&self.base_url, "/wallet/login", Some(&request)).await?;
+        let response: LoginResponse = post_request(
+            &self.client,
+            &self.base_url,
+            "/wallet/login",
+            Some(&request),
+        )
+        .await?;
         let hashed_signature = response.hashed_signature.clone();
         if hashed_signature.len() != 32 {
             return Err(ServerError::InvalidResponse(
