@@ -354,7 +354,6 @@ impl ValidityProver {
                 .get_result(last_validity_proof_block_number)
                 .await?;
             if result.is_none() {
-                tracing::info!("result not found for {}", last_validity_proof_block_number);
                 break;
             }
             tracing::info!("result found for {}", last_validity_proof_block_number);
