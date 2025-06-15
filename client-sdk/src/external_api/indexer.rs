@@ -3,7 +3,7 @@ use intmax2_interfaces::api::{
     error::ServerError,
     indexer::interface::{BlockBuilderInfo, IndexerClientInterface},
 };
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::Client;
 
 use crate::external_api::utils::query::build_client;
 
@@ -11,7 +11,7 @@ use super::utils::query::get_request;
 
 #[derive(Debug, Clone)]
 pub struct IndexerClient {
-    client: ClientWithMiddleware,
+    client: Client,
     base_url: String,
 }
 

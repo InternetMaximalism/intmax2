@@ -4,7 +4,8 @@ use alloy::{
     sol_types::{SolCall, SolValue},
 };
 use intmax2_interfaces::api::error::ServerError;
-use reqwest_middleware::ClientWithMiddleware;
+
+use reqwest::Client;
 use serde::Deserialize;
 
 use crate::external_api::utils::query::{build_client, post_request};
@@ -82,7 +83,7 @@ impl PermissionRequest {
 
 #[derive(Debug, Clone)]
 pub struct PredicateClient {
-    client: ClientWithMiddleware,
+    client: Client,
     base_url: String,
 }
 

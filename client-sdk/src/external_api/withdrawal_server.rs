@@ -24,7 +24,7 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::Client;
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute
 
@@ -34,7 +34,7 @@ const D: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct WithdrawalServerClient {
-    client: ClientWithMiddleware,
+    client: Client,
     base_url: String,
 }
 

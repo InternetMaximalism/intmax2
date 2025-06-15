@@ -6,12 +6,13 @@ use intmax2_client_sdk::external_api::utils::query::{
     build_client, post_request_with_bearer_token,
 };
 use intmax2_interfaces::api::error::ServerError;
-use reqwest_middleware::ClientWithMiddleware;
+
+use reqwest::Client;
 use serde_json::json;
 
 #[derive(Clone, Debug)]
 pub struct TheGraphQueryClient {
-    client: ClientWithMiddleware,
+    client: Client,
     pub l1_url: String,
     pub l1_bearer_token: Option<String>,
     pub l2_url: String,

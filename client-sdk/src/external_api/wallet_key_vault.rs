@@ -25,12 +25,13 @@ use intmax2_interfaces::{
     },
     utils::{key::PrivateKey, key_derivation::derive_spend_key_from_bytes32},
 };
-use reqwest_middleware::ClientWithMiddleware;
+
+use reqwest::Client;
 use sha2::Digest;
 
 #[derive(Debug, Clone)]
 pub struct WalletKeyVaultClient {
-    client: ClientWithMiddleware,
+    client: Client,
     pub base_url: String,
 }
 

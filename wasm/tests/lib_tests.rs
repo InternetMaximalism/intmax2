@@ -1,6 +1,5 @@
 #![cfg(target_arch = "wasm32")]
 
-use alloy::network;
 use intmax2_wasm_lib::{generate_intmax_account_from_eth_key, get_deposit_hash};
 use wasm_bindgen_test::*;
 

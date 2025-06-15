@@ -28,7 +28,7 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::Client;
 
 use crate::external_api::utils::query::build_client;
 
@@ -40,7 +40,7 @@ const D: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct ValidityProverClient {
-    client: ClientWithMiddleware,
+    client: Client,
     base_url: String,
 }
 

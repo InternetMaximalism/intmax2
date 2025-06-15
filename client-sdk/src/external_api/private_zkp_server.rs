@@ -34,7 +34,8 @@ use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
-use reqwest_middleware::ClientWithMiddleware;
+
+use reqwest::Client;
 use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +55,7 @@ pub struct PrivateZKPServerConfig {
 
 #[derive(Debug, Clone)]
 pub struct PrivateZKPServerClient {
-    client: ClientWithMiddleware,
+    client: Client,
 
     base_url: String,
 

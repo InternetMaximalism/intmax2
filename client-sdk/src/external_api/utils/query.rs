@@ -1,9 +1,8 @@
 use intmax2_interfaces::api::error::ServerError;
-use reqwest::{header, Response, Url};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use reqwest_tracing::TracingMiddleware;
+use reqwest::{header, Client, Response, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::external_api::utils::retry::with_retry;
 
 #[derive(Debug, Deserialize)]
 struct ErrorResponse {
@@ -12,19 +11,14 @@ struct ErrorResponse {
     message: Option<String>,
 }
 
-pub fn build_client() -> ClientWithMiddleware {
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    let client = reqwest::Client::builder()
+pub fn build_client() -> Client {
+    reqwest::Client::builder()
         .build()
-        .expect("Failed to build reqwest client");
-    ClientBuilder::new(client)
-        .with(TracingMiddleware::default())
-        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build()
+        .expect("Failed to build reqwest client")
 }
 
 pub async fn post_request<B: Serialize, R: DeserializeOwned>(
-    client: &ClientWithMiddleware,
+    client: &Client,
     base_url: &str,
     endpoint: &str,
     body: Option<&B>,
@@ -33,7 +27,7 @@ pub async fn post_request<B: Serialize, R: DeserializeOwned>(
 }
 
 pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
-    client: &ClientWithMiddleware,
+    client: &Client,
     base_url: &str,
     endpoint: &str,
     bearer_token: Option<String>,
@@ -49,8 +43,7 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
     if let Some(body) = body {
         request = request.json(body);
     }
-    let response = request
-        .send()
+    let response = with_retry(|| async { request.try_clone().unwrap().send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
 
@@ -69,7 +62,7 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
 }
 
 pub async fn get_request<Q, R>(
-    client: &ClientWithMiddleware,
+    client: &Client,
     base_url: &str,
     endpoint: &str,
     query: Option<Q>,
@@ -91,9 +84,7 @@ where
     if query_str.is_some() {
         url = format!("{}?{}", url, query_str.as_ref().unwrap());
     }
-    let response = client
-        .get(&url)
-        .send()
+    let response = with_retry(|| async { client.get(&url).send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
     log::debug!("GET request url: {url}");

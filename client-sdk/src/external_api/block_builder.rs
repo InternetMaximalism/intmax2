@@ -16,7 +16,7 @@ use intmax2_zkp::{
     common::{block_builder::BlockProposal, signature_content::flatten::FlatG2, tx::Tx},
     ethereum_types::u256::U256,
 };
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::Client;
 
 use crate::external_api::utils::query::build_client;
 
@@ -26,7 +26,7 @@ pub const DEFAULT_BLOCK_EXPIRY: u64 = 80;
 
 #[derive(Debug, Clone)]
 pub struct BlockBuilderClient {
-    client: ClientWithMiddleware,
+    client: Client,
 }
 
 impl BlockBuilderClient {

@@ -1,5 +1,5 @@
 use super::utils::query::post_request;
-use crate::external_api::utils::query::build_client;
+use crate::external_api::utils::{query::build_client, retry::with_retry};
 use async_trait::async_trait;
 use intmax2_interfaces::{
     api::{
@@ -22,14 +22,14 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::Client;
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute for normal requests
 const TIME_TO_EXPIRY_READONLY: u64 = 60 * 60 * 24; // 24 hours for readonly
 
 #[derive(Debug, Clone)]
 pub struct S3StoreVaultClient {
-    client: ClientWithMiddleware,
+    client: Client,
     base_url: String,
 }
 
@@ -278,18 +278,17 @@ impl S3StoreVaultClient {
     }
 }
 
-async fn upload_s3(
-    client: &ClientWithMiddleware,
-    url: &str,
-    data: &[u8],
-) -> Result<(), ServerError> {
-    let response = client
-        .put(url)
-        .header("Content-Type", "application/octet-stream")
-        .body(data.to_vec())
-        .send()
-        .await
-        .map_err(|e| ServerError::NetworkError(e.to_string()))?;
+async fn upload_s3(client: &Client, url: &str, data: &[u8]) -> Result<(), ServerError> {
+    let response = with_retry(|| async {
+        client
+            .put(url)
+            .header("Content-Type", "application/octet-stream")
+            .body(data.to_vec())
+            .send()
+            .await
+    })
+    .await
+    .map_err(|e| ServerError::NetworkError(e.to_string()))?;
     if !response.status().is_success() {
         return Err(ServerError::InvalidResponse(format!(
             "Failed to upload data: {:?}",
@@ -299,10 +298,8 @@ async fn upload_s3(
     Ok(())
 }
 
-async fn download_s3(client: &ClientWithMiddleware, url: &str) -> Result<Vec<u8>, ServerError> {
-    let response = client
-        .get(url)
-        .send()
+async fn download_s3(client: &Client, url: &str) -> Result<Vec<u8>, ServerError> {
+    let response = with_retry(|| async { client.get(url).send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
     if !response.status().is_success() {
@@ -319,7 +316,7 @@ async fn download_s3(client: &ClientWithMiddleware, url: &str) -> Result<Vec<u8>
 }
 
 async fn batch_upload_s3(
-    client: &ClientWithMiddleware,
+    client: &Client,
     urls: &[String],
     data: &[Vec<u8>],
 ) -> Result<(), ServerError> {
@@ -335,10 +332,7 @@ async fn batch_upload_s3(
     Ok(())
 }
 
-async fn batch_download_s3(
-    client: &ClientWithMiddleware,
-    urls: &[String],
-) -> Result<Vec<Vec<u8>>, ServerError> {
+async fn batch_download_s3(client: &Client, urls: &[String]) -> Result<Vec<Vec<u8>>, ServerError> {
     let download_futures = urls
         .iter()
         .map(|url| async move { download_s3(client, url).await })

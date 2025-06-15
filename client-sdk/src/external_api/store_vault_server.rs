@@ -18,7 +18,7 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::Client;
 
 use crate::external_api::utils::query::build_client;
 
@@ -29,7 +29,7 @@ const TIME_TO_EXPIRY_READONLY: u64 = 60 * 60 * 24; // 24 hours for readonly
 
 #[derive(Debug, Clone)]
 pub struct StoreVaultServerClient {
-    client: ClientWithMiddleware,
+    client: Client,
     base_url: String,
 }
 
