@@ -243,8 +243,9 @@ impl<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned> TaskManag
 
         // get all running tasks
         let task_ids: Vec<u32> = conn.smembers(&self.running_key).await?;
-        log::info!("running tasks: {task_ids:?}",);
-
+        if !task_ids.is_empty() {
+            log::info!("running tasks: {task_ids:?}",);
+        }
         // wait heartbeat_ttl seconds for worker to submit heartbeat
         tokio::time::sleep(tokio::time::Duration::from_secs(self.heartbeat_ttl as u64)).await;
 

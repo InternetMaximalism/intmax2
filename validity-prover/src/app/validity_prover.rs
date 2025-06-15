@@ -194,12 +194,6 @@ impl ValidityProver {
         self.leader_election.wait_for_leadership().await?;
 
         let observer_block_number = self.observer_api.get_local_last_block_number().await?;
-        tracing::info!(
-            "Start sync_validity_witness: current block number {}, observer block number {}, validity proof block number: {}",
-            self.get_last_block_number().await?,
-            observer_block_number,
-            self.get_latest_validity_proof_block_number().await?,
-        );
         let last_block_number = self.get_last_block_number().await?;
         let next_block_number = observer_block_number + 1;
         let mut prev_validity_pis = if last_block_number == 0 {
@@ -212,8 +206,7 @@ impl ValidityProver {
         };
         for block_number in (last_block_number + 1)..next_block_number {
             tracing::info!(
-                "sync_validity_witness: syncing block number {}",
-                block_number
+                "sync_validity_witness: syncing block number {block_number}, observer block number {observer_block_number}",
             );
             self.rate_manager
                 .emit_heartbeat(SYNC_VALIDITY_WITNESS_KEY)
@@ -361,7 +354,6 @@ impl ValidityProver {
                 .get_result(last_validity_proof_block_number)
                 .await?;
             if result.is_none() {
-                tracing::info!("result not found for {}", last_validity_proof_block_number);
                 break;
             }
             tracing::info!("result found for {}", last_validity_proof_block_number);
