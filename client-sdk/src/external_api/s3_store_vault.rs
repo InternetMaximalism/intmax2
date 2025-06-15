@@ -1,5 +1,8 @@
 use super::utils::query::post_request;
-use crate::external_api::utils::{query::build_client, retry::with_retry};
+use crate::external_api::utils::{
+    query::{build_client, REQWEST_TIMEOUT},
+    retry::with_retry,
+};
 use async_trait::async_trait;
 use intmax2_interfaces::{
     api::{
@@ -284,6 +287,7 @@ async fn upload_s3(client: &Client, url: &str, data: &[u8]) -> Result<(), Server
             .put(url)
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
+            .timeout(REQWEST_TIMEOUT)
             .send()
             .await
     })
@@ -299,7 +303,7 @@ async fn upload_s3(client: &Client, url: &str, data: &[u8]) -> Result<(), Server
 }
 
 async fn download_s3(client: &Client, url: &str) -> Result<Vec<u8>, ServerError> {
-    let response = with_retry(|| async { client.get(url).send().await })
+    let response = with_retry(|| async { client.get(url).timeout(REQWEST_TIMEOUT).send().await })
         .await
         .map_err(|e| ServerError::NetworkError(e.to_string()))?;
     if !response.status().is_success() {
