@@ -181,23 +181,3 @@ typos
 ### Load Testing
 
 See the [tests directory](tests/README.md) for load testing documentation.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Database connection errors**
-   - Ensure PostgreSQL is running: `docker compose ps`
-   - Check database credentials in `.env` files
-
-2. **Port conflicts**
-   - Default ports: 9000-9004
-   - Modify port numbers in respective `.env` files if needed
-
-3. **Contract deployment failures**
-   - Ensure `anvil` is running
-   - Check network configuration in test environment
-
-4. **Build errors**
-   - Update Rust: `rustup update`
-   - Clean build: `cargo clean && cargo build`
