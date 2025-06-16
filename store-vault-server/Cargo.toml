@@ -28,7 +28,7 @@ hashbrown = { workspace = true }
 actix-web = { workspace = true }
 actix-cors = { workspace = true }
 tracing-actix-web = { workspace = true }
-aws-config = "1.6.3"
+aws-config = "1.8.0"
 aws-sdk-s3 = "1.92.0"
 cloudfront_sign = "0.4.0"
 base64 = "0.22.1"
