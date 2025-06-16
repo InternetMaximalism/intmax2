@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 use crate::app::{
     block_post::BlockPostTask,
     fee::{collect_fee, FeeCollection},
-    storage::nonce_manager::NonceManager,
+    storage::{nonce_manager::NonceManager, utils::remove_duplicate_signatures},
     types::{ProposalMemo, TxRequest},
 };
 
@@ -532,12 +532,12 @@ impl Storage for RedisStorage {
                 let signatures_key = format!("{}:{}", self.signatures_key, block_id);
                 let serialized_signatures: Vec<String> =
                     conn.lrange(&signatures_key, 0, -1).await?;
-                // Deserialize signatures
-                let mut signatures = Vec::with_capacity(serialized_signatures.len());
-                for serialized in serialized_signatures {
-                    let sig = serde_json::from_str::<UserSignature>(&serialized)?;
-                    signatures.push(sig);
-                }
+                let mut signatures = serialized_signatures
+                    .iter()
+                    .map(|s| serde_json::from_str::<UserSignature>(s))
+                    .collect::<serde_json::Result<Vec<_>>>()?;
+
+                remove_duplicate_signatures(&mut signatures);
 
                 // Post task only if we have non-empty signatures
                 if !signatures.is_empty() {

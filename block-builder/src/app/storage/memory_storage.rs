@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 use crate::app::{
     block_post::BlockPostTask,
     fee::{collect_fee, FeeCollection},
-    storage::nonce_manager::NonceManager,
+    storage::{nonce_manager::NonceManager, utils::remove_duplicate_signatures},
     types::{ProposalMemo, TxRequest},
 };
 
@@ -232,13 +232,15 @@ impl Storage for InMemoryStorage {
         for memo in target_memos {
             log::info!("process_signatures block_id: {}", memo.block_id);
             // get signatures
-            let signatures = {
+            let mut signatures = {
                 let signatures_guard = self.signatures.read().await;
                 signatures_guard
                     .get(&memo.block_id)
                     .cloned()
                     .unwrap_or(Vec::new())
             };
+
+            remove_duplicate_signatures(&mut signatures);
 
             log::info!("num signatures: {}", signatures.len());
 
