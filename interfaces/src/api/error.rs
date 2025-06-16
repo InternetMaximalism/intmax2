@@ -12,8 +12,8 @@ pub enum ServerError {
     #[error("Signing error: {0}")]
     SigningError(String),
 
-    #[error("Server error status={0}, message={1}, url={2}, query={3}")]
-    ServerError(u16, String, String, String),
+    #[error("Response error: {0}")]
+    ResponseError(String),
 
     #[error("Unknown error: {0}")]
     UnknownError(String),
@@ -21,8 +21,8 @@ pub enum ServerError {
     #[error("Serialization error: {0}")]
     SerializeError(String),
 
-    #[error("Deserialization error: {0}")]
-    DeserializationError(String),
+    #[error("Response Deserialization error: {0}")]
+    ResponseDeserializationError(String),
 
     #[error("Proof Decode error: {0}")]
     ProofDecodeError(String),

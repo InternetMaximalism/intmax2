@@ -117,24 +117,16 @@ async fn handle_response<R: DeserializeOwned>(
             // full request string
             request_str.clone().unwrap_or_default()
         } else {
-            // Truncate the request string to 500 characters if it is too long
-            request_str
-                .as_ref()
-                .map(|s| s.chars().take(500).collect::<String>())
-                .unwrap_or_default()
+            String::default()
         };
-        return Err(ServerError::ServerError(
-            status.into(),
-            error_message,
-            url.to_string(),
-            abr_request,
-        ));
+        return Err(ServerError::ResponseError(format!(
+            "Request to url:{url} failed with status:{status}, request:{abr_request}, error:{error_message}"
+        )));
     }
 
-    let response_text = response
-        .text()
-        .await
-        .map_err(|e| ServerError::DeserializationError(format!("Failed to read response: {e}")))?;
+    let response_text = response.text().await.map_err(|e| {
+        ServerError::ResponseDeserializationError(format!("Failed to read response: {e}"))
+    })?;
 
     match serde_json::from_str::<R>(&response_text) {
         Ok(result) => Ok(result),
@@ -146,7 +138,7 @@ async fn handle_response<R: DeserializeOwned>(
                 // Truncate the response string to 500 characters if it is too long
                 response_text.chars().take(500).collect::<String>()
             };
-            Err(ServerError::DeserializationError(format!(
+            Err(ServerError::ResponseDeserializationError(format!(
                 "Failed to deserialize response of url:{url} response:{abr_response}, error:{e}"
             )))
         }
