@@ -121,7 +121,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-update-witness",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.update_witness)
@@ -136,7 +136,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-deposit-info",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.deposit_info)
@@ -176,7 +176,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-block-number-by-tx-tree-root",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.block_number)
@@ -214,7 +214,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-validity-witness",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.validity_witness)
@@ -229,7 +229,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-validity-proof",
-            Some(query),
+            Some(&query),
         )
         .await?;
         let validity_proof = response.validity_proof.decompress().map_err(|e| {
@@ -251,7 +251,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-block-merkle-proof",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.block_merkle_proof)
@@ -270,7 +270,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-deposit-merkle-proof",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.deposit_merkle_proof)
@@ -282,7 +282,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             &self.client,
             &self.base_url,
             "/validity-prover/get-account-info",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.account_info)
