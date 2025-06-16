@@ -49,7 +49,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
 /// Validate if the given address is a valid Intmax address without checking the network.
 #[wasm_bindgen]
-pub fn validate_intmax_address(address: &str) -> bool {
+pub fn is_valid_intmax_address(address: &str) -> bool {
     address.parse::<IntmaxAddress>().is_ok()
 }
 

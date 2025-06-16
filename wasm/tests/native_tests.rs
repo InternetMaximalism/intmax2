@@ -3,7 +3,7 @@
 use intmax2_interfaces::utils::random::default_rng;
 use intmax2_wasm_lib::native::{
     calc_simple_aggregated_pubkey, encrypt_message, extract_address_aux_info,
-    generate_integrated_address, sign_message, validate_intmax_address, verify_signature,
+    generate_integrated_address, is_valid_intmax_address, sign_message, verify_signature,
 };
 use intmax2_zkp::{
     common::signature_content::key_set::KeySet, ethereum_types::u32limb_trait::U32LimbTrait,
@@ -52,7 +52,7 @@ fn test_calc_aggregated_pubkey() {
 }
 
 #[wasm_bindgen_test]
-fn test_validate_intmax_address() {
+fn test_is_valid_intmax_address() {
     // Test with valid devnet address
     let valid_address = "X8GjPwLr5ZiX85RJpZ1in6VzsAYsoHGbzMGfDKh1ovRw5Yc83zJmvnR6cKC6xRN5g2jM6MMxstnApa1T7wLMESFUVT3GemZ";
     assert!(
