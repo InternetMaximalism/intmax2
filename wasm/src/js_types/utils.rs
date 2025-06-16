@@ -33,7 +33,7 @@ pub fn parse_bytes32(input: &str) -> Result<Bytes32, JsError> {
 pub fn parse_payment_id(input: &str) -> Result<PaymentId, JsError> {
     js_err(
         PaymentId::from_hex(input),
-        "Failed to parse as Payment Id. Expected 0x-prefixed 8 byes hex string",
+        "Failed to parse as Payment Id. Expected 0x-prefixed 8 bytes hex string",
     )
 }
 
