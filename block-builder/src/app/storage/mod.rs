@@ -16,6 +16,7 @@ pub mod error;
 pub mod memory_storage;
 pub mod nonce_manager;
 pub mod redis_storage;
+pub mod utils;
 
 #[async_trait::async_trait(?Send)]
 pub trait Storage: Sync + Send {
