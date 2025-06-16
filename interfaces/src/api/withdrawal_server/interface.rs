@@ -42,6 +42,7 @@ pub struct WithdrawalInfo {
     pub status: WithdrawalStatus,
     pub contract_withdrawal: ContractWithdrawal,
     pub l1_tx_hash: Option<Bytes32>,
+    pub requested_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ pub struct ClaimInfo {
     pub claim: Claim,
     pub submit_claim_proof_tx_hash: Option<Bytes32>,
     pub l1_tx_hash: Option<Bytes32>,
+    pub requested_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

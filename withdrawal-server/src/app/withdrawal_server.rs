@@ -6,7 +6,10 @@ use alloy::primitives::B256;
 use intmax2_interfaces::{
     api::{
         store_vault_server::interface::StoreVaultClientInterface,
-        withdrawal_server::interface::FeeResult,
+        withdrawal_server::{
+            interface::FeeResult,
+            types::{TimestampCursor, TimestampCursorResponse},
+        },
     },
     data::{
         data_type::DataType,
@@ -370,7 +373,8 @@ impl WithdrawalServer {
     pub async fn get_withdrawal_info(
         &self,
         pubkey: U256,
-    ) -> Result<Vec<WithdrawalInfo>, WithdrawalServerError> {
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), WithdrawalServerError> {
         let pubkey_str = pubkey.to_hex();
         let records = sqlx::query!(
             r#"
@@ -395,6 +399,7 @@ impl WithdrawalServer {
                 status: record.status.into(),
                 contract_withdrawal,
                 l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                requested_at: todo!(),
             });
         }
         Ok(withdrawal_infos)
@@ -431,6 +436,7 @@ impl WithdrawalServer {
                     .submit_claim_proof_tx_hash
                     .map(|h| Bytes32::from_hex(&h).unwrap()),
                 l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                requested_at: todo!(),
             });
         }
         Ok(claim_infos)
@@ -464,6 +470,7 @@ impl WithdrawalServer {
                 status: record.status.into(),
                 contract_withdrawal,
                 l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                requested_at: todo!(),
             });
         }
         Ok(withdrawal_infos)
