@@ -56,13 +56,13 @@ fn test_is_valid_intmax_address() {
     // Test with valid devnet address
     let valid_address = "X8GjPwLr5ZiX85RJpZ1in6VzsAYsoHGbzMGfDKh1ovRw5Yc83zJmvnR6cKC6xRN5g2jM6MMxstnApa1T7wLMESFUVT3GemZ";
     assert!(
-        validate_intmax_address(valid_address),
+        is_valid_intmax_address(valid_address),
         "Valid address should pass validation"
     );
 
     // Test with invalid addresses
     assert!(
-        !validate_intmax_address("invalid_address"),
+        !is_valid_intmax_address("invalid_address"),
         "Invalid address should fail validation"
     );
 }
