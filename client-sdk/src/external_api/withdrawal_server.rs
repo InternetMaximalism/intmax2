@@ -142,7 +142,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             &self.client,
             &self.base_url,
             "/withdrawal-server/get-withdrawal-info-by-recipient",
-            Some(query),
+            Some(&query),
         )
         .await?;
         Ok(response.withdrawal_info)

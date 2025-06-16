@@ -89,10 +89,10 @@ impl PrivateZKPServerClient {
         let response: GetPublicKeyResponse =
             get_request::<(), _>(&self.client, &self.base_url, "/v1/public-key", None).await?;
         let public_key_bytes = BASE64_STANDARD.decode(&response.public_key).map_err(|e| {
-            ServerError::DeserializationError(format!("Failed to decode public key: {e:?}"))
+            ServerError::ResponseDeserializationError(format!("Failed to decode public key: {e:?}"))
         })?;
         let public_key = RsaPublicKey::from_public_key_der(&public_key_bytes).map_err(|e| {
-            ServerError::DeserializationError(format!("Failed to parse public key: {e:?}"))
+            ServerError::ResponseDeserializationError(format!("Failed to parse public key: {e:?}"))
         })?;
         Ok(public_key)
     }
@@ -329,7 +329,7 @@ impl PrivateZKPServerClient {
                 let proof_with_result =
                     ProofResultWithError::decrypt(view_key, None, &response.result.unwrap())
                         .map_err(|e| {
-                            ServerError::DeserializationError(format!(
+                            ServerError::ResponseDeserializationError(format!(
                                 "Failed to decrypt proof result: {e:?}"
                             ))
                         })?;

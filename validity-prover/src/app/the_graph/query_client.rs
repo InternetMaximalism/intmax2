@@ -68,7 +68,7 @@ impl TheGraphQueryClient {
             &self.client,
             &self.l2_url,
             "",
-            self.l2_bearer_token.clone(),
+            self.l2_bearer_token.as_deref(),
             Some(&request),
         )
         .await?;
@@ -104,7 +104,7 @@ impl TheGraphQueryClient {
             &self.client,
             &self.l2_url,
             "",
-            self.l2_bearer_token.clone(),
+            self.l2_bearer_token.as_deref(),
             Some(&request),
         )
         .await?;
@@ -145,7 +145,7 @@ impl TheGraphQueryClient {
             &self.client,
             &self.l1_url,
             "",
-            self.l1_bearer_token.clone(),
+            self.l1_bearer_token.as_deref(),
             Some(&request),
         )
         .await?;
