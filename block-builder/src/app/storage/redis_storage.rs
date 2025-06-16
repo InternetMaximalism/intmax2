@@ -7,6 +7,7 @@ use intmax2_zkp::{
     constants::NUM_SENDERS_IN_BLOCK,
 };
 
+use itertools::Itertools as _;
 use rand::Rng as _;
 use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisResult, Script};
 use serde::{Deserialize, Serialize};
@@ -532,12 +533,16 @@ impl Storage for RedisStorage {
                 let signatures_key = format!("{}:{}", self.signatures_key, block_id);
                 let serialized_signatures: Vec<String> =
                     conn.lrange(&signatures_key, 0, -1).await?;
-                // Deserialize signatures
-                let mut signatures = Vec::with_capacity(serialized_signatures.len());
-                for serialized in serialized_signatures {
-                    let sig = serde_json::from_str::<UserSignature>(&serialized)?;
-                    signatures.push(sig);
-                }
+                let signatures = serialized_signatures
+                    .iter()
+                    .map(|s| serde_json::from_str::<UserSignature>(s))
+                    .collect::<serde_json::Result<Vec<_>>>()?;
+
+                // remove duplicate signatures
+                let signatures = signatures
+                    .into_iter()
+                    .unique_by(|s| s.pubkey)
+                    .collect::<Vec<_>>();
 
                 // Post task only if we have non-empty signatures
                 if !signatures.is_empty() {

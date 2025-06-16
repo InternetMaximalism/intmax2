@@ -1983,6 +1983,7 @@ dependencies = [
  "intmax2-client-sdk",
  "intmax2-interfaces",
  "intmax2-zkp",
+ "itertools 0.14.0",
  "log",
  "num-bigint 0.4.6",
  "num-traits",

@@ -9,6 +9,7 @@ use intmax2_zkp::{
     common::block_builder::{BlockProposal, UserSignature},
     constants::NUM_SENDERS_IN_BLOCK,
 };
+use itertools::Itertools;
 use rand::Rng as _;
 use tokio::sync::RwLock;
 
@@ -239,6 +240,12 @@ impl Storage for InMemoryStorage {
                     .cloned()
                     .unwrap_or(Vec::new())
             };
+
+            // remove duplicate signatures
+            let signatures = signatures
+                .into_iter()
+                .unique_by(|s| s.pubkey)
+                .collect::<Vec<_>>();
 
             log::info!("num signatures: {}", signatures.len());
 
