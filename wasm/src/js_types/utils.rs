@@ -1,6 +1,8 @@
 use std::str::FromStr;
 
-use intmax2_interfaces::utils::{address::IntmaxAddress, key::PublicKey, network::Network};
+use intmax2_interfaces::utils::{
+    address::IntmaxAddress, key::PublicKey, network::Network, payment_id::PaymentId,
+};
 use intmax2_zkp::{
     common::salt::Salt,
     ethereum_types::{address::Address, bytes32::Bytes32, u256::U256, u32limb_trait::U32LimbTrait},
@@ -25,6 +27,13 @@ pub fn parse_bytes32(input: &str) -> Result<Bytes32, JsError> {
     js_err(
         Bytes32::from_hex(input),
         "Failed to parse as Bytes32. Expected 0x-prefixed hex string",
+    )
+}
+
+pub fn parse_payment_id(input: &str) -> Result<PaymentId, JsError> {
+    js_err(
+        PaymentId::from_hex(input),
+        "Failed to parse as Payment Id. Expected 0x-prefixed 8 byes hex string",
     )
 }
 

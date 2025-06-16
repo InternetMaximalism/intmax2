@@ -14,6 +14,7 @@ wasm_bindgen_test_configure!();
 const TEST_MESSAGE: &[u8] = b"Hello, zk-world!";
 
 #[wasm_bindgen_test]
+#[wasm_bindgen_test]
 async fn test_sign_and_verify_message() {
     let mut rng = default_rng();
     let key = KeySet::rand(&mut rng);

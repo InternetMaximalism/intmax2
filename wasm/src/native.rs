@@ -12,7 +12,7 @@ use crate::{
             JsMultiEciesStep1Response, JsMultiEciesStep2Response, JsMultiEciesStep3Response,
             JsMultisigStep1Response, JsMultisigStep2Response, JsMultisigStep3Response,
         },
-        utils::parse_bytes32,
+        utils::{parse_bytes32, parse_intmax_address, parse_payment_id},
     },
     utils::{str_to_keyset, str_to_view_pair},
 };
@@ -35,13 +35,62 @@ use intmax2_interfaces::{
         transfer_data::TransferData,
         tx_data::TxData,
     },
-    utils::{random::default_rng, signature::Auth},
+    utils::{
+        address::{AddressType, IntmaxAddress},
+        random::default_rng,
+        signature::Auth,
+    },
 };
 use intmax2_zkp::{
     common::signature_content::{self, flatten::FlatG2},
     ethereum_types::{u256::U256, u32limb_trait::U32LimbTrait},
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
+
+/// Validate if the given address is a valid Intmax address without checking the network.
+#[wasm_bindgen]
+pub fn validate_intmax_address(address: &str) -> bool {
+    address.parse::<IntmaxAddress>().is_ok()
+}
+
+#[derive(Debug, Clone)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct AddressAuxInfo {
+    pub payment_id: Option<String>,
+    pub network: String,
+}
+
+/// Extracts auxiliary information from an Intmax address string, returning an `AddressAuxInfo`
+/// which contains the optional payment ID (if present) and the network as a string.
+#[wasm_bindgen]
+pub fn extract_address_aux_info(address: &str) -> Result<AddressAuxInfo, JsError> {
+    let address = parse_intmax_address(address)?;
+    let payment_id = match address.addr_type {
+        AddressType::Standard => None,
+        AddressType::Integrated(payment_id) => Some(payment_id.to_string()),
+    };
+    Ok(AddressAuxInfo {
+        payment_id,
+        network: address.network.to_string(),
+    })
+}
+
+/// Generate integrated address from a standard address and a payment ID.
+#[wasm_bindgen]
+pub fn generate_integrated_address(address: &str, payment_id: &str) -> Result<String, JsError> {
+    let address = parse_intmax_address(address)?;
+    let payment_id = parse_payment_id(payment_id)?;
+    if address.addr_type != AddressType::Standard {
+        return Err(JsError::new("Address must be a standard address"));
+    }
+    let integrated_address = IntmaxAddress::integrated(
+        address.network,
+        address.public_spend,
+        address.public_view,
+        payment_id,
+    );
+    Ok(integrated_address.to_string())
+}
 
 /// Decrypt the deposit data.
 #[wasm_bindgen]
