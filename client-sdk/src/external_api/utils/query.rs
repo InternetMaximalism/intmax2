@@ -113,14 +113,13 @@ async fn handle_response<R: DeserializeOwned>(
             Ok(error_resp) => error_resp.message.unwrap_or(error_resp.error),
             Err(_) => error_text,
         };
-        let abr_request = if log::log_enabled!(log::Level::Debug) {
-            // full request string
-            request_str.clone().unwrap_or_default()
+        let request_str = if log::log_enabled!(log::Level::Debug) {
+            format!(", request:{}", request_str.clone().unwrap_or_default())
         } else {
             String::default()
         };
         return Err(ServerError::ResponseError(format!(
-            "Request to url:{url} failed with status:{status}, request:{abr_request}, error:{error_message}"
+            "Request to url:{url} failed with status:{status}, error:{error_message}{request_str}",
         )));
     }
 
