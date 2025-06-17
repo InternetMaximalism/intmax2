@@ -89,7 +89,7 @@ pub async fn validate_fee_proof(
         let transfer_data = &collateral_block.fee_transfer_data;
         transfer_data.validate().map_err(|e| {
             log::error!("Failed to validate transfer data: {e}");
-            FeeError::FeeVerificationError("Failed to validate trasnfer data".to_string())
+            FeeError::FeeVerificationError("Failed to validate transfer data".to_string())
         })?;
         if collateral_block.block_builder_address != block_builder_address {
             return Err(FeeError::FeeVerificationError(
