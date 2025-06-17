@@ -28,6 +28,7 @@ use intmax2_zkp::{
     ethereum_types::{
         account_id::{AccountId, AccountIdPacked},
         address::Address,
+        bytes32::Bytes32,
         u256::U256,
     },
 };
@@ -50,13 +51,14 @@ pub async fn validate_fee_proof(
         required_fee.is_some(),
         required_collateral_fee.is_some()
     );
-    if required_fee.is_none() {
-        return Ok(());
-    }
-    let required_fee = required_fee.unwrap();
+    let required_fee = match required_fee {
+        Some(fee) => fee,
+        None => return Ok(()),
+    };
+
     let fee_proof = fee_proof
         .as_ref()
-        .ok_or(FeeError::InvalidFee("Fee proof is missing".to_string()))?;
+        .ok_or_else(|| FeeError::InvalidFee("Fee proof is missing".to_string()))?;
     let sender_proof_set = fetch_sender_proof_set(
         store_vault_server_client,
         fee_proof.sender_proof_set_ephemeral_key,
@@ -74,13 +76,9 @@ pub async fn validate_fee_proof(
 
     // validate collateral fee
     if let Some(collateral_fee) = required_collateral_fee {
-        let collateral_block =
-            fee_proof
-                .collateral_block
-                .as_ref()
-                .ok_or(FeeError::FeeVerificationError(
-                    "Collateral block is missing".to_string(),
-                ))?;
+        let collateral_block = fee_proof.collateral_block.as_ref().ok_or_else(|| {
+            FeeError::FeeVerificationError("Collateral block is missing".to_string())
+        })?;
         // validate block builder address
         if collateral_block.block_builder_address != block_builder_address {
             return Err(FeeError::FeeVerificationError(
@@ -89,15 +87,10 @@ pub async fn validate_fee_proof(
         }
         // validate transfer data
         let transfer_data = &collateral_block.fee_transfer_data;
-        match transfer_data.validate() {
-            Ok(_) => {}
-            Err(e) => {
-                log::error!("Failed to validate transfer data: {e}");
-                return Err(FeeError::FeeVerificationError(
-                    "Failed to validate transfer data".to_string(),
-                ));
-            }
-        }
+        transfer_data.validate().map_err(|e| {
+            log::error!("Failed to validate transfer data: {e}");
+            FeeError::FeeVerificationError("Failed to validate trasnfer data".to_string())
+        })?;
         if collateral_block.block_builder_address != block_builder_address {
             return Err(FeeError::FeeVerificationError(
                 "Invalid block builder address in collateral block".to_string(),
@@ -109,8 +102,7 @@ pub async fn validate_fee_proof(
             pubkey: sender_spend_pub.0,
             signature: collateral_block.signature.clone(),
         };
-        let mut pubkeys = vec![sender_spend_pub.0];
-        pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
+        let pubkeys = padded_pubkeys(sender_spend_pub.0);
         let pubkey_hash = get_pubkey_hash(&pubkeys);
         let block_sign_payload = BlockSignPayload {
             is_registration_block: collateral_block.is_registration_block,
@@ -119,11 +111,8 @@ pub async fn validate_fee_proof(
             block_builder_address,
             block_builder_nonce: 0,
         };
-        user_signature
-            .verify(&block_sign_payload, pubkey_hash)
-            .map_err(|e| {
-                FeeError::SignatureVerificationError(format!("Failed to verify signature: {e}"))
-            })?;
+        verify_user_signature(&user_signature, &block_sign_payload, pubkey_hash)?;
+
         let sender_proof_set = fetch_sender_proof_set(
             store_vault_server_client,
             collateral_block.sender_proof_set_ephemeral_key,
@@ -211,7 +200,7 @@ async fn validate_fee_single(
     }
     let requested_fee = required_fee
         .get(&transfer_witness.transfer.token_index)
-        .unwrap();
+        .ok_or_else(|| FeeError::InvalidFee("Fee token index is not correct".to_string()))?;
     if transfer_witness.transfer.amount < *requested_fee {
         return Err(FeeError::InvalidFee(format!(
             "Transfer amount is not enough: requested_fee: {}, transfer_amount: {}",
@@ -271,7 +260,7 @@ pub async fn collect_fee(
         let fee_proof = request
             .fee_proof
             .as_ref()
-            .ok_or(FeeError::InvalidFee("Fee proof is missing".to_string()))?;
+            .ok_or_else(|| FeeError::InvalidFee("Fee proof is missing".to_string()))?;
 
         // check if the sender returned the signature
         let signature = fee_collection
@@ -303,22 +292,18 @@ pub async fn collect_fee(
                 );
                 continue;
             }
+
             // this is already validated in the tx request phase
-            let collateral_block =
-                fee_proof
-                    .collateral_block
-                    .as_ref()
-                    .ok_or(FeeError::InvalidFee(
-                        "Collateral block is missing".to_string(),
-                    ))?;
+            let collateral_block = fee_proof
+                .collateral_block
+                .as_ref()
+                .ok_or_else(|| FeeError::InvalidFee("Collateral block is missing".to_string()))?;
 
             let transfer_data = &collateral_block.fee_transfer_data;
-            let mut pubkeys = vec![request.spend_pub()];
-            pubkeys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
+            let pubkeys = padded_pubkeys(request.spend_pub());
             let pubkey_hash = get_pubkey_hash(&pubkeys);
             let account_ids = request.account_id.map(|id| {
-                let mut account_ids = vec![id];
-                account_ids.resize(NUM_SENDERS_IN_BLOCK, AccountId::dummy());
+                let account_ids = padded_account_ids(id);
                 AccountIdPacked::pack(&account_ids)
             });
             let signature = UserSignature {
@@ -333,11 +318,7 @@ pub async fn collect_fee(
                 block_builder_nonce: 0,
             };
             // validate signature again
-            signature
-                .verify(&block_sign_payload, pubkey_hash)
-                .map_err(|e| {
-                    FeeError::SignatureVerificationError(format!("Failed to verify signature: {e}"))
-                })?;
+            verify_user_signature(&signature, &block_sign_payload, pubkey_hash)?;
 
             // save transfer data
             transfer_data_vec.push(transfer_data.clone());
@@ -392,13 +373,105 @@ pub fn convert_fee_vec(fee: &Option<HashMap<u32, U256>>) -> Option<Vec<Fee>> {
     })
 }
 
+fn padded_pubkeys(pubkey: U256) -> Vec<U256> {
+    let mut keys = vec![pubkey];
+    keys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
+    keys
+}
+
+fn padded_account_ids(account_id: AccountId) -> Vec<AccountId> {
+    let mut accounts = vec![account_id];
+    accounts.resize(NUM_SENDERS_IN_BLOCK, AccountId::dummy());
+    accounts
+}
+
+fn verify_user_signature(
+    signature: &UserSignature,
+    payload: &BlockSignPayload,
+    pubkey_hash: Bytes32,
+) -> Result<(), FeeError> {
+    signature.verify(payload, pubkey_hash).map_err(|e| {
+        FeeError::SignatureVerificationError(format!("Failed to verify signature: {e}"))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use intmax2_zkp::ethereum_types::u256::U256;
+    use intmax2_zkp::ethereum_types::{account_id::ACCOUNT_ID_BYTES_LEN, u256::U256};
     use num_bigint::BigUint;
     use num_traits::One;
     use std::collections::HashMap;
+
+    fn account_id_from_u64(val: u64) -> AccountId {
+        let bytes = val.to_be_bytes();
+        AccountId::from_bytes_be(&bytes[8 - ACCOUNT_ID_BYTES_LEN..])
+    }
+
+    #[test]
+    fn test_convert_fee_vec_some() {
+        let mut map = HashMap::new();
+        map.insert(0, U256::from(100));
+        map.insert(1, U256::from(200));
+
+        let result = convert_fee_vec(&Some(map)).unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(result
+            .iter()
+            .any(|f| f.token_index == 0 && f.amount == U256::from(100)));
+        assert!(result
+            .iter()
+            .any(|f| f.token_index == 1 && f.amount == U256::from(200)));
+    }
+
+    #[test]
+    fn test_convert_fee_vec_none() {
+        let result = convert_fee_vec(&None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_padded_pubkeys_exact_size() {
+        let pubkey = U256::from(12345);
+        let result = padded_pubkeys(pubkey);
+
+        assert_eq!(result.len(), NUM_SENDERS_IN_BLOCK);
+        assert_eq!(result[0], pubkey);
+
+        for (i, key) in result.iter().enumerate().skip(1) {
+            assert_eq!(*key, U256::dummy_pubkey(), "Mismatch at index {i}")
+        }
+    }
+
+    #[test]
+    fn test_padded_account_ids_exact_size() {
+        let account = account_id_from_u64(42);
+        let result1 = padded_account_ids(account);
+
+        assert_eq!(result1.len(), NUM_SENDERS_IN_BLOCK);
+        assert_eq!(result1[0], account);
+
+        for (i, id) in result1.iter().enumerate().skip(1) {
+            assert_eq!(*id, AccountId::dummy(), "Mismatch at index {i}");
+        }
+    }
+
+    #[test]
+    fn test_padded_pubkeys_idempotent() {
+        let pubkey = U256::from(0xdeadbeef);
+        let result1 = padded_pubkeys(pubkey);
+        let result2 = padded_pubkeys(pubkey);
+        assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn test_padded_account_ids_idempotent() {
+        let account = account_id_from_u64(1);
+        let result1 = padded_account_ids(account);
+        let result2 = padded_account_ids(account);
+
+        assert_eq!(result1, result2);
+    }
 
     #[test]
     fn test_fee_amount_zero() {
