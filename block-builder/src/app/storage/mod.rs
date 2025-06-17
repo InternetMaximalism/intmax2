@@ -61,23 +61,23 @@ pub trait Storage: Sync + Send {
 ///
 /// Returns RedisStorage if redis_url is set in the config, otherwise returns InMemoryStorage
 pub async fn create_storage(config: &StorageConfig, rollup: RollupContract) -> Box<dyn Storage> {
+    let nonce_config = build_nonce_config(config);
+
     if config.redis_url.is_some() {
         log::info!("use redis storage");
-        let nonce_config = NonceManagerConfig {
-            block_builder_address: convert_address_to_alloy(config.block_builder_address),
-            redis_url: config.redis_url.clone(),
-            cluster_id: config.cluster_id.clone(),
-        };
         let nonce_manager = RedisNonceManager::new(nonce_config, rollup).await;
         Box::new(redis_storage::RedisStorage::new(config, nonce_manager).await)
     } else {
         log::info!("use in-memory storage");
-        let nonce_config = NonceManagerConfig {
-            block_builder_address: convert_address_to_alloy(config.block_builder_address),
-            redis_url: None,
-            cluster_id: None,
-        };
         let nonce_manager = InMemoryNonceManager::new(nonce_config, rollup);
         Box::new(memory_storage::InMemoryStorage::new(config, nonce_manager))
+    }
+}
+
+fn build_nonce_config(config: &StorageConfig) -> NonceManagerConfig {
+    NonceManagerConfig {
+        block_builder_address: convert_address_to_alloy(config.block_builder_address),
+        redis_url: config.redis_url.clone(),
+        cluster_id: config.cluster_id.clone(),
     }
 }
