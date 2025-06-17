@@ -589,6 +589,11 @@ impl Client {
             .map(|t| t.to_string())
             .collect::<Vec<_>>();
 
+        let recipient_view_pubs = transfer_data_and_encrypted_data
+            .iter()
+            .map(|(_, receiver_view_pub, _, _, _)| *receiver_view_pub)
+            .collect::<Vec<_>>();
+
         let mut entries = vec![];
         for (data_type, receiver, transfer_data, encrypted_data, _) in
             &transfer_data_and_encrypted_data
@@ -612,6 +617,7 @@ impl Client {
             full_extra_data: memo.full_extra_data.clone(),
             transfer_digests,
             transfer_types,
+            recipient_view_pubs,
             sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
         };
         let tx_data_encrypted =

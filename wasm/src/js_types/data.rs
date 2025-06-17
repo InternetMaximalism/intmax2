@@ -12,6 +12,8 @@ use intmax2_zkp::{
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
+use crate::js_types::keys::JsPublicKeyPair;
+
 use super::common::{JsTransfer, JsTx};
 
 #[derive(Debug, Clone)]
@@ -49,7 +51,7 @@ impl From<DepositData> for JsDepositData {
 #[derive(Debug, Clone)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct JsTransferData {
-    pub sender: String,
+    pub sender: JsPublicKeyPair,
     pub transfer: JsTransfer,
     pub extra_data: JsExtraData,
 }
@@ -57,7 +59,7 @@ pub struct JsTransferData {
 impl From<TransferData> for JsTransferData {
     fn from(transfer_data: TransferData) -> Self {
         Self {
-            sender: transfer_data.sender.to_string(),
+            sender: transfer_data.sender.into(),
             transfer: transfer_data.transfer.into(),
             extra_data: JsExtraData::from(transfer_data.extra_data),
         }
@@ -73,6 +75,7 @@ pub struct JsTxData {
     pub transfers: Vec<JsTransfer>,
     pub transfer_digests: Vec<String>,
     pub transfer_types: Vec<String>,
+    pub recipient_view_pubs: Vec<String>,
     pub full_extra_data: Vec<JsFullExtraData>,
 }
 
@@ -91,6 +94,11 @@ impl From<TxData> for JsTxData {
             .into_iter()
             .map(|digest| digest.to_hex())
             .collect();
+        let recipient_view_pubs = tx_data
+            .recipient_view_pubs
+            .into_iter()
+            .map(|pubkey| pubkey.to_string())
+            .collect();
         let full_extra_data = tx_data
             .full_extra_data
             .into_iter()
@@ -103,6 +111,7 @@ impl From<TxData> for JsTxData {
             transfers,
             transfer_digests,
             transfer_types: tx_data.transfer_types,
+            recipient_view_pubs,
             full_extra_data,
         }
     }

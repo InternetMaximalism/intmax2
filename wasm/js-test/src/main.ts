@@ -1,4 +1,4 @@
-import { await_tx_sendable, Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_tx_status, get_user_data, get_withdrawal_info, IntmaxAccount, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsTransfer, JsTransferRequest, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
+import { await_tx_sendable, Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_intmax_address_from_public_pair, get_tx_status, get_user_data, get_withdrawal_info, IntmaxAccount, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsPublicKeyPair, JsTransfer, JsTransferRequest, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
 import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
 import { ethers } from 'ethers';
@@ -70,7 +70,6 @@ async function main() {
   await syncBalanceProof(config, account.view_pair);
   console.log("balance proof synced");
 
-
   const cursor = new JsMetaDataCursor(null, "asc", null);
   const deposit_history = await fetch_deposit_history(config, account.view_pair, cursor);
   for (const entry of deposit_history.history) {
@@ -78,11 +77,29 @@ async function main() {
   }
   const transfer_history = await fetch_transfer_history(config, account.view_pair, cursor);
   for (const entry of transfer_history.history) {
-    console.log(`Receive: sender ${entry.data.sender} of ${entry.data.transfer.amount} (#${entry.data.transfer.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
+    const sender = get_intmax_address_from_public_pair(config.network, entry.data.sender);
+    console.log(`Receive: sender ${sender} of ${entry.data.transfer.amount} (#${entry.data.transfer.token_index}) at ${entry.meta.timestamp} ${entry.status.status}`);
   }
   const tx_history = await fetch_tx_history(config, account.view_pair, cursor);
   for (const entry of tx_history.history) {
-    console.log(`Send: transfers ${entry.data.transfers.length} at ${entry.meta.timestamp} ${entry.status.status}`);
+    console.log(`Send: ${entry.status.status} at ${entry.meta.timestamp}`);
+
+    const recipient_view_pubs = entry.data.recipient_view_pubs;
+    for (let i = 0; i < entry.data.transfers.length; i++) {
+      const transfer = entry.data.transfers[i];
+      const recipient_view_pub = recipient_view_pubs[i];
+      let recipient: string;
+      if (transfer.recipient.is_pubkey) {
+        // recipient is an intmax address
+        // calculate intmax address from public key pair
+        const recipient_public_pair = new JsPublicKeyPair(recipient_view_pub, transfer.recipient.data);
+        recipient = get_intmax_address_from_public_pair(config.network, recipient_public_pair);
+      } else {
+        // recipient is an ethereum address
+        recipient = transfer.recipient.data;
+      }
+      console.log(`  Transfer: recipient ${recipient} of ${transfer.amount} (token#${transfer.token_index})`);
+    }
   }
   // print withdrawal status 
   const withdrawalInfo = await get_withdrawal_info(config, account.view_pair);

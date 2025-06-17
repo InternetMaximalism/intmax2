@@ -8,11 +8,12 @@ use crate::{
         data::{JsDepositData, JsTransferData, JsTxData},
         deposit::JsDepositInfo,
         encrypted_data::JsEncryptedData,
+        keys::JsPublicKeyPair,
         multisig::{
             JsMultiEciesStep1Response, JsMultiEciesStep2Response, JsMultiEciesStep3Response,
             JsMultisigStep1Response, JsMultisigStep2Response, JsMultisigStep3Response,
         },
-        utils::{parse_bytes32, parse_intmax_address, parse_payment_id},
+        utils::{parse_bytes32, parse_intmax_address, parse_network, parse_payment_id},
     },
     utils::{str_to_keyset, str_to_view_pair},
 };
@@ -37,6 +38,7 @@ use intmax2_interfaces::{
     },
     utils::{
         address::{AddressType, IntmaxAddress},
+        key::PublicKeyPair,
         random::default_rng,
         signature::Auth,
     },
@@ -90,6 +92,16 @@ pub fn generate_integrated_address(address: &str, payment_id: &str) -> Result<St
         payment_id,
     );
     Ok(integrated_address.to_string())
+}
+
+#[wasm_bindgen]
+pub fn get_intmax_address_from_public_pair(
+    network: &str,
+    public_key_pair: &JsPublicKeyPair,
+) -> Result<String, JsError> {
+    let network = parse_network(network)?;
+    let keys: PublicKeyPair = public_key_pair.clone().try_into()?;
+    Ok(IntmaxAddress::from_public_keypair(network, &keys).to_string())
 }
 
 /// Decrypt the deposit data.
