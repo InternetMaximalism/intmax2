@@ -71,12 +71,8 @@ impl RedisNonceManager {
 
             // GET requests
             let mut pipe = redis::pipe();
-            pipe.cmd("GET")
-                .arg(&self.next_registration_nonce_key)
-                .ignore();
-            pipe.cmd("GET")
-                .arg(&self.next_non_registration_nonce_key)
-                .ignore();
+            pipe.cmd("GET").arg(&self.next_registration_nonce_key);
+            pipe.cmd("GET").arg(&self.next_non_registration_nonce_key);
             let (local_next_reg_raw, local_next_non_reg_raw): (Option<u32>, Option<u32>) =
                 pipe.query_async(&mut conn).await?;
 
