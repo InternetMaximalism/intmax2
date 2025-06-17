@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 
+use alloy::primitives::map::HashMap;
 use intmax2_interfaces::{api::block_builder::interface::FeeProof, utils::key::PublicKeyPair};
 use intmax2_zkp::{
     common::{
@@ -106,12 +107,15 @@ impl ProposalMemo {
             block_builder_nonce,
         };
         let mut proposals = Vec::new();
+
+        // Create hash map to avoid O(n^2)
+        let pubkey_to_index: HashMap<U256, u32> = sorted_and_padded_txs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.spend_pub(), i as u32))
+        .collect();
         for r in tx_requests {
-            let pubkey = r.spend_pub();
-            let tx_index = sorted_and_padded_txs
-                .iter()
-                .position(|r| r.spend_pub() == pubkey)
-                .unwrap() as u32;
+            let tx_index = *pubkey_to_index.get(&r.spend_pub()).unwrap();
             let tx_merkle_proof = tx_tree.prove(tx_index as u64);
             proposals.push(BlockProposal {
                 block_sign_payload: block_sign_payload.clone(),
@@ -121,6 +125,7 @@ impl ProposalMemo {
                 pubkeys_hash: pubkey_hash,
             });
         }
+        
         ProposalMemo {
             block_sign_payload,
             pubkeys,
