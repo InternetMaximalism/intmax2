@@ -37,12 +37,10 @@ impl BlockBuilder {
             .get_latest_included_deposit_index()
             .await?;
 
-        let does_new_deposits_exist =
-            if let Some(latest_included_deposit_index) = latest_included_deposit_index {
-                next_deposit_index > latest_included_deposit_index + 1
-            } else {
-                next_deposit_index > 0
-            };
+        let does_new_deposits_exist = match latest_included_deposit_index {
+            Some(i) => next_deposit_index > i + 1,
+            None => next_deposit_index > 0,
+        };
 
         if does_new_deposits_exist {
             log::info!(
