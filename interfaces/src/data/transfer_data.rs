@@ -20,7 +20,7 @@ use super::{encryption::BlsEncryption, sender_proof_set::SenderProofSet, validat
 /// Backup data for receiving transfers
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LegacyTransferData {
+pub struct LegacyTransferData {
     // Ephemeral key to query the sender proof set
     pub sender_proof_set_ephemeral_key: U256,
     // After fetching sender proof set, this will be filled
@@ -36,7 +36,7 @@ struct LegacyTransferData {
 }
 
 impl LegacyTransferData {
-    fn into_latest(self) -> TransferData {
+    pub fn into_latest(self) -> TransferData {
         let sender = PublicKeyPair {
             view: PublicKey(self.sender), // use the same key as spend key for migration
             spend: PublicKey(self.sender),

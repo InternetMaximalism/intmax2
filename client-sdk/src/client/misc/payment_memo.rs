@@ -9,7 +9,7 @@ use intmax2_interfaces::{
         meta_data::MetaData,
         rw_rights::{RWRights, ReadRights, WriteRights},
         topic::topic_from_rights,
-        transfer_data::TransferData,
+        transfer_data::{LegacyTransferData, TransferData},
     },
     utils::key::PrivateKey,
 };
@@ -28,6 +28,24 @@ pub fn payment_memo_topic(name: &str) -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", bound(deserialize = ""))]
+struct LegacyPaymentMemo {
+    pub meta: MetaData,
+    pub transfer_data: LegacyTransferData,
+    pub memo: String,
+}
+
+impl LegacyPaymentMemo {
+    fn into_latest(self) -> PaymentMemo {
+        PaymentMemo {
+            meta: self.meta,
+            transfer_data: self.transfer_data.into_latest(),
+            memo: self.memo,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", bound(deserialize = ""))]
 pub struct PaymentMemo {
     pub meta: MetaData,
     pub transfer_data: TransferData,
@@ -37,7 +55,14 @@ pub struct PaymentMemo {
 impl BlsEncryption for PaymentMemo {
     fn from_bytes(bytes: &[u8], version: u8) -> Result<Self, BlsEncryptionError> {
         match version {
-            1 | 2 => Ok(bincode::deserialize(bytes)?),
+            1 => {
+                let legacy_memo: LegacyPaymentMemo = bincode::deserialize(bytes)?;
+                Ok(legacy_memo.into_latest())
+            }
+            2 => {
+                let memo: PaymentMemo = bincode::deserialize(bytes)?;
+                Ok(memo)
+            }
             _ => Err(BlsEncryptionError::UnsupportedVersion(version)),
         }
     }
