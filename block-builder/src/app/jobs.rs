@@ -3,9 +3,6 @@ use intmax2_interfaces::api::validity_prover::interface::ValidityProverClientInt
 use std::time::Duration;
 use tokio::{task::JoinHandle, time::sleep};
 
-pub const GENERAL_POLLING_INTERVAL: u64 = 2;
-pub const RESTART_JOB_INTERVAL: u64 = 60;
-
 impl BlockBuilder {
     async fn emit_heart_beat(&self) -> Result<(), BlockBuilderError> {
         self.registry_contract
@@ -62,7 +59,8 @@ impl BlockBuilder {
 
     fn enqueue_empty_block_job(self) -> JoinHandle<Result<(), BlockBuilderError>> {
         actix_web::rt::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(GENERAL_POLLING_INTERVAL));
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(self.config.general_polling_interval));
             loop {
                 interval.tick().await;
                 self.enqueue_empty_block().await?;
@@ -75,7 +73,8 @@ impl BlockBuilder {
         is_registration: bool,
     ) -> JoinHandle<Result<(), BlockBuilderError>> {
         actix_web::rt::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(GENERAL_POLLING_INTERVAL));
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(self.config.general_polling_interval));
             loop {
                 interval.tick().await;
                 self.storage.process_requests(is_registration).await?;
@@ -85,7 +84,8 @@ impl BlockBuilder {
 
     fn process_signatures_job(self) -> JoinHandle<Result<(), BlockBuilderError>> {
         actix_web::rt::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(GENERAL_POLLING_INTERVAL));
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(self.config.general_polling_interval));
             loop {
                 interval.tick().await;
                 self.storage.process_signatures().await?;
@@ -95,7 +95,8 @@ impl BlockBuilder {
 
     fn process_fee_collection_job(self) -> JoinHandle<Result<(), BlockBuilderError>> {
         actix_web::rt::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(GENERAL_POLLING_INTERVAL));
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(self.config.general_polling_interval));
             loop {
                 interval.tick().await;
                 self.storage
@@ -132,7 +133,8 @@ impl BlockBuilder {
 
     fn post_block_job(self) -> JoinHandle<Result<(), BlockBuilderError>> {
         actix_web::rt::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(GENERAL_POLLING_INTERVAL));
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(self.config.general_polling_interval));
             loop {
                 interval.tick().await;
                 self.post_block().await?;
@@ -151,17 +153,19 @@ impl BlockBuilder {
                     Ok(result) => {
                         if let Err(e) = result {
                             log::error!(
-                                "Error in {job_name}: {e}. Restarting in {RESTART_JOB_INTERVAL}sec ..."
+                                "Error in {job_name}: {e}. Restarting in {}sec ...",
+                                self.config.restart_job_interval
                             );
                         }
                     }
                     Err(e) => {
                         log::error!(
-                            "Panic in {job_name}: {e}. Restarting in {RESTART_JOB_INTERVAL}sec ..."
+                            "Panic in {job_name}: {e}. Restarting in {}sec ...",
+                            self.config.restart_job_interval
                         );
                     }
                 }
-                sleep(Duration::from_secs(RESTART_JOB_INTERVAL)).await;
+                sleep(Duration::from_secs(self.config.restart_job_interval)).await;
             }
         });
     }
