@@ -1,6 +1,6 @@
 use crate::{
     data::{encryption::errors::BlsEncryptionError, extra_data::FullExtraData},
-    utils::key::{PrivateKey, PublicKeyPair},
+    utils::key::{PrivateKey, PublicKey, PublicKeyPair},
 };
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +35,21 @@ impl LegacyTxData {
     pub fn into_latest(self) -> TxData {
         // use default extra data for migration
         let full_extra_data = vec![FullExtraData::default(); self.transfer_digests.len()];
+        let recipient_view_pubs = self
+            .spent_witness
+            .transfers
+            .iter()
+            .map(|transfer| {
+                if transfer.recipient.is_pubkey {
+                    // use the recipient's pubkey as the view key
+                    PublicKey(transfer.recipient.data)
+                } else {
+                    // should be an tx sender's view key, but we don't have it in legacy data
+                    // so we use a default public key
+                    PublicKey::default()
+                }
+            })
+            .collect();
         TxData {
             tx_index: self.tx_index,
             tx_merkle_proof: self.tx_merkle_proof,
@@ -42,6 +57,7 @@ impl LegacyTxData {
             spent_witness: self.spent_witness,
             transfer_digests: self.transfer_digests,
             transfer_types: self.transfer_types,
+            recipient_view_pubs,
             full_extra_data,
             sender_proof_set_ephemeral_key: PrivateKey(self.sender_proof_set_ephemeral_key),
         }
@@ -58,6 +74,7 @@ pub struct TxData {
     pub spent_witness: SpentWitness, // to update sender's private state
     pub transfer_digests: Vec<Bytes32>,
     pub transfer_types: Vec<String>,
+    pub recipient_view_pubs: Vec<PublicKey>,
     pub full_extra_data: Vec<FullExtraData>,
     // Ephemeral key to query the sender proof set
     pub sender_proof_set_ephemeral_key: PrivateKey,

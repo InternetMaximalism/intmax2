@@ -8,6 +8,7 @@ pub mod deposit;
 pub mod encrypted_data;
 pub mod fee;
 pub mod history;
+pub mod keys;
 pub mod multisig;
 pub mod payment_memo;
 pub mod utils;

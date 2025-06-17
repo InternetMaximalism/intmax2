@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use chrono::TimeZone;
 use colored::{ColoredString, Colorize as _};
 use intmax2_client_sdk::client::history::EntryStatus;
 use intmax2_interfaces::{
@@ -7,7 +7,11 @@ use intmax2_interfaces::{
         deposit_data::DepositData, meta_data::MetaData, transfer_data::TransferData,
         tx_data::TxData,
     },
-    utils::key::ViewPair,
+    utils::{
+        address::IntmaxAddress,
+        key::{PublicKey, PublicKeyPair, ViewPair},
+        network::Network,
+    },
 };
 use intmax2_zkp::{
     common::transfer::Transfer,
@@ -96,16 +100,17 @@ pub async fn history(
     });
 
     println!("History:");
+    let network = client.config.network;
     for entry in history {
-        print_history_entry(&entry)?;
+        print_history_entry(network, &entry)?;
         println!();
     }
     Ok(())
 }
 
 pub fn format_timestamp(timestamp: u64) -> String {
-    match DateTime::from_timestamp(timestamp as i64, 0) {
-        Some(dt) => dt.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+    match chrono::Local.timestamp_opt(timestamp as i64, 0).single() {
+        Some(dt) => dt.format("%Y-%m-%d %H:%M:%S (UTC%:z)").to_string(),
         None => format!("Invalid timestamp: {timestamp}"),
     }
 }
@@ -123,12 +128,23 @@ fn format_status(status: &EntryStatus) -> ColoredString {
     }
 }
 
-fn format_transfer(transfer: &Transfer, transfer_type: &str, transfer_digest: Bytes32) -> String {
+fn format_transfer(
+    network: Network,
+    transfer: &Transfer,
+    transfer_type: &str,
+    transfer_digest: Bytes32,
+    recipient_view_pub: PublicKey,
+) -> String {
     format!(
         "Transfer ({}) to {}: token_index: {}, amount: {}, digest: {}",
         transfer_type,
         if transfer.recipient.is_pubkey {
-            transfer.recipient.to_pubkey().unwrap().to_hex()
+            let public_keys = PublicKeyPair {
+                view: recipient_view_pub,
+                spend: PublicKey(transfer.recipient.data),
+            };
+            let recipient = IntmaxAddress::from_public_keypair(network, &public_keys);
+            recipient.to_string()
         } else {
             transfer.recipient.to_address().unwrap().to_hex()
         },
@@ -138,7 +154,7 @@ fn format_transfer(transfer: &Transfer, transfer_type: &str, transfer_digest: By
     )
 }
 
-fn print_history_entry(entry: &HistoryEntry) -> Result<(), CliError> {
+fn print_history_entry(network: Network, entry: &HistoryEntry) -> Result<(), CliError> {
     match entry {
         HistoryEntry::Deposit {
             deposit,
@@ -149,8 +165,8 @@ fn print_history_entry(entry: &HistoryEntry) -> Result<(), CliError> {
             transfer,
             status,
             meta,
-        } => print_receive_entry(transfer, status, meta),
-        HistoryEntry::Send { tx, status, meta } => print_send_entry(tx, status, meta),
+        } => print_receive_entry(network, transfer, status, meta),
+        HistoryEntry::Send { tx, status, meta } => print_send_entry(network, tx, status, meta),
     }
     Ok(())
 }
@@ -187,10 +203,16 @@ fn print_deposit_entry(deposit: &DepositData, status: &EntryStatus, meta: &MetaD
     );
 }
 
-fn print_receive_entry(transfer: &TransferData, status: &EntryStatus, meta: &MetaData) {
+fn print_receive_entry(
+    network: Network,
+    transfer: &TransferData,
+    status: &EntryStatus,
+    meta: &MetaData,
+) {
     print_digest_status(meta, status, &"RECEIVE".bright_purple().bold());
 
-    println!("  From: {}", transfer.sender.to_string().yellow());
+    let sender = IntmaxAddress::from_public_keypair(network, &transfer.sender);
+    println!("  From: {}", sender.to_string().yellow());
     println!(
         "  Token Index: {}",
         transfer.transfer.token_index.to_string().white()
@@ -201,7 +223,7 @@ fn print_receive_entry(transfer: &TransferData, status: &EntryStatus, meta: &Met
     );
 }
 
-fn print_send_entry(tx: &TxData, status: &EntryStatus, meta: &MetaData) {
+fn print_send_entry(network: Network, tx: &TxData, status: &EntryStatus, meta: &MetaData) {
     print_digest_status(meta, status, &"SEND".bright_red().bold());
 
     println!(
@@ -216,16 +238,24 @@ fn print_send_entry(tx: &TxData, status: &EntryStatus, meta: &MetaData) {
         .filter(|transfer| transfer != &&Transfer::default())
         .collect::<Vec<_>>();
 
-    for (i, ((transfer, transfer_type), transfer_digest)) in transfers
+    for (i, (((transfer, transfer_type), transfer_digest), reicipient_view_pub)) in transfers
         .iter()
         .zip(tx.transfer_types.iter())
         .zip(tx.transfer_digests.iter())
+        .zip(tx.recipient_view_pubs.iter())
         .enumerate()
     {
         println!(
             "    {}: {}",
             i,
-            format_transfer(transfer, transfer_type, *transfer_digest).white()
+            format_transfer(
+                network,
+                transfer,
+                transfer_type,
+                *transfer_digest,
+                *reicipient_view_pub
+            )
+            .white()
         );
     }
 }
