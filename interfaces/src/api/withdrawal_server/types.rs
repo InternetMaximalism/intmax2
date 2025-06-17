@@ -87,9 +87,6 @@ pub struct GetWithdrawalInfoRequest {
 impl Signable for GetWithdrawalInfoRequest {
     fn content(&self) -> Vec<u8> {
         content_prefix("get_withdrawal_info")
-            .into_iter()
-            .chain(bincode::serialize(&self.cursor).unwrap())
-            .collect()
     }
 }
 
@@ -102,7 +99,9 @@ pub struct GetWithdrawalInfoResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetClaimInfoRequest;
+pub struct GetClaimInfoRequest {
+    pub cursor: TimestampCursor,
+}
 
 impl Signable for GetClaimInfoRequest {
     fn content(&self) -> Vec<u8> {
@@ -114,12 +113,14 @@ impl Signable for GetClaimInfoRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetClaimInfoResponse {
     pub claim_info: Vec<ClaimInfo>,
+    pub cursor_response: TimestampCursorResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetWithdrawalInfoByRecipientQuery {
     pub recipient: Address,
+    pub cursor: TimestampCursor,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

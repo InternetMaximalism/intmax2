@@ -7,8 +7,9 @@ use intmax2_interfaces::{
             types::{MetaDataCursor, MetaDataCursorResponse},
         },
         validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::{
-            ClaimInfo, WithdrawalInfo, WithdrawalServerClientInterface,
+        withdrawal_server::{
+            interface::{ClaimInfo, WithdrawalInfo, WithdrawalServerClientInterface},
+            types::{TimestampCursor, TimestampCursorResponse},
         },
     },
     data::{
@@ -703,20 +704,25 @@ impl Client {
     pub async fn get_withdrawal_info(
         &self,
         view_key: PrivateKey,
-    ) -> Result<Vec<WithdrawalInfo>, ClientError> {
-        let withdrawal_info = self.withdrawal_server.get_withdrawal_info(view_key).await?;
-        Ok(withdrawal_info)
+        cursor: &TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), ClientError> {
+        let (withdrawal_info, cursor_response) = self
+            .withdrawal_server
+            .get_withdrawal_info(view_key, cursor.clone())
+            .await?;
+        Ok((withdrawal_info, cursor_response))
     }
 
     pub async fn get_withdrawal_info_by_recipient(
         &self,
         recipient: Address,
-    ) -> Result<Vec<WithdrawalInfo>, ClientError> {
-        let withdrawal_info = self
+        cursor: &TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), ClientError> {
+        let (withdrawal_info, cursor_response) = self
             .withdrawal_server
-            .get_withdrawal_info_by_recipient(recipient)
+            .get_withdrawal_info_by_recipient(recipient, cursor.clone())
             .await?;
-        Ok(withdrawal_info)
+        Ok((withdrawal_info, cursor_response))
     }
 
     pub async fn get_mining_list(&self, view_pair: ViewPair) -> Result<Vec<Mining>, ClientError> {
@@ -739,9 +745,13 @@ impl Client {
     pub async fn get_claim_info(
         &self,
         view_key: PrivateKey,
-    ) -> Result<Vec<ClaimInfo>, ClientError> {
-        let claim_info = self.withdrawal_server.get_claim_info(view_key).await?;
-        Ok(claim_info)
+        cursor: &TimestampCursor,
+    ) -> Result<(Vec<ClaimInfo>, TimestampCursorResponse), ClientError> {
+        let (claim_info, cursor_response) = self
+            .withdrawal_server
+            .get_claim_info(view_key, cursor.clone())
+            .await?;
+        Ok((claim_info, cursor_response))
     }
 
     pub async fn fetch_deposit_history(

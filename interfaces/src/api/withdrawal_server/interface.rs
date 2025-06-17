@@ -13,7 +13,11 @@ use plonky2_keccak::utils::solidity_keccak256;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    api::{block_builder::interface::Fee, error::ServerError},
+    api::{
+        block_builder::interface::Fee,
+        error::ServerError,
+        withdrawal_server::types::{TimestampCursor, TimestampCursorResponse},
+    },
     utils::{address::IntmaxAddress, key::PrivateKey},
 };
 
@@ -155,12 +159,18 @@ pub trait WithdrawalServerClientInterface: Sync + Send {
     async fn get_withdrawal_info(
         &self,
         view_key: PrivateKey,
-    ) -> Result<Vec<WithdrawalInfo>, ServerError>;
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), ServerError>;
 
     async fn get_withdrawal_info_by_recipient(
         &self,
         recipient: Address,
-    ) -> Result<Vec<WithdrawalInfo>, ServerError>;
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), ServerError>;
 
-    async fn get_claim_info(&self, view_key: PrivateKey) -> Result<Vec<ClaimInfo>, ServerError>;
+    async fn get_claim_info(
+        &self,
+        view_key: PrivateKey,
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<ClaimInfo>, TimestampCursorResponse), ServerError>;
 }
