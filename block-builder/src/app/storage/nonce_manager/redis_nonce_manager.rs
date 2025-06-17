@@ -66,48 +66,50 @@ impl RedisNonceManager {
             get_onchain_next_nonce(&self.rollup, false, self.config.block_builder_address).await?;
 
         with_retry(|| async {
+            // Sync registration and non-registration nonces. Batch them as possible
             let mut conn = self.get_conn().await?;
-            // Sync registration nonces
-            let local_next_reg_raw: Option<u32> = redis::cmd("GET")
+
+            // GET requests
+            let mut pipe = redis::pipe();
+            pipe.cmd("GET")
                 .arg(&self.next_registration_nonce_key)
-                .query_async(&mut conn)
-                .await?;
+                .ignore();
+            pipe.cmd("GET")
+                .arg(&self.next_non_registration_nonce_key)
+                .ignore();
+            let (local_next_reg_raw, local_next_non_reg_raw): (Option<u32>, Option<u32>) =
+                pipe.query_async(&mut conn).await?;
+
+            // SET requests
             let local_next_reg = local_next_reg_raw.unwrap_or(0);
             let new_next_reg = onchain_next_registration_nonce.max(local_next_reg);
-            let () = redis::cmd("SET")
+            let local_next_non_reg = local_next_non_reg_raw.unwrap_or(0);
+            let new_next_non_reg = onchain_next_non_registration_nonce.max(local_next_non_reg);
+            pipe.cmd("SET")
                 .arg(&self.next_registration_nonce_key)
                 .arg(new_next_reg)
-                .query_async(&mut conn)
-                .await?;
+                .ignore();
+            pipe.cmd("SET")
+                .arg(&self.next_non_registration_nonce_key)
+                .arg(new_next_non_reg)
+                .ignore();
+            pipe.query_async::<()>(&mut conn).await?;
 
+            // ZREMRANGEBYSCORE requests
             let max_score_reg = onchain_next_registration_nonce as i64 - 1;
-            let () = redis::cmd("ZREMRANGEBYSCORE")
+            let max_score_non_reg = onchain_next_non_registration_nonce as i64 - 1;
+            pipe.cmd("ZREMRANGEBYSCORE")
                 .arg(&self.reserved_registration_nonces_key)
                 .arg(0)
                 .arg(max_score_reg)
-                .query_async(&mut conn)
-                .await?;
-
-            // Sync non-registration nonces
-            let local_next_non_reg_raw: Option<u32> = redis::cmd("GET")
-                .arg(&self.next_non_registration_nonce_key)
-                .query_async(&mut conn)
-                .await?;
-            let local_next_non_reg = local_next_non_reg_raw.unwrap_or(0);
-            let new_next_non_reg = onchain_next_non_registration_nonce.max(local_next_non_reg);
-            let () = redis::cmd("SET")
-                .arg(&self.next_non_registration_nonce_key)
-                .arg(new_next_non_reg)
-                .query_async(&mut conn)
-                .await?;
-
-            let max_score_non_reg = onchain_next_non_registration_nonce as i64 - 1;
-            let () = redis::cmd("ZREMRANGEBYSCORE")
+                .ignore();
+            pipe.cmd("ZREMRANGEBYSCORE")
                 .arg(&self.reserved_non_registration_nonces_key)
                 .arg(0)
                 .arg(max_score_non_reg)
-                .query_async(&mut conn)
-                .await?;
+                .ignore();
+            pipe.query_async::<()>(&mut conn).await?;
+
             Ok(())
         })
         .await
