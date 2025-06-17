@@ -27,51 +27,48 @@ async function main() {
   console.log("view_pair: ", account.view_pair);
   console.log("key_pair: ", account.key_pair);
 
+  const balance = await getEthBalance(ethKey, env.L1_RPC_URL);
+  console.log("eth balance: ", balance);
 
+  // deposit to the account
+  const tokenType = TokenType.Native; // 0: native token, 1: ERC20, 2: ERC721, 3: ERC1155
+  const tokenAddress = "0x0000000000000000000000000000000000000000";
+  const tokenId = "0"; // Use "0" for fungible tokens
+  const amount = "1000000000000000"; // in wei
+  await depositWrapper(config, ethKey, ethAddress, account.address, amount, tokenType, tokenAddress, tokenId);
 
-  // const balance = await getEthBalance(ethKey, env.L1_RPC_URL);
-  // console.log("eth balance: ", balance);
+  // sync the account's balance proof and print the account's balance
+  await syncAndPrintBalances(config, account);
 
-  // // deposit to the account
-  // const tokenType = TokenType.Native; // 0: native token, 1: ERC20, 2: ERC721, 3: ERC1155
-  // const tokenAddress = "0x0000000000000000000000000000000000000000";
-  // const tokenId = "0"; // Use "0" for fungible tokens
-  // const amount = "1000000000000000"; // in wei
-  // await depositWrapper(config, ethKey, ethAddress, account.address, amount, tokenType, tokenAddress, tokenId);
+  // send a transfer tx
+  const someonesAccount = await generate_intmax_account_from_eth_key(config.network, generateRandomHex(32), false);
 
-  // // sync the account's balance proof and print the account's balance
-  // await syncAndPrintBalances(config, account);
+  // transfer 1 native token
+  const transferRequest = new JsTransferRequest(someonesAccount.address, 0, "1", "1 wei ETH transfer to someone");
+  const feeTokenIndex = TokenType.Native; // use native token for fee
 
-  // // send a transfer tx
-  // const someonesAccount = await generate_intmax_account_from_eth_key(config.network, generateRandomHex(32), false);
+  await sendTx(config, env.BLOCK_BUILDER_BASE_URL, account, [transferRequest], [], feeTokenIndex);
 
-  // // transfer 1 native token
-  // const transferRequest = new JsTransferRequest(someonesAccount.address, 0, "1", "1 wei ETH transfer to someone");
-  // const feeTokenIndex = TokenType.Native; // use native token for fee
+  // wait for the validity prover syncs
+  await sleep(80);
 
-  // await sendTx(config, env.BLOCK_BUILDER_BASE_URL, account, [transferRequest], [], feeTokenIndex);
+  // get the receiver's balance
+  await syncAndPrintBalances(config, someonesAccount);
 
-  // // wait for the validity prover syncs
-  // await sleep(80);
+  // Withdrawal 
+  const withClaimFee = false; // set to true if you want to pay claim fee
+  await sendWithdrawal(config, env.BLOCK_BUILDER_BASE_URL, account, generateRandomHex(20), 0, "1", feeTokenIndex, withClaimFee,);
 
-  // // get the receiver's balance
-  // await syncAndPrintBalances(config, someonesAccount);
+  // wait for the validity prover syncs
+  await sleep(80);
 
-  // // Withdrawal 
-  // const withClaimFee = false; // set to true if you want to pay claim fee
-  // await sendWithdrawal(config, env.BLOCK_BUILDER_BASE_URL, account, generateRandomHex(20), 0, "1", feeTokenIndex, withClaimFee,);
+  // sync withdrawals 
+  await sync_withdrawals(config, account.view_pair, feeTokenIndex);
+  console.log("Withdrawal synced");
 
-  // // wait for the validity prover syncs
-  // await sleep(80);
-
-  // // sync withdrawals 
-  // await sync_withdrawals(config, account.view_pair, feeTokenIndex);
-  // console.log("Withdrawal synced");
-
-  // // print the history 
-  // await syncBalanceProof(config, account.view_pair);
-  // console.log("balance proof synced");
-
+  // print the history 
+  await syncBalanceProof(config, account.view_pair);
+  console.log("balance proof synced");
 
   const cursor = new JsMetaDataCursor(null, "asc", null);
   const deposit_history = await fetch_deposit_history(config, account.view_pair, cursor);
@@ -88,28 +85,20 @@ async function main() {
     console.log(`Send: ${entry.status.status} at ${entry.meta.timestamp}`);
 
     const recipient_view_pubs = entry.data.recipient_view_pubs;
-    console.log("recipient_view_pubs: ", recipient_view_pubs);
     for (let i = 0; i < entry.data.transfers.length; i++) {
       const transfer = entry.data.transfers[i];
       const recipient_view_pub = recipient_view_pubs[i];
-      console.log("recipient_view_pub : ", recipient_view_pub, i);
-
       let recipient: string;
-
       if (transfer.recipient.is_pubkey) {
         // recipient is an intmax address
         // calculate intmax address from public key pair
-
         const recipient_public_pair = new JsPublicKeyPair(recipient_view_pub, transfer.recipient.data);
         recipient = get_intmax_address_from_public_pair(config.network, recipient_public_pair);
-        console.log("recipient generated from public pair");
       } else {
         // recipient is an ethereum address
-        console.log("recipient is an ethereum address");
-        // recipient = transfer.recipient.data;
-        recipient = "";
+        recipient = transfer.recipient.data;
       }
-      console.log(`  Transfer: recipient ${recipient} of ${transfer.amount} (#${transfer.token_index})`);
+      console.log(`  Transfer: recipient ${recipient} of ${transfer.amount} (token#${transfer.token_index})`);
     }
   }
   // print withdrawal status 
