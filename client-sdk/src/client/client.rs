@@ -589,8 +589,12 @@ impl Client {
             .map(|t| t.to_string())
             .collect::<Vec<_>>();
 
+        let recipient_view_pubs = transfer_data_and_encrypted_data
+            .iter()
+            .map(|(_, receiver_view_pub, _, _, _)| *receiver_view_pub)
+            .collect::<Vec<_>>();
+
         let mut entries = vec![];
-        let mut recipient_view_pubs = Vec::new();
         for (data_type, receiver, transfer_data, encrypted_data, _) in
             &transfer_data_and_encrypted_data
         {
@@ -603,7 +607,6 @@ impl Client {
                 pubkey: receiver.0,
                 data: encrypted_data.clone(),
             });
-            recipient_view_pubs.push(*receiver);
         }
 
         let tx_data = TxData {
