@@ -590,6 +590,7 @@ impl Client {
             .collect::<Vec<_>>();
 
         let mut entries = vec![];
+        let mut recipient_view_pubs = Vec::new();
         for (data_type, receiver, transfer_data, encrypted_data, _) in
             &transfer_data_and_encrypted_data
         {
@@ -602,6 +603,7 @@ impl Client {
                 pubkey: receiver.0,
                 data: encrypted_data.clone(),
             });
+            recipient_view_pubs.push(*receiver);
         }
 
         let tx_data = TxData {
@@ -612,6 +614,7 @@ impl Client {
             full_extra_data: memo.full_extra_data.clone(),
             transfer_digests,
             transfer_types,
+            recipient_view_pubs,
             sender_proof_set_ephemeral_key: memo.sender_proof_set_ephemeral_key,
         };
         let tx_data_encrypted =

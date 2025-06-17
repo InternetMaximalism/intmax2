@@ -148,6 +148,7 @@ pub async fn generate_fee_proof(
             spent_witness: collateral_spent_witness.clone(),
             transfer_digests: vec![encrypted_fee_transfer_digest],
             transfer_types: vec![TransferType::TransferCollateralFee.to_string()],
+            recipient_view_pubs: vec![view_key.to_public_key()],
             sender_proof_set_ephemeral_key: collateral_block.sender_proof_set_ephemeral_key,
             full_extra_data: vec![FullExtraData::default()],
         };
