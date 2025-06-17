@@ -205,7 +205,7 @@ impl NonceManager for RedisNonceManager {
 #[cfg(test)]
 mod tests {
     use crate::app::storage::redis_storage::test_redis_helper::{
-        find_free_port, run_redis_docker, stop_redis_docker,
+        assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker,
     };
 
     use super::*;
@@ -266,37 +266,43 @@ mod tests {
         set_non_reg_nonce_asserter(&asserter, 20);
 
         let reg_nonce = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(reg_nonce, 10);
+        assert_and_stop(cont_name, || assert_eq!(reg_nonce, 10));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let non_reg_nonce = client.reserve_nonce(false).await.unwrap();
-        assert_eq!(non_reg_nonce, 20);
+        assert_and_stop(cont_name, || assert_eq!(non_reg_nonce, 20));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let reg_nonce2 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(reg_nonce2, 11);
+        assert_and_stop(cont_name, || assert_eq!(reg_nonce2, 11));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let non_reg_nonce2 = client.reserve_nonce(false).await.unwrap();
-        assert_eq!(non_reg_nonce2, 21);
+        assert_and_stop(cont_name, || assert_eq!(non_reg_nonce2, 21));
 
         let smallest_reg_nonce = client.smallest_reserved_nonce(true).await.unwrap();
-        assert_eq!(smallest_reg_nonce, Some(10));
+        assert_and_stop(cont_name, || assert_eq!(smallest_reg_nonce, Some(10)));
 
         let smallest_non_reg_nonce = client.smallest_reserved_nonce(false).await.unwrap();
-        assert_eq!(smallest_non_reg_nonce, Some(20));
+        assert_and_stop(cont_name, || assert_eq!(smallest_non_reg_nonce, Some(20)));
 
         client.release_nonce(10, true).await.unwrap();
         let smallest_reg_nonce_after_release = client.smallest_reserved_nonce(true).await.unwrap();
-        assert_eq!(smallest_reg_nonce_after_release, Some(11));
+        assert_and_stop(cont_name, || {
+            assert_eq!(smallest_reg_nonce_after_release, Some(11))
+        });
 
         client.release_nonce(20, false).await.unwrap();
         let smallest_non_reg_nonce_after_release =
             client.smallest_reserved_nonce(false).await.unwrap();
-        assert_eq!(smallest_non_reg_nonce_after_release, Some(21));
+        assert_and_stop(cont_name, || {
+            assert_eq!(smallest_non_reg_nonce_after_release, Some(21))
+        });
+
+        stop_redis_docker(cont_name);
     }
 
     #[tokio::test]
@@ -318,22 +324,24 @@ mod tests {
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let nonce1 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(nonce1, 10);
+        assert_and_stop(cont_name, || assert_eq!(nonce1, 10));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let nonce2 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(nonce2, 11);
+        assert_and_stop(cont_name, || assert_eq!(nonce2, 11));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let nonce3 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(nonce3, 12);
+        assert_and_stop(cont_name, || assert_eq!(nonce3, 12));
 
         set_reg_nonce_asserter(&asserter, 11);
         set_non_reg_nonce_asserter(&asserter, 20);
         client.sync_onchain().await.unwrap();
         let smallest_reg_nonce = client.smallest_reserved_nonce(true).await.unwrap();
-        assert_eq!(smallest_reg_nonce, Some(11));
+        assert_and_stop(cont_name, || assert_eq!(smallest_reg_nonce, Some(11)));
+
+        stop_redis_docker(cont_name);
     }
 }
