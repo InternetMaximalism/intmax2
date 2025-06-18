@@ -81,6 +81,8 @@ impl RedisNonceManager {
             let new_next_reg = onchain_next_registration_nonce.max(local_next_reg);
             let local_next_non_reg = local_next_non_reg_raw.unwrap_or(0);
             let new_next_non_reg = onchain_next_non_registration_nonce.max(local_next_non_reg);
+
+            let mut pipe = redis::pipe();
             pipe.cmd("SET")
                 .arg(&self.next_registration_nonce_key)
                 .arg(new_next_reg)
@@ -94,6 +96,8 @@ impl RedisNonceManager {
             // ZREMRANGEBYSCORE requests
             let max_score_reg = onchain_next_registration_nonce as i64 - 1;
             let max_score_non_reg = onchain_next_non_registration_nonce as i64 - 1;
+
+            let mut pipe = redis::pipe();
             pipe.cmd("ZREMRANGEBYSCORE")
                 .arg(&self.reserved_registration_nonces_key)
                 .arg(0)

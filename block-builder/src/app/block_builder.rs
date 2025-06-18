@@ -54,6 +54,8 @@ use super::{
 };
 
 pub const DEFAULT_POST_BLOCK_CHANNEL: u64 = 100;
+const GENERAL_POLLING_INTERVAL: u64 = 2;
+const RESTART_JOB_INTERVAL: u64 = 60;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -171,6 +173,11 @@ impl BlockBuilder {
         let block_builder_address =
             convert_address_to_intmax(get_address_from_private_key(env.block_builder_private_key));
 
+        let general_polling_interval = env
+            .general_polling_interval
+            .unwrap_or(GENERAL_POLLING_INTERVAL);
+        let restart_job_interval = env.restart_job_interval.unwrap_or(RESTART_JOB_INTERVAL);
+
         // log configuration
         log::info!("network: {network}");
         log::info!("block_builder_address: {block_builder_address}");
@@ -193,8 +200,8 @@ impl BlockBuilder {
             eth_allowance_for_block,
             initial_heart_beat_delay: env.initial_heart_beat_delay,
             heart_beat_interval: env.heart_beat_interval,
-            general_polling_interval: env.general_polling_interval,
-            restart_job_interval: env.restart_job_interval,
+            general_polling_interval,
+            restart_job_interval,
             beneficiary,
             use_fee,
             use_collateral: use_collateral_fee,
@@ -426,8 +433,8 @@ mod tests {
             deposit_check_interval: Some(20),
             initial_heart_beat_delay: 600,
             heart_beat_interval: 86400,
-            general_polling_interval: 2,
-            restart_job_interval: 60,
+            general_polling_interval: None,
+            restart_job_interval: None,
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
@@ -480,8 +487,8 @@ mod tests {
             deposit_check_interval: Some(20),
             initial_heart_beat_delay: 600,
             heart_beat_interval: 86400,
-            general_polling_interval: 2,
-            restart_job_interval: 60,
+            general_polling_interval: None,
+            restart_job_interval: None,
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
@@ -525,8 +532,8 @@ mod tests {
             deposit_check_interval: Some(20),
             initial_heart_beat_delay: 600,
             heart_beat_interval: 86400,
-            general_polling_interval: 2,
-            restart_job_interval: 60,
+            general_polling_interval: None,
+            restart_job_interval: None,
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
@@ -573,8 +580,8 @@ mod tests {
             deposit_check_interval: Some(20),
             initial_heart_beat_delay: 600,
             heart_beat_interval: 86400,
-            general_polling_interval: 2,
-            restart_job_interval: 60,
+            general_polling_interval: None,
+            restart_job_interval: None,
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,

@@ -28,8 +28,8 @@ pub struct EnvVar {
     pub deposit_check_interval: Option<u64>,
     pub initial_heart_beat_delay: u64,
     pub heart_beat_interval: u64,
-    pub general_polling_interval: u64,
-    pub restart_job_interval: u64,
+    pub general_polling_interval: Option<u64>,
+    pub restart_job_interval: Option<u64>,
     pub gas_limit_for_block_post: Option<u64>,
     pub nonce_waiting_time: Option<u64>,
 

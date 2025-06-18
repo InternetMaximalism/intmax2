@@ -91,11 +91,6 @@ pub async fn validate_fee_proof(
             log::error!("Failed to validate transfer data: {e}");
             FeeError::FeeVerificationError("Failed to validate transfer data".to_string())
         })?;
-        if collateral_block.block_builder_address != block_builder_address {
-            return Err(FeeError::FeeVerificationError(
-                "Invalid block builder address in collateral block".to_string(),
-            ));
-        }
 
         // validate signature
         let user_signature = UserSignature {
