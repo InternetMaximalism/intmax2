@@ -49,13 +49,8 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
         &self,
         block_builder_url: &str,
     ) -> Result<BlockBuilderFeeInfo, ServerError> {
-        get_request::<(), BlockBuilderFeeInfo>(
-            &self.client,
-            block_builder_url,
-            "/block-builder/fee-info",
-            None,
-        )
-        .await
+        get_request::<(), BlockBuilderFeeInfo>(&self.client, block_builder_url, "/fee-info", None)
+            .await
     }
 
     async fn send_tx_request(
@@ -75,7 +70,7 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
         let response: TxRequestResponse = post_request(
             &self.client,
             block_builder_url,
-            "/block-builder/tx-request",
+            "/tx-request",
             Some(&request),
         )
         .await?;
@@ -93,7 +88,7 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
         let response: QueryProposalResponse = post_request(
             &self.client,
             block_builder_url,
-            "/block-builder/query-proposal",
+            "/query-proposal",
             Some(&request),
         )
         .await?;
@@ -115,7 +110,7 @@ impl BlockBuilderClientInterface for BlockBuilderClient {
         post_request::<_, ()>(
             &self.client,
             block_builder_url,
-            "/block-builder/post-signature",
+            "/post-signature",
             Some(&request),
         )
         .await

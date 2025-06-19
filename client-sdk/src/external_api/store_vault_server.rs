@@ -62,7 +62,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         post_request::<_, ()>(
             &self.client,
             &self.base_url,
-            "/store-vault-server/save-snapshot",
+            "/save-snapshot",
             Some(&request_with_auth),
         )
         .await?;
@@ -83,7 +83,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         let response: GetSnapshotResponse = post_request(
             &self.client,
             &self.base_url,
-            "/store-vault-server/get-snapshot",
+            "/get-snapshot",
             Some(&request_with_auth),
         )
         .await?;
@@ -105,7 +105,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             let response: SaveDataBatchResponse = post_request(
                 &self.client,
                 &self.base_url,
-                "/store-vault-server/save-data-batch",
+                "/save-data-batch",
                 Some(&request_with_auth),
             )
             .await?;
@@ -132,7 +132,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             let response: GetDataBatchResponse = post_request(
                 &self.client,
                 &self.base_url,
-                "/store-vault-server/get-data-batch",
+                "/get-data-batch",
                 Some(&request_with_auth),
             )
             .await?;
@@ -180,7 +180,7 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
         let response: GetDataSequenceResponse = post_request(
             &self.client,
             &self.base_url,
-            "/store-vault-server/get-data-sequence",
+            "/get-data-sequence",
             Some(&request_with_auth),
         )
         .await?;

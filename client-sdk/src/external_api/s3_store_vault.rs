@@ -65,7 +65,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         let response: S3PreSaveSnapshotResponse = post_request(
             &self.client,
             &self.base_url,
-            "/s3-store-vault/pre-save-snapshot",
+            "/pre-save-snapshot",
             Some(&request_with_auth),
         )
         .await?;
@@ -84,7 +84,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         let () = post_request(
             &self.client,
             &self.base_url,
-            "/s3-store-vault/save-snapshot",
+            "/save-snapshot",
             Some(&request_with_auth),
         )
         .await?;
@@ -106,7 +106,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         let response: S3GetSnapshotResponse = post_request(
             &self.client,
             &self.base_url,
-            "/s3-store-vault/get-snapshot",
+            "/get-snapshot",
             Some(&request_with_auth),
         )
         .await?;
@@ -142,7 +142,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             let response: S3SaveDataBatchResponse = post_request(
                 &self.client,
                 &self.base_url,
-                "/s3-store-vault/save-data-batch",
+                "/save-data-batch",
                 Some(&request_with_auth),
             )
             .await?;
@@ -176,7 +176,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             let response: S3GetDataBatchResponse = post_request(
                 &self.client,
                 &self.base_url,
-                "/s3-store-vault/get-data-batch",
+                "/get-data-batch",
                 Some(&request_with_auth),
             )
             .await?;
@@ -242,7 +242,7 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
         let response: S3GetDataSequenceResponse = post_request(
             &self.client,
             &self.base_url,
-            "/s3-store-vault/get-data-sequence",
+            "/get-data-sequence",
             Some(&request_with_auth),
         )
         .await?;
