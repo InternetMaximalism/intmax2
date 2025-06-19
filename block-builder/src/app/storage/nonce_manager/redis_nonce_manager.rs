@@ -66,48 +66,50 @@ impl RedisNonceManager {
             get_onchain_next_nonce(&self.rollup, false, self.config.block_builder_address).await?;
 
         with_retry(|| async {
+            // Sync registration and non-registration nonces. Batch them as possible
             let mut conn = self.get_conn().await?;
-            // Sync registration nonces
-            let local_next_reg_raw: Option<u32> = redis::cmd("GET")
-                .arg(&self.next_registration_nonce_key)
-                .query_async(&mut conn)
-                .await?;
+
+            // GET requests
+            let mut pipe = redis::pipe();
+            pipe.cmd("GET").arg(&self.next_registration_nonce_key);
+            pipe.cmd("GET").arg(&self.next_non_registration_nonce_key);
+            let (local_next_reg_raw, local_next_non_reg_raw): (Option<u32>, Option<u32>) =
+                pipe.query_async(&mut conn).await?;
+
+            // SET requests
             let local_next_reg = local_next_reg_raw.unwrap_or(0);
             let new_next_reg = onchain_next_registration_nonce.max(local_next_reg);
-            let () = redis::cmd("SET")
+            let local_next_non_reg = local_next_non_reg_raw.unwrap_or(0);
+            let new_next_non_reg = onchain_next_non_registration_nonce.max(local_next_non_reg);
+
+            let mut pipe = redis::pipe();
+            pipe.cmd("SET")
                 .arg(&self.next_registration_nonce_key)
                 .arg(new_next_reg)
-                .query_async(&mut conn)
-                .await?;
+                .ignore();
+            pipe.cmd("SET")
+                .arg(&self.next_non_registration_nonce_key)
+                .arg(new_next_non_reg)
+                .ignore();
+            pipe.query_async::<()>(&mut conn).await?;
 
+            // ZREMRANGEBYSCORE requests
             let max_score_reg = onchain_next_registration_nonce as i64 - 1;
-            let () = redis::cmd("ZREMRANGEBYSCORE")
+            let max_score_non_reg = onchain_next_non_registration_nonce as i64 - 1;
+
+            let mut pipe = redis::pipe();
+            pipe.cmd("ZREMRANGEBYSCORE")
                 .arg(&self.reserved_registration_nonces_key)
                 .arg(0)
                 .arg(max_score_reg)
-                .query_async(&mut conn)
-                .await?;
-
-            // Sync non-registration nonces
-            let local_next_non_reg_raw: Option<u32> = redis::cmd("GET")
-                .arg(&self.next_non_registration_nonce_key)
-                .query_async(&mut conn)
-                .await?;
-            let local_next_non_reg = local_next_non_reg_raw.unwrap_or(0);
-            let new_next_non_reg = onchain_next_non_registration_nonce.max(local_next_non_reg);
-            let () = redis::cmd("SET")
-                .arg(&self.next_non_registration_nonce_key)
-                .arg(new_next_non_reg)
-                .query_async(&mut conn)
-                .await?;
-
-            let max_score_non_reg = onchain_next_non_registration_nonce as i64 - 1;
-            let () = redis::cmd("ZREMRANGEBYSCORE")
+                .ignore();
+            pipe.cmd("ZREMRANGEBYSCORE")
                 .arg(&self.reserved_non_registration_nonces_key)
                 .arg(0)
                 .arg(max_score_non_reg)
-                .query_async(&mut conn)
-                .await?;
+                .ignore();
+            pipe.query_async::<()>(&mut conn).await?;
+
             Ok(())
         })
         .await
@@ -205,7 +207,7 @@ impl NonceManager for RedisNonceManager {
 #[cfg(test)]
 mod tests {
     use crate::app::storage::redis_storage::test_redis_helper::{
-        find_free_port, run_redis_docker, stop_redis_docker,
+        assert_and_stop, find_free_port, run_redis_docker, stop_redis_docker,
     };
 
     use super::*;
@@ -266,37 +268,43 @@ mod tests {
         set_non_reg_nonce_asserter(&asserter, 20);
 
         let reg_nonce = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(reg_nonce, 10);
+        assert_and_stop(cont_name, || assert_eq!(reg_nonce, 10));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let non_reg_nonce = client.reserve_nonce(false).await.unwrap();
-        assert_eq!(non_reg_nonce, 20);
+        assert_and_stop(cont_name, || assert_eq!(non_reg_nonce, 20));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let reg_nonce2 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(reg_nonce2, 11);
+        assert_and_stop(cont_name, || assert_eq!(reg_nonce2, 11));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let non_reg_nonce2 = client.reserve_nonce(false).await.unwrap();
-        assert_eq!(non_reg_nonce2, 21);
+        assert_and_stop(cont_name, || assert_eq!(non_reg_nonce2, 21));
 
         let smallest_reg_nonce = client.smallest_reserved_nonce(true).await.unwrap();
-        assert_eq!(smallest_reg_nonce, Some(10));
+        assert_and_stop(cont_name, || assert_eq!(smallest_reg_nonce, Some(10)));
 
         let smallest_non_reg_nonce = client.smallest_reserved_nonce(false).await.unwrap();
-        assert_eq!(smallest_non_reg_nonce, Some(20));
+        assert_and_stop(cont_name, || assert_eq!(smallest_non_reg_nonce, Some(20)));
 
         client.release_nonce(10, true).await.unwrap();
         let smallest_reg_nonce_after_release = client.smallest_reserved_nonce(true).await.unwrap();
-        assert_eq!(smallest_reg_nonce_after_release, Some(11));
+        assert_and_stop(cont_name, || {
+            assert_eq!(smallest_reg_nonce_after_release, Some(11))
+        });
 
         client.release_nonce(20, false).await.unwrap();
         let smallest_non_reg_nonce_after_release =
             client.smallest_reserved_nonce(false).await.unwrap();
-        assert_eq!(smallest_non_reg_nonce_after_release, Some(21));
+        assert_and_stop(cont_name, || {
+            assert_eq!(smallest_non_reg_nonce_after_release, Some(21))
+        });
+
+        stop_redis_docker(cont_name);
     }
 
     #[tokio::test]
@@ -318,22 +326,24 @@ mod tests {
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let nonce1 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(nonce1, 10);
+        assert_and_stop(cont_name, || assert_eq!(nonce1, 10));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let nonce2 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(nonce2, 11);
+        assert_and_stop(cont_name, || assert_eq!(nonce2, 11));
 
         set_reg_nonce_asserter(&asserter, 10);
         set_non_reg_nonce_asserter(&asserter, 20);
         let nonce3 = client.reserve_nonce(true).await.unwrap();
-        assert_eq!(nonce3, 12);
+        assert_and_stop(cont_name, || assert_eq!(nonce3, 12));
 
         set_reg_nonce_asserter(&asserter, 11);
         set_non_reg_nonce_asserter(&asserter, 20);
         client.sync_onchain().await.unwrap();
         let smallest_reg_nonce = client.smallest_reserved_nonce(true).await.unwrap();
-        assert_eq!(smallest_reg_nonce, Some(11));
+        assert_and_stop(cont_name, || assert_eq!(smallest_reg_nonce, Some(11)));
+
+        stop_redis_docker(cont_name);
     }
 }

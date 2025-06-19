@@ -140,7 +140,7 @@ impl Storage for InMemoryStorage {
 
         // update block_id -> memo
         let mut memos = self.memos.write().await;
-        memos.insert(memo.block_id.clone(), memo.clone());
+        memos.insert(memo.block_id.clone(), memo);
 
         // update last_processed
         *last_processed.write().await = current_time;
@@ -155,6 +155,7 @@ impl Storage for InMemoryStorage {
         let block_ids = self.request_id_to_block_id.read().await;
         let block_id = block_ids.get(request_id);
         if block_id.is_none() {
+            log::warn!("Request id {request_id} not found in request_id_to_block_id");
             return Ok(None);
         }
         let block_id = block_id.unwrap();
