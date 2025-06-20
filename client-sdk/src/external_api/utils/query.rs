@@ -232,7 +232,7 @@ fn build_url(base_url: &str, endpoint: &str) -> Result<Url, ServerError> {
     } else {
         format!("/{endpoint}")
     };
-    let url = Url::parse(&format!("{base_url}{endpoint}")).map_err(|e| {
+    let url = Url::parse(&format!("{base_url}{normalized_endpoint}")).map_err(|e| {
         ServerError::MalformedUrl(format!(
             "Invalid URL: {base_url}{normalized_endpoint}, error: {e}"
         ))
