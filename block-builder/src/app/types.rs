@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 
+use alloy::primitives::map::HashMap;
 use intmax2_interfaces::{api::block_builder::interface::FeeProof, utils::key::PublicKeyPair};
 use intmax2_zkp::{
     common::{
@@ -106,12 +107,15 @@ impl ProposalMemo {
             block_builder_nonce,
         };
         let mut proposals = Vec::new();
+
+        // Create hash map to avoid O(n^2)
+        let pubkey_to_index: HashMap<U256, u32> = sorted_and_padded_txs
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (r.spend_pub(), i as u32))
+            .collect();
         for r in tx_requests {
-            let pubkey = r.spend_pub();
-            let tx_index = sorted_and_padded_txs
-                .iter()
-                .position(|r| r.spend_pub() == pubkey)
-                .unwrap() as u32;
+            let tx_index = *pubkey_to_index.get(&r.spend_pub()).unwrap();
             let tx_merkle_proof = tx_tree.prove(tx_index as u64);
             proposals.push(BlockProposal {
                 block_sign_payload: block_sign_payload.clone(),
@@ -121,6 +125,7 @@ impl ProposalMemo {
                 pubkeys_hash: pubkey_hash,
             });
         }
+
         ProposalMemo {
             block_sign_payload,
             pubkeys,
@@ -153,10 +158,13 @@ impl ProposalMemo {
         if pubkey == U256::dummy_pubkey() {
             return Some(AccountId::dummy());
         }
-        self.tx_requests
-            .iter()
-            .find(|r| r.spend_pub() == pubkey)
-            .and_then(|r| r.account_id)
+        self.tx_requests.iter().find_map(|r| {
+            if r.spend_pub() == pubkey {
+                r.account_id
+            } else {
+                None
+            }
+        })
     }
 
     /// Get the account ids for the tx requests in the memo.
@@ -164,12 +172,13 @@ impl ProposalMemo {
         if self.block_sign_payload.is_registration_block {
             None
         } else {
-            let account_ids: Vec<AccountId> = self
+            let account_ids: Option<Vec<AccountId>> = self
                 .pubkeys
                 .iter()
-                .map(|pubkey| self.get_account_id(*pubkey).unwrap())
+                .map(|pubkey| self.get_account_id(*pubkey))
                 .collect();
-            Some(AccountIdPacked::pack(&account_ids))
+
+            account_ids.map(|ids| AccountIdPacked::pack(&ids))
         }
     }
 }

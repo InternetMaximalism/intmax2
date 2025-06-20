@@ -51,24 +51,14 @@ impl WithdrawalServerClient {
 #[async_trait(?Send)]
 impl WithdrawalServerClientInterface for WithdrawalServerClient {
     async fn get_withdrawal_fee(&self) -> Result<WithdrawalFeeInfo, ServerError> {
-        let response: WithdrawalFeeInfo = get_request::<(), _>(
-            &self.client,
-            &self.base_url,
-            "/withdrawal-server/withdrawal-fee",
-            None,
-        )
-        .await?;
+        let response: WithdrawalFeeInfo =
+            get_request::<(), _>(&self.client, &self.base_url, "/withdrawal-fee", None).await?;
         Ok(response)
     }
 
     async fn get_claim_fee(&self) -> Result<ClaimFeeInfo, ServerError> {
-        let response: ClaimFeeInfo = get_request::<(), _>(
-            &self.client,
-            &self.base_url,
-            "/withdrawal-server/claim-fee",
-            None,
-        )
-        .await?;
+        let response: ClaimFeeInfo =
+            get_request::<(), _>(&self.client, &self.base_url, "/claim-fee", None).await?;
         Ok(response)
     }
 
@@ -88,7 +78,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         let result: RequestWithdrawalResponse = post_request(
             &self.client,
             &self.base_url,
-            "/withdrawal-server/request-withdrawal",
+            "/request-withdrawal",
             Some(&request_with_auth),
         )
         .await?;
@@ -111,7 +101,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         let result: RequestClaimResponse = post_request(
             &self.client,
             &self.base_url,
-            "/withdrawal-server/request-claim",
+            "/request-claim",
             Some(&request_with_auth),
         )
         .await?;
@@ -128,7 +118,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         let response: GetWithdrawalInfoResponse = post_request(
             &self.client,
             &self.base_url,
-            "/withdrawal-server/get-withdrawal-info",
+            "/get-withdrawal-info",
             Some(&request_with_auth),
         )
         .await?;
@@ -144,7 +134,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         let response: GetWithdrawalInfoResponse = get_request(
             &self.client,
             &self.base_url,
-            "/withdrawal-server/get-withdrawal-info-by-recipient",
+            "/get-withdrawal-info-by-recipient",
             Some(&query),
         )
         .await?;
@@ -161,7 +151,7 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
         let response: GetClaimInfoResponse = post_request(
             &self.client,
             &self.base_url,
-            "/withdrawal-server/get-claim-info",
+            "/get-claim-info",
             Some(&request_with_auth),
         )
         .await?;
