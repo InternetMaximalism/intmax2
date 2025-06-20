@@ -88,7 +88,7 @@ pub async fn get_withdrawal_info(
     let pubkey = request.auth.pubkey;
     let (withdrawal_info, cursor_response) = state
         .withdrawal_server
-        .get_withdrawal_info(pubkey, request.inner.cursor)
+        .get_withdrawal_info(pubkey, request.inner.cursor.clone())
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetWithdrawalInfoResponse {
@@ -109,7 +109,7 @@ pub async fn get_claim_info(
     let pubkey = request.auth.pubkey;
     let (claim_info, cursor_response) = state
         .withdrawal_server
-        .get_claim_info(pubkey)
+        .get_claim_info(pubkey, request.inner.cursor.clone())
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetClaimInfoResponse {
@@ -125,7 +125,7 @@ pub async fn get_withdrawal_info_by_recipient(
 ) -> Result<Json<GetWithdrawalInfoResponse>, Error> {
     let (withdrawal_info, cursor_response) = state
         .withdrawal_server
-        .get_withdrawal_info_by_recipient(query.recipient)
+        .get_withdrawal_info_by_recipient(query.recipient, query.cursor.clone())
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     Ok(Json(GetWithdrawalInfoResponse {

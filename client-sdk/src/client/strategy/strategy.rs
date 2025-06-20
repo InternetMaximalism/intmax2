@@ -1,8 +1,11 @@
 use intmax2_interfaces::{
     api::{
-        store_vault_server::interface::StoreVaultClientInterface,
+        store_vault_server::{interface::StoreVaultClientInterface, types::CursorOrder},
         validity_prover::interface::ValidityProverClientInterface,
-        withdrawal_server::interface::WithdrawalServerClientInterface,
+        withdrawal_server::{
+            interface::{ClaimInfo, WithdrawalInfo, WithdrawalServerClientInterface},
+            types::TimestampCursor,
+        },
     },
     data::{
         deposit_data::DepositData, meta_data::MetaDataWithBlockNumber, transfer_data::TransferData,
@@ -335,9 +338,8 @@ pub async fn determine_withdrawals(
         .collect();
 
     // fetch requested withdrawals
-    let requested_withdrawal_info = withdrawal_server
-        .get_withdrawal_info(view_pair.view)
-        .await?;
+    let requested_withdrawal_info =
+        fetch_all_withdrawal_infos(withdrawal_server, view_pair).await?;
     let requested_withdrawal_nullifiers = requested_withdrawal_info
         .iter()
         .map(|info| info.contract_withdrawal.nullifier)
@@ -394,7 +396,7 @@ pub async fn determine_claims(
         .collect::<Vec<_>>();
 
     // fetch requested claims
-    let requested_claim_info = withdrawal_server.get_claim_info(view_pair.view).await?;
+    let requested_claim_info = fetch_all_claim_infos(withdrawal_server, view_pair).await?;
     let requested_claim_nullifiers = requested_claim_info
         .iter()
         .map(|info| info.claim.nullifier)
@@ -413,4 +415,62 @@ pub async fn determine_claims(
         .collect();
 
     Ok(claims)
+}
+
+pub async fn fetch_all_withdrawal_infos(
+    withdrawal_server: &dyn WithdrawalServerClientInterface,
+    view_pair: ViewPair,
+) -> Result<Vec<WithdrawalInfo>, StrategyError> {
+    let mut cursor = TimestampCursor {
+        cursor: None,
+        order: CursorOrder::Asc,
+        limit: None,
+    };
+
+    let mut results = Vec::new();
+    loop {
+        let (withdrawal_info, cursor_response) = withdrawal_server
+            .get_withdrawal_info(view_pair.view, cursor.clone())
+            .await?;
+
+        if !cursor_response.has_more {
+            break;
+        }
+
+        results.extend(withdrawal_info);
+
+        // Update cursor for the next iteration
+        cursor.cursor = cursor_response.next_cursor;
+    }
+
+    Ok(results)
+}
+
+pub async fn fetch_all_claim_infos(
+    withdrawal_server: &dyn WithdrawalServerClientInterface,
+    view_pair: ViewPair,
+) -> Result<Vec<ClaimInfo>, StrategyError> {
+    let mut cursor = TimestampCursor {
+        cursor: None,
+        order: CursorOrder::Asc,
+        limit: None,
+    };
+
+    let mut results = Vec::new();
+    loop {
+        let (claim_info, cursor_response) = withdrawal_server
+            .get_claim_info(view_pair.view, cursor.clone())
+            .await?;
+
+        if !cursor_response.has_more {
+            break;
+        }
+
+        results.extend(claim_info);
+
+        // Update cursor for the next iteration
+        cursor.cursor = cursor_response.next_cursor;
+    }
+
+    Ok(results)
 }

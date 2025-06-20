@@ -5,7 +5,7 @@ use crate::{
 use alloy::primitives::B256;
 use intmax2_interfaces::{
     api::{
-        store_vault_server::interface::StoreVaultClientInterface,
+        store_vault_server::{interface::StoreVaultClientInterface, types::CursorOrder},
         withdrawal_server::{
             interface::FeeResult,
             types::{TimestampCursor, TimestampCursorResponse},
@@ -376,104 +376,330 @@ impl WithdrawalServer {
         cursor: TimestampCursor,
     ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), WithdrawalServerError> {
         let pubkey_str = pubkey.to_hex();
-        let records = sqlx::query!(
-            r#"
-            SELECT 
-                status as "status: SqlWithdrawalStatus",
-                contract_withdrawal,
-                l1_tx_hash
-            FROM withdrawals
-            WHERE pubkey = $1
-            "#,
+        let actual_limit = cursor.limit.unwrap_or(100) as i64;
+
+        let withdrawal_infos: Vec<WithdrawalInfo> = match cursor.order {
+            CursorOrder::Asc => {
+                let cursor_timestamp = cursor.cursor.unwrap_or(0) as i64;
+                sqlx::query!(
+                    r#"
+              SELECT 
+                  status as "status: SqlWithdrawalStatus",
+                  contract_withdrawal,
+                  l1_tx_hash,
+                  created_at
+              FROM withdrawals
+              WHERE pubkey = $1
+              AND EXTRACT(EPOCH FROM created_at)::bigint > $2
+              ORDER BY created_at ASC
+              LIMIT $3
+              "#,
+                    pubkey_str,
+                    cursor_timestamp,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|record| {
+                    // Convert the record to WithdrawalInfo
+                    let contract_withdrawal: ContractWithdrawal =
+                        serde_json::from_value(record.contract_withdrawal).map_err(|e| {
+                            WithdrawalServerError::SerializationError(e.to_string())
+                        })?;
+                    Ok(WithdrawalInfo {
+                        status: record.status.into(),
+                        contract_withdrawal,
+                        l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                        requested_at: record.created_at.timestamp() as u64,
+                    })
+                })
+                .collect::<Result<Vec<_>, WithdrawalServerError>>()?
+            }
+            CursorOrder::Desc => {
+                let cursor_timestamp = cursor.cursor.unwrap_or(i64::MAX as u64) as i64;
+                sqlx::query!(
+                    r#"
+              SELECT 
+                  status as "status: SqlWithdrawalStatus",
+                  contract_withdrawal,
+                  l1_tx_hash,
+                  created_at
+              FROM withdrawals
+              WHERE pubkey = $1
+              AND EXTRACT(EPOCH FROM created_at)::bigint < $2
+              ORDER BY created_at DESC
+              LIMIT $3
+              "#,
+                    pubkey_str,
+                    cursor_timestamp,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|record| {
+                    // Convert the record to WithdrawalInfo
+                    let contract_withdrawal: ContractWithdrawal =
+                        serde_json::from_value(record.contract_withdrawal).map_err(|e| {
+                            WithdrawalServerError::SerializationError(e.to_string())
+                        })?;
+                    Ok(WithdrawalInfo {
+                        status: record.status.into(),
+                        contract_withdrawal,
+                        l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                        requested_at: record.created_at.timestamp() as u64,
+                    })
+                })
+                .collect::<Result<Vec<_>, WithdrawalServerError>>()?
+            }
+        };
+
+        let has_more = withdrawal_infos.len() > actual_limit as usize;
+        let withdrawal_infos = withdrawal_infos
+            .into_iter()
+            .take(actual_limit as usize)
+            .collect::<Vec<_>>();
+
+        let next_cursor = withdrawal_infos
+            .last()
+            .map(|withdrawal_info| withdrawal_info.requested_at);
+
+        let total_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM withdrawals WHERE pubkey = $1",
             pubkey_str
         )
-        .fetch_all(&self.pool)
-        .await?;
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0) as u32;
 
-        let mut withdrawal_infos = Vec::new();
-        for record in records {
-            let contract_withdrawal: ContractWithdrawal =
-                serde_json::from_value(record.contract_withdrawal)
-                    .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
-            withdrawal_infos.push(WithdrawalInfo {
-                status: record.status.into(),
-                contract_withdrawal,
-                l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
-                requested_at: todo!(),
-            });
-        }
-        Ok(withdrawal_infos)
+        let cursor_response = TimestampCursorResponse {
+            next_cursor,
+            has_more,
+            total_count,
+        };
+
+        Ok((withdrawal_infos, cursor_response))
     }
 
     pub async fn get_claim_info(
         &self,
         pubkey: U256,
-    ) -> Result<Vec<ClaimInfo>, WithdrawalServerError> {
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<ClaimInfo>, TimestampCursorResponse), WithdrawalServerError> {
         let pubkey_str = pubkey.to_hex();
-        let records = sqlx::query!(
-            r#"
-            SELECT 
-                status as "status: SqlClaimStatus",
-                claim,
-                submit_claim_proof_tx_hash,
-                l1_tx_hash
-            FROM claims
-            WHERE pubkey = $1
-            "#,
-            pubkey_str
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let actual_limit = cursor.limit.unwrap_or(100) as i64;
 
-        let mut claim_infos = Vec::new();
-        for record in records {
-            let claim: Claim = serde_json::from_value(record.claim)
-                .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
-            claim_infos.push(ClaimInfo {
-                status: record.status.into(),
-                claim,
-                submit_claim_proof_tx_hash: record
-                    .submit_claim_proof_tx_hash
-                    .map(|h| Bytes32::from_hex(&h).unwrap()),
-                l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
-                requested_at: todo!(),
-            });
-        }
-        Ok(claim_infos)
+        let claim_infos: Vec<ClaimInfo> = match cursor.order {
+            CursorOrder::Asc => {
+                let cursor_timestamp = cursor.cursor.unwrap_or(0) as i64;
+                sqlx::query!(
+                    r#"
+                SELECT 
+                    status as "status: SqlClaimStatus",
+                    claim,
+                    submit_claim_proof_tx_hash,
+                    l1_tx_hash,
+                    created_at
+                FROM claims
+                WHERE pubkey = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint > $2
+                ORDER BY created_at ASC
+                LIMIT $3
+                "#,
+                    pubkey_str,
+                    cursor_timestamp,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|record| {
+                    let claim: Claim = serde_json::from_value(record.claim)
+                        .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+                    Ok(ClaimInfo {
+                        status: record.status.into(),
+                        claim,
+                        submit_claim_proof_tx_hash: record
+                            .submit_claim_proof_tx_hash
+                            .map(|h| Bytes32::from_hex(&h).unwrap()),
+                        l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                        requested_at: record.created_at.timestamp() as u64,
+                    })
+                })
+                .collect::<Result<Vec<_>, WithdrawalServerError>>()?
+            }
+            CursorOrder::Desc => {
+                let cursor_timestamp = cursor.cursor.unwrap_or(i64::MAX as u64) as i64;
+                sqlx::query!(
+                    r#"
+                SELECT 
+                    status as "status: SqlClaimStatus",
+                    claim,
+                    submit_claim_proof_tx_hash,
+                    l1_tx_hash,
+                    created_at
+                FROM claims
+                WHERE pubkey = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint < $2
+                ORDER BY created_at DESC
+                LIMIT $3
+                "#,
+                    pubkey_str,
+                    cursor_timestamp,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|record| {
+                    let claim: Claim = serde_json::from_value(record.claim)
+                        .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
+                    Ok(ClaimInfo {
+                        status: record.status.into(),
+                        claim,
+                        submit_claim_proof_tx_hash: record
+                            .submit_claim_proof_tx_hash
+                            .map(|h| Bytes32::from_hex(&h).unwrap()),
+                        l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                        requested_at: record.created_at.timestamp() as u64,
+                    })
+                })
+                .collect::<Result<Vec<_>, WithdrawalServerError>>()?
+            }
+        };
+
+        let has_more = claim_infos.len() > actual_limit as usize;
+        let claim_infos = claim_infos
+            .into_iter()
+            .take(actual_limit as usize)
+            .collect::<Vec<_>>();
+
+        let next_cursor = claim_infos.last().map(|claim_info| claim_info.requested_at);
+
+        let total_count =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM claims WHERE pubkey = $1", pubkey_str)
+                .fetch_one(&self.pool)
+                .await?
+                .unwrap_or(0) as u32;
+
+        let cursor_response = TimestampCursorResponse {
+            next_cursor,
+            has_more,
+            total_count,
+        };
+
+        Ok((claim_infos, cursor_response))
     }
 
     pub async fn get_withdrawal_info_by_recipient(
         &self,
         recipient: Address,
-    ) -> Result<Vec<WithdrawalInfo>, WithdrawalServerError> {
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), WithdrawalServerError> {
         let recipient_str = recipient.to_hex();
-        let records = sqlx::query!(
-            r#"
-            SELECT 
-                status as "status: SqlWithdrawalStatus",
-                contract_withdrawal,
-                l1_tx_hash
-            FROM withdrawals
-            WHERE recipient = $1
-            "#,
+        let actual_limit = cursor.limit.unwrap_or(100) as i64;
+
+        let withdrawal_infos: Vec<WithdrawalInfo> = match cursor.order {
+            CursorOrder::Asc => {
+                let cursor_timestamp = cursor.cursor.unwrap_or(0) as i64;
+                sqlx::query!(
+                    r#"
+                SELECT 
+                    status as "status: SqlWithdrawalStatus",
+                    contract_withdrawal,
+                    l1_tx_hash,
+                    created_at
+                FROM withdrawals
+                WHERE recipient = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint > $2
+                ORDER BY created_at ASC
+                LIMIT $3
+                "#,
+                    recipient_str,
+                    cursor_timestamp,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|record| {
+                    let contract_withdrawal: ContractWithdrawal =
+                        serde_json::from_value(record.contract_withdrawal).map_err(|e| {
+                            WithdrawalServerError::SerializationError(e.to_string())
+                        })?;
+                    Ok(WithdrawalInfo {
+                        status: record.status.into(),
+                        contract_withdrawal,
+                        l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                        requested_at: record.created_at.timestamp() as u64,
+                    })
+                })
+                .collect::<Result<Vec<_>, WithdrawalServerError>>()?
+            }
+            CursorOrder::Desc => {
+                let cursor_timestamp = cursor.cursor.unwrap_or(i64::MAX as u64) as i64;
+                sqlx::query!(
+                    r#"
+                SELECT 
+                    status as "status: SqlWithdrawalStatus",
+                    contract_withdrawal,
+                    l1_tx_hash,
+                    created_at
+                FROM withdrawals
+                WHERE recipient = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint < $2
+                ORDER BY created_at DESC
+                LIMIT $3
+                "#,
+                    recipient_str,
+                    cursor_timestamp,
+                    actual_limit + 1
+                )
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|record| {
+                    let contract_withdrawal: ContractWithdrawal =
+                        serde_json::from_value(record.contract_withdrawal).map_err(|e| {
+                            WithdrawalServerError::SerializationError(e.to_string())
+                        })?;
+                    Ok(WithdrawalInfo {
+                        status: record.status.into(),
+                        contract_withdrawal,
+                        l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
+                        requested_at: record.created_at.timestamp() as u64,
+                    })
+                })
+                .collect::<Result<Vec<_>, WithdrawalServerError>>()?
+            }
+        };
+
+        let has_more = withdrawal_infos.len() > actual_limit as usize;
+        let withdrawal_infos = withdrawal_infos
+            .into_iter()
+            .take(actual_limit as usize)
+            .collect::<Vec<_>>();
+
+        let next_cursor = withdrawal_infos
+            .last()
+            .map(|withdrawal_info| withdrawal_info.requested_at);
+
+        let total_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM withdrawals WHERE recipient = $1",
             recipient_str
         )
-        .fetch_all(&self.pool)
-        .await?;
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0) as u32;
 
-        let mut withdrawal_infos = Vec::new();
-        for record in records {
-            let contract_withdrawal: ContractWithdrawal =
-                serde_json::from_value(record.contract_withdrawal)
-                    .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
-            withdrawal_infos.push(WithdrawalInfo {
-                status: record.status.into(),
-                contract_withdrawal,
-                l1_tx_hash: record.l1_tx_hash.map(|h| Bytes32::from_hex(&h).unwrap()),
-                requested_at: todo!(),
-            });
-        }
-        Ok(withdrawal_infos)
+        let cursor_response = TimestampCursorResponse {
+            next_cursor,
+            has_more,
+            total_count,
+        };
+
+        Ok((withdrawal_infos, cursor_response))
     }
 
     async fn fee_validation(
