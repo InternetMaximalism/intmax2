@@ -98,6 +98,7 @@ impl WalletKeyVaultClient {
             address: get_address_from_private_key(private_key),
             security_seed: encode_hex_with_prefix(&security_seed),
             challenge_signature: encode_hex_with_prefix(&signed_challenge_message),
+            wallet_provider_type: "intmax2-cli".to_string(),
         };
         let response: LoginResponse = post_request(
             &self.client,

@@ -20,6 +20,7 @@ pub struct LoginRequest {
     pub address: Address,
     pub challenge_signature: String,
     pub security_seed: String,
+    pub wallet_provider_type: String,
 }
 
 #[serde_as]
