@@ -1,13 +1,16 @@
 use crate::{
     js_types::{
         client::{JsDepositResult, JsTransferRequest, JsTxResult},
+        cursor::{JsTimestampCursor, JsTimestampCursorResponse},
         utils::{parse_intmax_address, parse_network, parse_public_key},
     },
     utils::str_to_key_pair,
 };
+use alloy::signers::k256::elliptic_curve::rand_core::le;
 use client::{get_client, Config};
 use intmax2_client_sdk::client::types::{PaymentMemoEntry, TransferFeeQuote, TransferRequest};
 use intmax2_interfaces::{
+    api::withdrawal_server::types::TimestampCursor,
     data::deposit_data::TokenType,
     utils::{
         address::IntmaxAddress,
@@ -311,17 +314,30 @@ pub async fn get_user_data(config: &Config, view_pair: &str) -> Result<JsUserDat
     Ok(user_data.into())
 }
 
+#[derive(Debug, Default, Clone)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct JsWithdrawalInfoRespose {
+    pub info: Vec<JsWithdrawalInfo>,
+    pub cursor_response: JsTimestampCursorResponse,
+}
+
 #[wasm_bindgen]
 pub async fn get_withdrawal_info(
     config: &Config,
     view_pair: &str,
-) -> Result<Vec<JsWithdrawalInfo>, JsError> {
+    cursor: &JsTimestampCursor,
+) -> Result<JsWithdrawalInfoRespose, JsError> {
     init_logger();
     let view_pair = str_to_view_pair(view_pair)?;
+    let cursor: TimestampCursor = cursor.try_into()?;
     let client = get_client(config);
-    let info = client.get_withdrawal_info(view_pair.view).await?;
+    let (info, cursor_response) = client.get_withdrawal_info(view_pair.view, &cursor).await?;
     let js_info = info.into_iter().map(JsWithdrawalInfo::from).collect();
-    Ok(js_info)
+    let js_cursor_response = JsTimestampCursorResponse::from(cursor_response)?;
+    Ok(JsWithdrawalInfoRespose {
+        info: js_info,
+        cursor_response: js_cursor_response,
+    })
 }
 
 #[wasm_bindgen]

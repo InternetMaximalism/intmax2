@@ -4,7 +4,10 @@ use chrono::{Local, TimeZone as _, Utc};
 use intmax2_client_sdk::{
     client::{
         client::Client,
-        strategy::mining::{Mining, MiningStatus},
+        strategy::{
+            mining::{Mining, MiningStatus},
+            strategy::fetch_all_claim_infos,
+        },
     },
     external_api::{
         contract::{
@@ -125,7 +128,10 @@ pub async fn mining_loop(
                     retries
                 ));
             }
-            let claim_info = client.get_claim_info(key_pair.view).await?;
+            let claim_info =
+                fetch_all_claim_infos(client.withdrawal_server.as_ref(), key_pair.into())
+                    .await
+                    .context("Failed to fetch claim info")?;
             let corresponding_claim_info = claim_info
                 .iter()
                 .find(|w| w.claim.nullifier == nullifier)

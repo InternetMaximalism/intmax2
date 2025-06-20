@@ -1,5 +1,6 @@
 use intmax2_interfaces::{
     api::{
+        error::ServerError,
         store_vault_server::{interface::StoreVaultClientInterface, types::CursorOrder},
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::{
@@ -420,7 +421,7 @@ pub async fn determine_claims(
 pub async fn fetch_all_withdrawal_infos(
     withdrawal_server: &dyn WithdrawalServerClientInterface,
     view_pair: ViewPair,
-) -> Result<Vec<WithdrawalInfo>, StrategyError> {
+) -> Result<Vec<WithdrawalInfo>, ServerError> {
     let mut cursor = TimestampCursor {
         cursor: None,
         order: CursorOrder::Asc,
@@ -449,7 +450,7 @@ pub async fn fetch_all_withdrawal_infos(
 pub async fn fetch_all_claim_infos(
     withdrawal_server: &dyn WithdrawalServerClientInterface,
     view_pair: ViewPair,
-) -> Result<Vec<ClaimInfo>, StrategyError> {
+) -> Result<Vec<ClaimInfo>, ServerError> {
     let mut cursor = TimestampCursor {
         cursor: None,
         order: CursorOrder::Asc,

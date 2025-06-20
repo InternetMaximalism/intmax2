@@ -1,6 +1,8 @@
 use colored::Colorize;
 use futures::future::try_join_all;
-use intmax2_client_sdk::client::misc::payment_memo::get_all_payment_memos;
+use intmax2_client_sdk::client::{
+    misc::payment_memo::get_all_payment_memos, strategy::strategy::{fetch_all_claim_infos, fetch_all_withdrawal_infos},
+};
 use intmax2_interfaces::{data::deposit_data::TokenType, utils::key::ViewPair};
 use intmax2_zkp::{
     common::trees::asset_tree::AssetLeaf, ethereum_types::u32limb_trait::U32LimbTrait,
@@ -54,7 +56,8 @@ pub async fn balance(view_pair: ViewPair, sync: bool) -> Result<(), CliError> {
 
 pub async fn withdrawal_status(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let withdrawal_info = client.get_withdrawal_info(view_pair.view).await?;
+    let withdrawal_info =
+        fetch_all_withdrawal_infos(client.withdrawal_server.as_ref(), view_pair).await?;
     println!("Withdrawal status:");
     for (i, withdrawal_info) in withdrawal_info.iter().enumerate() {
         let withdrawal = &withdrawal_info.contract_withdrawal;
@@ -94,7 +97,7 @@ pub async fn mining_list(view_pair: ViewPair) -> Result<(), CliError> {
 
 pub async fn claim_status(view_pair: ViewPair) -> Result<(), CliError> {
     let client = get_client()?;
-    let claim_info = client.get_claim_info(view_pair.view).await?;
+    let claim_info = fetch_all_claim_infos(client.withdrawal_server.as_ref(), view_pair).await?;
     println!("Claim status:");
     for (i, claim_info) in claim_info.iter().enumerate() {
         let claim = claim_info.claim.clone();

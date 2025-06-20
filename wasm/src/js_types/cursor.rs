@@ -1,5 +1,5 @@
 use intmax2_interfaces::{
-    api::store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse},
+    api::{store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse}, withdrawal_server::types::{TimestampCursor, TimestampCursorResponse}},
     data::meta_data::MetaData,
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
@@ -109,6 +109,109 @@ impl TryFrom<JsMetaDataCursorResponse> for MetaDataCursorResponse {
     type Error = JsError;
 
     fn try_from(cursor_response: JsMetaDataCursorResponse) -> Result<Self, Self::Error> {
+        Self::try_from(&cursor_response)
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct JsTimestampCursor {
+    pub cursor: Option<u64>,
+    pub order: String,
+    pub limit: Option<u32>,
+}
+
+#[wasm_bindgen]
+impl JsTimestampCursor {
+    #[wasm_bindgen(constructor)]
+    pub fn new(cursor: Option<u64>, order: String, limit: Option<u32>) -> Self {
+        Self {
+            cursor,
+            order,
+            limit,
+        }
+    }
+}
+
+impl From<TimestampCursor> for JsTimestampCursor {
+    fn from(cursor: TimestampCursor) -> Self {
+        Self {
+            cursor: cursor.cursor,
+            order: cursor.order.to_string(),
+            limit: cursor.limit,
+        }
+    }
+}
+
+impl TryFrom<&JsTimestampCursor> for TimestampCursor {
+    type Error = JsError;
+
+    fn try_from(cursor: &JsTimestampCursor) -> Result<Self, Self::Error> {
+        Ok(Self {
+            cursor: cursor.cursor,
+            order: cursor
+                .order
+                .parse()
+                .map_err(|e| JsError::new(&format!("Failed to parse CursorOrder: {e}")))?,
+            limit: cursor.limit,
+        })
+    }
+}
+
+impl TryFrom<JsTimestampCursor> for TimestampCursor {
+    type Error = JsError;
+
+    fn try_from(cursor: JsTimestampCursor) -> Result<Self, Self::Error> {
+        Self::try_from(&cursor)
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct JsTimestampCursorResponse {
+    pub next_cursor: Option<u64>,
+    pub has_more: bool,
+    pub total_count: u32,
+}
+
+#[wasm_bindgen]
+impl JsTimestampCursorResponse {
+    #[wasm_bindgen(constructor)]
+    pub fn new(next_cursor: Option<u64>, has_more: bool, total_count: u32) -> Self {
+        Self {
+            next_cursor,
+            has_more,
+            total_count,
+        }
+    }
+}
+
+impl From<TimestampCursorResponse> for JsTimestampCursorResponse {
+    fn from(cursor_response: TimestampCursorResponse) -> Self {
+        Self {
+            next_cursor: cursor_response.next_cursor,
+            has_more: cursor_response.has_more,
+            total_count: cursor_response.total_count,
+        }
+    }
+}
+
+impl TryFrom<&JsTimestampCursorResponse> for TimestampCursorResponse {
+    type Error = JsError;
+
+    fn try_from(cursor_response: &JsTimestampCursorResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            next_cursor: cursor_response.next_cursor,
+            has_more: cursor_response.has_more,
+            total_count: cursor_response.total_count,
+        })
+    }
+}
+
+impl TryFrom<JsTimestampCursorResponse> for TimestampCursorResponse {
+    type Error = JsError;
+
+    fn try_from(cursor_response: JsTimestampCursorResponse) -> Result<Self, Self::Error> {
         Self::try_from(&cursor_response)
     }
 }
