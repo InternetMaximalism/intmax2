@@ -41,7 +41,7 @@ impl IndexerClientInterface for IndexerClient {
                 log::warn!("Invalid URL for block builder: {}", block_builder.url);
                 continue; // Skip invalid URLs
             }
-            let fee_info_url = format!("{}/block-builder/fee-info", block_builder.url);
+            let fee_info_url = format!("{}/fee-info", block_builder.url);
             // Query fee info without retry
             let response = client.get(&fee_info_url).send().await;
             match response {

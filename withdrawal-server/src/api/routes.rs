@@ -126,7 +126,7 @@ pub async fn get_withdrawal_info_by_recipient(
 }
 
 pub fn withdrawal_server_scope() -> Scope {
-    actix_web::web::scope("/withdrawal-server")
+    actix_web::web::scope("")
         .service(get_withdrawal_fee)
         .service(get_claim_fee)
         .service(request_withdrawal)

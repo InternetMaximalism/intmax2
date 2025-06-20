@@ -243,7 +243,7 @@ pub async fn get_deposit_merkle_proof(
 }
 
 pub fn validity_prover_scope() -> actix_web::Scope {
-    actix_web::web::scope("/validity-prover")
+    actix_web::web::scope("")
         .service(get_block_number)
         .service(get_validity_proof_block_number)
         .service(get_next_deposit_index)

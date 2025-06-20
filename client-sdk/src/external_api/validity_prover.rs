@@ -51,23 +51,13 @@ impl ValidityProverClient {
             base_url: base_url.to_string(),
         }
     }
-
-    pub async fn sync(&self) -> Result<(), ServerError> {
-        get_request::<(), ()>(&self.client, &self.base_url, "/validity-prover/sync", None).await?;
-        Ok(())
-    }
 }
 
 #[async_trait(?Send)]
 impl ValidityProverClientInterface for ValidityProverClient {
     async fn get_block_number(&self) -> Result<u32, ServerError> {
-        let response: GetBlockNumberResponse = get_request::<(), _>(
-            &self.client,
-            &self.base_url,
-            "/validity-prover/block-number",
-            None,
-        )
-        .await?;
+        let response: GetBlockNumberResponse =
+            get_request::<(), _>(&self.client, &self.base_url, "/block-number", None).await?;
         Ok(response.block_number)
     }
 
@@ -75,7 +65,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetBlockNumberResponse = get_request::<(), _>(
             &self.client,
             &self.base_url,
-            "/validity-prover/validity-proof-block-number",
+            "/validity-proof-block-number",
             None,
         )
         .await?;
@@ -83,13 +73,8 @@ impl ValidityProverClientInterface for ValidityProverClient {
     }
 
     async fn get_next_deposit_index(&self) -> Result<u32, ServerError> {
-        let response: GetNextDepositIndexResponse = get_request::<(), _>(
-            &self.client,
-            &self.base_url,
-            "/validity-prover/next-deposit-index",
-            None,
-        )
-        .await?;
+        let response: GetNextDepositIndexResponse =
+            get_request::<(), _>(&self.client, &self.base_url, "/next-deposit-index", None).await?;
         Ok(response.deposit_index)
     }
 
@@ -97,7 +82,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetLatestIncludedDepositIndexResponse = get_request::<(), _>(
             &self.client,
             &self.base_url,
-            "/validity-prover/latest-included-deposit-index",
+            "/latest-included-deposit-index",
             None,
         )
         .await?;
@@ -120,7 +105,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetUpdateWitnessResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-update-witness",
+            "/get-update-witness",
             Some(&query),
         )
         .await?;
@@ -135,7 +120,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetDepositInfoResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-deposit-info",
+            "/get-deposit-info",
             Some(&query),
         )
         .await?;
@@ -156,7 +141,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             let response: GetDepositInfoBatchResponse = post_request(
                 &self.client,
                 &self.base_url,
-                "/validity-prover/get-deposit-info-batch",
+                "/get-deposit-info-batch",
                 Some(&request),
             )
             .await?;
@@ -175,7 +160,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetBlockNumberByTxTreeRootResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-block-number-by-tx-tree-root",
+            "/get-block-number-by-tx-tree-root",
             Some(&query),
         )
         .await?;
@@ -195,7 +180,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             let response: GetBlockNumberByTxTreeRootBatchResponse = post_request(
                 &self.client,
                 &self.base_url,
-                "/validity-prover/get-block-number-by-tx-tree-root-batch",
+                "/get-block-number-by-tx-tree-root-batch",
                 Some(&request),
             )
             .await?;
@@ -213,7 +198,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetValidityWitnessResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-validity-witness",
+            "/get-validity-witness",
             Some(&query),
         )
         .await?;
@@ -228,7 +213,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetValidityProofResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-validity-proof",
+            "/get-validity-proof",
             Some(&query),
         )
         .await?;
@@ -250,7 +235,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetBlockMerkleProofResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-block-merkle-proof",
+            "/get-block-merkle-proof",
             Some(&query),
         )
         .await?;
@@ -269,7 +254,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetDepositMerkleProofResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-deposit-merkle-proof",
+            "/get-deposit-merkle-proof",
             Some(&query),
         )
         .await?;
@@ -281,7 +266,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
         let response: GetAccountInfoResponse = get_request(
             &self.client,
             &self.base_url,
-            "/validity-prover/get-account-info",
+            "/get-account-info",
             Some(&query),
         )
         .await?;
@@ -301,7 +286,7 @@ impl ValidityProverClientInterface for ValidityProverClient {
             let response: GetAccountInfoBatchResponse = post_request(
                 &self.client,
                 &self.base_url,
-                "/validity-prover/get-account-info-batch",
+                "/get-account-info-batch",
                 Some(&request),
             )
             .await?;

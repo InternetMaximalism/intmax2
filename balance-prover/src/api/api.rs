@@ -106,7 +106,7 @@ pub async fn prove_single_claim(
 }
 
 pub fn balance_prover_scope() -> Scope {
-    scope("/balance-prover")
+    scope("")
         .service(prove_spent)
         .service(prove_send)
         .service(prove_update)

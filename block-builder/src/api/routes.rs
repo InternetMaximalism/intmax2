@@ -77,7 +77,7 @@ pub async fn post_signature(
 }
 
 pub fn block_builder_scope() -> actix_web::Scope {
-    actix_web::web::scope("/block-builder")
+    actix_web::web::scope("")
         .service(get_fee_info)
         .service(tx_request)
         .service(query_proposal)
