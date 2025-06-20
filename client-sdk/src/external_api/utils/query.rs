@@ -227,9 +227,16 @@ fn deserialize_response<R: DeserializeOwned>(
 fn build_url(base_url: &str, endpoint: &str) -> Result<Url, ServerError> {
     let base_url = Url::parse(base_url)
         .map_err(|e| ServerError::MalformedUrl(format!("Invalid URL: {base_url}, error: {e}")))?;
-    let url = base_url
-        .join(endpoint)
-        .map_err(|e| ServerError::MalformedUrl(format!("Failed to join URL: {e}")))?;
+    let normalized_endpoint = if endpoint.starts_with('/') {
+        endpoint.to_string()
+    } else {
+        format!("/{endpoint}")
+    };
+    let url = Url::parse(&format!("{base_url}{normalized_endpoint}")).map_err(|e| {
+        ServerError::MalformedUrl(format!(
+            "Invalid URL: {base_url}{normalized_endpoint}, error: {e}"
+        ))
+    })?;
     Ok(url)
 }
 
