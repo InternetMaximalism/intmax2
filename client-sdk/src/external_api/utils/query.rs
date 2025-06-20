@@ -225,16 +225,21 @@ fn deserialize_response<R: DeserializeOwned>(
 
 /// Builds a complete URL from base URL and endpoint
 fn build_url(base_url: &str, endpoint: &str) -> Result<Url, ServerError> {
-    let base_url = Url::parse(base_url)
+    let _ = Url::parse(base_url)
         .map_err(|e| ServerError::MalformedUrl(format!("Invalid URL: {base_url}, error: {e}")))?;
+    let normalized_base_url = if base_url.ends_with('/') {
+        base_url.trim_end_matches('/').to_string()
+    } else {
+        base_url.to_string()
+    };
     let normalized_endpoint = if endpoint.starts_with('/') {
         endpoint.to_string()
     } else {
         format!("/{endpoint}")
     };
-    let url = Url::parse(&format!("{base_url}{normalized_endpoint}")).map_err(|e| {
+    let url = Url::parse(&format!("{normalized_base_url}{normalized_endpoint}")).map_err(|e| {
         ServerError::MalformedUrl(format!(
-            "Invalid URL: {base_url}{normalized_endpoint}, error: {e}"
+            "Invalid URL: {normalized_base_url}{normalized_endpoint}, error: {e}"
         ))
     })?;
     Ok(url)
