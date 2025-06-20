@@ -86,12 +86,15 @@ pub async fn get_withdrawal_info(
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    let withdrawal_info = state
+    let (withdrawal_info, cursor_response) = state
         .withdrawal_server
-        .get_withdrawal_info(pubkey)
+        .get_withdrawal_info(pubkey, request.inner.cursor)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetWithdrawalInfoResponse { withdrawal_info }))
+    Ok(Json(GetWithdrawalInfoResponse {
+        withdrawal_info,
+        cursor_response,
+    }))
 }
 
 #[post("/get-claim-info")]
@@ -104,12 +107,15 @@ pub async fn get_claim_info(
         .verify(&request.auth)
         .map_err(ErrorUnauthorized)?;
     let pubkey = request.auth.pubkey;
-    let claim_info = state
+    let (claim_info, cursor_response) = state
         .withdrawal_server
         .get_claim_info(pubkey)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetClaimInfoResponse { claim_info }))
+    Ok(Json(GetClaimInfoResponse {
+        claim_info,
+        cursor_response,
+    }))
 }
 
 #[get("/get-withdrawal-info-by-recipient")]
@@ -117,12 +123,15 @@ pub async fn get_withdrawal_info_by_recipient(
     state: Data<State>,
     query: QsQuery<GetWithdrawalInfoByRecipientQuery>,
 ) -> Result<Json<GetWithdrawalInfoResponse>, Error> {
-    let withdrawal_info = state
+    let (withdrawal_info, cursor_response) = state
         .withdrawal_server
         .get_withdrawal_info_by_recipient(query.recipient)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
-    Ok(Json(GetWithdrawalInfoResponse { withdrawal_info }))
+    Ok(Json(GetWithdrawalInfoResponse {
+        withdrawal_info,
+        cursor_response,
+    }))
 }
 
 pub fn withdrawal_server_scope() -> Scope {
