@@ -1,8 +1,11 @@
 use alloy::primitives::U256;
-use intmax2_client_sdk::external_api::contract::{
-    block_builder_reward::BlockBuilderRewardContract,
-    convert::{convert_address_to_alloy, convert_bytes32_to_b256},
-    utils::get_address_from_private_key,
+use intmax2_client_sdk::{
+    client::strategy::strategy::fetch_all_withdrawal_infos,
+    external_api::contract::{
+        block_builder_reward::BlockBuilderRewardContract,
+        convert::{convert_address_to_alloy, convert_bytes32_to_b256},
+        utils::get_address_from_private_key,
+    },
 };
 use intmax2_interfaces::{
     api::withdrawal_server::interface::WithdrawalStatus, utils::key::ViewPair,
@@ -19,7 +22,8 @@ pub async fn claim_withdrawals(
 ) -> Result<(), CliError> {
     let signer_private_key = convert_bytes32_to_b256(eth_private_key);
     let client = get_client()?;
-    let withdrawal_infos = client.get_withdrawal_info(view_pair.view).await?;
+    let withdrawal_infos =
+        fetch_all_withdrawal_infos(client.withdrawal_server.as_ref(), view_pair).await?;
 
     let mut claim_withdrawals = Vec::new();
 

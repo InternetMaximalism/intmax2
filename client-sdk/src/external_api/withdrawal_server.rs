@@ -14,6 +14,7 @@ use intmax2_interfaces::{
                 GetClaimInfoRequest, GetClaimInfoResponse, GetWithdrawalInfoByRecipientQuery,
                 GetWithdrawalInfoRequest, GetWithdrawalInfoResponse, RequestClaimRequest,
                 RequestClaimResponse, RequestWithdrawalRequest, RequestWithdrawalResponse,
+                TimestampCursor, TimestampCursorResponse,
             },
         },
     },
@@ -110,8 +111,9 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
     async fn get_withdrawal_info(
         &self,
         view_key: PrivateKey,
-    ) -> Result<Vec<WithdrawalInfo>, ServerError> {
-        let request = GetWithdrawalInfoRequest;
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), ServerError> {
+        let request = GetWithdrawalInfoRequest { cursor };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: GetWithdrawalInfoResponse = post_request(
             &self.client,
@@ -120,14 +122,15 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             Some(&request_with_auth),
         )
         .await?;
-        Ok(response.withdrawal_info)
+        Ok((response.withdrawal_info, response.cursor_response))
     }
 
     async fn get_withdrawal_info_by_recipient(
         &self,
         recipient: Address,
-    ) -> Result<Vec<WithdrawalInfo>, ServerError> {
-        let query = GetWithdrawalInfoByRecipientQuery { recipient };
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<WithdrawalInfo>, TimestampCursorResponse), ServerError> {
+        let query = GetWithdrawalInfoByRecipientQuery { recipient, cursor };
         let response: GetWithdrawalInfoResponse = get_request(
             &self.client,
             &self.base_url,
@@ -135,11 +138,15 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             Some(&query),
         )
         .await?;
-        Ok(response.withdrawal_info)
+        Ok((response.withdrawal_info, response.cursor_response))
     }
 
-    async fn get_claim_info(&self, view_key: PrivateKey) -> Result<Vec<ClaimInfo>, ServerError> {
-        let request = GetClaimInfoRequest;
+    async fn get_claim_info(
+        &self,
+        view_key: PrivateKey,
+        cursor: TimestampCursor,
+    ) -> Result<(Vec<ClaimInfo>, TimestampCursorResponse), ServerError> {
+        let request = GetClaimInfoRequest { cursor };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
         let response: GetClaimInfoResponse = post_request(
             &self.client,
@@ -148,6 +155,6 @@ impl WithdrawalServerClientInterface for WithdrawalServerClient {
             Some(&request_with_auth),
         )
         .await?;
-        Ok(response.claim_info)
+        Ok((response.claim_info, response.cursor_response))
     }
 }

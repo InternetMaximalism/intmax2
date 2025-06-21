@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT \n                    status as \"status: SqlClaimStatus\",\n                    claim,\n                    submit_claim_proof_tx_hash,\n                    l1_tx_hash,\n                    created_at\n                FROM claims\n                WHERE pubkey = $1\n                AND EXTRACT(EPOCH FROM created_at)::bigint > $2\n                ORDER BY created_at ASC\n                LIMIT $3\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status: SqlClaimStatus",
+        "type_info": {
+          "Custom": {
+            "name": "claim_status",
+            "kind": {
+              "Enum": [
+                "requested",
+                "verified",
+                "relayed",
+                "success",
+                "failed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "claim",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "submit_claim_proof_tx_hash",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "l1_tx_hash",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bpchar",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "e2f241bceac15ecfab1e56a0a57df76c14b1982920a8fb45aafbed6e4c037078"
+}

@@ -5,7 +5,7 @@ use plonky2::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::utils::signature::Signable;
+use crate::{api::store_vault_server::types::CursorOrder, utils::signature::Signable};
 
 use super::interface::{ClaimInfo, FeeResult, WithdrawalInfo};
 
@@ -80,7 +80,9 @@ pub struct RequestClaimResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetWithdrawalInfoRequest;
+pub struct GetWithdrawalInfoRequest {
+    pub cursor: TimestampCursor,
+}
 
 impl Signable for GetWithdrawalInfoRequest {
     fn content(&self) -> Vec<u8> {
@@ -92,11 +94,14 @@ impl Signable for GetWithdrawalInfoRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetWithdrawalInfoResponse {
     pub withdrawal_info: Vec<WithdrawalInfo>,
+    pub cursor_response: TimestampCursorResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetClaimInfoRequest;
+pub struct GetClaimInfoRequest {
+    pub cursor: TimestampCursor,
+}
 
 impl Signable for GetClaimInfoRequest {
     fn content(&self) -> Vec<u8> {
@@ -108,10 +113,28 @@ impl Signable for GetClaimInfoRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetClaimInfoResponse {
     pub claim_info: Vec<ClaimInfo>,
+    pub cursor_response: TimestampCursorResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetWithdrawalInfoByRecipientQuery {
     pub recipient: Address,
+    pub cursor: TimestampCursor,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimestampCursor {
+    pub cursor: Option<u64>, // Optional timestamp in seconds
+    pub order: CursorOrder,
+    pub limit: Option<u32>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimestampCursorResponse {
+    pub next_cursor: Option<u64>,
+    pub has_more: bool,
+    pub total_count: u32,
 }

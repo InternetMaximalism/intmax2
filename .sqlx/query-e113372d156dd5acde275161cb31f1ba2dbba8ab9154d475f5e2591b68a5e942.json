@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO claims (\n                    uuid,\n                    pubkey,\n                    recipient,\n                    nullifier,\n                    single_claim_proof,\n                    claim,\n                    status\n                )\n                VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bpchar",
+        "Bpchar",
+        "Bpchar",
+        "Bytea",
+        "Jsonb",
+        {
+          "Custom": {
+            "name": "claim_status",
+            "kind": {
+              "Enum": [
+                "requested",
+                "verified",
+                "relayed",
+                "success",
+                "failed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e113372d156dd5acde275161cb31f1ba2dbba8ab9154d475f5e2591b68a5e942"
+}

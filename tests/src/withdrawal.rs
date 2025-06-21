@@ -9,6 +9,7 @@ use intmax2_client_sdk::{
     client::{
         client::Client,
         fee_payment::generate_fee_payment_memo,
+        strategy::strategy::fetch_all_withdrawal_infos,
         types::{GenericRecipient, TransferRequest},
     },
     external_api::{
@@ -138,10 +139,10 @@ pub async fn single_withdrawal(
                 retries
             ));
         }
-        let withdrawal_info = client
-            .get_withdrawal_info(key_pair.view)
-            .await
-            .context("Failed to get withdrawal info")?;
+        let withdrawal_info =
+            fetch_all_withdrawal_infos(client.withdrawal_server.as_ref(), key_pair.into())
+                .await
+                .context("Failed to fetch withdrawal info")?;
         let corresponding_withdrawal_info = withdrawal_info
             .iter()
             .find(|w| w.contract_withdrawal.nullifier == nullifier)

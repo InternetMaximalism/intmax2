@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO withdrawals (\n                    uuid,\n                    pubkey,\n                    recipient,\n                    withdrawal_hash,\n                    single_withdrawal_proof,\n                    contract_withdrawal,\n                    status\n                )\n                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bpchar",
+        "Bpchar",
+        "Bpchar",
+        "Bytea",
+        "Jsonb",
+        {
+          "Custom": {
+            "name": "withdrawal_status",
+            "kind": {
+              "Enum": [
+                "requested",
+                "relayed",
+                "success",
+                "need_claim",
+                "failed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d3c690d7b77a541f7493caa2a6dd17510b3c7cab98b9f4eba7384eddf0d55d09"
+}
