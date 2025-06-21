@@ -1000,6 +1000,9 @@ mod tests {
         },
         Env,
     };
+    use intmax2_interfaces::api::{
+        store_vault_server::types::CursorOrder, withdrawal_server::types::TimestampCursor,
+    };
 
     use super::*;
 
@@ -1229,6 +1232,226 @@ mod tests {
                 assert!(exists.0, "Claim should contain nullifier after insertion")
             });
         }
+
+        stop_withdrawal_docker(cont_name);
+    }
+
+    #[tokio::test]
+    async fn test_get_withdrawal_info_with_data() {
+        let port = find_free_port();
+        let cont_name = "withdrawal-test-get-info-data";
+
+        stop_withdrawal_docker(cont_name);
+        let output = run_withdrawal_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        sleep(Duration::from_millis(2500));
+        assert_and_stop(cont_name, || create_databases(cont_name));
+
+        let mut env = get_example_env();
+        env.database_url =
+            format!("postgres://postgres:password@localhost:{port}/withdrawal").to_string();
+        let server = WithdrawalServer::new(&env, get_provider()).await;
+
+        if let Err(err) = &server {
+            stop_withdrawal_docker(cont_name);
+            panic!("Withdrawal Server initialization failed: {err:?}");
+        }
+        let server = server.unwrap();
+
+        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+
+        let pubkey =
+            U256::from_hex("0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447")
+                .unwrap();
+
+        // Insert test data
+        let withdrawal_hashes = [
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "0x2345678901bcdef12345678901bcdef12345678901bcdef12345678901bcdef1",
+            "0x3456789012cdef123456789012cdef123456789012cdef123456789012cdef12",
+        ];
+        let recipients = [
+            "0x1234567890123456789012345678901234567890",
+            "0x2345678901234567890123456789012345678901",
+            "0x3456789012345678901234567890123456789012",
+        ];
+        let proof_bytes = vec![1u8, 2, 3, 4];
+
+        for (i, (hash, recipient)) in withdrawal_hashes.iter().zip(recipients.iter()).enumerate() {
+            let contract_withdrawal = json!({
+                "recipient": recipient,
+                "tokenIndex": i as u32,
+                "amount": (1000 * (i + 1)).to_string(),
+                "nullifier": hash
+            });
+            let uuid_str = uuid::Uuid::new_v4().to_string();
+
+            sqlx::query!(
+                r#"
+                INSERT INTO withdrawals (
+                    uuid,
+                    pubkey,
+                    recipient,
+                    withdrawal_hash,
+                    single_withdrawal_proof,
+                    contract_withdrawal,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                "#,
+                uuid_str,
+                pubkey.to_hex(),
+                recipient,
+                hash,
+                proof_bytes,
+                contract_withdrawal,
+                SqlWithdrawalStatus::Requested as SqlWithdrawalStatus
+            )
+            .execute(&server.pool)
+            .await
+            .expect("Failed to insert test withdrawal");
+        }
+
+        // Test with default limit
+        let cursor = TimestampCursor {
+            cursor: None,
+            order: CursorOrder::Desc,
+            limit: None,
+        };
+
+        let result = server.get_withdrawal_info(pubkey, cursor).await;
+        assert!(result.is_ok(), "get_withdrawal_info should succeed");
+        let (withdrawal_infos, cursor_response) = result.unwrap();
+        assert_eq!(withdrawal_infos.len(), 3, "Should have 3 withdrawals");
+        assert_eq!(cursor_response.total_count, 3, "Total count should be 3");
+        assert!(!cursor_response.has_more, "Should not have more results");
+
+        // Verify the data is correct
+        assert_eq!(withdrawal_infos[0].contract_withdrawal.token_index, 2);
+        assert_eq!(withdrawal_infos[1].contract_withdrawal.token_index, 1);
+        assert_eq!(withdrawal_infos[2].contract_withdrawal.token_index, 0);
+
+        stop_withdrawal_docker(cont_name);
+    }
+
+    #[tokio::test]
+    async fn test_get_withdrawal_info_with_pagination() {
+        let port = find_free_port();
+        let cont_name = "withdrawal-test-get-info-pagination";
+
+        stop_withdrawal_docker(cont_name);
+        let output = run_withdrawal_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        sleep(Duration::from_millis(2500));
+        create_databases(cont_name);
+
+        let mut env = get_example_env();
+        env.database_url =
+            format!("postgres://postgres:password@localhost:{port}/withdrawal").to_string();
+        let server = WithdrawalServer::new(&env, get_provider()).await;
+
+        if let Err(err) = &server {
+            stop_withdrawal_docker(cont_name);
+            panic!("Withdrawal Server initialization failed: {err:?}");
+        }
+        let server = server.unwrap();
+
+        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+
+        let pubkey =
+            U256::from_hex("0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447")
+                .unwrap();
+
+        // Insert 5 test withdrawals
+        let proof_bytes = vec![1u8, 2, 3, 4];
+        let base_hashes = [
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+            "0x2222222222222222222222222222222222222222222222222222222222222222",
+            "0x3333333333333333333333333333333333333333333333333333333333333333",
+            "0x4444444444444444444444444444444444444444444444444444444444444444",
+            "0x5555555555555555555555555555555555555555555555555555555555555555",
+        ];
+        let base_recipients = [
+            "0x1111111111111111111111111111111111111111",
+            "0x2222222222222222222222222222222222222222",
+            "0x3333333333333333333333333333333333333333",
+            "0x4444444444444444444444444444444444444444",
+            "0x5555555555555555555555555555555555555555",
+        ];
+
+        for i in 0..5 {
+            let hash = base_hashes[i];
+            let recipient = base_recipients[i];
+            let contract_withdrawal = json!({
+                "recipient": recipient,
+                "tokenIndex": i as u32,
+                "amount": (1000 * (i + 1)).to_string(),
+                "nullifier": hash
+            });
+            let uuid_str = uuid::Uuid::new_v4().to_string();
+
+            sqlx::query!(
+                r#"
+                INSERT INTO withdrawals (
+                    uuid,
+                    pubkey,
+                    recipient,
+                    withdrawal_hash,
+                    single_withdrawal_proof,
+                    contract_withdrawal,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                "#,
+                uuid_str,
+                pubkey.to_hex(),
+                recipient,
+                hash,
+                proof_bytes,
+                contract_withdrawal,
+                SqlWithdrawalStatus::Requested as SqlWithdrawalStatus
+            )
+            .execute(&server.pool)
+            .await
+            .expect("Failed to insert test withdrawal");
+
+            sleep(Duration::from_millis(10));
+        }
+
+        // Test with limit of 2
+        let cursor = TimestampCursor {
+            cursor: None,
+            order: CursorOrder::Desc,
+            limit: Some(2),
+        };
+
+        let result = server.get_withdrawal_info(pubkey, cursor).await;
+        assert!(result.is_ok(), "get_withdrawal_info should succeed");
+        let (withdrawal_infos, cursor_response) = result.unwrap();
+
+        assert_eq!(
+            withdrawal_infos.len(),
+            2,
+            "Should have 2 withdrawals due to limit"
+        );
+        assert_eq!(cursor_response.total_count, 5, "Total count should be 5");
+        assert!(cursor_response.has_more, "Should have more results");
+        assert!(
+            cursor_response.next_cursor.is_some(),
+            "Next cursor should be set"
+        );
 
         stop_withdrawal_docker(cont_name);
     }
