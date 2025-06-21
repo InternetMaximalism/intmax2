@@ -1,4 +1,4 @@
-import { await_tx_sendable, Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_intmax_address_from_public_pair, get_tx_status, get_user_data, get_withdrawal_info, IntmaxAccount, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsPublicKeyPair, JsTransfer, JsTransferRequest, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
+import { await_tx_sendable, Config, fetch_deposit_history, fetch_transfer_history, fetch_tx_history, generate_fee_payment_memo, generate_intmax_account_from_eth_key, generate_withdrawal_transfers, get_intmax_address_from_public_pair, get_tx_status, get_user_data, get_withdrawal_info, IntmaxAccount, JsGenericAddress, JsMetaDataCursor, JsPaymentMemoEntry, JsPublicKeyPair, JsTimestampCursor, JsTransfer, JsTransferRequest, JsTxRequestMemo, prepare_deposit, query_and_finalize, quote_transfer_fee, quote_withdrawal_fee, send_tx_request, sync, sync_withdrawals, } from '../pkg';
 import { generateRandomHex } from './utils';
 import { deposit, getEthBalance } from './contract';
 import { ethers } from 'ethers';
@@ -102,8 +102,9 @@ async function main() {
     }
   }
   // print withdrawal status 
-  const withdrawalInfo = await get_withdrawal_info(config, account.view_pair);
-  for (const withdrawal of withdrawalInfo) {
+  const timeCursor = new JsTimestampCursor(null, "asc", null);
+  const result = await get_withdrawal_info(config, account.view_pair, timeCursor);
+  for (const withdrawal of result.info) {
     const contract_withdrawal = withdrawal.contract_withdrawal;
     console.log(`Withdrawal: amount: ${contract_withdrawal.amount}, token_index: ${contract_withdrawal.token_index}, status: ${withdrawal.status}`);
   }

@@ -1,4 +1,4 @@
-import { generate_intmax_account_from_eth_key, get_withdrawal_info } from '../pkg/intmax2_wasm_lib';
+import { generate_intmax_account_from_eth_key, get_withdrawal_info, JsTimestampCursor } from '../pkg/intmax2_wasm_lib';
 import { ethers } from 'ethers';
 import { claimWithdrawals, } from './contract';
 import { env, config } from './setup';
@@ -8,8 +8,9 @@ async function getEthAddress(privateKey: string): Promise<string> {
 }
 
 async function getWithdrawalsToClaim(view_pair: string) {
-    const withdrwalInfo = await get_withdrawal_info(config, view_pair);
-    return withdrwalInfo
+    const cursor = new JsTimestampCursor(null, "asc", null);
+    const result = await get_withdrawal_info(config, view_pair, cursor);
+    return result.info
         .filter(w => w.status === "need_claim")
         .map(w => w.contract_withdrawal);
 }
