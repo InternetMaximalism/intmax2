@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                status as \"status: SqlWithdrawalStatus\",\n                contract_withdrawal,\n                l1_tx_hash\n            FROM withdrawals\n            WHERE pubkey = $1\n            ",
+  "query": "\n              SELECT \n                  status as \"status: SqlWithdrawalStatus\",\n                  contract_withdrawal,\n                  l1_tx_hash,\n                  created_at\n              FROM withdrawals\n              WHERE pubkey = $1\n              AND EXTRACT(EPOCH FROM created_at)::bigint < $2\n              ORDER BY created_at DESC\n              LIMIT $3\n              ",
   "describe": {
     "columns": [
       {
@@ -30,18 +30,26 @@
         "ordinal": 2,
         "name": "l1_tx_hash",
         "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Bpchar"
+        "Bpchar",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "2b28fb656aa5853a3a7683a24f894b35a06e1c90bf9948f28ab9b320d0f8f20d"
+  "hash": "a152c422817e8dc9b6b4bedb17b710c1831d3b40816a18c2ea48bbb14d0d4fe6"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                status as \"status: SqlClaimStatus\",\n                claim,\n                submit_claim_proof_tx_hash,\n                l1_tx_hash\n            FROM claims\n            WHERE pubkey = $1\n            ",
+  "query": "\n                SELECT \n                    status as \"status: SqlClaimStatus\",\n                    claim,\n                    submit_claim_proof_tx_hash,\n                    l1_tx_hash,\n                    created_at\n                FROM claims\n                WHERE pubkey = $1\n                AND EXTRACT(EPOCH FROM created_at)::bigint < $2\n                ORDER BY created_at DESC\n                LIMIT $3\n                ",
   "describe": {
     "columns": [
       {
@@ -35,19 +35,27 @@
         "ordinal": 3,
         "name": "l1_tx_hash",
         "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Bpchar"
+        "Bpchar",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
       true,
-      true
+      true,
+      false
     ]
   },
-  "hash": "925c271aa1f900705e6f7e1a318a13dda04d3b27dece5889fb4a61463953282d"
+  "hash": "43a3f267e19b53ba0e022b637845a948746d26ccf2c25d253d7ef8edc085127a"
 }
