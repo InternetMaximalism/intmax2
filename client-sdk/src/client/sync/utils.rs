@@ -1,5 +1,6 @@
 use intmax2_interfaces::{
-    api::block_builder::interface::Fee, data::user_data::UserData, utils::random::default_rng,
+    data::user_data::UserData,
+    utils::{fee::Fee, random::default_rng},
 };
 use intmax2_zkp::{
     common::{

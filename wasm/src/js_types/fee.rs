@@ -2,7 +2,7 @@ use intmax2_client_sdk::client::{
     fee_payment::WithdrawalTransferRequests,
     types::{FeeQuote, TransferFeeQuote},
 };
-use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
+use intmax2_interfaces::{api::block_builder::interface::BlockBuilderFeeInfo, utils::fee::Fee};
 use intmax2_zkp::ethereum_types::{address::Address, u32limb_trait::U32LimbTrait as _};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -176,7 +176,7 @@ mod fee_tests {
     use std::str::FromStr;
 
     use intmax2_client_sdk::client::{fee_payment::WithdrawalTransferRequests, types::FeeQuote};
-    use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
+    use intmax2_interfaces::{api::block_builder::interface::BlockBuilderFeeInfo, utils::fee::Fee};
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
     use crate::js_types::{

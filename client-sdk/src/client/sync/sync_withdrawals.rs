@@ -5,12 +5,9 @@ use crate::client::{
     sync::{balance_logic::update_send_by_receiver, utils::quote_withdrawal_claim_fee},
 };
 use intmax2_interfaces::{
-    api::{
-        block_builder::interface::Fee,
-        withdrawal_server::interface::{FeeResult, WithdrawalFeeInfo},
-    },
+    api::withdrawal_server::interface::{FeeResult, WithdrawalFeeInfo},
     data::{meta_data::MetaDataWithBlockNumber, transfer_data::TransferData},
-    utils::{address::IntmaxAddress, key::ViewPair},
+    utils::{address::IntmaxAddress, fee::Fee, key::ViewPair},
 };
 use intmax2_zkp::{
     common::witness::{transfer_witness::TransferWitness, withdrawal_witness::WithdrawalWitness},

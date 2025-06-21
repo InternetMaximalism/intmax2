@@ -95,6 +95,11 @@ mod tests {
             reward_contract_address: None,
             private_zkp_server_max_retires: None,
             private_zkp_server_retry_interval: None,
+            max_registoration_fee: None,
+            max_non_registoration_fee: None,
+            max_registration_collateral_fee: None,
+            max_withdrawal_fee: None,
+            max_claim_fee: None,
         };
 
         let dir = tempdir().unwrap();

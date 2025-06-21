@@ -1,11 +1,11 @@
 use intmax2_interfaces::{
-    api::block_builder::interface::Fee,
     data::{
         deposit_data::DepositData, extra_data::FullExtraData, transfer_data::TransferData,
         tx_data::TxData,
     },
     utils::{
         address::{AddressType, IntmaxAddress},
+        fee::Fee,
         key::PrivateKey,
         payment_id::PaymentId,
         random::default_rng,

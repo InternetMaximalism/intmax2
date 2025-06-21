@@ -46,4 +46,11 @@ pub struct EnvVar {
     // optional private zkp server settings
     pub private_zkp_server_max_retires: Option<usize>,
     pub private_zkp_server_retry_interval: Option<u64>,
+
+    // optional max fee
+    pub max_registoration_fee: Option<String>,
+    pub max_non_registoration_fee: Option<String>,
+    pub max_registration_collateral_fee: Option<String>,
+    pub max_withdrawal_fee: Option<String>,
+    pub max_claim_fee: Option<String>,
 }

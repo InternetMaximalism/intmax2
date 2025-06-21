@@ -4,7 +4,7 @@ use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
 use intmax2_client_sdk::client::strategy::common::fetch_sender_proof_set;
 use intmax2_interfaces::{
     api::{
-        block_builder::interface::{Fee, FeeProof},
+        block_builder::interface::FeeProof,
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
@@ -13,6 +13,7 @@ use intmax2_interfaces::{
     },
     utils::{
         address::IntmaxAddress,
+        fee::Fee,
         key::{PrivateKey, PublicKey},
         random::default_rng,
     },

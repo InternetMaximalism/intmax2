@@ -14,11 +14,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     api::{
-        block_builder::interface::Fee,
         error::ServerError,
         withdrawal_server::types::{TimestampCursor, TimestampCursorResponse},
     },
-    utils::{address::IntmaxAddress, key::PrivateKey},
+    utils::{address::IntmaxAddress, fee::Fee, key::PrivateKey},
 };
 
 type F = GoldilocksField;

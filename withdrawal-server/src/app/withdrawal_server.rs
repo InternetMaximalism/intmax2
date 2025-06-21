@@ -16,7 +16,7 @@ use intmax2_interfaces::{
         encryption::{errors::BlsEncryptionError, BlsEncryption},
         transfer_data::TransferData,
     },
-    utils::{address::IntmaxAddress, network::Network},
+    utils::{address::IntmaxAddress, fee::Fee, network::Network},
 };
 
 use super::{error::WithdrawalServerError, fee::parse_optional_fee_str};
@@ -38,11 +38,8 @@ use intmax2_client_sdk::{
     },
 };
 use intmax2_interfaces::{
-    api::{
-        block_builder::interface::Fee,
-        withdrawal_server::interface::{
-            ClaimFeeInfo, ClaimInfo, ContractWithdrawal, WithdrawalFeeInfo, WithdrawalInfo,
-        },
+    api::withdrawal_server::interface::{
+        ClaimFeeInfo, ClaimInfo, ContractWithdrawal, WithdrawalFeeInfo, WithdrawalInfo,
     },
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
     utils::{circuit_verifiers::CircuitVerifiers, key::ViewPair},

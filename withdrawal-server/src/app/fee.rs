@@ -1,5 +1,5 @@
 use super::error::WithdrawalServerError;
-use intmax2_interfaces::api::block_builder::interface::Fee;
+use intmax2_interfaces::utils::fee::Fee;
 use intmax2_zkp::ethereum_types::u256::U256;
 
 pub fn parse_fee_str(fee: &str) -> Result<Vec<Fee>, WithdrawalServerError> {
