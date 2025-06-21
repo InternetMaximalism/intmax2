@@ -1,7 +1,8 @@
 use colored::Colorize;
 use futures::future::try_join_all;
 use intmax2_client_sdk::client::{
-    misc::payment_memo::get_all_payment_memos, strategy::strategy::{fetch_all_claim_infos, fetch_all_withdrawal_infos},
+    misc::payment_memo::get_all_payment_memos,
+    strategy::strategy::{fetch_all_claim_infos, fetch_all_withdrawal_infos},
 };
 use intmax2_interfaces::{data::deposit_data::TokenType, utils::key::ViewPair};
 use intmax2_zkp::{

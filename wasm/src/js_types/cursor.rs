@@ -1,5 +1,8 @@
 use intmax2_interfaces::{
-    api::{store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse}, withdrawal_server::types::{TimestampCursor, TimestampCursorResponse}},
+    api::{
+        store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse},
+        withdrawal_server::types::{TimestampCursor, TimestampCursorResponse},
+    },
     data::meta_data::MetaData,
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
