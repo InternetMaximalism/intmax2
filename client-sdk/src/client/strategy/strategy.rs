@@ -434,11 +434,11 @@ pub async fn fetch_all_withdrawal_infos(
             .get_withdrawal_info(view_pair.view, cursor.clone())
             .await?;
 
+        results.extend(withdrawal_info);
+
         if !cursor_response.has_more {
             break;
         }
-
-        results.extend(withdrawal_info);
 
         // Update cursor for the next iteration
         cursor.cursor = cursor_response.next_cursor;
@@ -463,11 +463,11 @@ pub async fn fetch_all_claim_infos(
             .get_claim_info(view_pair.view, cursor.clone())
             .await?;
 
+        results.extend(claim_info);
+
         if !cursor_response.has_more {
             break;
         }
-
-        results.extend(claim_info);
 
         // Update cursor for the next iteration
         cursor.cursor = cursor_response.next_cursor;
