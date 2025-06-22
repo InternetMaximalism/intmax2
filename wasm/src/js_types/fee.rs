@@ -238,6 +238,7 @@ mod fee_tests {
     #[test]
     fn test_blockbuilderfeeinfo_to_jsfeeinfo() {
         let info = BlockBuilderFeeInfo {
+            version: "0.1.0".to_string(),
             beneficiary: "X7p9827sHEvXEePM2bLy8UQvB3Gx6FXZw65u3YFtaZE6Sm4mVYrZ7s6dAu1Sbg1Kg2b4SPHZqadsw4h3vkjdDG37A5TzZq8".parse().unwrap(),
             registration_fee: Some(vec![fee("10", 0), fee("20", 1)]),
             non_registration_fee: None,

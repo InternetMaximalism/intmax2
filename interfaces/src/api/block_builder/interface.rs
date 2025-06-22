@@ -44,6 +44,7 @@ pub enum BlockBuilderStatus {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockBuilderFeeInfo {
+    pub version: String,
     pub block_builder_address: Address,
     pub beneficiary: IntmaxAddress,
     pub registration_fee: Option<Vec<Fee>>,

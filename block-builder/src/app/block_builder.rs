@@ -228,6 +228,7 @@ impl BlockBuilder {
     /// Get fee information for the block builder
     pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
         BlockBuilderFeeInfo {
+            version: env!("CARGO_PKG_VERSION").to_string(),
             block_builder_address: self.config.block_builder_address,
             beneficiary: self.config.beneficiary,
             registration_fee: self.config.registration_fee.clone(),
