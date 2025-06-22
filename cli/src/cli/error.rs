@@ -8,7 +8,7 @@ use intmax2_client_sdk::{
 };
 use intmax2_interfaces::api::error::ServerError;
 
-use crate::format::FormatTokenInfoError;
+use crate::{cli::fee_cap::FeeCapError, format::FormatTokenInfoError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
@@ -29,6 +29,9 @@ pub enum CliError {
 
     #[error("CSV deserialize error: {0}")]
     CSVDeserializeError(#[from] csv::Error),
+
+    #[error("Fee cap error: {0}")]
+    FeeCapError(#[from] FeeCapError),
 
     #[error("Env error:{0}")]
     EnvError(String),

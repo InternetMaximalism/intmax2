@@ -1,5 +1,5 @@
 use alloy::primitives::Address;
-use intmax2_interfaces::utils::key::ViewPair;
+use intmax2_interfaces::utils::{fee::FeeList, key::ViewPair};
 use serde::Deserialize;
 
 pub mod api;
@@ -23,7 +23,7 @@ pub struct Env {
     pub is_faster_mining: bool,
     pub withdrawal_beneficiary_view_pair: ViewPair,
     pub claim_beneficiary_view_pair: ViewPair,
-    pub direct_withdrawal_fee: Option<String>,
-    pub claimable_withdrawal_fee: Option<String>,
-    pub claim_fee: Option<String>,
+    pub direct_withdrawal_fee: Option<FeeList>,
+    pub claimable_withdrawal_fee: Option<FeeList>,
+    pub claim_fee: Option<FeeList>,
 }

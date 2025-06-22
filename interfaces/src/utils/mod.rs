@@ -1,6 +1,7 @@
 pub mod address;
 pub mod circuit_verifiers;
 pub mod digest;
+pub mod fee;
 pub mod key;
 pub mod key_derivation;
 pub mod network;

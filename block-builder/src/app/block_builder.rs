@@ -27,6 +27,7 @@ use intmax2_interfaces::{
     },
     utils::{
         address::IntmaxAddress,
+        fee::Fee,
         key::PublicKey,
         key_derivation::{derive_keypair_from_spend_key, derive_spend_key_from_bytes32},
         network::Network,
@@ -39,7 +40,7 @@ use intmax2_zkp::{
     },
     ethereum_types::{account_id::AccountId, address::Address, u256::U256},
 };
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
@@ -49,7 +50,6 @@ use crate::{
 
 use super::{
     error::BlockBuilderError,
-    fee::{convert_fee_vec, parse_fee_str},
     storage::{self, config::StorageConfig, Storage},
 };
 
@@ -76,10 +76,10 @@ pub struct Config {
     pub beneficiary: IntmaxAddress,
     pub use_fee: bool,
     pub use_collateral: bool,
-    pub registration_fee: Option<HashMap<u32, U256>>,
-    pub non_registration_fee: Option<HashMap<u32, U256>>,
-    pub registration_collateral_fee: Option<HashMap<u32, U256>>,
-    pub non_registration_collateral_fee: Option<HashMap<u32, U256>>,
+    pub registration_fee: Option<Vec<Fee>>,
+    pub non_registration_fee: Option<Vec<Fee>>,
+    pub registration_collateral_fee: Option<Vec<Fee>>,
+    pub non_registration_collateral_fee: Option<Vec<Fee>>,
 }
 
 #[derive(Clone)]
@@ -134,26 +134,14 @@ impl BlockBuilder {
             let u = parse_ether(&env.eth_allowance_for_block).unwrap();
             convert_u256_to_intmax(u)
         };
-        let registration_fee = env
-            .registration_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        let non_registration_fee = env
-            .non_registration_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
-        let registration_collateral_fee = env
-            .registration_collateral_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
+        let registration_fee = env.registration_fee.clone().map(|list| list.0);
+        let non_registration_fee = env.non_registration_fee.clone().map(|list| list.0);
+        let registration_collateral_fee =
+            env.registration_collateral_fee.clone().map(|list| list.0);
         let non_registration_collateral_fee = env
             .non_registration_collateral_fee
-            .as_ref()
-            .map(|fee| parse_fee_str(fee))
-            .transpose()?;
+            .clone()
+            .map(|list| list.0);
         let use_fee = registration_fee.is_some() || non_registration_fee.is_some();
         let use_collateral_fee =
             registration_collateral_fee.is_some() || non_registration_collateral_fee.is_some();
@@ -240,14 +228,13 @@ impl BlockBuilder {
     /// Get fee information for the block builder
     pub fn get_fee_info(&self) -> BlockBuilderFeeInfo {
         BlockBuilderFeeInfo {
+            version: env!("CARGO_PKG_VERSION").to_string(),
             block_builder_address: self.config.block_builder_address,
             beneficiary: self.config.beneficiary,
-            registration_fee: convert_fee_vec(&self.config.registration_fee),
-            non_registration_fee: convert_fee_vec(&self.config.non_registration_fee),
-            registration_collateral_fee: convert_fee_vec(&self.config.registration_collateral_fee),
-            non_registration_collateral_fee: convert_fee_vec(
-                &self.config.non_registration_collateral_fee,
-            ),
+            registration_fee: self.config.registration_fee.clone(),
+            non_registration_fee: self.config.non_registration_fee.clone(),
+            registration_collateral_fee: self.config.registration_collateral_fee.clone(),
+            non_registration_collateral_fee: self.config.non_registration_collateral_fee.clone(),
         }
     }
 
@@ -438,8 +425,8 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
-            registration_fee: Some("0:100,1:2000".to_string()),
-            non_registration_fee: Some("0:100,1:2000".to_string()),
+            registration_fee: Some("0:100,1:2000".parse().unwrap()),
+            non_registration_fee: Some("0:100,1:2000".parse().unwrap()),
             registration_collateral_fee: None,
             non_registration_collateral_fee: None,
         };
@@ -452,14 +439,6 @@ mod tests {
             block_builder.config.block_builder_address
         );
         assert_eq!(info.beneficiary, block_builder.config.beneficiary);
-        assert_eq!(
-            info.registration_fee,
-            convert_fee_vec(&block_builder.config.registration_fee)
-        );
-        assert_eq!(
-            info.non_registration_fee,
-            convert_fee_vec(&block_builder.config.non_registration_fee)
-        );
     }
 
     #[tokio::test]
@@ -492,8 +471,8 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
-            registration_fee: Some("0:100,1:2000".to_string()),
-            non_registration_fee: Some("0:100,1:2000".to_string()),
+            registration_fee: Some("0:100,1:2000".parse().unwrap()),
+            non_registration_fee: Some("0:100,1:2000".parse().unwrap()),
             registration_collateral_fee: None,
             non_registration_collateral_fee: None,
         };
@@ -537,8 +516,8 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
-            registration_fee: Some("0:100,1:2000".to_string()),
-            non_registration_fee: Some("0:100,1:2000".to_string()),
+            registration_fee: Some("0:100,1:2000".parse().unwrap()),
+            non_registration_fee: Some("0:100,1:2000".parse().unwrap()),
             registration_collateral_fee: None,
             non_registration_collateral_fee: None,
         };
@@ -585,8 +564,8 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
-            registration_fee: Some("0:100,1:2000".to_string()),
-            non_registration_fee: Some("0:100,1:2000".to_string()),
+            registration_fee: Some("0:100,1:2000".parse().unwrap()),
+            non_registration_fee: Some("0:100,1:2000".parse().unwrap()),
             registration_collateral_fee: None,
             non_registration_collateral_fee: None,
         };

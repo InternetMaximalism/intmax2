@@ -805,6 +805,7 @@ impl Client {
             fee,
             collateral_fee,
             block_builder_address: fee_info.block_builder_address,
+            is_registration_block,
         })
     }
 

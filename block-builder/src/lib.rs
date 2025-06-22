@@ -1,5 +1,5 @@
 use alloy::primitives::{Address, B256};
-use intmax2_interfaces::utils::address::IntmaxAddress;
+use intmax2_interfaces::utils::{address::IntmaxAddress, fee::FeeList};
 use serde::Deserialize;
 
 pub mod api;
@@ -34,8 +34,8 @@ pub struct EnvVar {
     pub nonce_waiting_time: Option<u64>,
 
     pub beneficiary: Option<IntmaxAddress>,
-    pub registration_fee: Option<String>,
-    pub non_registration_fee: Option<String>,
-    pub registration_collateral_fee: Option<String>,
-    pub non_registration_collateral_fee: Option<String>,
+    pub registration_fee: Option<FeeList>,
+    pub non_registration_fee: Option<FeeList>,
+    pub registration_collateral_fee: Option<FeeList>,
+    pub non_registration_collateral_fee: Option<FeeList>,
 }

@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use super::{block_post::BlockPostTask, error::FeeError, types::ProposalMemo};
 use intmax2_client_sdk::client::strategy::common::fetch_sender_proof_set;
 use intmax2_interfaces::{
     api::{
-        block_builder::interface::{Fee, FeeProof},
+        block_builder::interface::FeeProof,
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
@@ -13,6 +11,7 @@ use intmax2_interfaces::{
     },
     utils::{
         address::IntmaxAddress,
+        fee::Fee,
         key::{PrivateKey, PublicKey},
         random::default_rng,
     },
@@ -32,7 +31,6 @@ use intmax2_zkp::{
         u256::U256,
     },
 };
-use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -41,8 +39,8 @@ pub async fn validate_fee_proof(
     store_vault_server_client: &dyn StoreVaultClientInterface,
     beneficiary: IntmaxAddress,
     block_builder_address: Address,
-    required_fee: Option<&HashMap<u32, U256>>,
-    required_collateral_fee: Option<&HashMap<u32, U256>>,
+    required_fee: Option<&Vec<Fee>>,
+    required_collateral_fee: Option<&Vec<Fee>>,
     sender_spend_pub: PublicKey,
     fee_proof: &Option<FeeProof>,
 ) -> Result<(), FeeError> {
@@ -134,7 +132,7 @@ pub async fn validate_fee_proof(
 /// common function to validate fee
 async fn validate_fee_single(
     beneficiary: IntmaxAddress,
-    required_fee: &HashMap<u32, U256>, // token index -> fee amount
+    required_fee: &[Fee], // token index -> fee amount
     sender_proof_set: &SenderProofSet,
     transfer_witness: &TransferWitness,
 ) -> Result<(), FeeError> {
@@ -188,45 +186,23 @@ async fn validate_fee_single(
     }
 
     // make sure that the fee is correct
-    if !required_fee.contains_key(&transfer_witness.transfer.token_index) {
-        return Err(FeeError::InvalidFee(
-            "Fee token index is not correct".to_string(),
-        ));
-    }
+
     let requested_fee = required_fee
-        .get(&transfer_witness.transfer.token_index)
-        .ok_or_else(|| FeeError::InvalidFee("Fee token index is not correct".to_string()))?;
-    if transfer_witness.transfer.amount < *requested_fee {
+        .iter()
+        .find(|f| f.token_index == transfer_witness.transfer.token_index)
+        .ok_or_else(|| {
+            FeeError::InvalidFee(format!(
+                "Fee for token index {} is not found",
+                transfer_witness.transfer.token_index
+            ))
+        })?;
+    if transfer_witness.transfer.amount < requested_fee.amount {
         return Err(FeeError::InvalidFee(format!(
             "Transfer amount is not enough: requested_fee: {}, transfer_amount: {}",
-            requested_fee, transfer_witness.transfer.amount
+            requested_fee.amount, transfer_witness.transfer.amount
         )));
     }
     Ok(())
-}
-
-/// Parse fee string into a map of token index -> fee amount
-// Example: "0:100,1:200" -> {0: 100, 1: 200}
-pub fn parse_fee_str(fee: &str) -> Result<HashMap<u32, U256>, FeeError> {
-    let mut fee_map = HashMap::new();
-    for fee_str in fee.split(',') {
-        let fee_parts: Vec<&str> = fee_str.split(':').collect();
-        if fee_parts.len() != 2 {
-            return Err(FeeError::ParseError(
-                "Invalid fee format: should be token_index:fee_amount".to_string(),
-            ));
-        }
-        let token_index = fee_parts[0]
-            .parse::<u32>()
-            .map_err(|e| FeeError::ParseError(format!("Failed to parse token index: {e}")))?;
-        let fee_amount: U256 = fee_parts[1]
-            .parse::<BigUint>()
-            .map_err(|e| FeeError::ParseError(format!("Failed to parse fee amount: {e}")))?
-            .try_into()
-            .map_err(|e| FeeError::ParseError(format!("Failed to convert fee amount: {e}")))?;
-        fee_map.insert(token_index, fee_amount);
-    }
-    Ok(fee_map)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -357,17 +333,6 @@ pub async fn collect_fee(
     Ok(block_post_tasks)
 }
 
-pub fn convert_fee_vec(fee: &Option<HashMap<u32, U256>>) -> Option<Vec<Fee>> {
-    fee.as_ref().map(|fee| {
-        fee.iter()
-            .map(|(token_index, amount)| Fee {
-                token_index: *token_index,
-                amount: *amount,
-            })
-            .collect()
-    })
-}
-
 fn padded_pubkeys(pubkey: U256) -> Vec<U256> {
     let mut keys = vec![pubkey];
     keys.resize(NUM_SENDERS_IN_BLOCK, U256::dummy_pubkey());
@@ -394,35 +359,9 @@ fn verify_user_signature(
 mod tests {
     use super::*;
     use intmax2_zkp::ethereum_types::{account_id::ACCOUNT_ID_BYTES_LEN, u256::U256};
-    use num_bigint::BigUint;
-    use num_traits::One;
-    use std::collections::HashMap;
-
     fn account_id_from_u64(val: u64) -> AccountId {
         let bytes = val.to_be_bytes();
         AccountId::from_bytes_be(&bytes[8 - ACCOUNT_ID_BYTES_LEN..])
-    }
-
-    #[test]
-    fn test_convert_fee_vec_some() {
-        let mut map = HashMap::new();
-        map.insert(0, U256::from(100));
-        map.insert(1, U256::from(200));
-
-        let result = convert_fee_vec(&Some(map)).unwrap();
-        assert_eq!(result.len(), 2);
-        assert!(result
-            .iter()
-            .any(|f| f.token_index == 0 && f.amount == U256::from(100)));
-        assert!(result
-            .iter()
-            .any(|f| f.token_index == 1 && f.amount == U256::from(200)));
-    }
-
-    #[test]
-    fn test_convert_fee_vec_none() {
-        let result = convert_fee_vec(&None);
-        assert!(result.is_none());
     }
 
     #[test]
@@ -466,151 +405,5 @@ mod tests {
         let result2 = padded_account_ids(account);
 
         assert_eq!(result1, result2);
-    }
-
-    #[test]
-    fn test_fee_amount_zero() {
-        let fee_str = "0:0";
-        let result = parse_fee_str(fee_str).unwrap();
-
-        let mut expected = HashMap::new();
-        expected.insert(0, U256::default());
-
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_few_fees() {
-        let fee_str = "0:100,1:200";
-        let result = parse_fee_str(fee_str).unwrap();
-
-        let mut expected = HashMap::new();
-        expected.insert(0, U256::try_from(BigUint::from(100u64)).unwrap());
-        expected.insert(1, U256::try_from(BigUint::from(200u64)).unwrap());
-
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_parse_single_fee() {
-        let fee_str = "42:123456789";
-        let result = parse_fee_str(fee_str).unwrap();
-
-        let mut expected = HashMap::new();
-        expected.insert(42, U256::try_from(BigUint::from(123456789u64)).unwrap());
-
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_parse_empty_string() {
-        let fee_str = "";
-        let result = parse_fee_str(fee_str);
-
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Parse error: Invalid fee format: should be token_index:fee_amount"
-        );
-    }
-
-    #[test]
-    fn test_invalid_format_missing_colon() {
-        let fee_str = "0-100,1:200";
-        let result = parse_fee_str(fee_str);
-
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Parse error: Invalid fee format: should be token_index:fee_amount"
-        );
-    }
-
-    #[test]
-    fn test_hex_token_index() {
-        let fee_str = "abc:100";
-        let result = parse_fee_str(fee_str);
-
-        assert!(result.is_err());
-        assert!(format!("{}", result.err().unwrap()).contains("Failed to parse token index"));
-    }
-
-    #[test]
-    fn test_hex_fee_amount() {
-        let fee_str = "0:abc";
-        let result = parse_fee_str(fee_str);
-
-        assert!(result.is_err());
-        assert!(format!("{}", result.err().unwrap()).contains("Failed to parse fee amount"));
-    }
-
-    #[test]
-    fn test_big_fee_amount() {
-        let fee_str = "1:1000000000000000000000000000000000000";
-        let result = parse_fee_str(fee_str).unwrap();
-
-        let mut expected = HashMap::new();
-        expected.insert(
-            1u32,
-            U256::try_from(
-                BigUint::parse_bytes("1000000000000000000000000000000000000".as_bytes(), 10)
-                    .unwrap(),
-            )
-            .unwrap(),
-        );
-
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_maximum_u256_fee() {
-        // max = 2^256 - 1
-        let max = (BigUint::one() << 256) - BigUint::one();
-        let fee_str = format!("1:{max}");
-        let result = parse_fee_str(&fee_str).unwrap();
-
-        let mut expected = HashMap::new();
-        let u256 = U256::try_from(max).unwrap();
-        expected.insert(1, u256);
-
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_fee_amount_overflow_u256() {
-        // 2^256 — overflow for U256
-        let overflow = BigUint::one() << 256;
-        let fee_str = format!("0:{overflow}");
-
-        let result = parse_fee_str(&fee_str);
-
-        assert!(matches!(
-            result,
-            Err(FeeError::ParseError(msg)) if msg.contains("Failed to convert fee amount")
-        ));
-    }
-
-    #[test]
-    fn test_negative_fee_amount() {
-        let fee_str = "0:-100";
-        let result = parse_fee_str(fee_str);
-
-        assert!(matches!(
-            result,
-            Err(FeeError::ParseError(msg)) if msg.contains("Failed to parse fee amount")
-        ));
-    }
-
-    #[test]
-    fn test_maximum_token_index() {
-        let fee_str = format!("{}:42", u32::MAX);
-        let result = parse_fee_str(&fee_str).unwrap();
-
-        let mut expected = HashMap::new();
-        let big = BigUint::from(42u32);
-        let u256 = U256::try_from(big).unwrap();
-        expected.insert(u32::MAX, u256);
-
-        assert_eq!(result, expected);
     }
 }

@@ -2,7 +2,7 @@ use intmax2_client_sdk::client::{
     fee_payment::WithdrawalTransferRequests,
     types::{FeeQuote, TransferFeeQuote},
 };
-use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
+use intmax2_interfaces::{api::block_builder::interface::BlockBuilderFeeInfo, utils::fee::Fee};
 use intmax2_zkp::ethereum_types::{address::Address, u32limb_trait::U32LimbTrait as _};
 use wasm_bindgen::{prelude::wasm_bindgen, JsError};
 
@@ -56,6 +56,7 @@ pub struct JsTransferFeeQuote {
     pub fee: Option<JsFee>,
     pub collateral_fee: Option<JsFee>,
     pub block_builder_address: String,
+    pub is_registration_block: bool,
 }
 
 impl From<TransferFeeQuote> for JsTransferFeeQuote {
@@ -65,6 +66,7 @@ impl From<TransferFeeQuote> for JsTransferFeeQuote {
             fee: fee_quote.fee.map(JsFee::from),
             collateral_fee: fee_quote.collateral_fee.map(JsFee::from),
             block_builder_address: fee_quote.block_builder_address.to_hex(),
+            is_registration_block: fee_quote.is_registration_block,
         }
     }
 }
@@ -85,6 +87,7 @@ impl TryFrom<JsTransferFeeQuote> for TransferFeeQuote {
                 .transpose()?,
             block_builder_address: Address::from_hex(&js_fee_quote.block_builder_address)
                 .map_err(|e| JsError::new(&format!("Invalid block builder address: {e}")))?,
+            is_registration_block: js_fee_quote.is_registration_block,
         })
     }
 }
@@ -176,7 +179,7 @@ mod fee_tests {
     use std::str::FromStr;
 
     use intmax2_client_sdk::client::{fee_payment::WithdrawalTransferRequests, types::FeeQuote};
-    use intmax2_interfaces::api::block_builder::interface::{BlockBuilderFeeInfo, Fee};
+    use intmax2_interfaces::{api::block_builder::interface::BlockBuilderFeeInfo, utils::fee::Fee};
     use intmax2_zkp::ethereum_types::{address::Address, u256::U256};
 
     use crate::js_types::{
@@ -235,6 +238,7 @@ mod fee_tests {
     #[test]
     fn test_blockbuilderfeeinfo_to_jsfeeinfo() {
         let info = BlockBuilderFeeInfo {
+            version: "0.1.0".to_string(),
             beneficiary: "X7p9827sHEvXEePM2bLy8UQvB3Gx6FXZw65u3YFtaZE6Sm4mVYrZ7s6dAu1Sbg1Kg2b4SPHZqadsw4h3vkjdDG37A5TzZq8".parse().unwrap(),
             registration_fee: Some(vec![fee("10", 0), fee("20", 1)]),
             non_registration_fee: None,

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     api::error::ServerError,
     data::transfer_data::TransferData,
-    utils::{address::IntmaxAddress, key::PrivateKey},
+    utils::{address::IntmaxAddress, fee::Fee, key::PrivateKey},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,15 +41,10 @@ pub enum BlockBuilderStatus {
     ProposingBlock, // after constructed the block, accepting signatures for the block
 }
 
-#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Fee {
-    pub token_index: u32,
-    pub amount: U256,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockBuilderFeeInfo {
+    pub version: String,
     pub block_builder_address: Address,
     pub beneficiary: IntmaxAddress,
     pub registration_fee: Option<Vec<Fee>>,

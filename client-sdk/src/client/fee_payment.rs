@@ -1,6 +1,5 @@
 use intmax2_interfaces::{
     api::{
-        block_builder::interface::Fee,
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
         validity_prover::interface::ValidityProverClientInterface,
         withdrawal_server::interface::WithdrawalServerClientInterface,
@@ -8,6 +7,7 @@ use intmax2_interfaces::{
     data::encryption::BlsEncryption,
     utils::{
         address::IntmaxAddress,
+        fee::Fee,
         key::{PublicKey, ViewPair},
     },
 };

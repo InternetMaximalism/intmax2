@@ -67,8 +67,8 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
-            registration_fee: Some("0:100,1:2000".to_string()),
-            non_registration_fee: Some("0:100,1:2000".to_string()),
+            registration_fee: Some("0:100,1:2000".parse().unwrap()),
+            non_registration_fee: Some("0:100,1:2000".parse().unwrap()),
             registration_collateral_fee: None,
             non_registration_collateral_fee: None,
         };
@@ -136,8 +136,8 @@ mod tests {
             gas_limit_for_block_post: Some(40000),
             nonce_waiting_time: None,
             beneficiary: None,
-            registration_fee: Some("0:100,1:2000".to_string()),
-            non_registration_fee: Some("0:100,1:2000".to_string()),
+            registration_fee: Some("0:100,1:2000".parse().unwrap()),
+            non_registration_fee: Some("0:100,1:2000".parse().unwrap()),
             registration_collateral_fee: None,
             non_registration_collateral_fee: None,
         };

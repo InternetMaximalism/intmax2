@@ -1,7 +1,7 @@
 use intmax2_interfaces::{
     api::{
         balance_prover::interface::BalanceProverClientInterface,
-        block_builder::interface::{BlockBuilderFeeInfo, CollateralBlock, Fee, FeeProof},
+        block_builder::interface::{BlockBuilderFeeInfo, CollateralBlock, FeeProof},
         store_vault_server::interface::{SaveDataEntry, StoreVaultClientInterface},
     },
     data::{
@@ -17,6 +17,7 @@ use intmax2_interfaces::{
     },
     utils::{
         digest::get_digest,
+        fee::Fee,
         key::{KeyPair, PrivateKey},
         random::default_rng,
     },

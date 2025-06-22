@@ -16,10 +16,10 @@ use intmax2_interfaces::{
         encryption::{errors::BlsEncryptionError, BlsEncryption},
         transfer_data::TransferData,
     },
-    utils::{address::IntmaxAddress, network::Network},
+    utils::{address::IntmaxAddress, fee::Fee, network::Network},
 };
 
-use super::{error::WithdrawalServerError, fee::parse_optional_fee_str};
+use super::error::WithdrawalServerError;
 use intmax2_client_sdk::{
     client::{
         config::network_from_env,
@@ -38,11 +38,8 @@ use intmax2_client_sdk::{
     },
 };
 use intmax2_interfaces::{
-    api::{
-        block_builder::interface::Fee,
-        withdrawal_server::interface::{
-            ClaimFeeInfo, ClaimInfo, ContractWithdrawal, WithdrawalFeeInfo, WithdrawalInfo,
-        },
+    api::withdrawal_server::interface::{
+        ClaimFeeInfo, ClaimInfo, ContractWithdrawal, WithdrawalFeeInfo, WithdrawalInfo,
     },
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
     utils::{circuit_verifiers::CircuitVerifiers, key::ViewPair},
@@ -78,19 +75,15 @@ struct Config {
 
 impl Config {
     pub fn from_env(env: &Env) -> Result<Self, WithdrawalServerError> {
-        let direct_withdrawal_fee = parse_optional_fee_str(&env.direct_withdrawal_fee)?;
-        let claimable_withdrawal_fee: Option<Vec<Fee>> =
-            parse_optional_fee_str(&env.claimable_withdrawal_fee)?;
-        let claim_fee: Option<Vec<Fee>> = parse_optional_fee_str(&env.claim_fee)?;
         let network = network_from_env();
         Ok(Self {
             network,
             is_faster_mining: env.is_faster_mining,
             withdrawal_beneficiary_key: env.withdrawal_beneficiary_view_pair,
             claim_beneficiary_key: env.claim_beneficiary_view_pair,
-            direct_withdrawal_fee,
-            claimable_withdrawal_fee,
-            claim_fee,
+            direct_withdrawal_fee: env.direct_withdrawal_fee.clone().map(|l| l.0),
+            claimable_withdrawal_fee: env.claimable_withdrawal_fee.clone().map(|l| l.0),
+            claim_fee: env.claim_fee.clone().map(|l| l.0),
         })
     }
 }
@@ -991,12 +984,9 @@ mod tests {
     use std::{str::FromStr, thread::sleep, time::Duration};
 
     use crate::{
-        app::{
-            fee::parse_fee_str,
-            withdrawal_server::test_withdrawal_server_helper::{
-                assert_and_stop, create_databases, create_tables, find_free_port,
-                run_withdrawal_docker, stop_withdrawal_docker,
-            },
+        app::withdrawal_server::test_withdrawal_server_helper::{
+            assert_and_stop, create_databases, create_tables, find_free_port,
+            run_withdrawal_docker, stop_withdrawal_docker,
         },
         Env,
     };
@@ -1038,9 +1028,9 @@ mod tests {
             is_faster_mining: true,
             withdrawal_beneficiary_view_pair:"viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
             claim_beneficiary_view_pair: "viewpair/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447/0x1a1ef1bc29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447".parse().unwrap(),
-            direct_withdrawal_fee: Some("0:100".to_string()),
-            claimable_withdrawal_fee: Some("0:10".to_string()),
-            claim_fee: Some("0:100".to_string()),
+            direct_withdrawal_fee: Some("0:100".parse().unwrap()),
+            claimable_withdrawal_fee: Some("0:10".parse().unwrap()),
+            claim_fee: Some("0:100".parse().unwrap()),
         }
     }
 
@@ -1083,7 +1073,7 @@ mod tests {
             // If only one variable is Some and another one is not, test will fail, so there is should be some error in WithdrawalServer new method.
             let claim_fee = server.get_claim_fee();
             if env.claim_fee.is_some() {
-                let fee = parse_fee_str(&env.claim_fee.unwrap()).unwrap();
+                let fee = env.claim_fee.unwrap().0;
                 assert_and_stop(cont_name, || assert_eq!(claim_fee.fee.unwrap(), fee));
             }
             let withdrawal_fee = server.get_withdrawal_fee();
