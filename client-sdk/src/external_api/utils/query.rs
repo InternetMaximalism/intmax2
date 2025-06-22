@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use intmax2_interfaces::api::error::ServerError;
-use reqwest::{header, Client, Response, Url};
+use reqwest::{header, Client, RequestBuilder, Response, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::external_api::utils::retry::with_retry;
@@ -58,6 +58,7 @@ pub async fn post_request_with_bearer_token<B: Serialize, R: DeserializeOwned>(
         };
         request_builder = request_builder.header(header::AUTHORIZATION, auth_header);
     }
+    request_builder = add_client_version_header(request_builder);
 
     if let Some(body) = body {
         request_builder = request_builder.json(body);
@@ -97,6 +98,7 @@ where
     };
 
     let request_builder = client.get(url.clone()).timeout(REQWEST_TIMEOUT);
+    let request_builder = add_client_version_header(request_builder);
 
     log::debug!("GET request url: {url}");
 
@@ -222,6 +224,11 @@ fn deserialize_response<R: DeserializeOwned>(
 /*
 * Utility functions
 */
+
+/// Adds a custom header with the client version to the request builder
+fn add_client_version_header(request_builder: RequestBuilder) -> RequestBuilder {
+    request_builder.header("Client-Version", env!("CARGO_PKG_VERSION"))
+}
 
 /// Builds a complete URL from base URL and endpoint
 fn build_url(base_url: &str, endpoint: &str) -> Result<Url, ServerError> {
