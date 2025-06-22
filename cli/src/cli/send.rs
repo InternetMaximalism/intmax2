@@ -54,9 +54,9 @@ pub async fn send_transfers(
         .await?;
     if let Some(fee) = &fee_quote.fee {
         let fee_caps = if fee_quote.is_registration_block {
-            &env.max_registoration_fee
+            &env.max_registration_fee
         } else {
-            &env.max_non_registoration_fee
+            &env.max_non_registration_fee
         };
         validate_fee_cap(fee, fee_caps)?;
         log::info!("beneficiary: {}", fee_quote.beneficiary);

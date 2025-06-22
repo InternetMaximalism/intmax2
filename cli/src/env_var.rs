@@ -48,8 +48,8 @@ pub struct EnvVar {
     pub private_zkp_server_retry_interval: Option<u64>,
 
     // optional max fees
-    pub max_registoration_fee: Option<FeeList>,
-    pub max_non_registoration_fee: Option<FeeList>,
+    pub max_registration_fee: Option<FeeList>,
+    pub max_non_registration_fee: Option<FeeList>,
     pub max_registration_collateral_fee: Option<FeeList>,
     pub max_non_registration_collateral_fee: Option<FeeList>,
     pub max_withdrawal_fee: Option<FeeList>,
