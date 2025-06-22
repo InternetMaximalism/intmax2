@@ -56,6 +56,7 @@ pub struct JsTransferFeeQuote {
     pub fee: Option<JsFee>,
     pub collateral_fee: Option<JsFee>,
     pub block_builder_address: String,
+    pub is_registration_block: bool,
 }
 
 impl From<TransferFeeQuote> for JsTransferFeeQuote {
@@ -65,6 +66,7 @@ impl From<TransferFeeQuote> for JsTransferFeeQuote {
             fee: fee_quote.fee.map(JsFee::from),
             collateral_fee: fee_quote.collateral_fee.map(JsFee::from),
             block_builder_address: fee_quote.block_builder_address.to_hex(),
+            is_registration_block: fee_quote.is_registration_block,
         }
     }
 }
@@ -85,6 +87,7 @@ impl TryFrom<JsTransferFeeQuote> for TransferFeeQuote {
                 .transpose()?,
             block_builder_address: Address::from_hex(&js_fee_quote.block_builder_address)
                 .map_err(|e| JsError::new(&format!("Invalid block builder address: {e}")))?,
+            is_registration_block: js_fee_quote.is_registration_block,
         })
     }
 }

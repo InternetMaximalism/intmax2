@@ -98,6 +98,7 @@ mod tests {
             max_registoration_fee: None,
             max_non_registoration_fee: None,
             max_registration_collateral_fee: None,
+            max_non_registration_collateral_fee: None,
             max_withdrawal_fee: None,
             max_claim_fee: None,
         };

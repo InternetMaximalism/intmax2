@@ -21,7 +21,10 @@ use intmax2_zkp::{
 };
 use tokio::time::Instant;
 
-use crate::{cli::client::get_client, env_var::EnvVar};
+use crate::{
+    cli::{client::get_client, fee_cap::validate_fee_cap},
+    env_var::EnvVar,
+};
 
 use super::error::CliError;
 
@@ -50,10 +53,22 @@ pub async fn send_transfers(
         .quote_transfer_fee(&block_builder_url, spend_pub.0, fee_token_index)
         .await?;
     if let Some(fee) = &fee_quote.fee {
+        let fee_caps = if fee_quote.is_registration_block {
+            &env.max_registoration_fee
+        } else {
+            &env.max_non_registoration_fee
+        };
+        validate_fee_cap(fee, fee_caps)?;
         log::info!("beneficiary: {}", fee_quote.beneficiary);
         log::info!("Fee: {} (token# {})", fee.amount, fee.token_index);
     }
     if let Some(collateral_fee) = &fee_quote.collateral_fee {
+        let collateral_fee_caps = if fee_quote.is_registration_block {
+            &env.max_registration_collateral_fee
+        } else {
+            &env.max_non_registration_collateral_fee
+        };
+        validate_fee_cap(collateral_fee, collateral_fee_caps)?;
         log::info!(
             "Collateral Fee: {} (token# {})",
             collateral_fee.amount,

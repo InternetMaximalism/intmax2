@@ -159,6 +159,7 @@ pub struct TransferFeeQuote {
     pub fee: Option<Fee>,
     pub collateral_fee: Option<Fee>,
     pub block_builder_address: Address,
+    pub is_registration_block: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

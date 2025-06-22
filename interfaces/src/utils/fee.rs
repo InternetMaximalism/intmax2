@@ -18,8 +18,6 @@ pub enum FeeListError {
     TokenIndexParseError { position: usize, message: String },
     #[error("Failed to parse fee amount at position {position}: {message}")]
     AmountParseError { position: usize, message: String },
-    #[error("Empty fee string")]
-    EmptyFeeString,
 }
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr)]
@@ -42,7 +40,7 @@ impl FromStr for FeeList {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let trimmed = s.trim();
         if trimmed.is_empty() {
-            return Err(FeeListError::EmptyFeeString);
+            return Ok(FeeList(Vec::new()));
         }
 
         let mut fees = Vec::new();
@@ -186,18 +184,6 @@ mod tests {
     }
 
     #[test]
-    fn test_fee_list_from_str_empty_string() {
-        let result = FeeList::from_str("");
-        assert!(matches!(result, Err(FeeListError::EmptyFeeString)));
-    }
-
-    #[test]
-    fn test_fee_list_from_str_whitespace_only() {
-        let result = FeeList::from_str("   ");
-        assert!(matches!(result, Err(FeeListError::EmptyFeeString)));
-    }
-
-    #[test]
     fn test_fee_list_from_str_invalid_format_no_colon() {
         let result = FeeList::from_str("1-100");
         assert!(matches!(
@@ -314,10 +300,6 @@ mod tests {
         let error_str = error.to_string();
         assert!(error_str.contains("Failed to parse fee amount at position 0"));
         assert!(error_str.contains("invalid character"));
-
-        let error = FeeListError::EmptyFeeString;
-        let error_str = error.to_string();
-        assert_eq!(error_str, "Empty fee string");
     }
 
     #[test]

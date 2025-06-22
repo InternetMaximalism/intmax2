@@ -1,4 +1,4 @@
-use intmax2_interfaces::api::store_vault_server::types::StoreVaultType;
+use intmax2_interfaces::{api::store_vault_server::types::StoreVaultType, utils::fee::FeeList};
 use intmax2_zkp::ethereum_types::address::Address;
 use serde::Deserialize;
 
@@ -47,10 +47,11 @@ pub struct EnvVar {
     pub private_zkp_server_max_retires: Option<usize>,
     pub private_zkp_server_retry_interval: Option<u64>,
 
-    // optional max fee
-    pub max_registoration_fee: Option<String>,
-    pub max_non_registoration_fee: Option<String>,
-    pub max_registration_collateral_fee: Option<String>,
-    pub max_withdrawal_fee: Option<String>,
-    pub max_claim_fee: Option<String>,
+    // optional max fees
+    pub max_registoration_fee: Option<FeeList>,
+    pub max_non_registoration_fee: Option<FeeList>,
+    pub max_registration_collateral_fee: Option<FeeList>,
+    pub max_non_registration_collateral_fee: Option<FeeList>,
+    pub max_withdrawal_fee: Option<FeeList>,
+    pub max_claim_fee: Option<FeeList>,
 }
