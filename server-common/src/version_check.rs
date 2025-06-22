@@ -22,6 +22,12 @@ impl VersionCheck {
         }
     }
 
+    /// Creates a new `VersionCheck` instance from the environment variable `MIN_CLIENT_VERSION`.
+    pub fn from_env() -> Self {
+        let min_version = std::env::var("MIN_CLIENT_VERSION").unwrap_or("0.0.0".to_string());
+        Self::new(&min_version)
+    }
+
     fn is_version_supported(&self, version: &str) -> bool {
         match (
             Version::from_str(version),
