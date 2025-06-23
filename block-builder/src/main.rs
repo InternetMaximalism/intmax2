@@ -7,6 +7,7 @@ use block_builder::{
 use server_common::{
     health_check::{health_check, set_name_and_version},
     logger,
+    version_check::VersionCheck,
 };
 use std::io;
 use tracing_actix_web::TracingLogger;
@@ -30,6 +31,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(TracingLogger::<logger::CustomRootSpanBuilder>::new())
+            .wrap(VersionCheck::from_env())
             .app_data(data.clone())
             .service(health_check)
             .service(block_builder_scope())

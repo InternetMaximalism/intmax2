@@ -2,7 +2,7 @@ use std::io::{self};
 
 use actix_cors::Cors;
 use actix_web::{web::Data, App, HttpServer};
-use server_common::logger;
+use server_common::{logger, version_check::VersionCheck};
 use tracing_actix_web::TracingLogger;
 use validity_prover::{
     api::{health::health_check, state::State, validity_prover::validity_prover_scope},
@@ -27,6 +27,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(TracingLogger::<logger::CustomRootSpanBuilder>::new())
+            .wrap(VersionCheck::from_env())
             .app_data(data.clone())
             .service(health_check)
             .service(validity_prover_scope())

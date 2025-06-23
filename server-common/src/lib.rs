@@ -7,3 +7,4 @@ pub mod logger;
 pub mod parser;
 pub mod redis;
 pub mod tracer;
+pub mod version_check;

@@ -6,6 +6,7 @@ use actix_web::{
 use server_common::{
     health_check::{health_check, set_name_and_version},
     logger,
+    version_check::VersionCheck,
 };
 use std::io::{self};
 use store_vault_server::{
@@ -38,6 +39,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(TracingLogger::<logger::CustomRootSpanBuilder>::new())
+            .wrap(VersionCheck::from_env())
             .app_data(JsonConfig::default().limit(35_000_000))
             .app_data(state.clone())
             .service(health_check)

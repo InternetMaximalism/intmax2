@@ -5,6 +5,7 @@ use actix_web::{web::Data, App, HttpServer};
 use server_common::{
     health_check::{health_check, set_name_and_version},
     logger,
+    version_check::VersionCheck,
 };
 use tracing_actix_web::TracingLogger;
 use withdrawal_server::{
@@ -29,6 +30,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(TracingLogger::<logger::CustomRootSpanBuilder>::new())
+            .wrap(VersionCheck::from_env())
             .app_data(state.clone())
             .service(health_check)
             .service(withdrawal_server_scope())
