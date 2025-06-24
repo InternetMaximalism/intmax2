@@ -918,6 +918,11 @@ pub mod test_withdrawal_server_helper {
         }
     }
 
+    pub async fn setup_migration(pool: &DbPool) {
+        create_tables(pool, "./migrations/20250523164255_initial.up.sql").await;
+        create_tables(pool, "./migrations/20250624100406_delete-uuid.up.sql").await;
+    }
+
     pub async fn create_tables(pool: &DbPool, file_path: &str) {
         // Open and read file
         let mut file =
@@ -979,8 +984,8 @@ mod tests {
 
     use crate::{
         app::withdrawal_server::test_withdrawal_server_helper::{
-            assert_and_stop, create_databases, create_tables, find_free_port,
-            run_withdrawal_docker, stop_withdrawal_docker,
+            assert_and_stop, create_databases, find_free_port, run_withdrawal_docker,
+            setup_migration, stop_withdrawal_docker,
         },
         Env,
     };
@@ -1058,8 +1063,7 @@ mod tests {
         }
         let server = server.unwrap();
 
-        // Create needed SQL tables
-        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+        setup_migration(&server.pool).await;
 
         // Test get_claim_fee and get_withdrawal_fee
         {
@@ -1095,7 +1099,6 @@ mod tests {
                 "block_hash": "0xblockhash",
                 "nullifier": withdrawal_hash
             });
-            let uuid_str = uuid::Uuid::new_v4().to_string();
 
             // Check claims table for some withdrawal_hash record
             let exists: (bool,) = sqlx::query_as::<_, (bool,)>(
@@ -1117,7 +1120,6 @@ mod tests {
             sqlx::query(
                 r#"
                 INSERT INTO withdrawals (
-                    uuid,
                     pubkey,
                     recipient,
                     withdrawal_hash,
@@ -1125,10 +1127,9 @@ mod tests {
                     contract_withdrawal,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                VALUES ($1, $2, $3, $4, $5, $6::withdrawal_status)
                 "#,
             )
-            .bind(&uuid_str)
             .bind(pubkey_str.to_hex())
             .bind(recipient_str)
             .bind(withdrawal_hash)
@@ -1178,7 +1179,6 @@ mod tests {
             sqlx::query(
                 r#"
                 INSERT INTO claims (
-                    uuid,
                     pubkey,
                     recipient,
                     nullifier,
@@ -1186,10 +1186,9 @@ mod tests {
                     claim,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)
+                VALUES ($1, $2, $3, $4, $5, $6::claim_status)
                 "#,
             )
-            .bind(&uuid_str)
             .bind(pubkey_str.to_hex())
             .bind(recipient_str)
             .bind(withdrawal_hash)
@@ -1248,7 +1247,7 @@ mod tests {
         }
         let server = server.unwrap();
 
-        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+        setup_migration(&server.pool).await;
 
         let pubkey =
             U256::from_hex("0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447")
@@ -1348,7 +1347,7 @@ mod tests {
         }
         let server = server.unwrap();
 
-        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+        setup_migration(&server.pool).await;
 
         let pubkey =
             U256::from_hex("0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447")
@@ -1461,7 +1460,7 @@ mod tests {
         }
         let server = server.unwrap();
 
-        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+        setup_migration(&server.pool).await;
 
         let pubkey =
             U256::from_hex("0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447")
@@ -1563,7 +1562,7 @@ mod tests {
         }
         let server = server.unwrap();
 
-        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+        setup_migration(&server.pool).await;
 
         let pubkey =
             U256::from_hex("0xdeadbeef29051c687773b8751961827400215d295e4ee2ef8754c7f831a3b447")
@@ -1673,7 +1672,7 @@ mod tests {
         }
         let server = server.unwrap();
 
-        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+        setup_migration(&server.pool).await;
 
         let target_recipient = intmax2_zkp::ethereum_types::address::Address::from_hex(
             "0x1234567890123456789012345678901234567890",
@@ -1827,7 +1826,7 @@ mod tests {
         }
         let server = server.unwrap();
 
-        create_tables(&server.pool, "./migrations/20250523164255_initial.up.sql").await;
+        setup_migration(&server.pool).await;
 
         let target_recipient = intmax2_zkp::ethereum_types::address::Address::from_hex(
             "0x1234567890123456789012345678901234567890",
