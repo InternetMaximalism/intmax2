@@ -851,6 +851,7 @@ setup_env() {
     if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
         echo "❌ Docker Swarm is not active"
         echo "💡 Run: docker swarm init"
+        echo "🔄 After running 'docker swarm init', please re-execute the command"
         return 1
     fi
 
@@ -861,11 +862,16 @@ setup_env() {
     echo ""
 
     echo "📝 L2 RPC URL configuration:"
-    echo "   This should be a valid HTTP/HTTPS URL to your Scroll Sepolia RPC endpoint"
+    echo "   This should be a valid HTTP/HTTPS URL to your Scroll (Sepolia) RPC endpoint"
     echo "   Examples:"
-    echo "     • https://rpc.ankr.com/scroll_sepolia_testnet"
-    echo "     • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
-    echo "     • https://scroll-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
+    echo ""
+    echo "Mainnet RPC URLs:"
+    echo "  • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
+    echo "  • https://scroll-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
+    echo ""
+    echo "Testnet RPC URLs:"
+    echo "  • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
+    echo "  • https://scroll-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
     echo ""
 
     update_rpc=true
@@ -2121,7 +2127,8 @@ case "${1:-help}" in
         echo "  2. $0 setup-env  # Configure L2_RPC_URL and private key"
         echo "  3. $0 check      # Verify all configurations"
         echo "  4. $0 run        # Start the services"
-        echo "  5. $0 monitor    # Monitor running services"
+        echo "  5. $0 health     # Check the health status of the services"
+        echo "  6. $0 monitor    # Monitor running services"
         echo ""
         echo "Maintenance:"
         echo "  $0 stop          # Stop services"
