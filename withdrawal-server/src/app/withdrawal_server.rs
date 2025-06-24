@@ -244,11 +244,9 @@ impl WithdrawalServer {
         let recipient_str = withdrawal.recipient.to_hex();
         let withdrawal_value = serde_json::to_value(contract_withdrawal)
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
-        let uuid_str = uuid::Uuid::new_v4().to_string();
         sqlx::query!(
             r#"
             INSERT INTO withdrawals (
-                uuid,
                 pubkey,
                 recipient,
                 withdrawal_hash,
@@ -256,9 +254,8 @@ impl WithdrawalServer {
                 contract_withdrawal,
                 status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+            VALUES ($1, $2, $3, $4, $5, $6::withdrawal_status)
             "#,
-            uuid_str,
             pubkey_str,
             recipient_str,
             withdrawal_hash_str,
@@ -335,11 +332,9 @@ impl WithdrawalServer {
         let nullifier_str = claim.nullifier.to_hex();
         let claim_value = serde_json::to_value(claim)
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
-        let uuid_str = uuid::Uuid::new_v4().to_string();
         sqlx::query!(
             r#"
             INSERT INTO claims (
-                uuid,
                 pubkey,
                 recipient,
                 nullifier,
@@ -347,9 +342,8 @@ impl WithdrawalServer {
                 claim,
                 status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)
+            VALUES ($1, $2, $3, $4, $5, $6::claim_status)
             "#,
-            uuid_str,
             pubkey_str,
             recipient_str,
             nullifier_str,
@@ -1280,12 +1274,9 @@ mod tests {
                 "amount": (1000 * (i + 1)).to_string(),
                 "nullifier": hash
             });
-            let uuid_str = uuid::Uuid::new_v4().to_string();
-
             sqlx::query!(
                 r#"
                 INSERT INTO withdrawals (
-                    uuid,
                     pubkey,
                     recipient,
                     withdrawal_hash,
@@ -1293,9 +1284,8 @@ mod tests {
                     contract_withdrawal,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                VALUES ($1, $2, $3, $4, $5, $6::withdrawal_status)
                 "#,
-                uuid_str,
                 pubkey.to_hex(),
                 recipient,
                 hash,
@@ -1390,12 +1380,10 @@ mod tests {
                 "amount": (1000 * (i + 1)).to_string(),
                 "nullifier": hash
             });
-            let uuid_str = uuid::Uuid::new_v4().to_string();
 
             sqlx::query!(
                 r#"
                 INSERT INTO withdrawals (
-                    uuid,
                     pubkey,
                     recipient,
                     withdrawal_hash,
@@ -1403,9 +1391,8 @@ mod tests {
                     contract_withdrawal,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                VALUES ($1, $2, $3, $4, $5, $6::withdrawal_status)
                 "#,
-                uuid_str,
                 pubkey.to_hex(),
                 recipient,
                 hash,
@@ -1501,12 +1488,10 @@ mod tests {
                 "blockHash": format!("0x{:064x}", (i + 1) as u64 * 0x1111111111111111u64),
                 "nullifier": nullifier
             });
-            let uuid_str = uuid::Uuid::new_v4().to_string();
 
             sqlx::query!(
                 r#"
                 INSERT INTO claims (
-                    uuid,
                     pubkey,
                     recipient,
                     nullifier,
@@ -1514,9 +1499,8 @@ mod tests {
                     claim,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)
+                VALUES ($1, $2, $3, $4, $5, $6::claim_status)
                 "#,
-                uuid_str,
                 pubkey.to_hex(),
                 recipient,
                 nullifier,
@@ -1612,12 +1596,10 @@ mod tests {
                 "blockHash": format!("0x{:064x}", (i + 1) as u64 * 0x1111111111111111u64),
                 "nullifier": nullifier
             });
-            let uuid_str = uuid::Uuid::new_v4().to_string();
 
             sqlx::query!(
                 r#"
                 INSERT INTO claims (
-                    uuid,
                     pubkey,
                     recipient,
                     nullifier,
@@ -1625,9 +1607,8 @@ mod tests {
                     claim,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)
+                VALUES ($1, $2, $3, $4, $5, $6::claim_status)
                 "#,
-                uuid_str,
                 pubkey.to_hex(),
                 recipient,
                 nullifier,
@@ -1723,12 +1704,10 @@ mod tests {
                 "amount": (1000 * (i + 1)).to_string(),
                 "nullifier": hash
             });
-            let uuid_str = uuid::Uuid::new_v4().to_string();
 
             sqlx::query!(
                 r#"
                 INSERT INTO withdrawals (
-                    uuid,
                     pubkey,
                     recipient,
                     withdrawal_hash,
@@ -1736,9 +1715,8 @@ mod tests {
                     contract_withdrawal,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                VALUES ($1, $2, $3, $4, $5, $6::withdrawal_status)
                 "#,
-                uuid_str,
                 pubkey,
                 target_recipient.to_hex(),
                 hash,
@@ -1758,12 +1736,10 @@ mod tests {
             "amount": "999999",
             "nullifier": "0x9999999999999999999999999999999999999999999999999999999999999999"
         });
-        let other_uuid = uuid::Uuid::new_v4().to_string();
 
         sqlx::query!(
             r#"
             INSERT INTO withdrawals (
-                uuid,
                 pubkey,
                 recipient,
                 withdrawal_hash,
@@ -1771,9 +1747,8 @@ mod tests {
                 contract_withdrawal,
                 status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+            VALUES ($1, $2, $3, $4, $5, $6::withdrawal_status)
             "#,
-            other_uuid,
             "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
             other_recipient.to_hex(),
             "0x9999999999999999999999999999999999999999999999999999999999999999",
@@ -1885,12 +1860,10 @@ mod tests {
                 "amount": (1000 * (i + 1)).to_string(),
                 "nullifier": hash
             });
-            let uuid_str = uuid::Uuid::new_v4().to_string();
 
             sqlx::query!(
                 r#"
                 INSERT INTO withdrawals (
-                    uuid,
                     pubkey,
                     recipient,
                     withdrawal_hash,
@@ -1898,9 +1871,8 @@ mod tests {
                     contract_withdrawal,
                     status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::withdrawal_status)
+                VALUES ($1, $2, $3, $4, $5, $6::withdrawal_status)
                 "#,
-                uuid_str,
                 pubkey,
                 target_recipient.to_hex(),
                 hash,

@@ -1,11 +1,10 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO claims (\n                uuid,\n                pubkey,\n                recipient,\n                nullifier,\n                single_claim_proof,\n                claim,\n                status\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7::claim_status)\n            ",
+  "query": "\n            INSERT INTO claims (\n                pubkey,\n                recipient,\n                nullifier,\n                single_claim_proof,\n                claim,\n                status\n            )\n            VALUES ($1, $2, $3, $4, $5, $6::claim_status)\n            ",
   "describe": {
     "columns": [],
     "parameters": {
       "Left": [
-        "Text",
         "Bpchar",
         "Bpchar",
         "Bpchar",
@@ -29,5 +28,5 @@
     },
     "nullable": []
   },
-  "hash": "14192c68f238b54098163119792699e8825c4ad10cec6bed7cdf93d6e47a450c"
+  "hash": "89c2f08b6b6dc9d17d1bab7f7bb38ad8225dcd303316aefe4d6f765d89baed82"
 }
