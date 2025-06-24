@@ -53,6 +53,40 @@ else
     exit 1
 fi
 
+show_current_environment() {
+    if set_env_from_environment; then
+        local env_color=""
+        local env_label=""
+        case "$ENVIRONMENT" in
+            "devnet")
+                env_color="\033[1;36m"
+                env_label="🔧 DEVELOPMENT"
+                ;;
+            "testnet")
+                env_color="\033[1;33m"
+                env_label="🧪 TESTNET"
+                ;;
+            "mainnet")
+                env_color="\033[1;32m"
+                env_label="🚀 MAINNET"
+                ;;
+        esac
+        local reset_color="\033[0m"
+
+        echo ""
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "🌍 ENVIRONMENT CONFIGURATION"
+        echo -e "   ENVIRONMENT: ${env_color}${ENVIRONMENT}${reset_color}"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo ""
+    else
+        echo "   ❌ INVALID ENVIRONMENT: $ENVIRONMENT"
+        echo "   💡 Supported values: devnet, testnet, mainnet"
+        echo ""
+        return 1
+    fi
+}
+
 validate_api_endpoint() {
     local endpoint="$1"
 
@@ -605,6 +639,8 @@ confirm_action() {
 }
 
 setup() {
+    show_current_environment
+
     echo "🔍 Checking required tools..."
     if ! check_required_tools; then
         echo "❌ Setup cannot continue without required tools"
@@ -815,6 +851,7 @@ setup_env() {
     if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
         echo "❌ Docker Swarm is not active"
         echo "💡 Run: docker swarm init"
+        echo "🔄 After running 'docker swarm init', please re-execute the command"
         return 1
     fi
 
@@ -825,11 +862,16 @@ setup_env() {
     echo ""
 
     echo "📝 L2 RPC URL configuration:"
-    echo "   This should be a valid HTTP/HTTPS URL to your Scroll Sepolia RPC endpoint"
+    echo "   This should be a valid HTTP/HTTPS URL to your Scroll (Sepolia) RPC endpoint"
     echo "   Examples:"
-    echo "     • https://rpc.ankr.com/scroll_sepolia_testnet"
-    echo "     • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
-    echo "     • https://scroll-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
+    echo ""
+    echo "Mainnet RPC URLs:"
+    echo "  • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
+    echo "  • https://scroll-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
+    echo ""
+    echo "Testnet RPC URLs:"
+    echo "  • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
+    echo "  • https://scroll-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
     echo ""
 
     update_rpc=true
@@ -1169,6 +1211,8 @@ verify_env() {
 }
 
 check() {
+    show_current_environment
+
     echo "🔍 Checking required tools..."
     if ! check_required_tools; then
         echo ""
@@ -1290,6 +1334,8 @@ check() {
 }
 
 run() {
+    show_current_environment
+
     if [ ! -f "frpc.toml" ] || [ ! -f "nginx.conf" ]; then
         echo "❌ Configuration files not found"
         echo "Run: $0 setup first"
@@ -1972,6 +2018,8 @@ clean() {
 }
 
 version() {
+    show_current_environment
+
     echo "Block Builder Setup Script"
 
     local version_source=""
