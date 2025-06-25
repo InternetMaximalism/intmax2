@@ -18,13 +18,7 @@ pub struct S3Config {
 pub struct S3Client {
     client: AwsS3Client,
     config: S3Config,
-}
-
-impl S3Client {
-    pub fn new(aws_config: SdkConfig, config: S3Config) -> Self {
-        let client = AwsS3Client::new(&aws_config);
-        Self { client, config }
-    }
+    private_key: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,6 +43,22 @@ pub enum S3Error {
 }
 
 impl S3Client {
+    pub fn new(aws_config: SdkConfig, config: S3Config) -> Result<Self> {
+        let client = AwsS3Client::new(&aws_config);
+
+        let private_key_bytes = BASE64_STANDARD
+            .decode(&config.cloudfront_private_key_base64)
+            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to decode base64: {e}")))?;
+        let private_key = String::from_utf8(private_key_bytes)
+            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to parse utf8: {e}")))?;
+
+        Ok(Self {
+            client,
+            config,
+            private_key,
+        })
+    }
+
     pub async fn generate_upload_url(
         &self,
         key: &str,
@@ -83,15 +93,9 @@ impl S3Client {
             self.config.cloudfront_domain, resource_path
         );
 
-        let private_key_bytes = BASE64_STANDARD
-            .decode(&self.config.cloudfront_private_key_base64)
-            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to decode base64: {e}")))?;
-        let private_key = String::from_utf8(private_key_bytes)
-            .map_err(|e| S3Error::ParsePrivateKeyError(format!("failed to parse utf8: {e}")))?;
-
         let options = cloudfront_sign::SignedOptions {
             key_pair_id: self.config.cloudfront_key_pair_id.clone().into(),
-            private_key: private_key.into(),
+            private_key: self.private_key.clone().into(),
             date_less_than: chrono::Utc::now().timestamp() as u64 + expiration.as_secs(),
             ..Default::default()
         };
@@ -103,23 +107,20 @@ impl S3Client {
     }
 
     pub async fn check_object_exists(&self, key: &str) -> Result<bool> {
-        match self
+        let result = self
             .client
             .head_object()
             .bucket(&self.config.bucket_name)
             .key(key)
             .send()
-            .await
-        {
+            .await;
+
+        match result {
             Ok(_) => Ok(true),
-            Err(err) => {
-                if let SdkError::ServiceError(service_err) = &err {
-                    if service_err.err().is_not_found() {
-                        return Ok(false);
-                    }
-                }
-                Err(S3Error::ObjectExistenceCheck(format!("{err:?}")))
+            Err(SdkError::ServiceError(service_err)) if service_err.err().is_not_found() => {
+                Ok(false)
             }
+            Err(err) => Err(S3Error::ObjectExistenceCheck(format!("{err:?}"))),
         }
     }
 
@@ -138,7 +139,7 @@ impl S3Client {
 #[cfg(test)]
 mockall::mock! {
     pub S3Client {
-        pub fn new(aws_config: SdkConfig, config: S3Config) -> Self;
+        pub fn new(aws_config: SdkConfig, config: S3Config) -> Result<Self>;
 
         pub async fn generate_upload_url(
             &self,

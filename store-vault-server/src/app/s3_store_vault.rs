@@ -58,7 +58,8 @@ impl S3StoreVault {
             cloudfront_key_pair_id: env.cloudfront_key_pair_id.clone(),
             cloudfront_private_key_base64: env.cloudfront_private_key_base64.clone(),
         };
-        let s3_client = S3Client::new(aws_config, s3_config);
+
+        let s3_client = S3Client::new(aws_config, s3_config).expect("Failed to create S3 client");
 
         let config = Config {
             s3_upload_timeout: env.s3_upload_timeout,
