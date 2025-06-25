@@ -155,6 +155,20 @@ pub enum Commands {
         #[clap(long)]
         path: PathBuf,
     },
+    GenerateReceipt {
+        #[clap(long)]
+        private_key: Bytes32,
+        #[clap(long)]
+        tx_digest: Bytes32,
+        #[clap(long)]
+        transfer_index: u32,
+    },
+    VerifyReceipt {
+        #[clap(long)]
+        private_key: Bytes32,
+        #[clap(long)]
+        receipt: String,
+    },
     CheckValidityProver,
     GenerateKey,
     PublicKey {
