@@ -33,7 +33,10 @@ async fn main() -> std::io::Result<()> {
     s3_store_vault.run();
 
     let state = Data::new(State::new(s3_store_vault));
+    build_server(state, &env).await
+}
 
+async fn build_server(state: Data<State>, env: &EnvVar) -> std::io::Result<()> {
     HttpServer::new(move || {
         let cors = Cors::permissive();
         App::new()

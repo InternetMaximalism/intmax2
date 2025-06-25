@@ -4,32 +4,34 @@ version.workspace = true
 edition = "2021"
 
 [dependencies]
+actix-cors = { workspace = true }
+actix-web = { workspace = true }
 anyhow = { workspace = true }
-plonky2 = { workspace = true }
-plonky2_keccak = { workspace = true }
-plonky2_bn254 = { workspace = true }
-intmax2-zkp = { workspace = true }
-intmax2-interfaces = { path = "../interfaces" }
-server-common = { path = "../server-common" }
-tokio = { workspace = true }
-reqwest = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true }
-sqlx = { workspace = true }
+bincode = { workspace = true }
 chrono = { workspace = true }
-log = { workspace = true }
-uuid = { workspace = true }
 dotenvy = { workspace = true }
 envy = { workspace = true }
 env_logger = { workspace = true }
-bincode = { workspace = true }
-thiserror = { workspace = true }
 hashbrown = { workspace = true }
-actix-web = { workspace = true }
-actix-cors = { workspace = true }
+intmax2-interfaces = { path = "../interfaces" }
+intmax2-zkp = { workspace = true }
+log = { workspace = true }
+plonky2 = { workspace = true }
+plonky2_keccak = { workspace = true }
+plonky2_bn254 = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+server-common = { path = "../server-common" }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 tracing-actix-web = { workspace = true }
+uuid = { workspace = true }
+async-trait = "0.1.88"
 aws-config = "1.8.0"
 aws-sdk-s3 = "1.93.0"
-cloudfront_sign = "0.4.0"
 base64 = "0.22.1"
+cloudfront_sign = "0.4.0"
+futures = "0.3.31"
 mockall = "0.13.1"

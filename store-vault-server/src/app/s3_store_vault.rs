@@ -3,6 +3,7 @@ use std::time::Duration;
 use super::{error::StoreVaultError, s3::S3Config};
 use crate::EnvVar;
 use aws_config::BehaviorVersion;
+use futures::future::try_join_all;
 use intmax2_interfaces::{
     api::{
         s3_store_vault::types::{PresignedUrlWithMetaData, S3SaveDataEntry},
@@ -134,12 +135,15 @@ impl S3StoreVault {
             )));
         }
 
+        let pubkey_hex = pubkey.to_hex();
+        let digest_hex = digest.to_hex();
+
         // check timestamp
         let record = sqlx::query!(
             r#"
             SELECT timestamp FROM s3_snapshot_pending_uploads WHERE digest = $1
             "#,
-            digest.to_hex(),
+            digest_hex,
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -173,9 +177,9 @@ impl S3StoreVault {
             ON CONFLICT (pubkey, topic) DO UPDATE SET digest = EXCLUDED.digest,
             timestamp = EXCLUDED.timestamp
             "#,
-            pubkey.to_hex(),
+            pubkey_hex,
             topic,
-            digest.to_hex(),
+            digest_hex,
             chrono::Utc::now().timestamp() as i64
         )
         .execute(tx.as_mut())
@@ -186,9 +190,9 @@ impl S3StoreVault {
             r#"
             DELETE FROM s3_snapshot_pending_uploads WHERE pubkey = $1 AND topic = $2 AND digest = $3
             "#,
-            pubkey.to_hex(),
+            pubkey_hex,
             topic,
-            digest.to_hex()
+            digest_hex
         )
         .execute(tx.as_mut())
         .await?;
@@ -258,19 +262,18 @@ impl S3StoreVault {
         }
 
         // generate presigned urls
-        let mut presigned_urls = Vec::with_capacity(entries.len());
-        for entry in entries {
+        let timeout = Duration::from_secs(self.config.s3_upload_timeout);
+        let futures = entries.iter().map(|entry| {
             let path = get_path(&entry.topic, entry.pubkey, entry.digest);
-            let presigned_url = self
-                .s3_client
-                .generate_upload_url(
-                    &path,
-                    "application/octet-stream",
-                    Duration::from_secs(self.config.s3_upload_timeout),
-                )
-                .await?;
-            presigned_urls.push(presigned_url);
-        }
+            let client = &self.s3_client;
+
+            async move {
+                client
+                    .generate_upload_url(&path, "application/octet-stream", timeout)
+                    .await
+            }
+        });
+        let presigned_urls = try_join_all(futures).await?;
 
         Ok(presigned_urls)
     }
