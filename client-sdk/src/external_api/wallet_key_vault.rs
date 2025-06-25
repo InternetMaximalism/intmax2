@@ -23,7 +23,7 @@ use intmax2_interfaces::{
             types::{ChallengeRequest, ChallengeResponse, LoginRequest, LoginResponse},
         },
     },
-    utils::{key::PrivateKey, key_derivation::derive_spend_key_from_bytes32},
+    utils::{key::PrivateKey, key_derivation::derive_spend_key_from_bytes32, network::Network},
 };
 
 use reqwest::Client;
@@ -33,6 +33,7 @@ use sha2::Digest;
 pub struct WalletKeyVaultClient {
     client: Client,
     pub base_url: String,
+    pub network: Network,
 }
 
 #[async_trait(?Send)]
@@ -50,10 +51,11 @@ impl WalletKeyVaultClientInterface for WalletKeyVaultClient {
 }
 
 impl WalletKeyVaultClient {
-    pub fn new(base_url: String) -> Self {
+    pub fn new(base_url: String, network: Network) -> Self {
         Self {
             client: build_client(),
             base_url,
+            network,
         }
     }
 
@@ -83,6 +85,12 @@ impl WalletKeyVaultClient {
         };
         let response: ChallengeResponse =
             post_request(&self.client, &self.base_url, "/challenge", Some(&request)).await?;
+        if response.network != self.network {
+            return Err(ServerError::InvalidResponse(format!(
+                "Network mismatch at challenge: expected {}, got {}",
+                self.network, response.network
+            )));
+        }
         Ok(response.message)
     }
 
@@ -112,6 +120,12 @@ impl WalletKeyVaultClient {
             return Err(ServerError::InvalidResponse(
                 "Invalid hashed signature length".to_string(),
             ));
+        }
+        if response.network != self.network {
+            return Err(ServerError::InvalidResponse(format!(
+                "Network mismatch at login: expected {}, got {}",
+                self.network, response.network
+            )));
         }
         Ok(hashed_signature.try_into().unwrap())
     }
@@ -166,11 +180,12 @@ mod tests {
         contract::utils::get_address_from_private_key, wallet_key_vault::mnemonic_to_spend_key,
     };
     use alloy::primitives::B256;
+    use intmax2_interfaces::utils::network::Network;
 
     fn get_client() -> super::WalletKeyVaultClient {
         let base_url = std::env::var("WALLET_KEY_VAULT_BASE_URL")
             .unwrap_or_else(|_| "http://localhost:3000".to_string());
-        super::WalletKeyVaultClient::new(base_url)
+        super::WalletKeyVaultClient::new(base_url, Network::Devnet)
     }
 
     #[tokio::test]
