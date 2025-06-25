@@ -54,7 +54,7 @@ pub async fn generate_transfer_receipt(
         .recipient_view_pubs
         .get(transfer_index as usize)
         .ok_or(ClientError::GeneralError(
-            "Recipient view pubkey is missing".to_string(),
+            format!("Recipient view pubkey is missing for transfer index {}", transfer_index),
         ))?;
     let encrypted_data = TransferReceipt {
         data,
