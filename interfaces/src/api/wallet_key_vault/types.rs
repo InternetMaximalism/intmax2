@@ -2,6 +2,8 @@ use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
+use crate::utils::network::Network;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChallengeRequest {
     pub address: Address,
@@ -12,6 +14,7 @@ pub struct ChallengeRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChallengeResponse {
     pub message: String,
+    pub network: Network,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,4 +35,5 @@ pub struct LoginResponse {
     pub nonce: u32,
     pub encrypted_entropy: Option<String>,
     pub access_token: Option<String>,
+    pub network: Network,
 }

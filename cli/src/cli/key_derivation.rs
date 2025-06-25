@@ -1,8 +1,9 @@
 use super::error::CliError;
 use crate::env_var::EnvVar;
 use alloy::primitives::B256;
-use intmax2_client_sdk::external_api::wallet_key_vault::{
-    mnemonic_to_spend_key, WalletKeyVaultClient,
+use intmax2_client_sdk::{
+    client::config::env_type_to_network,
+    external_api::wallet_key_vault::{mnemonic_to_spend_key, WalletKeyVaultClient},
 };
 use intmax2_interfaces::{
     api::wallet_key_vault::interface::WalletKeyVaultClientInterface, utils::key::PrivateKey,
@@ -22,8 +23,8 @@ pub async fn derive_key_from_eth_with_env(
             ))
         }
     };
-
-    let client = WalletKeyVaultClient::new(base_url.clone());
+    let network = env_type_to_network(env.env);
+    let client = WalletKeyVaultClient::new(base_url.clone(), network);
     let mnemonic = client.derive_mnemonic(eth_private_key).await?;
     let spend_key = mnemonic_to_spend_key(&mnemonic, redeposit_index, wallet_index);
 
@@ -41,7 +42,8 @@ pub async fn derive_spend_key_from_eth(
             "Wallet key vault base URL is not set".to_string(),
         ));
     }
-    let client = WalletKeyVaultClient::new(env.wallet_key_vault_base_url.unwrap());
+    let network = env_type_to_network(env.env);
+    let client = WalletKeyVaultClient::new(env.wallet_key_vault_base_url.unwrap(), network);
     let mnemonic = client.derive_mnemonic(eth_private_key).await?;
     let spend_key = mnemonic_to_spend_key(&mnemonic, redeposit_index, wallet_index);
     Ok(spend_key)
