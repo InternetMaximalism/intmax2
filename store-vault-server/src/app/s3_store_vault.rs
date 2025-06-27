@@ -3,6 +3,7 @@ use std::time::Duration;
 use super::{error::StoreVaultError, s3::S3Config};
 use crate::EnvVar;
 use aws_config::BehaviorVersion;
+use futures::future::try_join_all;
 use intmax2_interfaces::{
     api::{
         s3_store_vault::types::{PresignedUrlWithMetaData, S3SaveDataEntry},
@@ -57,7 +58,8 @@ impl S3StoreVault {
             cloudfront_key_pair_id: env.cloudfront_key_pair_id.clone(),
             cloudfront_private_key_base64: env.cloudfront_private_key_base64.clone(),
         };
-        let s3_client = S3Client::new(aws_config, s3_config);
+
+        let s3_client = S3Client::new(aws_config, s3_config).expect("Failed to create S3 client");
 
         let config = Config {
             s3_upload_timeout: env.s3_upload_timeout,
@@ -134,12 +136,15 @@ impl S3StoreVault {
             )));
         }
 
+        let pubkey_hex = pubkey.to_hex();
+        let digest_hex = digest.to_hex();
+
         // check timestamp
         let record = sqlx::query!(
             r#"
             SELECT timestamp FROM s3_snapshot_pending_uploads WHERE digest = $1
             "#,
-            digest.to_hex(),
+            digest_hex,
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -173,9 +178,9 @@ impl S3StoreVault {
             ON CONFLICT (pubkey, topic) DO UPDATE SET digest = EXCLUDED.digest,
             timestamp = EXCLUDED.timestamp
             "#,
-            pubkey.to_hex(),
+            pubkey_hex,
             topic,
-            digest.to_hex(),
+            digest_hex,
             chrono::Utc::now().timestamp() as i64
         )
         .execute(tx.as_mut())
@@ -186,9 +191,9 @@ impl S3StoreVault {
             r#"
             DELETE FROM s3_snapshot_pending_uploads WHERE pubkey = $1 AND topic = $2 AND digest = $3
             "#,
-            pubkey.to_hex(),
+            pubkey_hex,
             topic,
-            digest.to_hex()
+            digest_hex
         )
         .execute(tx.as_mut())
         .await?;
@@ -258,19 +263,18 @@ impl S3StoreVault {
         }
 
         // generate presigned urls
-        let mut presigned_urls = Vec::with_capacity(entries.len());
-        for entry in entries {
+        let timeout = Duration::from_secs(self.config.s3_upload_timeout);
+        let futures = entries.iter().map(|entry| {
             let path = get_path(&entry.topic, entry.pubkey, entry.digest);
-            let presigned_url = self
-                .s3_client
-                .generate_upload_url(
-                    &path,
-                    "application/octet-stream",
-                    Duration::from_secs(self.config.s3_upload_timeout),
-                )
-                .await?;
-            presigned_urls.push(presigned_url);
-        }
+            let client = &self.s3_client;
+
+            async move {
+                client
+                    .generate_upload_url(&path, "application/octet-stream", timeout)
+                    .await
+            }
+        });
+        let presigned_urls = try_join_all(futures).await?;
 
         Ok(presigned_urls)
     }
@@ -547,86 +551,302 @@ impl S3StoreVault {
 }
 
 #[cfg(test)]
+pub mod test_s3_store_vault_helper {
+    use server_common::db::{DbPool, DbPoolConfig};
+    use sqlx::query;
+    use std::{
+        fs,
+        io::Read,
+        net::TcpListener,
+        panic,
+        process::{Command, Output, Stdio},
+    };
+
+    use crate::EnvVar;
+
+    pub fn run_s3_store_vault_docker(port: u16, container_name: &str) -> Output {
+        let port_arg = format!("{port}:5432");
+
+        let output = Command::new("docker")
+            .args([
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                container_name,
+                "--hostname",
+                "--postgres",
+                "-e",
+                "POSTGRES_USER=postgres",
+                "-e",
+                "POSTGRES_PASSWORD=password",
+                "-e",
+                "POSTGRES_DB=store_vault_server",
+                "-p",
+                &port_arg,
+                "postgres",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during Redis container startup");
+
+        output
+    }
+
+    pub async fn create_tables(env: &EnvVar, database_url: String, file_path: &str) {
+        let pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: database_url,
+        })
+        .await;
+        let pool = pool.unwrap();
+
+        // Open and read file
+        let mut file =
+            fs::File::open(file_path).unwrap_or_else(|e| panic!("Failed to open SQL file: {e}"));
+        let mut sql_content = String::new();
+        file.read_to_string(&mut sql_content)
+            .unwrap_or_else(|e| panic!("Failed to read SQL file: {e}"));
+
+        // Execute the SQL content
+        for statement in sql_content.split(';') {
+            let trimmed = statement.trim();
+            if !trimmed.is_empty() {
+                query(trimmed)
+                    .execute(pool.clone())
+                    .await
+                    .unwrap_or_else(|e| panic!("Failed to execute SQL: {e}"));
+            }
+        }
+    }
+
+    pub fn stop_s3_store_vault_docker(container_name: &str) -> Output {
+        let output = Command::new("docker")
+            .args(["stop", container_name])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("Error during S3StoreVault container stopping");
+
+        output
+    }
+
+    pub fn find_free_port() -> u16 {
+        TcpListener::bind("127.0.0.1:0")
+            .expect("Failed to bind to address")
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    pub fn assert_and_stop<F: FnOnce() + panic::UnwindSafe>(cont_name: &str, f: F) {
+        let res = panic::catch_unwind(f);
+
+        if let Err(panic_info) = res {
+            stop_s3_store_vault_docker(cont_name);
+            panic::resume_unwind(panic_info);
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use std::panic::AssertUnwindSafe;
+
     use intmax2_interfaces::utils::digest::get_digest;
     use intmax2_zkp::ethereum_types::u256::U256;
     use mockall::predicate::eq;
     use sqlx::{Executor, PgPool, Postgres};
     use tokio::time::sleep;
 
+    use crate::app::s3_store_vault::test_s3_store_vault_helper::{
+        assert_and_stop, create_tables, find_free_port, run_s3_store_vault_docker,
+        stop_s3_store_vault_docker,
+    };
+
     use super::*;
 
-    #[tokio::test]
-    #[ignore]
+    async fn create_s3_store_vault(env: &EnvVar) -> Result<S3StoreVault> {
+        let pool = DbPool::from_config(&DbPoolConfig {
+            max_connections: env.database_max_connections,
+            idle_timeout: env.database_timeout,
+            url: env.database_url.clone(),
+        })
+        .await?;
+
+        let s3_client = S3Client::default();
+
+        let config = Config {
+            s3_upload_timeout: env.s3_upload_timeout,
+            s3_download_timeout: env.s3_download_timeout,
+            cleanup_interval: env.cleanup_interval,
+        };
+
+        Ok(S3StoreVault {
+            config,
+            pool,
+            s3_client,
+        })
+    }
+
+    #[sqlx::test]
     async fn update_snapshot_test() {
         let _ = env_logger::builder().is_test(true).try_init();
         dotenvy::dotenv().ok();
 
-        let env = envy::from_env::<crate::EnvVar>().unwrap();
-        let s3_store_vault = S3StoreVault::new(&env).await.unwrap();
+        let mut env = envy::from_env::<crate::EnvVar>().unwrap();
 
-        let topic = "test-2";
+        // Create postgres docker image for testing
+        let port = find_free_port();
+        let cont_name = "update-snapshot-test";
+
+        stop_s3_store_vault_docker(cont_name);
+        let output = run_s3_store_vault_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // 2.5 seconds should be enough for postgres container to be started
+        sleep(Duration::from_millis(2500)).await;
+
+        // Create needed SQL tables
+        let database_url =
+            format!("postgres://postgres:password@localhost:{port}/store_vault_server").to_string();
+        create_tables(
+            &env,
+            database_url,
+            "./migrations/20250523164136_initial.up.sql",
+        )
+        .await;
+
+        // Create S3StoreVault
+        let config = Config {
+            s3_upload_timeout: 10,
+            s3_download_timeout: 0,
+            cleanup_interval: 0,
+        };
+
+        env.database_url =
+            format!("postgres://postgres:password@localhost:{port}/store_vault_server").to_string();
+        let mut s3_store_vault = create_s3_store_vault(&env).await.unwrap();
+
+        let topic = "topic";
         let pubkey = U256::from(1);
-        let data = b"test data 1";
+        let data_1 = b"test data 1";
+        let data_2 = b"test data 2";
 
         let prev_digest = None;
-        let new_digest = get_digest(data);
-        let url = s3_store_vault
-            .pre_save_snapshot(topic, pubkey, new_digest)
-            .await
-            .unwrap();
+        let digest_1 = get_digest(data_1);
+        let digest_2 = get_digest(data_2);
 
-        reqwest::Client::new()
-            .put(&url)
-            .header("Content-Type", "application/octet-stream")
-            .body(data.to_vec())
-            .send()
-            .await
-            .unwrap();
+        let path_1 = get_path(topic, pubkey, digest_1);
+        let path_2 = get_path(topic, pubkey, digest_2);
+
+        // Set up expectations for the first pre_save_snapshot call
+        s3_store_vault
+            .s3_client
+            .expect_generate_upload_url()
+            .returning(move |_, _, _| Ok("presigned_url_1".to_string()));
+
+        // Pre-save snapshot
+        let url = s3_store_vault
+            .pre_save_snapshot(topic, pubkey, digest_1)
+            .await;
+        assert_and_stop(
+            cont_name,
+            AssertUnwindSafe(|| {
+                match &url {
+                    Ok(_) => {} // all good
+                    Err(e) => panic!("pre_save_snapshot should return url, but got error: {e}"),
+                }
+            }),
+        );
+
+        // Set up check_object_exists expectation for the first save_snapshot call
+        s3_store_vault
+            .s3_client
+            .expect_check_object_exists()
+            .with(eq(path_1.clone()))
+            .returning(|_| Ok(true));
 
         s3_store_vault
-            .save_snapshot(topic, pubkey, prev_digest, new_digest)
+            .save_snapshot(topic, pubkey, prev_digest, digest_1)
             .await
             .unwrap();
+
+        // Returns the URL equal to the transferred path
+        s3_store_vault
+            .s3_client
+            .expect_generate_download_url()
+            .returning(|path_1, _| Ok(path_1.to_owned()));
 
         let get_url = s3_store_vault
             .get_snapshot_url(topic, pubkey)
             .await
-            .unwrap()
             .unwrap();
+        assert_and_stop(cont_name, || assert_eq!(get_url, Some(path_1.clone())));
 
-        let response = reqwest::Client::new().get(&get_url).send().await.unwrap();
-        assert_eq!(response.bytes().await.unwrap().as_ref(), data);
+        // Now we can overwrite the record
+        // Set up expectations for the second pre_save_snapshot call
+        s3_store_vault
+            .s3_client
+            .expect_generate_upload_url()
+            .with(
+                eq(path_2.clone()),
+                eq("application/octet-stream"),
+                eq(Duration::from_secs(config.s3_upload_timeout)),
+            )
+            .returning(|_, _, _| Ok("presigned_url_2".to_string()));
 
-        // overwrite
-        let data = b"test data 2";
-        let prev_digest = Some(new_digest);
-        let new_digest = get_digest(data);
+        let prev_digest = Some(digest_1);
         let url = s3_store_vault
-            .pre_save_snapshot(topic, pubkey, new_digest)
-            .await
-            .unwrap();
+            .pre_save_snapshot(topic, pubkey, digest_2)
+            .await;
+        assert_and_stop(
+            cont_name,
+            AssertUnwindSafe(|| {
+                match &url {
+                    Ok(_) => {} // all good
+                    Err(e) => panic!("pre_save_snapshot should return url, but got error: {e}",),
+                }
+            }),
+        );
 
-        reqwest::Client::new()
-            .put(&url)
-            .header("Content-Type", "application/octet-stream")
-            .body(data.to_vec())
-            .send()
-            .await
-            .unwrap();
+        // Set up check_object_exists expectation for the second save_snapshot call
+        s3_store_vault
+            .s3_client
+            .expect_check_object_exists()
+            .with(eq(path_2.clone()))
+            .returning(|_| Ok(true));
+
+        // Set up delete_object expectation for the second save_snapshot call
+        s3_store_vault
+            .s3_client
+            .expect_delete_object()
+            .with(eq(path_1.clone()))
+            .returning(|_| Ok(()));
 
         s3_store_vault
-            .save_snapshot(topic, pubkey, prev_digest, new_digest)
+            .save_snapshot(topic, pubkey, prev_digest, digest_2)
             .await
             .unwrap();
+
+        // Returns the URL equal to the transferred path
+        s3_store_vault
+            .s3_client
+            .expect_generate_download_url()
+            .returning(|path_2, _| Ok(path_2.to_owned()));
 
         let get_url = s3_store_vault
             .get_snapshot_url(topic, pubkey)
             .await
-            .unwrap()
             .unwrap();
-        let response = reqwest::Client::new().get(&get_url).send().await.unwrap();
-        assert_eq!(response.bytes().await.unwrap().as_ref(), data);
+        assert_and_stop(cont_name, || assert_eq!(get_url, Some(path_2.clone())));
     }
 
     /// test case 1: It is expected to get an error while preservation a snapshot for the absent previous digest.
