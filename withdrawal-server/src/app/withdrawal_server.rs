@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     app::status::{SqlClaimStatus, SqlWithdrawalStatus},
     Env,
@@ -95,6 +97,7 @@ pub struct WithdrawalServer {
     pub validity_prover: ValidityProverClient,
     pub rollup_contract: RollupContract,
     pub withdrawal_contract: WithdrawalContract,
+    pub validator: Arc<dyn BlockHashValidator>,
 }
 
 impl WithdrawalServer {
@@ -108,6 +111,15 @@ impl WithdrawalServer {
     /// # Returns
     /// * `Result(Self)` - The instance itself or the error
     pub async fn new(env: &Env, provider: NormalProvider) -> anyhow::Result<Self> {
+        let validator = Arc::new(RealBlockHashValidator);
+        Self::new_with_validator(env, provider, validator).await
+    }
+
+    async fn new_with_validator(
+        env: &Env,
+        provider: NormalProvider,
+        validator: Arc<dyn BlockHashValidator>,
+    ) -> anyhow::Result<Self> {
         let pool = DbPool::from_config(&DbPoolConfig {
             max_connections: env.database_max_connections,
             idle_timeout: env.database_timeout,
@@ -138,6 +150,7 @@ impl WithdrawalServer {
             validity_prover,
             rollup_contract,
             withdrawal_contract,
+            validator,
         })
     }
 
@@ -180,12 +193,13 @@ impl WithdrawalServer {
                 .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
 
         // validate block hash existence
-        Self::validate_block_hash_existence(
-            &self.rollup_contract,
-            withdrawal.block_number,
-            withdrawal.block_hash,
-        )
-        .await?;
+        self.validator
+            .validate_block_hash_existence(
+                &self.rollup_contract,
+                withdrawal.block_number,
+                withdrawal.block_hash,
+            )
+            .await?;
 
         // validate fee
         let direct_withdrawal_tokens = self
@@ -284,12 +298,13 @@ impl WithdrawalServer {
             .map_err(|e| WithdrawalServerError::SerializationError(e.to_string()))?;
 
         // validate block hash existence
-        Self::validate_block_hash_existence(
-            &self.rollup_contract,
-            claim.block_number,
-            claim.block_hash,
-        )
-        .await?;
+        self.validator
+            .validate_block_hash_existence(
+                &self.rollup_contract,
+                claim.block_number,
+                claim.block_hash,
+            )
+            .await?;
 
         let nullifier = claim.nullifier;
         let nullifier_str = nullifier.to_hex();
@@ -827,9 +842,29 @@ impl WithdrawalServer {
             }
         }
     }
+}
 
-    // Helper methods
+pub fn privkey_to_keyset(privkey: B256) -> KeySet {
+    let privkey: Bytes32 = convert_b256_to_bytes32(privkey);
+    KeySet::new(privkey.into())
+}
+
+#[async_trait::async_trait]
+pub trait BlockHashValidator: Send + Sync {
     async fn validate_block_hash_existence(
+        &self,
+        contract: &RollupContract,
+        block_number: u32,
+        expected_hash: Bytes32,
+    ) -> Result<(), WithdrawalServerError>;
+}
+
+pub struct RealBlockHashValidator;
+
+#[async_trait::async_trait]
+impl BlockHashValidator for RealBlockHashValidator {
+    async fn validate_block_hash_existence(
+        &self,
         contract: &RollupContract,
         block_number: u32,
         expected_hash: Bytes32,
@@ -847,22 +882,39 @@ impl WithdrawalServer {
     }
 }
 
-pub fn privkey_to_keyset(privkey: B256) -> KeySet {
-    let privkey: Bytes32 = convert_b256_to_bytes32(privkey);
-    KeySet::new(privkey.into())
+pub struct MockBlockHashValidator;
+
+#[async_trait::async_trait]
+impl BlockHashValidator for MockBlockHashValidator {
+    async fn validate_block_hash_existence(
+        &self,
+        _contract: &RollupContract,
+        _block_number: u32,
+        _expected_hash: Bytes32,
+    ) -> Result<(), WithdrawalServerError> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
-pub mod test_withdrawal_server_helper {
-    use std::{fs, io::Read, panic};
+pub(crate) mod test_withdrawal_server_helper {
+    use std::{fs, io::Read, panic, sync::Arc, thread::sleep, time::Duration};
     // For redis
     use std::{
         net::TcpListener,
         process::{Command, Output, Stdio},
     };
 
+    use alloy::providers::{mock::Asserter, ProviderBuilder};
+    use dotenvy::dotenv;
+    use intmax2_client_sdk::external_api::contract::utils::NormalProvider;
     use server_common::db::DbPool;
     use sqlx::query;
+
+    use crate::{
+        app::withdrawal_server::{MockBlockHashValidator, WithdrawalServer},
+        Env,
+    };
 
     pub fn run_withdrawal_docker(port: u16, container_name: &str) -> Output {
         let port_arg = format!("{port}:5432");
@@ -970,21 +1022,60 @@ pub mod test_withdrawal_server_helper {
             panic::resume_unwind(panic_info);
         }
     }
+
+    pub fn get_provider() -> NormalProvider {
+        let provider_asserter = Asserter::new();
+        ProviderBuilder::default()
+            .with_gas_estimation()
+            .with_simple_nonce_management()
+            .fetch_chain_id()
+            .connect_mocked_client(provider_asserter)
+    }
+
+    pub async fn start_mock_withdrawal_server(cont_name: &str) -> anyhow::Result<WithdrawalServer> {
+        let port = find_free_port();
+
+        stop_withdrawal_docker(cont_name);
+        let output = run_withdrawal_docker(port, cont_name);
+        assert!(
+            output.status.success(),
+            "Couldn't start {}: {}",
+            cont_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        sleep(Duration::from_millis(2500));
+        assert_and_stop(cont_name, || create_databases(cont_name));
+
+        dotenv().ok();
+        let mut env: Env = envy::from_env().expect("Failed to parse env");
+        env.database_url =
+            format!("postgres://postgres:password@localhost:{port}/withdrawal").to_string();
+        let validator = Arc::new(MockBlockHashValidator);
+        let server = WithdrawalServer::new_with_validator(&env, get_provider(), validator).await;
+
+        if let Err(err) = &server {
+            stop_withdrawal_docker(cont_name);
+            panic!("Withdrawal Server initialization failed: {err:?}");
+        }
+        let server = server.unwrap();
+
+        setup_migration(&server.pool).await;
+
+        Ok(server)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use alloy::{
-        primitives::Address,
-        providers::{mock::Asserter, ProviderBuilder},
-    };
+    use alloy::primitives::Address;
     use intmax2_zkp::ethereum_types::u256::U256;
     use serde_json::json;
     use std::{str::FromStr, thread::sleep, time::Duration};
 
     use crate::{
         app::withdrawal_server::test_withdrawal_server_helper::{
-            assert_and_stop, create_databases, find_free_port, run_withdrawal_docker,
+            assert_and_stop, create_databases, find_free_port, get_provider, run_withdrawal_docker,
             setup_migration, stop_withdrawal_docker,
         },
         Env,
@@ -994,15 +1085,6 @@ mod tests {
     };
 
     use super::*;
-
-    fn get_provider() -> NormalProvider {
-        let provider_asserter = Asserter::new();
-        ProviderBuilder::default()
-            .with_gas_estimation()
-            .with_simple_nonce_management()
-            .fetch_chain_id()
-            .connect_mocked_client(provider_asserter)
-    }
 
     fn get_example_env() -> Env {
         Env {
