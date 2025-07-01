@@ -30,7 +30,7 @@ tracing-actix-web = { workspace = true }
 uuid = { workspace = true }
 async-trait = "0.1.88"
 aws-config = "1.8.0"
-aws-sdk-s3 = "1.93.0"
+aws-sdk-s3 = "1.94.0"
 base64 = "0.22.1"
 cloudfront_sign = "0.4.0"
 futures = "0.3.31"
