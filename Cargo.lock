@@ -7980,6 +7980,7 @@ dependencies = [
  "anyhow",
  "ark-bn254",
  "ark-ec",
+ "async-trait",
  "base64 0.22.1",
  "bincode",
  "chrono",
