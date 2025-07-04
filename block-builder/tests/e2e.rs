@@ -1,13 +1,26 @@
-use std::time::{Duration, Instant};
+use std::{
+    env,
+    time::{Duration, Instant},
+};
 
 use actix_web::{web::Data, App, HttpServer};
+use alloy::{
+    primitives::{utils::parse_units, B256},
+    providers::Provider,
+    rpc::types::TransactionRequest,
+    signers::local::{coins_bip39::English, MnemonicBuilder},
+};
 use block_builder::{
     api::{routes::block_builder_scope, state::State},
     EnvVar,
 };
 use intmax2_client_sdk::{
     client::config::network_from_env,
-    external_api::{block_builder::BlockBuilderClient, validity_prover::ValidityProverClient},
+    external_api::{
+        block_builder::BlockBuilderClient,
+        contract::utils::{get_address_from_private_key, get_provider, get_provider_with_signer},
+        validity_prover::ValidityProverClient,
+    },
 };
 use intmax2_interfaces::{
     api::{
@@ -29,10 +42,11 @@ use uuid::Uuid;
 
 const MAX_QUERY_RETRIES: usize = 10;
 
-async fn run_builder(env: EnvVar, port: u16) {
+async fn run_builder(env: EnvVar, port: u16, private_key: B256) {
     set_name_and_version(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     let mut env = env;
     env.cluster_id = Some(Uuid::new_v4().to_string());
+    env.block_builder_private_key = private_key;
     env.registration_fee = None;
     env.non_registration_fee = None;
     env.registration_collateral_fee = None;
@@ -130,6 +144,33 @@ fn get_block_builder_url(port: u16) -> String {
     format!("http://localhost:{port}")
 }
 
+fn get_private_key(mnemonic: &str, index: u32) -> B256 {
+    let signer = MnemonicBuilder::<English>::default()
+        .phrase(mnemonic)
+        .index(index)
+        .unwrap()
+        .build()
+        .unwrap();
+    signer.to_bytes()
+}
+
+async fn distribute(rpc_url: &str, private_key: B256, mnemonic: &str, num_builders: usize) {
+    let provider = get_provider(rpc_url).unwrap();
+    let signer = get_provider_with_signer(&provider, private_key);
+
+    // send 0.1 ETH to each port
+    let amount = parse_units("0.1", "ether").unwrap();
+    for index in 0..num_builders {
+        let private_key = get_private_key(mnemonic, index as u32);
+        let address = get_address_from_private_key(private_key);
+
+        let tx = TransactionRequest::default()
+            .to(address)
+            .value(amount.into());
+        let _ = signer.send_transaction(tx).await.unwrap();
+    }
+}
+
 #[actix_rt::test]
 #[ignore]
 async fn test_e2e_block_builder() {
@@ -139,12 +180,23 @@ async fn test_e2e_block_builder() {
     let env = envy::from_env::<EnvVar>().unwrap();
     let network = network_from_env();
 
+    let mnemonic = env::var("E2E_TEST_MNEMONIC").unwrap();
+
     let ports = (9100..9110).collect::<Vec<u16>>();
 
-    for &port in &ports {
+    distribute(
+        &env.l2_rpc_url,
+        env.block_builder_private_key,
+        &mnemonic,
+        ports.len(),
+    )
+    .await;
+
+    for (i, &port) in ports.iter().enumerate() {
         let env = env.clone();
+        let private_key = get_private_key(&mnemonic, i as u32);
         actix_rt::spawn(async move {
-            run_builder(env.clone(), port).await;
+            run_builder(env.clone(), port, private_key).await;
         });
     }
     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
