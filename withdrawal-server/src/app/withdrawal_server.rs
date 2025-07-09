@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    app::status::{SqlClaimStatus, SqlWithdrawalStatus},
+    app::{
+        config::Config,
+        status::{SqlClaimStatus, SqlWithdrawalStatus},
+    },
     Env,
 };
 use alloy::primitives::B256;
@@ -18,13 +21,12 @@ use intmax2_interfaces::{
         encryption::{errors::BlsEncryptionError, BlsEncryption},
         transfer_data::TransferData,
     },
-    utils::{address::IntmaxAddress, fee::Fee, network::Network},
+    utils::{address::IntmaxAddress, fee::Fee},
 };
 
 use super::error::WithdrawalServerError;
 use intmax2_client_sdk::{
     client::{
-        config::network_from_env,
         fee_payment::FeeType,
         receive_validation::{validate_receive, ReceiveValidationError},
         sync::utils::quote_withdrawal_claim_fee,
@@ -44,7 +46,7 @@ use intmax2_interfaces::{
         ClaimFeeInfo, ClaimInfo, ContractWithdrawal, WithdrawalFeeInfo, WithdrawalInfo,
     },
     data::proof_compression::{CompressedSingleClaimProof, CompressedSingleWithdrawalProof},
-    utils::{circuit_verifiers::CircuitVerifiers, key::ViewPair},
+    utils::circuit_verifiers::CircuitVerifiers,
 };
 use intmax2_zkp::{
     common::{
@@ -64,31 +66,6 @@ use server_common::db::{DbPool, DbPoolConfig};
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
-
-struct Config {
-    network: Network,
-    is_faster_mining: bool,
-    withdrawal_beneficiary_key: ViewPair,
-    claim_beneficiary_key: ViewPair,
-    direct_withdrawal_fee: Option<Vec<Fee>>,
-    claimable_withdrawal_fee: Option<Vec<Fee>>,
-    claim_fee: Option<Vec<Fee>>,
-}
-
-impl Config {
-    pub fn from_env(env: &Env) -> Result<Self, WithdrawalServerError> {
-        let network = network_from_env();
-        Ok(Self {
-            network,
-            is_faster_mining: env.is_faster_mining,
-            withdrawal_beneficiary_key: env.withdrawal_beneficiary_view_pair,
-            claim_beneficiary_key: env.claim_beneficiary_view_pair,
-            direct_withdrawal_fee: env.direct_withdrawal_fee.clone().map(|l| l.0),
-            claimable_withdrawal_fee: env.claimable_withdrawal_fee.clone().map(|l| l.0),
-            claim_fee: env.claim_fee.clone().map(|l| l.0),
-        })
-    }
-}
 
 pub struct WithdrawalServer {
     config: Config,
