@@ -188,15 +188,21 @@ async fn test_e2e_block_builder() {
 
     let mnemonic = env::var("E2E_TEST_MNEMONIC").unwrap();
 
-    let num_builders = 5;
-    let start_port = 9100;
-    let ports = (start_port..start_port + num_builders).collect::<Vec<u16>>();
+    let start_port = env::var("E2E_TEST_START_PORT")
+        .unwrap_or("9100".to_string())
+        .parse::<u16>()
+        .expect("E2E_TEST_START_PORT must be a valid u16");
+    let num_builders = env::var("E2E_TEST_NUM_BUILDERS")
+        .unwrap_or("5".to_string())
+        .parse::<usize>()
+        .expect("E2E_TEST_NUM_BUILDERS must be a valid usize");
+    let ports = (start_port..start_port + num_builders as u16).collect::<Vec<u16>>();
 
     distribute(
         &env.l2_rpc_url,
         env.block_builder_private_key,
         &mnemonic,
-        ports.len(),
+        num_builders,
     )
     .await;
 
