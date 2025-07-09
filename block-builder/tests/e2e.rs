@@ -115,6 +115,11 @@ async fn send_tx(
         .await
         .unwrap();
 
+    println!(
+        "Proposal signed and posted successfully with tx_tree_root {}",
+        proposal.block_sign_payload.tx_tree_root
+    );
+
     let expiry: u64 = proposal.block_sign_payload.expiry.into();
     let deadline = Instant::now() + Duration::from_secs(expiry - current_time());
     loop {
@@ -183,7 +188,9 @@ async fn test_e2e_block_builder() {
 
     let mnemonic = env::var("E2E_TEST_MNEMONIC").unwrap();
 
-    let ports = (9100..9110).collect::<Vec<u16>>();
+    let num_builders = 5;
+    let start_port = 9100;
+    let ports = (start_port..start_port + num_builders).collect::<Vec<u16>>();
 
     distribute(
         &env.l2_rpc_url,
@@ -208,12 +215,7 @@ async fn test_e2e_block_builder() {
 
     for &port in &ports {
         let block_builder_url = get_block_builder_url(port);
-        let keys = KeyPair {
-            view: PrivateKey::rand(&mut rng),
-            spend: PrivateKey::rand(&mut rng),
-        };
-
-        for _ in 0..rng.gen_range(1..=3) {
+        for _ in 0..rng.gen_range(1..=5) {
             let tx = Tx {
                 transfer_tree_root: PoseidonHashOut::rand(&mut rng),
                 nonce: 0,
@@ -221,6 +223,10 @@ async fn test_e2e_block_builder() {
             let client = client.clone();
             let validity_prover_client = validity_prover_client.clone();
             let block_builder_url = block_builder_url.clone();
+            let keys = KeyPair {
+                view: PrivateKey::rand(&mut rng),
+                spend: PrivateKey::rand(&mut rng),
+            };
             actix_rt::spawn(async move {
                 send_tx(
                     &validity_prover_client,
