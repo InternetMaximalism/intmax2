@@ -23,4 +23,10 @@ pub enum StorageError {
 
     #[error("Serialization/Deserialization error: {0}")]
     SerdeError(#[from] SerdeJsonError),
+
+    #[error("Lock not acquired: {0}")]
+    LockNotAcquired(String),
+
+    #[error("Configuration error: {0}")]
+    ConfigurationError(String),
 }

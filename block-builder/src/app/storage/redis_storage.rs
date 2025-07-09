@@ -42,11 +42,8 @@ struct TxRequestWithTimestamp {
     timestamp: u64,
 }
 
-pub struct RedisStorage {
-    pub config: StorageConfig,
-    conn_manager: Arc<Mutex<ConnectionManager>>,
-    pub nonce_manager: RedisNonceManager,
-
+/// Redis key manager for consistent key naming
+struct RedisKeyManager {
     prefix: String,
     registration_tx_requests_key: String,
     registration_tx_last_processed_key: String,
@@ -60,33 +57,11 @@ pub struct RedisStorage {
     block_post_tasks_lo_key: String,
 }
 
-impl RedisStorage {
-    pub async fn new(config: &StorageConfig, nonce_manager: RedisNonceManager) -> Self {
-        let cluster_id = config
-            .cluster_id
-            .clone()
-            .unwrap_or_else(|| "default".to_string());
+impl RedisKeyManager {
+    fn new(cluster_id: &str) -> Self {
         let prefix = format!("block_builder:{cluster_id}");
-        // Create Redis client with fallback to localhost if URL not provided
-        let redis_url = config.redis_url.clone().expect("redis_url not found");
-        let client = Client::open(redis_url).expect("Failed to create Redis client");
-
-        // Create connection manager asynchronously
-        let conn_manager = ConnectionManager::new(client)
-            .await
-            .expect("Failed to create Redis connection manager");
-
-        log::info!("Redis storage initialized");
-
         Self {
-            config: config.clone(),
-            conn_manager: Arc::new(Mutex::new(conn_manager)),
-            nonce_manager,
-
-            // Store prefix for all keys
-            prefix: prefix.to_string(),
-
-            // Define Redis keys with shared prefix for consistent naming
+            prefix: prefix.clone(),
             registration_tx_requests_key: format!("{prefix}:registration_tx_requests"),
             registration_tx_last_processed_key: format!("{prefix}:registration_tx_last_processed"),
             non_registration_tx_requests_key: format!("{prefix}:non_registration_tx_requests"),
@@ -102,9 +77,28 @@ impl RedisStorage {
         }
     }
 
-    async fn get_conn(&self) -> RedisResult<ConnectionManager> {
-        let conn = self.conn_manager.lock().await;
-        Ok(conn.clone())
+    fn lock_key(&self, lock_name: &str) -> String {
+        format!("{}:lock:{}", self.prefix, lock_name)
+    }
+
+    fn signatures_key(&self, block_id: &str) -> String {
+        format!("{}:{}", self.signatures_key, block_id)
+    }
+
+    fn empty_block_posted_at_key(&self) -> String {
+        format!("{}:empty_block_posted_at", self.prefix)
+    }
+}
+
+/// Lock manager for distributed locking
+struct RedisLockManager<'a> {
+    storage: &'a RedisStorage,
+    keys: &'a RedisKeyManager,
+}
+
+impl<'a> RedisLockManager<'a> {
+    fn new(storage: &'a RedisStorage, keys: &'a RedisKeyManager) -> Self {
+        Self { storage, keys }
     }
 
     /// Acquire a distributed lock
@@ -119,9 +113,9 @@ impl RedisStorage {
     /// * `Ok(false)` - Lock held by another instance
     /// * `Err` - Redis communication error
     async fn acquire_lock(&self, lock_name: &str) -> Result<bool> {
-        let mut conn = self.get_conn().await?;
-        let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
-        let instance_id = &self.config.block_builder_id;
+        let mut conn = self.storage.get_conn().await?;
+        let lock_key = self.keys.lock_key(lock_name);
+        let instance_id = &self.storage.config.block_builder_id;
         let result: Option<String> = redis::cmd("SET")
             .arg(&lock_key)
             .arg(instance_id)
@@ -135,7 +129,7 @@ impl RedisStorage {
             log::debug!("Lock acquired: {lock_name}");
             Ok(true)
         } else {
-            log::debug!("Lock already held: {lock_name}",);
+            log::debug!("Lock already held: {lock_name}");
             Ok(false)
         }
     }
@@ -147,9 +141,9 @@ impl RedisStorage {
     /// # Arguments
     /// * `lock_name` - Lock name to release
     async fn release_lock(&self, lock_name: &str) -> Result<()> {
-        let mut conn = self.get_conn().await?;
-        let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
-        let instance_id = &self.config.block_builder_id;
+        let mut conn = self.storage.get_conn().await?;
+        let lock_key = self.keys.lock_key(lock_name);
+        let instance_id = &self.storage.config.block_builder_id;
 
         // Use a Lua script to ensure we only delete the lock if we own it
         let script = Script::new(
@@ -168,6 +162,446 @@ impl RedisStorage {
             .await?;
         log::debug!("Lock released: {lock_name}");
         Ok(())
+    }
+
+    async fn with_lock<F, Fut, R>(&self, lock_name: &str, f: F) -> Result<R>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<R>>,
+    {
+        if !self.acquire_lock(lock_name).await? {
+            return Err(StorageError::LockNotAcquired(lock_name.to_string()));
+        }
+
+        let result = f().await;
+
+        if let Err(e) = self.release_lock(lock_name).await {
+            log::error!("Failed to release lock for {lock_name}: {e}");
+        }
+
+        result
+    }
+}
+
+pub struct RedisStorage {
+    pub config: StorageConfig,
+    conn_manager: Arc<Mutex<ConnectionManager>>,
+    pub nonce_manager: RedisNonceManager,
+    keys: RedisKeyManager,
+}
+
+impl RedisStorage {
+    pub async fn new(config: &StorageConfig, nonce_manager: RedisNonceManager) -> Result<Self> {
+        let cluster_id = config
+            .cluster_id
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
+
+        let redis_url = config
+            .redis_url
+            .clone()
+            .ok_or_else(|| StorageError::ConfigurationError("redis_url not found".to_string()))?;
+
+        let client = Client::open(redis_url).map_err(|e| StorageError::RedisError(e))?;
+
+        let conn_manager = ConnectionManager::new(client)
+            .await
+            .map_err(|e| StorageError::RedisError(e))?;
+
+        log::info!("Redis storage initialized");
+
+        Ok(Self {
+            config: config.clone(),
+            conn_manager: Arc::new(Mutex::new(conn_manager)),
+            nonce_manager,
+            keys: RedisKeyManager::new(&cluster_id),
+        })
+    }
+
+    async fn get_conn(&self) -> RedisResult<ConnectionManager> {
+        let conn = self.conn_manager.lock().await;
+        Ok(conn.clone())
+    }
+
+    fn lock_manager(&self) -> RedisLockManager<'_> {
+        RedisLockManager::new(self, &self.keys)
+    }
+
+    async fn process_requests_inner(&self, is_registration: bool) -> Result<()> {
+        let tx_requests = self.get_and_validate_tx_requests(is_registration).await?;
+        if tx_requests.is_empty() {
+            return Ok(());
+        }
+
+        let nonce = self.nonce_manager.reserve_nonce(is_registration).await?;
+        let memo = self.create_proposal_memo(is_registration, nonce, &tx_requests);
+        self.store_memo_and_update_mappings(&memo, &tx_requests, is_registration)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn get_and_validate_tx_requests(&self, is_registration: bool) -> Result<Vec<TxRequest>> {
+        let (requests_key, last_processed_key) = self.get_queue_keys(is_registration);
+        let mut conn = self.get_conn().await?;
+
+        let last_processed = self
+            .get_last_processed_timestamp(&mut conn, last_processed_key)
+            .await?;
+        let queue_len: usize = conn.llen(requests_key).await?;
+
+        if !self.should_process_requests(queue_len, last_processed) {
+            return Ok(Vec::new());
+        }
+
+        let num_to_process = std::cmp::min(queue_len, NUM_SENDERS_IN_BLOCK);
+        let serialized_requests: Vec<String> = conn
+            .lrange(requests_key, 0, num_to_process as isize - 1)
+            .await?;
+
+        let mut tx_requests = Vec::with_capacity(num_to_process);
+        for serialized in &serialized_requests {
+            let request_with_timestamp: TxRequestWithTimestamp = serde_json::from_str(serialized)?;
+            tx_requests.push(request_with_timestamp.request);
+        }
+
+        Ok(tx_requests)
+    }
+
+    async fn store_memo_and_update_mappings(
+        &self,
+        memo: &ProposalMemo,
+        tx_requests: &[TxRequest],
+        is_registration: bool,
+    ) -> Result<()> {
+        let (requests_key, last_processed_key) = self.get_queue_keys(is_registration);
+        let serialized_memo = serde_json::to_string(memo)?;
+        let mut conn = self.get_conn().await?;
+        let current_time = chrono::Utc::now().timestamp() as u64;
+
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+
+        // Store memo by block ID
+        pipe.hset(&self.keys.memos_key, &memo.block_id, &serialized_memo);
+        pipe.expire(&self.keys.memos_key, GENERAL_KEY_TTL_SECONDS as i64);
+
+        // Update request_id -> block_id mapping for each transaction
+        for tx_request in tx_requests {
+            pipe.hset(
+                &self.keys.request_id_to_block_id_key,
+                &tx_request.request_id,
+                &memo.block_id,
+            );
+        }
+        pipe.expire(
+            &self.keys.request_id_to_block_id_key,
+            GENERAL_KEY_TTL_SECONDS as i64,
+        );
+
+        // Remove processed requests from the queue
+        pipe.ltrim(requests_key, tx_requests.len() as isize, -1);
+
+        // Update last processed timestamp
+        pipe.set(last_processed_key, current_time.to_string());
+        pipe.expire(last_processed_key, GENERAL_KEY_TTL_SECONDS as i64);
+
+        // Execute the transaction
+        let _: () = pipe.query_async(&mut conn).await?;
+        Ok(())
+    }
+
+    fn get_queue_keys(&self, is_registration: bool) -> (&str, &str) {
+        if is_registration {
+            (
+                &self.keys.registration_tx_requests_key,
+                &self.keys.registration_tx_last_processed_key,
+            )
+        } else {
+            (
+                &self.keys.non_registration_tx_requests_key,
+                &self.keys.non_registration_tx_last_processed_key,
+            )
+        }
+    }
+
+    async fn get_last_processed_timestamp(
+        &self,
+        conn: &mut ConnectionManager,
+        key: &str,
+    ) -> Result<u64> {
+        let last_processed: Option<String> = conn.get(key).await?;
+        Ok(last_processed
+            .map(|s| s.parse::<u64>().unwrap_or(0))
+            .unwrap_or(0))
+    }
+
+    fn should_process_requests(&self, queue_len: usize, last_processed: u64) -> bool {
+        let current_time = chrono::Utc::now().timestamp() as u64;
+
+        if queue_len == 0 {
+            return false;
+        }
+
+        // Process if queue is full or enough time has passed
+        queue_len >= NUM_SENDERS_IN_BLOCK
+            || current_time >= last_processed + self.config.accepting_tx_interval
+    }
+
+    fn create_proposal_memo(
+        &self,
+        is_registration: bool,
+        nonce: u32,
+        tx_requests: &[TxRequest],
+    ) -> ProposalMemo {
+        let memo = ProposalMemo::from_tx_requests(
+            is_registration,
+            self.config.block_builder_address,
+            nonce,
+            tx_requests,
+            self.config.tx_timeout,
+        );
+        log::info!(
+            "constructed proposal block_id: {}, payload: {:?}",
+            memo.block_id,
+            memo.block_sign_payload.clone()
+        );
+        memo
+    }
+
+    async fn process_signatures_inner(&self) -> Result<()> {
+        let mut conn = self.get_conn().await?;
+        let memo_keys: Vec<String> = conn.hkeys(&self.keys.memos_key).await?;
+        let current_time = chrono::Utc::now().timestamp() as u64;
+
+        for block_id in memo_keys {
+            if let Err(e) = self
+                .process_single_memo(&mut conn, &block_id, current_time)
+                .await
+            {
+                log::error!("Failed to process memo for block_id {block_id}: {e}");
+                continue;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn process_single_memo(
+        &self,
+        conn: &mut ConnectionManager,
+        block_id: &str,
+        current_time: u64,
+    ) -> Result<()> {
+        let memo = self
+            .get_memo_for_processing(conn, block_id, current_time)
+            .await?;
+        let memo = match memo {
+            Some(m) => m,
+            None => return Ok(()),
+        };
+
+        let signatures = self.get_and_clean_signatures(conn, block_id).await?;
+
+        if !signatures.is_empty() {
+            self.enqueue_block_post_task(conn, &memo, &signatures)
+                .await?;
+        }
+
+        self.cleanup_memo_and_create_fee_task(conn, block_id, &memo, &signatures)
+            .await?;
+        Ok(())
+    }
+
+    async fn get_memo_for_processing(
+        &self,
+        conn: &mut ConnectionManager,
+        block_id: &str,
+        current_time: u64,
+    ) -> Result<Option<ProposalMemo>> {
+        let serialized_memo: Option<String> = conn.hget(&self.keys.memos_key, block_id).await?;
+
+        let memo = match serialized_memo {
+            Some(serialized) => serde_json::from_str::<ProposalMemo>(&serialized)?,
+            None => return Ok(None),
+        };
+
+        // Check if it's time to process this memo
+        if current_time <= memo.created_at + self.config.proposing_block_interval {
+            return Ok(None);
+        }
+
+        Ok(Some(memo))
+    }
+
+    async fn get_and_clean_signatures(
+        &self,
+        conn: &mut ConnectionManager,
+        block_id: &str,
+    ) -> Result<Vec<UserSignature>> {
+        let signatures_key = self.keys.signatures_key(block_id);
+        let serialized_signatures: Vec<String> = conn.lrange(&signatures_key, 0, -1).await?;
+        let mut signatures = serialized_signatures
+            .iter()
+            .map(|s| serde_json::from_str::<UserSignature>(s))
+            .collect::<serde_json::Result<Vec<_>>>()?;
+
+        remove_duplicate_signatures(&mut signatures);
+        Ok(signatures)
+    }
+
+    async fn enqueue_block_post_task(
+        &self,
+        conn: &mut ConnectionManager,
+        memo: &ProposalMemo,
+        signatures: &[UserSignature],
+    ) -> Result<()> {
+        let block_post_task = BlockPostTask::from_memo(memo, signatures);
+        let serialized_task = serde_json::to_string(&block_post_task)?;
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+        pipe.rpush(&self.keys.block_post_tasks_hi_key, &serialized_task);
+        pipe.expire(
+            &self.keys.block_post_tasks_hi_key,
+            GENERAL_KEY_TTL_SECONDS as i64,
+        );
+        pipe.query_async::<()>(conn).await?;
+        Ok(())
+    }
+
+    async fn cleanup_memo_and_create_fee_task(
+        &self,
+        conn: &mut ConnectionManager,
+        block_id: &str,
+        memo: &ProposalMemo,
+        signatures: &[UserSignature],
+    ) -> Result<()> {
+        let signatures_key = self.keys.signatures_key(block_id);
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+
+        // Add fee collection task if needed
+        if self.config.use_fee {
+            let fee_collection = FeeCollection {
+                use_collateral: self.config.use_collateral,
+                memo: memo.clone(),
+                signatures: signatures.to_vec(),
+            };
+            let serialized_fee_collection = serde_json::to_string(&fee_collection)?;
+            pipe.rpush(
+                &self.keys.fee_collection_tasks_key,
+                &serialized_fee_collection,
+            );
+            pipe.expire(
+                &self.keys.fee_collection_tasks_key,
+                GENERAL_KEY_TTL_SECONDS as i64,
+            );
+        }
+
+        // Remove memo and signatures
+        pipe.hdel(&self.keys.memos_key, block_id);
+        pipe.del(&signatures_key);
+
+        pipe.query_async::<()>(conn).await?;
+        Ok(())
+    }
+
+    async fn process_fee_collection_inner(
+        &self,
+        store_vault_server_client: &dyn StoreVaultClientInterface,
+    ) -> Result<()> {
+        let mut conn = self.get_conn().await?;
+
+        let serialized_fee_collection: Option<(String, String)> =
+            conn.blpop(&self.keys.fee_collection_tasks_key, 1.0).await?;
+
+        let serialized_fee_collection = match serialized_fee_collection {
+            Some((_, value)) => value,
+            None => return Ok(()),
+        };
+
+        let fee_collection: FeeCollection = serde_json::from_str(&serialized_fee_collection)?;
+        let block_post_tasks = collect_fee(
+            store_vault_server_client,
+            self.config.beneficiary,
+            &fee_collection,
+        )
+        .await?;
+
+        if !block_post_tasks.is_empty() {
+            self.enqueue_block_post_tasks(&mut conn, &block_post_tasks)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn enqueue_block_post_tasks(
+        &self,
+        conn: &mut ConnectionManager,
+        tasks: &[BlockPostTask],
+    ) -> Result<()> {
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+
+        for task in tasks {
+            let serialized_task = serde_json::to_string(task)?;
+            pipe.rpush(&self.keys.block_post_tasks_lo_key, &serialized_task);
+        }
+        pipe.expire(
+            &self.keys.block_post_tasks_lo_key,
+            GENERAL_KEY_TTL_SECONDS as i64,
+        );
+        pipe.query_async::<()>(conn).await?;
+        Ok(())
+    }
+
+    async fn enqueue_empty_block_inner(&self) -> Result<()> {
+        let mut conn = self.get_conn().await?;
+        let empty_block_posted_at_key = self.keys.empty_block_posted_at_key();
+
+        if !self
+            .should_enqueue_empty_block(&mut conn, &empty_block_posted_at_key)
+            .await?
+        {
+            return Ok(());
+        }
+
+        let block_post_task = BlockPostTask::default();
+        let serialized_task = serde_json::to_string(&block_post_task)?;
+        let current_time = chrono::Utc::now().timestamp() as u64;
+
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+        pipe.rpush(&self.keys.block_post_tasks_lo_key, &serialized_task);
+        pipe.expire(
+            &self.keys.block_post_tasks_lo_key,
+            GENERAL_KEY_TTL_SECONDS as i64,
+        );
+        pipe.set(&empty_block_posted_at_key, current_time.to_string());
+        pipe.expire(&empty_block_posted_at_key, GENERAL_KEY_TTL_SECONDS as i64);
+        pipe.query_async::<()>(&mut conn).await?;
+
+        Ok(())
+    }
+
+    async fn should_enqueue_empty_block(
+        &self,
+        conn: &mut ConnectionManager,
+        key: &str,
+    ) -> Result<bool> {
+        let empty_block_posted_at: Option<String> = conn.get(key).await?;
+        let empty_block_posted_at = empty_block_posted_at
+            .map(|s| s.parse::<u64>().unwrap_or(0))
+            .unwrap_or(0);
+
+        let multiplier = rand::thread_rng().gen_range(0.5..=1.5);
+        let deposit_check_interval =
+            (self.config.deposit_check_interval.unwrap() as f64 * multiplier) as u64;
+        let current_time = chrono::Utc::now().timestamp() as u64;
+
+        Ok(empty_block_posted_at == 0
+            || current_time >= empty_block_posted_at + deposit_check_interval)
     }
 }
 
@@ -196,9 +630,9 @@ impl Storage for RedisStorage {
             let request_id = tx_request.request_id.clone();
             // Select the appropriate queue based on transaction type
             let key = if is_registration {
-                &self.registration_tx_requests_key
+                &self.keys.registration_tx_requests_key
             } else {
-                &self.non_registration_tx_requests_key
+                &self.keys.non_registration_tx_requests_key
             };
 
             // Add timestamp information
@@ -250,7 +684,7 @@ impl Storage for RedisStorage {
 
             // Get block_id for request_id
             let block_id: Option<String> = conn
-                .hget(&self.request_id_to_block_id_key, request_id)
+                .hget(&self.keys.request_id_to_block_id_key, request_id)
                 .await?;
 
             let block_id = match block_id {
@@ -259,7 +693,8 @@ impl Storage for RedisStorage {
             };
 
             // Get memo for block_id
-            let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await?;
+            let serialized_memo: Option<String> =
+                conn.hget(&self.keys.memos_key, &block_id).await?;
 
             match serialized_memo {
                 Some(serialized) => {
@@ -298,137 +733,31 @@ impl Storage for RedisStorage {
         };
 
         // Try to acquire the lock - if we can't, another instance is already processing
-        if !self.acquire_lock(lock_name).await? {
-            // Another instance is already processing, just return
-            return Ok(());
-        }
+        let lock_manager = self.lock_manager();
+        let process_result = lock_manager
+            .with_lock(lock_name, || {
+                Box::pin(self.process_requests_inner(is_registration))
+            })
+            .await;
 
-        // Make sure we release the lock when we're done
-        // we don't use `with_retry` here because we want to ensure the lock is released quickly
-        let result = {
-            // Select the appropriate keys based on transaction type
-            let requests_key = if is_registration {
-                &self.registration_tx_requests_key
-            } else {
-                &self.non_registration_tx_requests_key
-            };
-
-            let last_processed_key = if is_registration {
-                &self.registration_tx_last_processed_key
-            } else {
-                &self.non_registration_tx_last_processed_key
-            };
-
-            let mut conn = self.get_conn().await?;
-
-            // Get the last processed timestamp
-            let last_processed: Option<String> = conn.get(last_processed_key).await?;
-
-            let last_processed = last_processed
-                .map(|s| s.parse::<u64>().unwrap_or(0))
-                .unwrap_or(0);
-
-            // Get the length of the queue
-            let queue_len: usize = conn.llen(requests_key).await?;
-
-            // Check if we should process requests:
-            // 1. If queue is empty, nothing to process
-            // 2. If queue is not full and we haven't waited long enough, wait for more transactions
-            let current_time = chrono::Utc::now().timestamp() as u64;
-            if (queue_len < NUM_SENDERS_IN_BLOCK
-                && current_time < last_processed + self.config.accepting_tx_interval)
-                || queue_len == 0
-            {
-                return Ok(());
-            }
-
-            // Get up to NUM_SENDERS_IN_BLOCK requests
-            let num_to_process = std::cmp::min(queue_len, NUM_SENDERS_IN_BLOCK);
-            let serialized_requests: Vec<String> = conn
-                .lrange(requests_key, 0, num_to_process as isize - 1)
-                .await?;
-
-            // Deserialize requests
-            let mut tx_requests = Vec::with_capacity(num_to_process);
-            for serialized in &serialized_requests {
-                let request_with_timestamp: TxRequestWithTimestamp =
-                    serde_json::from_str(serialized)?;
-                tx_requests.push(request_with_timestamp.request);
-            }
-
-            let nonce = self.nonce_manager.reserve_nonce(is_registration).await?;
-
-            // Create memo from the transaction requests
-            let memo = ProposalMemo::from_tx_requests(
-                is_registration,
-                self.config.block_builder_address,
-                nonce,
-                &tx_requests,
-                self.config.tx_timeout,
-            );
-            log::info!(
-                "constructed proposal block_id: {}, payload: {:?}",
-                memo.block_id,
-                memo.block_sign_payload.clone()
-            );
-
-            // Serialize the memo for storage
-            let serialized_memo = serde_json::to_string(&memo)?;
-
-            // Use a transaction to ensure atomicity of the following operations
-            let mut pipe = redis::pipe();
-            pipe.atomic();
-
-            // Store memo by block ID
-            pipe.hset(&self.memos_key, &memo.block_id, &serialized_memo);
-            // Set TTL for memos hash
-            pipe.expire(&self.memos_key, GENERAL_KEY_TTL_SECONDS as i64);
-
-            // Update request_id -> block_id mapping for each transaction
-            for tx_request in &tx_requests {
-                pipe.hset(
-                    &self.request_id_to_block_id_key,
-                    &tx_request.request_id,
-                    &memo.block_id,
+        match process_result {
+            Ok(()) => {
+                log::info!(
+                    "Finished processing {} transaction requests",
+                    if is_registration {
+                        "registration"
+                    } else {
+                        "non-registration"
+                    }
                 );
+                Ok(())
             }
-            // Set TTL for request_id_to_block_id hash
-            pipe.expire(
-                &self.request_id_to_block_id_key,
-                GENERAL_KEY_TTL_SECONDS as i64,
-            );
-
-            // Remove processed requests from the queue
-            pipe.ltrim(requests_key, num_to_process as isize, -1);
-
-            // Update last processed timestamp
-            pipe.set(last_processed_key, current_time.to_string());
-            // Set TTL for last processed timestamp key
-            pipe.expire(last_processed_key, GENERAL_KEY_TTL_SECONDS as i64);
-
-            // Execute the transaction
-            let _: () = pipe.query_async(&mut conn).await?;
-
-            Ok(())
-        };
-
-        // Release the lock regardless of the result
-        let release_result = self.release_lock(lock_name).await;
-
-        // If releasing the lock failed, log the error but still return the original result
-        if let Err(e) = release_result {
-            log::error!("Failed to release lock for {lock_name}: {e}");
+            Err(StorageError::LockNotAcquired(_)) => {
+                // Another instance is already processing, just return
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
-
-        log::info!(
-            "Finished processing {} transaction requests",
-            if is_registration {
-                "registration"
-            } else {
-                "non-registration"
-            }
-        );
-        result
     }
 
     /// Add user signature for transaction request
@@ -444,7 +773,7 @@ impl Storage for RedisStorage {
 
             // Get block_id for request_id
             let block_id: Option<String> = conn
-                .hget(&self.request_id_to_block_id_key, request_id)
+                .hget(&self.keys.request_id_to_block_id_key, request_id)
                 .await?;
 
             let block_id = block_id.ok_or_else(|| {
@@ -454,7 +783,8 @@ impl Storage for RedisStorage {
             })?;
 
             // Get memo for block_id
-            let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await?;
+            let serialized_memo: Option<String> =
+                conn.hget(&self.keys.memos_key, &block_id).await?;
 
             let serialized_memo = serialized_memo.ok_or_else(|| {
                 StorageError::AddSignatureError(format!("memo not found for block_id: {block_id}"))
@@ -473,7 +803,7 @@ impl Storage for RedisStorage {
             let serialized_signature = serde_json::to_string(&signature)?;
 
             // Add signature to the list for this block_id
-            let signatures_key = format!("{}:{}", self.signatures_key, block_id);
+            let signatures_key = self.keys.signatures_key(&block_id);
             let _: () = conn.rpush(&signatures_key, serialized_signature).await?;
 
             // Set TTL for signatures key
@@ -490,119 +820,20 @@ impl Storage for RedisStorage {
     ///
     /// Processes signatures for ready memos and creates necessary tasks.
     async fn process_signatures(&self) -> Result<()> {
-        // Try to acquire the lock
-        let lock_acquired = match self.acquire_lock("process_signatures").await {
-            Ok(acquired) => acquired,
+        let lock_manager = self.lock_manager();
+        match lock_manager
+            .with_lock("process_signatures", || {
+                Box::pin(self.process_signatures_inner())
+            })
+            .await
+        {
+            Ok(()) => Ok(()),
+            Err(StorageError::LockNotAcquired(_)) => Ok(()),
             Err(e) => {
-                log::error!("Failed to acquire lock for process_signatures: {e}");
-                return Ok(());
+                log::error!("Failed to process signatures: {e}");
+                Ok(())
             }
-        };
-
-        if !lock_acquired {
-            // Another instance is already processing signatures
-            return Ok(());
         }
-
-        // Make sure we release the lock when we're done
-        // we don't use `with_retry` here because we want to ensure the lock is released quickly
-        let result = {
-            let mut conn = self.get_conn().await?;
-
-            // Get all memo keys
-            let memo_keys: Vec<String> = conn.hkeys(&self.memos_key).await?;
-
-            let current_time = chrono::Utc::now().timestamp() as u64;
-
-            for block_id in memo_keys {
-                // Get memo
-                let serialized_memo: Option<String> = conn.hget(&self.memos_key, &block_id).await?;
-
-                let memo = match serialized_memo {
-                    Some(serialized) => serde_json::from_str::<ProposalMemo>(&serialized)?,
-                    None => continue,
-                };
-
-                // Check if it's time to process this memo
-                if current_time <= memo.created_at + self.config.proposing_block_interval {
-                    continue;
-                }
-
-                // Get signatures for this block
-                let signatures_key = format!("{}:{}", self.signatures_key, block_id);
-                let serialized_signatures: Vec<String> =
-                    conn.lrange(&signatures_key, 0, -1).await?;
-                let mut signatures = serialized_signatures
-                    .iter()
-                    .map(|s| serde_json::from_str::<UserSignature>(s))
-                    .collect::<serde_json::Result<Vec<_>>>()?;
-
-                remove_duplicate_signatures(&mut signatures);
-
-                // Post task only if we have non-empty signatures
-                if !signatures.is_empty() {
-                    let block_post_task = BlockPostTask::from_memo(&memo, &signatures);
-                    let serialized_task = serde_json::to_string(&block_post_task)?;
-                    let mut pipe = redis::pipe();
-                    pipe.atomic();
-                    // Add to high priority queue
-                    pipe.rpush(&self.block_post_tasks_hi_key, &serialized_task);
-                    // Set TTL for high priority queue
-                    pipe.expire(
-                        &self.block_post_tasks_hi_key,
-                        GENERAL_KEY_TTL_SECONDS as i64,
-                    );
-                    if let Err(e) = pipe.query_async::<()>(&mut conn).await {
-                        log::error!(
-                            "Failed to execute queue post block task for block_id {block_id}: {e}"
-                        );
-                        continue;
-                    }
-                }
-
-                // Use a transaction to ensure atomicity
-                let mut pipe = redis::pipe();
-                pipe.atomic();
-
-                // Add fee collection task if needed
-                if self.config.use_fee {
-                    let fee_collection = FeeCollection {
-                        use_collateral: self.config.use_collateral,
-                        memo: memo.clone(),
-                        signatures: signatures.clone(),
-                    };
-                    let serialized_fee_collection = serde_json::to_string(&fee_collection)?;
-                    pipe.rpush(&self.fee_collection_tasks_key, &serialized_fee_collection);
-                    // Set TTL for fee collection tasks queue
-                    pipe.expire(
-                        &self.fee_collection_tasks_key,
-                        GENERAL_KEY_TTL_SECONDS as i64,
-                    );
-                }
-
-                // Remove memo and signatures
-                pipe.hdel(&self.memos_key, &block_id);
-                pipe.del(&signatures_key);
-
-                // Execute the transaction
-                if let Err(e) = pipe.query_async::<()>(&mut conn).await {
-                    log::error!("Failed to execute transaction for block_id {block_id}: {e}");
-                    continue;
-                }
-            }
-
-            Ok(())
-        };
-
-        // Release the lock regardless of the result
-        let release_result = self.release_lock("process_signatures").await;
-
-        // If releasing the lock failed, log the error but still return the original result
-        if let Err(e) = release_result {
-            log::error!("Failed to release lock for process_signatures: {e}");
-        }
-
-        result
     }
 
     /// Process fee collection tasks
@@ -615,151 +846,38 @@ impl Storage for RedisStorage {
         &self,
         store_vault_server_client: &dyn StoreVaultClientInterface,
     ) -> Result<()> {
-        // Try to acquire the lock
-        if !self.acquire_lock("process_fee_collection").await? {
-            // Another instance is already processing, just return
-            return Ok(());
+        let lock_manager = self.lock_manager();
+        match lock_manager
+            .with_lock("process_fee_collection", || {
+                Box::pin(self.process_fee_collection_inner(store_vault_server_client))
+            })
+            .await
+        {
+            Ok(()) => Ok(()),
+            Err(StorageError::LockNotAcquired(_)) => Ok(()),
+            Err(e) => Err(e),
         }
-
-        // Make sure we release the lock when we're done
-        // we don't use `with_retry` here because we want to ensure the lock is released quickly
-        let result = {
-            let mut conn = self.get_conn().await?;
-
-            // Use BLPOP with a short timeout to avoid race conditions between multiple instances
-            let serialized_fee_collection: Option<(String, String)> =
-                conn.blpop(&self.fee_collection_tasks_key, 1.0).await?;
-
-            // Return if there's no task
-            let serialized_fee_collection = match serialized_fee_collection {
-                Some((_, value)) => value,
-                None => return Ok(()),
-            };
-
-            // Deserialize the fee collection task
-            let fee_collection: FeeCollection = serde_json::from_str(&serialized_fee_collection)?;
-
-            // Process the fee collection
-            let block_post_tasks = collect_fee(
-                store_vault_server_client,
-                self.config.beneficiary,
-                &fee_collection,
-            )
-            .await?;
-
-            // Use a transaction to add all tasks atomically
-            if !block_post_tasks.is_empty() {
-                let mut pipe = redis::pipe();
-                pipe.atomic();
-
-                // Add resulting block post tasks to low priority queue
-                for task in block_post_tasks {
-                    let serialized_task = serde_json::to_string(&task)?;
-                    pipe.rpush(&self.block_post_tasks_lo_key, &serialized_task);
-                }
-                // Set TTL for low priority queue
-                pipe.expire(
-                    &self.block_post_tasks_lo_key,
-                    GENERAL_KEY_TTL_SECONDS as i64,
-                );
-
-                // Execute the transaction
-                let _: () = pipe.query_async(&mut conn).await?;
-            }
-
-            Ok(())
-        };
-
-        // Release the lock regardless of the result
-        let release_result = self.release_lock("process_fee_collection").await;
-
-        // If releasing the lock failed, log the error but still return the original result
-        if let Err(e) = release_result {
-            log::error!("Failed to release lock for process_fee_collection: {e}");
-        }
-
-        result
     }
 
     /// Enqueue empty block for deposit checking
     ///
     /// Adds empty block task if enough time passed since last check.
     async fn enqueue_empty_block(&self) -> Result<()> {
-        // If deposit check is disabled, do nothing
         if self.config.deposit_check_interval.is_none() {
             return Ok(());
         }
 
-        // Try to acquire a lock to prevent multiple instances from posting empty blocks
-        if !self.acquire_lock("enqueue_empty_block").await? {
-            // Another instance is already processing, just return
-            return Ok(());
+        let lock_manager = self.lock_manager();
+        match lock_manager
+            .with_lock("enqueue_empty_block", || {
+                Box::pin(self.enqueue_empty_block_inner())
+            })
+            .await
+        {
+            Ok(()) => Ok(()),
+            Err(StorageError::LockNotAcquired(_)) => Ok(()),
+            Err(e) => Err(e),
         }
-
-        // Make sure we release the lock when we're done
-        // we don't use `with_retry` here because we want to ensure the lock is released quickly
-        let result = {
-            let mut conn = self.get_conn().await?;
-
-            // Key for storing the timestamp of the last empty block post
-            let empty_block_posted_at_key = format!("{}:empty_block_posted_at", self.prefix);
-
-            // Get the timestamp of the last empty block post
-            let empty_block_posted_at: Option<String> =
-                conn.get(&empty_block_posted_at_key).await?;
-            let empty_block_posted_at = empty_block_posted_at
-                .map(|s| s.parse::<u64>().unwrap_or(0))
-                .unwrap_or(0);
-            let multiplier = rand::thread_rng().gen_range(0.5..=1.5);
-            let deposit_check_interval =
-                (self.config.deposit_check_interval.unwrap() as f64 * multiplier) as u64;
-
-            let current_time = chrono::Utc::now().timestamp() as u64;
-
-            // Check if enough time has passed since the last empty block post
-            if empty_block_posted_at > 0
-                && current_time < empty_block_posted_at + deposit_check_interval
-            {
-                // Not enough time has passed, do nothing
-                return Ok(());
-            }
-
-            // Create a default block post task (empty block)
-            let block_post_task = BlockPostTask::default();
-            let serialized_task = serde_json::to_string(&block_post_task)?;
-
-            // Use a transaction to ensure atomicity
-            let mut pipe = redis::pipe();
-            pipe.atomic();
-
-            // Add to low priority queue
-            pipe.rpush(&self.block_post_tasks_lo_key, &serialized_task);
-            // Set TTL for low priority queue
-            pipe.expire(
-                &self.block_post_tasks_lo_key,
-                GENERAL_KEY_TTL_SECONDS as i64,
-            );
-
-            // Update the timestamp of the last empty block post
-            pipe.set(&empty_block_posted_at_key, current_time.to_string());
-            // Set TTL for empty block posted timestamp key
-            pipe.expire(&empty_block_posted_at_key, GENERAL_KEY_TTL_SECONDS as i64);
-
-            // Execute the transaction
-            let _: () = pipe.query_async(&mut conn).await?;
-
-            Ok(())
-        };
-
-        // Release the lock regardless of the result
-        let release_result = self.release_lock("enqueue_empty_block").await;
-
-        // If releasing the lock failed, log the error but still return the original result
-        if let Err(e) = release_result {
-            log::error!("Failed to release lock for enqueue_empty_block: {e}");
-        }
-
-        result
     }
 
     /// Dequeue block post task
@@ -772,71 +890,86 @@ impl Storage for RedisStorage {
     async fn dequeue_block_post_task(&self) -> Result<Option<BlockPostTask>> {
         let mut conn = self.get_conn().await?;
 
-        /* ---------- 1. High-priority queue: peek (non-destructive) ---------- */
-        if let Some(task_json) = conn
-            .lindex::<_, Option<String>>(&self.block_post_tasks_hi_key, 0)
+        // Try high-priority queue first
+        if let Some(task) = self.try_dequeue_high_priority_task(&mut conn).await? {
+            return Ok(Some(task));
+        }
+
+        // Try low-priority queue
+        self.try_dequeue_low_priority_task(&mut conn).await
+    }
+}
+
+impl RedisStorage {
+    async fn try_dequeue_high_priority_task(
+        &self,
+        conn: &mut ConnectionManager,
+    ) -> Result<Option<BlockPostTask>> {
+        let task_json = conn
+            .lindex::<_, Option<String>>(&self.keys.block_post_tasks_hi_key, 0)
+            .await?;
+
+        let task_json = match task_json {
+            Some(json) => json,
+            None => return Ok(None),
+        };
+
+        let peek_task: BlockPostTask = serde_json::from_str(&task_json)?;
+        let is_registration = peek_task.block_sign_payload.is_registration_block;
+        let block_nonce = peek_task.block_sign_payload.block_builder_nonce;
+
+        let smallest_reserved_nonce = self
+            .nonce_manager
+            .smallest_reserved_nonce(is_registration)
+            .await?;
+
+        let should_wait = smallest_reserved_nonce != Some(block_nonce);
+
+        if should_wait {
+            log::info!(
+                "High-priority head nonce {} ≠ smallest {:?}. Waiting {} then processing anyway.",
+                block_nonce,
+                smallest_reserved_nonce,
+                self.config.nonce_waiting_time,
+            );
+            sleep_for(self.config.nonce_waiting_time).await;
+        }
+
+        if let Some(popped_json) = conn
+            .lpop::<_, Option<String>>(&self.keys.block_post_tasks_hi_key, None)
             .await?
         {
-            // ------------- decode task & nonce check -------------
-            let peek_task: BlockPostTask = serde_json::from_str(&task_json)?;
-            let is_registration = peek_task.block_sign_payload.is_registration_block;
-            let block_nonce = peek_task.block_sign_payload.block_builder_nonce;
-
-            let smallest_reserved_nonce = self
-                .nonce_manager
-                .smallest_reserved_nonce(is_registration)
+            let task: BlockPostTask = serde_json::from_str(&popped_json)?;
+            self.nonce_manager
+                .release_nonce(
+                    task.block_sign_payload.block_builder_nonce,
+                    task.block_sign_payload.is_registration_block,
+                )
                 .await?;
 
-            /* ----- 2A. Nonce matches: pop immediately ----- */
-            if smallest_reserved_nonce == Some(block_nonce) {
-                if let Some(popped_json) = conn
-                    .lpop::<_, Option<String>>(&self.block_post_tasks_hi_key, None)
-                    .await?
-                {
-                    let task: BlockPostTask = serde_json::from_str(&popped_json)?;
-                    self.nonce_manager
-                        .release_nonce(
-                            task.block_sign_payload.block_builder_nonce,
-                            task.block_sign_payload.is_registration_block,
-                        )
-                        .await?;
-                    log::info!(
-                        "Dequeued high-priority task (nonce match): id={}",
-                        task.block_id
-                    );
-                    return Ok(Some(task));
-                }
+            let message = if should_wait {
+                "Dequeued high-priority task after wait"
             } else {
-                log::info!(
-                    "High-priority head nonce {} ≠ smallest {:?}. Waiting {} then processing anyway.",
-                    block_nonce,
-                    smallest_reserved_nonce,
-                    self.config.nonce_waiting_time,
-                );
-                // sleep for nonce waiting time
-                sleep_for(self.config.nonce_waiting_time).await;
-                if let Some(popped_json) = conn
-                    .lpop::<_, Option<String>>(&self.block_post_tasks_hi_key, None)
-                    .await?
-                {
-                    let task: BlockPostTask = serde_json::from_str(&popped_json)?;
-                    self.nonce_manager
-                        .release_nonce(
-                            task.block_sign_payload.block_builder_nonce,
-                            task.block_sign_payload.is_registration_block,
-                        )
-                        .await?;
-                    log::info!(
-                        "Dequeued high-priority task after wait: id={}",
-                        task.block_id
-                    );
-                    return Ok(Some(task));
-                }
-            }
+                "Dequeued high-priority task (nonce match)"
+            };
+
+            log::info!("{}: id={}", message, task.block_id);
+            return Ok(Some(task));
         }
+
+        Ok(None)
+    }
+
+    async fn try_dequeue_low_priority_task(
+        &self,
+        conn: &mut ConnectionManager,
+    ) -> Result<Option<BlockPostTask>> {
         const BLPOP_TIMEOUT_SEC: f64 = 1.0;
         if let Some((_key, task_json)) = conn
-            .blpop::<_, Option<(String, String)>>(&self.block_post_tasks_lo_key, BLPOP_TIMEOUT_SEC)
+            .blpop::<_, Option<(String, String)>>(
+                &self.keys.block_post_tasks_lo_key,
+                BLPOP_TIMEOUT_SEC,
+            )
             .await?
         {
             let task = serde_json::from_str::<BlockPostTask>(&task_json)?;
@@ -963,7 +1096,7 @@ mod tests {
             .connect_mocked_client(provider_asserter);
         let rollup = RollupContract::new(provider, Default::default());
         let nonce_manager = RedisNonceManager::new(nonce_config, rollup).await;
-        RedisStorage::new(&config, nonce_manager).await
+        RedisStorage::new(&config, nonce_manager).await.unwrap()
     }
 
     #[tokio::test]
@@ -985,19 +1118,35 @@ mod tests {
         let redis1 = setup_test_storage("redis-test", "redis://localhost:6381").await;
         let redis2 = setup_test_storage("redis-test", "redis://localhost:6381").await;
 
-        let acquired1 = redis1.acquire_lock("test_lock").await.unwrap();
+        let acquired1 = redis1
+            .lock_manager()
+            .acquire_lock("test_lock")
+            .await
+            .unwrap();
         assert_and_stop(cont_name, || {
             assert!(acquired1, "Couldn't acquire lock for redis1")
         });
 
-        let acquired2 = redis2.acquire_lock("test_lock").await.unwrap();
+        let acquired2 = redis2
+            .lock_manager()
+            .acquire_lock("test_lock")
+            .await
+            .unwrap();
         assert_and_stop(cont_name, || {
             assert!(!acquired2, "Could acquire lock for redis2")
         });
 
-        redis1.release_lock("test_lock").await.unwrap();
+        redis1
+            .lock_manager()
+            .release_lock("test_lock")
+            .await
+            .unwrap();
 
-        let acquired2_after = redis2.acquire_lock("test_lock").await.unwrap();
+        let acquired2_after = redis2
+            .lock_manager()
+            .acquire_lock("test_lock")
+            .await
+            .unwrap();
         assert_and_stop(cont_name, || {
             assert!(acquired2_after, "Couldn't acquire lock for redis-test-2")
         });

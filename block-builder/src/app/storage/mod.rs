@@ -66,7 +66,11 @@ pub async fn create_storage(config: &StorageConfig, rollup: RollupContract) -> B
     if config.redis_url.is_some() {
         log::info!("use redis storage");
         let nonce_manager = RedisNonceManager::new(nonce_config, rollup).await;
-        Box::new(redis_storage::RedisStorage::new(config, nonce_manager).await)
+        Box::new(
+            redis_storage::RedisStorage::new(config, nonce_manager)
+                .await
+                .expect("Failed to create RedisStorage"),
+        )
     } else {
         log::info!("use in-memory storage");
         let nonce_manager = InMemoryNonceManager::new(nonce_config, rollup);
