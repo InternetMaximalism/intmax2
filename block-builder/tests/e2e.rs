@@ -34,6 +34,7 @@ use intmax2_interfaces::{
     },
 };
 use intmax2_zkp::{common::tx::Tx, utils::poseidon_hash_out::PoseidonHashOut};
+use rand::Rng;
 use server_common::{
     health_check::{health_check, set_name_and_version},
     logger,
@@ -211,23 +212,27 @@ async fn test_e2e_block_builder() {
             view: PrivateKey::rand(&mut rng),
             spend: PrivateKey::rand(&mut rng),
         };
-        let tx = Tx {
-            transfer_tree_root: PoseidonHashOut::rand(&mut rng),
-            nonce: 0,
-        };
-        let client = client.clone();
-        let validity_prover_client = validity_prover_client.clone();
-        actix_rt::spawn(async move {
-            send_tx(
-                &validity_prover_client,
-                &client,
-                network,
-                &block_builder_url,
-                keys,
-                tx,
-            )
-            .await;
-        });
+
+        for _ in 0..rng.gen_range(1..=3) {
+            let tx = Tx {
+                transfer_tree_root: PoseidonHashOut::rand(&mut rng),
+                nonce: 0,
+            };
+            let client = client.clone();
+            let validity_prover_client = validity_prover_client.clone();
+            let block_builder_url = block_builder_url.clone();
+            actix_rt::spawn(async move {
+                send_tx(
+                    &validity_prover_client,
+                    &client,
+                    network,
+                    &block_builder_url,
+                    keys,
+                    tx,
+                )
+                .await;
+            });
+        }
     }
 
     tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
