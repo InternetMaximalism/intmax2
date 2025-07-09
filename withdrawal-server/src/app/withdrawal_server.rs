@@ -4,7 +4,9 @@ use crate::{
     app::{
         config::Config,
         db_operations::DbOperations,
+        fee_handler::FeeHandler,
         status::{SqlClaimStatus, SqlWithdrawalStatus},
+        validator::{BlockHashValidator, RealBlockHashValidator},
     },
     Env,
 };
@@ -17,21 +19,12 @@ use intmax2_interfaces::{
             types::{TimestampCursor, TimestampCursorResponse},
         },
     },
-    data::{
-        data_type::DataType,
-        encryption::{errors::BlsEncryptionError, BlsEncryption},
-        transfer_data::TransferData,
-    },
     utils::{address::IntmaxAddress, fee::Fee},
 };
 
 use super::error::WithdrawalServerError;
 use intmax2_client_sdk::{
-    client::{
-        fee_payment::FeeType,
-        receive_validation::{validate_receive, ReceiveValidationError},
-        sync::utils::quote_withdrawal_claim_fee,
-    },
+    client::{fee_payment::FeeType, sync::utils::quote_withdrawal_claim_fee},
     external_api::{
         contract::{
             convert::convert_b256_to_bytes32, rollup_contract::RollupContract,
@@ -385,86 +378,16 @@ impl WithdrawalServer {
         fee: &Fee,
         fee_transfer_digests: &[Bytes32],
     ) -> Result<(Vec<Transfer>, FeeResult), WithdrawalServerError> {
-        // check duplicated nullifiers
-
-        let view_pair = match fee_type {
-            FeeType::Withdrawal => self.config.withdrawal_beneficiary_key,
-            FeeType::Claim => self.config.claim_beneficiary_key,
-        };
-        // fetch transfer data
-        let encrypted_transfer_data = self
-            .store_vault_server
-            .get_data_batch(
-                view_pair.view,
-                &DataType::Transfer.to_topic(),
-                fee_transfer_digests,
-            )
-            .await?;
-        if encrypted_transfer_data.len() != fee_transfer_digests.len() {
-            return Err(WithdrawalServerError::InvalidFee(format!(
-                "Invalid fee transfer digest response: expected {}, got {}",
-                fee_transfer_digests.len(),
-                encrypted_transfer_data.len()
-            )));
-        }
-
-        let transfer_data_with_meta = encrypted_transfer_data
-            .iter()
-            .map(|data| {
-                let transfer_data = TransferData::decrypt(view_pair.view, None, &data.data)?;
-                Ok((data.meta.clone(), transfer_data))
-            })
-            .collect::<Result<Vec<_>, BlsEncryptionError>>();
-        let transfer_data_with_meta = match transfer_data_with_meta {
-            Ok(data) => data,
-            Err(e) => {
-                log::warn!("Failed to decrypt transfer data: {e}");
-                return Ok((Vec::new(), FeeResult::DecryptionError));
-            }
-        };
-
-        let mut collected_fee = U256::zero();
-        let mut transfers = Vec::new();
-        for (meta, transfer_data) in transfer_data_with_meta {
-            let transfer = match validate_receive(
-                self.store_vault_server.as_ref(),
-                &self.validity_prover,
-                view_pair.spend,
-                meta.timestamp,
-                &transfer_data,
-            )
-            .await
-            {
-                Ok(transfer) => transfer,
-                Err(e) => {
-                    if matches!(e, ReceiveValidationError::ValidationError(_)) {
-                        return Ok((Vec::new(), FeeResult::ValidationError));
-                    } else {
-                        return Err(e.into());
-                    }
-                }
-            };
-            if fee.token_index != transfer.token_index {
-                return Ok((Vec::new(), FeeResult::TokenIndexMismatch));
-            }
-            collected_fee += transfer.amount;
-            transfers.push(transfer);
-        }
-        if collected_fee < fee.amount {
-            return Ok((Vec::new(), FeeResult::Insufficient));
-        }
-        if !self.check_no_duplicated_nullifiers(&transfers).await? {
-            return Ok((Vec::new(), FeeResult::AlreadyUsed));
-        }
-        Ok((transfers, FeeResult::Success))
-    }
-
-    async fn check_no_duplicated_nullifiers(
-        &self,
-        transfers: &[Transfer],
-    ) -> Result<bool, WithdrawalServerError> {
         let db_ops = DbOperations::new(&self.pool);
-        db_ops.check_no_duplicated_nullifiers(transfers).await
+        let fee_handler = FeeHandler::new(
+            &self.config,
+            db_ops,
+            self.store_vault_server.as_ref(),
+            &self.validity_prover,
+        );
+        fee_handler
+            .validate_fee(fee_type, fee, fee_transfer_digests)
+            .await
     }
 
     async fn add_spent_transfers(
@@ -479,53 +402,6 @@ impl WithdrawalServer {
 pub fn privkey_to_keyset(privkey: B256) -> KeySet {
     let privkey: Bytes32 = convert_b256_to_bytes32(privkey);
     KeySet::new(privkey.into())
-}
-
-#[async_trait::async_trait]
-pub trait BlockHashValidator: Send + Sync {
-    async fn validate_block_hash_existence(
-        &self,
-        contract: &RollupContract,
-        block_number: u32,
-        expected_hash: Bytes32,
-    ) -> Result<(), WithdrawalServerError>;
-}
-
-pub struct RealBlockHashValidator;
-
-#[async_trait::async_trait]
-impl BlockHashValidator for RealBlockHashValidator {
-    async fn validate_block_hash_existence(
-        &self,
-        contract: &RollupContract,
-        block_number: u32,
-        expected_hash: Bytes32,
-    ) -> Result<(), WithdrawalServerError> {
-        let onchain_hash = contract.get_block_hash(block_number).await?;
-        if onchain_hash != expected_hash {
-            return Err(WithdrawalServerError::InvalidBlockHash(format!(
-                "Invalid block hash: expected {}, got {} at block number {}",
-                expected_hash.to_hex(),
-                onchain_hash.to_hex(),
-                block_number
-            )));
-        }
-        Ok(())
-    }
-}
-
-pub struct MockBlockHashValidator;
-
-#[async_trait::async_trait]
-impl BlockHashValidator for MockBlockHashValidator {
-    async fn validate_block_hash_existence(
-        &self,
-        _contract: &RollupContract,
-        _block_number: u32,
-        _expected_hash: Bytes32,
-    ) -> Result<(), WithdrawalServerError> {
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -544,7 +420,7 @@ pub(crate) mod test_withdrawal_server_helper {
     use sqlx::query;
 
     use crate::{
-        app::withdrawal_server::{MockBlockHashValidator, WithdrawalServer},
+        app::{validator::MockBlockHashValidator, withdrawal_server::WithdrawalServer},
         Env,
     };
 
