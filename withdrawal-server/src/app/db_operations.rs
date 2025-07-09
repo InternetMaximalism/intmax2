@@ -40,17 +40,17 @@ impl<'a> DbOperations<'a> {
                 let cursor_timestamp = cursor.cursor.unwrap_or(0) as i64;
                 sqlx::query!(
                     r#"
-                    SELECT 
-                        status as "status: SqlWithdrawalStatus",
-                        contract_withdrawal,
-                        l1_tx_hash,
-                        created_at
-                    FROM withdrawals
-                    WHERE pubkey = $1
-                    AND EXTRACT(EPOCH FROM created_at)::bigint > $2
-                    ORDER BY created_at ASC
-                    LIMIT $3
-                    "#,
+              SELECT 
+                  status as "status: SqlWithdrawalStatus",
+                  contract_withdrawal,
+                  l1_tx_hash,
+                  created_at
+              FROM withdrawals
+              WHERE pubkey = $1
+              AND EXTRACT(EPOCH FROM created_at)::bigint > $2
+              ORDER BY created_at ASC
+              LIMIT $3
+              "#,
                     pubkey_str,
                     cursor_timestamp,
                     actual_limit + 1
@@ -77,17 +77,17 @@ impl<'a> DbOperations<'a> {
                 let cursor_timestamp = cursor.cursor.unwrap_or(i64::MAX as u64) as i64;
                 sqlx::query!(
                     r#"
-                    SELECT 
-                        status as "status: SqlWithdrawalStatus",
-                        contract_withdrawal,
-                        l1_tx_hash,
-                        created_at
-                    FROM withdrawals
-                    WHERE pubkey = $1
-                    AND EXTRACT(EPOCH FROM created_at)::bigint < $2
-                    ORDER BY created_at DESC
-                    LIMIT $3
-                    "#,
+              SELECT 
+                  status as "status: SqlWithdrawalStatus",
+                  contract_withdrawal,
+                  l1_tx_hash,
+                  created_at
+              FROM withdrawals
+              WHERE pubkey = $1
+              AND EXTRACT(EPOCH FROM created_at)::bigint < $2
+              ORDER BY created_at DESC
+              LIMIT $3
+              "#,
                     pubkey_str,
                     cursor_timestamp,
                     actual_limit + 1
@@ -152,18 +152,18 @@ impl<'a> DbOperations<'a> {
                 let cursor_timestamp = cursor.cursor.unwrap_or(0) as i64;
                 sqlx::query!(
                     r#"
-                    SELECT 
-                        status as "status: SqlClaimStatus",
-                        claim,
-                        submit_claim_proof_tx_hash,
-                        l1_tx_hash,
-                        created_at
-                    FROM claims
-                    WHERE pubkey = $1
-                    AND EXTRACT(EPOCH FROM created_at)::bigint > $2
-                    ORDER BY created_at ASC
-                    LIMIT $3
-                    "#,
+                SELECT 
+                    status as "status: SqlClaimStatus",
+                    claim,
+                    submit_claim_proof_tx_hash,
+                    l1_tx_hash,
+                    created_at
+                FROM claims
+                WHERE pubkey = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint > $2
+                ORDER BY created_at ASC
+                LIMIT $3
+                "#,
                     pubkey_str,
                     cursor_timestamp,
                     actual_limit + 1
@@ -190,18 +190,18 @@ impl<'a> DbOperations<'a> {
                 let cursor_timestamp = cursor.cursor.unwrap_or(i64::MAX as u64) as i64;
                 sqlx::query!(
                     r#"
-                    SELECT 
-                        status as "status: SqlClaimStatus",
-                        claim,
-                        submit_claim_proof_tx_hash,
-                        l1_tx_hash,
-                        created_at
-                    FROM claims
-                    WHERE pubkey = $1
-                    AND EXTRACT(EPOCH FROM created_at)::bigint < $2
-                    ORDER BY created_at DESC
-                    LIMIT $3
-                    "#,
+                SELECT 
+                    status as "status: SqlClaimStatus",
+                    claim,
+                    submit_claim_proof_tx_hash,
+                    l1_tx_hash,
+                    created_at
+                FROM claims
+                WHERE pubkey = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint < $2
+                ORDER BY created_at DESC
+                LIMIT $3
+                "#,
                     pubkey_str,
                     cursor_timestamp,
                     actual_limit + 1
@@ -262,17 +262,17 @@ impl<'a> DbOperations<'a> {
                 let cursor_timestamp = cursor.cursor.unwrap_or(0) as i64;
                 sqlx::query!(
                     r#"
-                    SELECT 
-                        status as "status: SqlWithdrawalStatus",
-                        contract_withdrawal,
-                        l1_tx_hash,
-                        created_at
-                    FROM withdrawals
-                    WHERE recipient = $1
-                    AND EXTRACT(EPOCH FROM created_at)::bigint > $2
-                    ORDER BY created_at ASC
-                    LIMIT $3
-                    "#,
+                SELECT 
+                    status as "status: SqlWithdrawalStatus",
+                    contract_withdrawal,
+                    l1_tx_hash,
+                    created_at
+                FROM withdrawals
+                WHERE recipient = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint > $2
+                ORDER BY created_at ASC
+                LIMIT $3
+                "#,
                     recipient_str,
                     cursor_timestamp,
                     actual_limit + 1
@@ -298,17 +298,17 @@ impl<'a> DbOperations<'a> {
                 let cursor_timestamp = cursor.cursor.unwrap_or(i64::MAX as u64) as i64;
                 sqlx::query!(
                     r#"
-                    SELECT 
-                        status as "status: SqlWithdrawalStatus",
-                        contract_withdrawal,
-                        l1_tx_hash,
-                        created_at
-                    FROM withdrawals
-                    WHERE recipient = $1
-                    AND EXTRACT(EPOCH FROM created_at)::bigint < $2
-                    ORDER BY created_at DESC
-                    LIMIT $3
-                    "#,
+                SELECT 
+                    status as "status: SqlWithdrawalStatus",
+                    contract_withdrawal,
+                    l1_tx_hash,
+                    created_at
+                FROM withdrawals
+                WHERE recipient = $1
+                AND EXTRACT(EPOCH FROM created_at)::bigint < $2
+                ORDER BY created_at DESC
+                LIMIT $3
+                "#,
                     recipient_str,
                     cursor_timestamp,
                     actual_limit + 1
@@ -397,9 +397,9 @@ impl<'a> DbOperations<'a> {
         // Batch insert the spent transfers
         match sqlx::query!(
             r#"
-            INSERT INTO used_payments (nullifier, transfer)
-            SELECT * FROM unnest($1::text[], $2::jsonb[])
-            "#,
+        INSERT INTO used_payments (nullifier, transfer)
+        SELECT * FROM unnest($1::text[], $2::jsonb[])
+        "#,
             &nullifiers,
             &transfers
         )
