@@ -152,9 +152,7 @@ mod tests {
             routes::{get_claim_fee, get_withdrawal_fee},
             state::State,
         },
-        app::withdrawal_server::test_withdrawal_server_helper::{
-            start_mock_withdrawal_server, stop_withdrawal_docker,
-        },
+        app::test_helpers::{start_mock_withdrawal_server, stop_withdrawal_docker},
         Env,
     };
     use actix_web::{test, web, App};
