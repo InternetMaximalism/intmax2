@@ -16,6 +16,7 @@ use intmax2_cli::{
         },
         history::history,
         key_derivation::derive_spend_key_from_eth,
+        receipt::{generate_receipt, verify_receipt},
         send::send_transfers,
         sync::{resync, sync_claims, sync_withdrawals},
         withdrawal::send_withdrawal,
@@ -252,6 +253,21 @@ async fn main_process(command: Commands) -> Result<(), CliError> {
         }
         Commands::CheckValidityProver => {
             check_validity_prover().await?;
+        }
+        Commands::GenerateReceipt {
+            private_key,
+            tx_digest,
+            transfer_index,
+        } => {
+            let key_pair = privkey_to_keypair(private_key);
+            generate_receipt(key_pair.into(), tx_digest, transfer_index).await?;
+        }
+        Commands::VerifyReceipt {
+            private_key,
+            receipt,
+        } => {
+            let key_pair = privkey_to_keypair(private_key);
+            verify_receipt(key_pair.into(), &receipt).await?;
         }
         Commands::GenerateKey => {
             let mut rng = default_rng();

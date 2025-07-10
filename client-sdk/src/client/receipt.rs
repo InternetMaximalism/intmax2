@@ -6,7 +6,7 @@ use intmax2_interfaces::{
         transfer_data::TransferData,
         tx_data::TxData,
     },
-    utils::key::{PublicKey, ViewPair},
+    utils::key::ViewPair,
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use serde::{Deserialize, Serialize};
@@ -50,12 +50,17 @@ pub async fn generate_transfer_receipt(
             "Recipient is not a pubkey address".to_string(),
         ));
     }
-    let receiver = PublicKey(data.transfer.recipient.to_pubkey()?);
+    let recipient_view_pub = tx_data
+        .recipient_view_pubs
+        .get(transfer_index as usize)
+        .ok_or(ClientError::GeneralError(format!(
+            "Recipient view pubkey is missing for transfer index {transfer_index}",
+        )))?;
     let encrypted_data = TransferReceipt {
         data,
         timestamp: meta.timestamp,
     }
-    .encrypt(receiver, None)?;
+    .encrypt(*recipient_view_pub, None)?;
     let encrypted_data_base64 = BASE64_STANDARD.encode(&encrypted_data);
     Ok(encrypted_data_base64)
 }

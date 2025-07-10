@@ -5,7 +5,7 @@ use serde::Deserialize;
 pub mod api;
 pub mod app;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct EnvVar {
     pub port: u16,
     pub block_builder_url: String,

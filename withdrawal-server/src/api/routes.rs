@@ -144,3 +144,78 @@ pub fn withdrawal_server_scope() -> Scope {
         .service(get_withdrawal_info_by_recipient)
         .service(get_claim_info)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        api::{
+            routes::{get_claim_fee, get_withdrawal_fee},
+            state::State,
+        },
+        app::test_helpers::{start_mock_withdrawal_server, stop_withdrawal_docker},
+        Env,
+    };
+    use actix_web::{test, web, App};
+    use dotenvy::dotenv;
+    use intmax2_client_sdk::client::config::network_from_env;
+    use intmax2_interfaces::{
+        api::withdrawal_server::interface::{ClaimFeeInfo, WithdrawalFeeInfo},
+        utils::address::IntmaxAddress,
+    };
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_withdrawal_server_actix_web() {
+        let cont_name = "test-withdrawal-server-actix-web";
+        let server = start_mock_withdrawal_server(cont_name)
+            .await
+            .expect("WithdrawalServer creation has failed");
+
+        // Get env for further checks
+        dotenv().ok();
+        let env: Env = envy::from_env().expect("Failed to parse env");
+
+        let state = State {
+            withdrawal_server: Arc::new(server),
+        };
+
+        // Test get("/withdrawal-fee")
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state.clone()))
+                .service(get_withdrawal_fee),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/withdrawal-fee").to_request();
+        let resp: WithdrawalFeeInfo = test::call_and_read_body_json(&app, req).await;
+        assert_eq!(
+            resp.beneficiary,
+            IntmaxAddress::from_viewpair(network_from_env(), &env.withdrawal_beneficiary_view_pair)
+        );
+        assert_eq!(
+            resp.direct_withdrawal_fee,
+            env.direct_withdrawal_fee.clone().map(|l| l.0)
+        );
+        assert_eq!(
+            resp.claimable_withdrawal_fee,
+            env.claimable_withdrawal_fee.clone().map(|l| l.0)
+        );
+
+        // Test get("/claim-fee")
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(state.clone()))
+                .service(get_claim_fee),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/claim-fee").to_request();
+        let resp: ClaimFeeInfo = test::call_and_read_body_json(&app, req).await;
+        assert_eq!(
+            resp.beneficiary,
+            IntmaxAddress::from_viewpair(network_from_env(), &env.claim_beneficiary_view_pair)
+        );
+        assert_eq!(resp.fee, env.claim_fee.clone().map(|l| l.0));
+
+        stop_withdrawal_docker(cont_name);
+    }
+}

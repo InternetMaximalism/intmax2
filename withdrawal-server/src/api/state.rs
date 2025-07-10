@@ -20,3 +20,19 @@ impl State {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dotenvy::dotenv;
+
+    #[tokio::test]
+    async fn test_state_creation_from_env() {
+        dotenv().ok();
+        let env = envy::from_env().expect("Failed to parse env");
+
+        let state = State::new(&env).await.expect("State creation failed");
+
+        assert!(Arc::strong_count(&state.withdrawal_server) >= 1);
+    }
+}

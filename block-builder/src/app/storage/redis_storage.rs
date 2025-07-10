@@ -54,7 +54,7 @@ pub struct RedisStorage {
     non_registration_tx_last_processed_key: String,
     request_id_to_block_id_key: String,
     memos_key: String,
-    signatures_key: String,
+    empty_block_posted_at_key: String,
     fee_collection_tasks_key: String,
     block_post_tasks_hi_key: String,
     block_post_tasks_lo_key: String,
@@ -95,7 +95,7 @@ impl RedisStorage {
             ),
             request_id_to_block_id_key: format!("{prefix}:request_id_to_block_id"),
             memos_key: format!("{prefix}:memos"),
-            signatures_key: format!("{prefix}:signatures"),
+            empty_block_posted_at_key: format!("{prefix}:empty_block_posted_at"),
             fee_collection_tasks_key: format!("{prefix}:fee_collection_tasks"),
             block_post_tasks_hi_key: format!("{prefix}:block_post_tasks_hi"),
             block_post_tasks_lo_key: format!("{prefix}:block_post_tasks_lo"),
@@ -105,6 +105,14 @@ impl RedisStorage {
     async fn get_conn(&self) -> RedisResult<ConnectionManager> {
         let conn = self.conn_manager.lock().await;
         Ok(conn.clone())
+    }
+
+    fn lock_key(&self, lock_name: &str) -> String {
+        format!("{}:lock:{}", self.prefix, lock_name)
+    }
+
+    fn signatures_key(&self, block_id: &str) -> String {
+        format!("{}:signatures:{}", self.prefix, block_id)
     }
 
     /// Acquire a distributed lock
@@ -120,7 +128,7 @@ impl RedisStorage {
     /// * `Err` - Redis communication error
     async fn acquire_lock(&self, lock_name: &str) -> Result<bool> {
         let mut conn = self.get_conn().await?;
-        let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
+        let lock_key = self.lock_key(lock_name);
         let instance_id = &self.config.block_builder_id;
         let result: Option<String> = redis::cmd("SET")
             .arg(&lock_key)
@@ -148,7 +156,7 @@ impl RedisStorage {
     /// * `lock_name` - Lock name to release
     async fn release_lock(&self, lock_name: &str) -> Result<()> {
         let mut conn = self.get_conn().await?;
-        let lock_key = format!("{}:lock:{}", self.prefix, lock_name);
+        let lock_key = self.lock_key(lock_name);
         let instance_id = &self.config.block_builder_id;
 
         // Use a Lua script to ensure we only delete the lock if we own it
@@ -473,7 +481,7 @@ impl Storage for RedisStorage {
             let serialized_signature = serde_json::to_string(&signature)?;
 
             // Add signature to the list for this block_id
-            let signatures_key = format!("{}:{}", self.signatures_key, block_id);
+            let signatures_key = self.signatures_key(&block_id);
             let _: () = conn.rpush(&signatures_key, serialized_signature).await?;
 
             // Set TTL for signatures key
@@ -529,7 +537,7 @@ impl Storage for RedisStorage {
                 }
 
                 // Get signatures for this block
-                let signatures_key = format!("{}:{}", self.signatures_key, block_id);
+                let signatures_key = self.signatures_key(&block_id);
                 let serialized_signatures: Vec<String> =
                     conn.lrange(&signatures_key, 0, -1).await?;
                 let mut signatures = serialized_signatures
@@ -701,12 +709,9 @@ impl Storage for RedisStorage {
         let result = {
             let mut conn = self.get_conn().await?;
 
-            // Key for storing the timestamp of the last empty block post
-            let empty_block_posted_at_key = format!("{}:empty_block_posted_at", self.prefix);
-
             // Get the timestamp of the last empty block post
             let empty_block_posted_at: Option<String> =
-                conn.get(&empty_block_posted_at_key).await?;
+                conn.get(&self.empty_block_posted_at_key).await?;
             let empty_block_posted_at = empty_block_posted_at
                 .map(|s| s.parse::<u64>().unwrap_or(0))
                 .unwrap_or(0);
@@ -741,9 +746,12 @@ impl Storage for RedisStorage {
             );
 
             // Update the timestamp of the last empty block post
-            pipe.set(&empty_block_posted_at_key, current_time.to_string());
+            pipe.set(&self.empty_block_posted_at_key, current_time.to_string());
             // Set TTL for empty block posted timestamp key
-            pipe.expire(&empty_block_posted_at_key, GENERAL_KEY_TTL_SECONDS as i64);
+            pipe.expire(
+                &self.empty_block_posted_at_key,
+                GENERAL_KEY_TTL_SECONDS as i64,
+            );
 
             // Execute the transaction
             let _: () = pipe.query_async(&mut conn).await?;
