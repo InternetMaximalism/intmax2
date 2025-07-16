@@ -674,6 +674,49 @@
     {
       "inputs": [
         {
+          "internalType": "bytes32",
+          "name": "_prevBlockHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_sender",
+          "type": "address"
+        },
+        {
+          "internalType": "uint64",
+          "name": "_timestamp",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint32",
+          "name": "_blockNumber",
+          "type": "uint32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_depositTreeRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_signatureHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes",
+          "name": "_originalCallData",
+          "type": "bytes"
+        }
+      ],
+      "name": "migrateBlockPost",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "to",
           "type": "address"
