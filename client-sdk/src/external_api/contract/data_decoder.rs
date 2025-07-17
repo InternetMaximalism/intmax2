@@ -30,10 +30,18 @@ pub fn decode_post_block_calldata(
     block_builder_address: Address,
     data: &[u8],
 ) -> anyhow::Result<FullBlock> {
-    let selector: [u8; 4] = data[0..4].try_into().unwrap();
+    let mut selector: [u8; 4] = data[0..4].try_into().unwrap();
+    let mut data = data.to_vec();
+
+    if selector == Rollup::migrateBlockPostCall::SELECTOR {
+        let decoded = Rollup::migrateBlockPostCall::abi_decode(&data)?;
+        data = decoded._originalCallData.to_vec();
+        selector = data[0..4].try_into().unwrap();
+    }
+
     match selector {
         Rollup::postRegistrationBlockCall::SELECTOR => {
-            let decoded = Rollup::postRegistrationBlockCall::abi_decode(data)?;
+            let decoded = Rollup::postRegistrationBlockCall::abi_decode(&data)?;
             let block_sign_payload = BlockSignPayload {
                 is_registration_block: true,
                 tx_tree_root: convert_b256_to_bytes32(decoded.txTreeRoot),
@@ -71,7 +79,7 @@ pub fn decode_post_block_calldata(
             Ok(full_block)
         }
         Rollup::postNonRegistrationBlockCall::SELECTOR => {
-            let decoded = Rollup::postNonRegistrationBlockCall::abi_decode(data)?;
+            let decoded = Rollup::postNonRegistrationBlockCall::abi_decode(&data)?;
             let block_sign_payload = BlockSignPayload {
                 is_registration_block: false,
                 tx_tree_root: convert_b256_to_bytes32(decoded.txTreeRoot),
