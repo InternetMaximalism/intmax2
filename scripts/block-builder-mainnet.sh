@@ -866,8 +866,8 @@ setup_env() {
     echo "   Examples:"
     echo ""
     echo "Mainnet RPC URLs:"
-    echo "  • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
-    echo "  • https://scroll-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
+    echo "  • https://scroll-mainnet.infura.io/v3/YOUR_PROJECT_ID"
+    echo "  • https://scroll-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
     echo ""
     echo "Testnet RPC URLs:"
     echo "  • https://scroll-sepolia.infura.io/v3/YOUR_PROJECT_ID"
@@ -1089,6 +1089,7 @@ verify_env() {
     echo ""
 
     local verification_passed=true
+    local network_mismatch=false
 
     echo "🌐 Checking L2_RPC_URL configuration..."
     local l2_rpc_url=$(grep "^L2_RPC_URL=" "$env_file" 2>/dev/null | cut -d'=' -f2-)
@@ -1117,6 +1118,52 @@ verify_env() {
             echo ""
             if check_rpc_connectivity "$l2_rpc_url" true; then
                 echo "   Connectivity: ✅"
+
+                local network_id=$(get_network_id "$l2_rpc_url")
+                local expected_network_id=""
+                local expected_network_name=""
+
+                case "${ENVIRONMENT}" in
+                    "devnet"|"testnet")
+                        expected_network_id="534351"
+                        expected_network_name="Scroll Sepolia Testnet"
+                        ;;
+                    "mainnet")
+                        expected_network_id="534352"
+                        expected_network_name="Scroll Mainnet"
+                        ;;
+                    *)
+                        echo "   Network: Unknown environment '$ENVIRONMENT', skipping network validation"
+                        ;;
+                esac
+
+                if [ -n "$expected_network_id" ] && [ -n "$network_id" ]; then
+                    if [ "$network_id" = "$expected_network_id" ]; then
+                        echo "   Network: ✅ Correct network (Chain ID: $network_id - $expected_network_name)"
+                    else
+                        echo "   Network: ❌ NETWORK MISMATCH DETECTED!"
+                        echo "   Expected: Chain ID $expected_network_id ($expected_network_name)"
+                        echo "   Actual: Chain ID $network_id"
+                        echo ""
+                        echo "🚨 CRITICAL WARNING: NETWORK CONFIGURATION MISMATCH!"
+                        echo "   Environment: $ENVIRONMENT"
+                        echo "   Expected Network: $expected_network_name (Chain ID: $expected_network_id)"
+                        echo "   Connected Network: Chain ID $network_id"
+                        echo ""
+                        echo "   This configuration mismatch could lead to:"
+                        echo "   • Transactions sent to wrong network"
+                        echo "   • Funds lost or stuck"
+                        echo "   • Application malfunction"
+                        echo ""
+                        echo "   💡 Recommended actions:"
+                        echo "   1. Verify your L2_RPC_URL in $env_file"
+                        echo "   2. Ensure you're using the correct RPC endpoint for $ENVIRONMENT"
+                        echo "   3. Update RPC URL to match expected network: $expected_network_name"
+                        echo ""
+                        network_mismatch=true
+                        verification_passed=false
+                    fi
+                fi
             else
                 echo "   Connectivity: ❌"
                 verification_passed=false
@@ -1204,9 +1251,36 @@ verify_env() {
     else
         echo "   Configuration: ❌ Issues found"
         echo ""
-        echo "❌ Environment verification failed"
+
+        if [ "$network_mismatch" = true ]; then
+            echo "🚨 ENVIRONMENT VERIFICATION FAILED - CRITICAL NETWORK MISMATCH!"
+            echo ""
+            echo "⛔ DO NOT PROCEED with current configuration!"
+            echo "   Continuing could result in:"
+            echo "   • Transactions on wrong network"
+            echo "   • Loss of funds"
+            echo "   • System malfunction"
+            echo ""
+            echo "🔧 REQUIRED ACTION:"
+            echo "   Update L2_RPC_URL in $env_file to match $ENVIRONMENT environment"
+        else
+            echo "❌ Environment verification failed"
+        fi
+
         echo "💡 Run: $0 setup-env to configure missing settings"
         return 1
+    fi
+}
+
+get_network_id() {
+    local rpc_url="$1"
+    local response=$(curl -s -X POST "$rpc_url" \
+        -H "Content-Type: application/json" \
+        -d '{"jsonrpc":"2.0","method":"net_version","params":[],"id":1}' \
+        2>/dev/null)
+
+    if [ $? -eq 0 ] && [ -n "$response" ]; then
+        echo "$response" | grep -o '"result":"[^"]*"' | cut -d'"' -f4
     fi
 }
 
@@ -1223,6 +1297,7 @@ check() {
 
     local files_exist=true
     local config_valid=true
+    local network_mismatch=false
 
     local env_file=".env.${ENVIRONMENT}"
 
@@ -1278,6 +1353,52 @@ check() {
                 echo ""
                 if check_rpc_connectivity "$l2_rpc_url" true; then
                     echo ""
+
+                    local network_id=$(get_network_id "$l2_rpc_url")
+                    local expected_network_id=""
+                    local expected_network_name=""
+
+                    case "${ENVIRONMENT}" in
+                        "devnet"|"testnet")
+                            expected_network_id="534351"
+                            expected_network_name="Scroll Sepolia Testnet"
+                            ;;
+                        "mainnet")
+                            expected_network_id="534352"
+                            expected_network_name="Scroll Mainnet"
+                            ;;
+                        *)
+                            echo "   Network: Unknown environment '$ENVIRONMENT', skipping network validation"
+                            ;;
+                    esac
+
+                    if [ -n "$expected_network_id" ] && [ -n "$network_id" ]; then
+                        if [ "$network_id" = "$expected_network_id" ]; then
+                            echo "   Network: ✅ Correct network (Chain ID: $network_id - $expected_network_name)"
+                        else
+                            echo "   Network: ❌ NETWORK MISMATCH DETECTED!"
+                            echo "   Expected: Chain ID $expected_network_id ($expected_network_name)"
+                            echo "   Actual: Chain ID $network_id"
+                            echo ""
+                            echo "🚨 CRITICAL WARNING: NETWORK CONFIGURATION MISMATCH!"
+                            echo "   Environment: $ENVIRONMENT"
+                            echo "   Expected Network: $expected_network_name (Chain ID: $expected_network_id)"
+                            echo "   Connected Network: Chain ID $network_id"
+                            echo ""
+                            echo "   This configuration mismatch could lead to:"
+                            echo "   • Transactions sent to wrong network"
+                            echo "   • Funds lost or stuck"
+                            echo "   • Application malfunction"
+                            echo ""
+                            echo "   💡 Recommended actions:"
+                            echo "   1. Verify your L2_RPC_URL in $env_file"
+                            echo "   2. Ensure you're using the correct RPC endpoint for $ENVIRONMENT"
+                            echo "   3. Update RPC URL to match expected network: $expected_network_name"
+                            echo ""
+                            network_mismatch=true
+                            config_valid=false
+                        fi
+                    fi
                 else
                     config_valid=false
                 fi
@@ -1306,8 +1427,23 @@ check() {
     fi
 
     if [ "$config_valid" = false ]; then
-        echo "❌ Configuration validation failed"
-        echo "💡 Run: $0 setup-env to fix configuration issues"
+        if [ "$network_mismatch" = true ]; then
+            echo "🚨 CONFIGURATION VALIDATION FAILED - CRITICAL NETWORK MISMATCH!"
+            echo ""
+            echo "⛔ DO NOT PROCEED with current configuration!"
+            echo "   Continuing could result in:"
+            echo "   • Transactions on wrong network"
+            echo "   • Loss of funds"
+            echo "   • System malfunction"
+            echo ""
+            echo "🔧 REQUIRED ACTION:"
+            echo "   Update L2_RPC_URL in $env_file to match $ENVIRONMENT environment"
+            echo ""
+            echo "💡 Fix network configuration: $0 setup-env"
+        else
+            echo "❌ Configuration validation failed"
+            echo "💡 Run: $0 setup-env to fix configuration issues"
+        fi
         return 1
     fi
 
@@ -1328,6 +1464,7 @@ check() {
     echo "🎉 All checks passed! Your configuration is ready:"
     echo "   ✅ Configuration files exist"
     echo "   ✅ L2 RPC URL is configured and accessible"
+    echo "   ✅ Network configuration is correct"
     echo "   ✅ Private key is configured"
     echo ""
     echo "💡 Next step: $0 run"
