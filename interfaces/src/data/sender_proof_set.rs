@@ -4,7 +4,8 @@ use intmax2_zkp::circuits::balance::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    data::encryption::errors::BlsEncryptionError, utils::circuit_verifiers::CircuitVerifiers,
+    data::encryption::errors::BlsEncryptionError,
+    utils::circuit_verifiers::{safe_proof_verify, CircuitVerifiers},
 };
 
 use super::{
@@ -34,10 +35,11 @@ impl Validation for SenderProofSet {
     fn validate(&self) -> anyhow::Result<()> {
         let verifiers = CircuitVerifiers::load();
         let spent_proof = self.spent_proof.decompress()?;
-        verifiers.get_spent_vd().verify(spent_proof.clone())?;
+        let spent_vd = verifiers.get_spent_vd();
+        safe_proof_verify(&spent_vd, &spent_proof)?;
         let prev_balance_proof = self.prev_balance_proof.decompress()?;
         let balance_vd = CircuitVerifiers::load().get_balance_vd();
-        balance_vd.verify(prev_balance_proof.clone())?;
+        safe_proof_verify(&balance_vd, &prev_balance_proof)?;
         let spent_pis = SpentPublicInputs::from_pis(&spent_proof.public_inputs)
             .map_err(|e| anyhow::anyhow!("Failed to convert spent proof public inputs: {}", e))?;
         let prev_balance_pis = BalancePublicInputs::from_pis(&prev_balance_proof.public_inputs)?;

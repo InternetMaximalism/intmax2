@@ -1,5 +1,6 @@
 use crate::app::{config, interface::ClaimProofContent, state::AppState};
 use anyhow::Context;
+use intmax2_interfaces::utils::circuit_verifiers::safe_proof_verify;
 use intmax2_zkp::{
     common::claim::Claim, ethereum_types::address::Address, utils::conversion::ToU64,
 };
@@ -21,9 +22,7 @@ pub async fn generate_claim_proof_job(
     conn: &mut redis::aio::Connection,
 ) -> anyhow::Result<()> {
     log::info!("generate_claim_proof_job");
-    state
-        .single_claim_vd
-        .verify(single_claim_proof.clone())
+    safe_proof_verify(&state.single_claim_vd, single_claim_proof)
         .map_err(|e| anyhow::anyhow!("Invalid single claim proof: {:?}", e))?;
 
     log::info!("Proving claim chain");
