@@ -9,7 +9,10 @@ use crate::{
     server::withdrawal_jobs::generate_withdrawal_proof_job,
 };
 use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
-use intmax2_interfaces::data::proof_compression::CompressedSingleWithdrawalProof;
+use intmax2_interfaces::{
+    data::proof_compression::CompressedSingleWithdrawalProof,
+    utils::circuit_verifiers::safe_proof_verify,
+};
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -97,9 +100,9 @@ async fn generate_proof(
             let prev_withdrawal_proof: ProofWithPublicInputs<F, C, D> =
                 bincode::deserialize::<_>(req_prev_withdrawal_proof)
                     .map_err(error::ErrorBadRequest)?;
-            withdrawal_circuit_data
-                .verify(prev_withdrawal_proof.clone())
+            safe_proof_verify(&withdrawal_circuit_data, &prev_withdrawal_proof)
                 .map_err(error::ErrorBadRequest)?;
+
             Some(prev_withdrawal_proof)
         }
     } else {

@@ -8,6 +8,7 @@ use plonky2::{
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
+use std::panic::{self, AssertUnwindSafe};
 
 use crate::utils::circuit_verifiers::CircuitVerifiers;
 
@@ -157,10 +158,13 @@ fn deserialize(
 ) -> Result<ProofWithPublicInputs<F, C, D>> {
     let compressed: CompressedProofWithPublicInputs<F, C, D> =
         bincode::deserialize(bytes).map_err(|_| ProofCompressionError::DeserializationError)?;
-    let proof = compressed
-        .decompress(&vd.verifier_only.circuit_digest, &vd.common)
-        .map_err(|_| ProofCompressionError::DecompressionError)?;
-    Ok(proof)
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        compressed.decompress(&vd.verifier_only.circuit_digest, &vd.common)
+    }));
+    match result {
+        Ok(proof) => proof.map_err(|_| ProofCompressionError::DecompressionError),
+        Err(_) => Err(ProofCompressionError::DecompressionError),
+    }
 }
 
 #[cfg(test)]

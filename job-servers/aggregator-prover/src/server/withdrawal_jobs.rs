@@ -1,6 +1,6 @@
 use crate::app::{config, interface::WithdrawalProofContent, state::AppState};
 use anyhow::Context;
-use intmax2_interfaces::utils::circuit_verifiers::CircuitVerifiers;
+use intmax2_interfaces::utils::circuit_verifiers::{safe_proof_verify, CircuitVerifiers};
 use intmax2_zkp::{
     common::withdrawal::Withdrawal, ethereum_types::address::Address, utils::conversion::ToU64,
 };
@@ -23,8 +23,7 @@ pub async fn generate_withdrawal_proof_job(
 ) -> anyhow::Result<()> {
     log::info!("generate_withdrawal_proof_job");
     let single_withdrawal_vd = CircuitVerifiers::load().get_single_withdrawal_vd();
-    single_withdrawal_vd
-        .verify(single_withdrawal_proof.clone())
+    safe_proof_verify(&single_withdrawal_vd, single_withdrawal_proof)
         .map_err(|e| anyhow::anyhow!("Invalid single withdrawal proof: {:?}", e))?;
 
     log::info!("Proving withdrawal chain");

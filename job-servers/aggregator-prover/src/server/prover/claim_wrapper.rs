@@ -6,6 +6,7 @@ use crate::{
     server::claim_jobs::generate_claim_wrapper_proof_job,
 };
 use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
+use intmax2_interfaces::utils::circuit_verifiers::safe_proof_verify;
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -79,9 +80,8 @@ async fn generate_proof(
 
     let claim_proof: ProofWithPublicInputs<F, C, D> =
         bincode::deserialize(&req.claim_proof).map_err(error::ErrorBadRequest)?;
-    claim_circuit_data
-        .verify(claim_proof.clone())
-        .map_err(error::ErrorBadRequest)?;
+
+    safe_proof_verify(&claim_circuit_data, &claim_proof).map_err(error::ErrorBadRequest)?;
 
     // Spawn a new task to generate the proof
     actix_web::rt::spawn(async move {

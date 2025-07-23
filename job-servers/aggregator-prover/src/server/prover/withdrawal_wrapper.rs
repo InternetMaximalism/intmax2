@@ -6,6 +6,7 @@ use crate::{
     server::withdrawal_jobs::generate_withdrawal_wrapper_proof_job,
 };
 use actix_web::{error, get, post, web, HttpResponse, Responder, Result};
+use intmax2_interfaces::utils::circuit_verifiers::safe_proof_verify;
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
@@ -83,8 +84,7 @@ async fn generate_proof(
 
     let withdrawal_proof: ProofWithPublicInputs<F, C, D> =
         bincode::deserialize(&req.withdrawal_proof).map_err(error::ErrorBadRequest)?;
-    withdrawal_circuit_data
-        .verify(withdrawal_proof.clone())
+    safe_proof_verify(&withdrawal_circuit_data, &withdrawal_proof)
         .map_err(error::ErrorBadRequest)?;
 
     // Spawn a new task to generate the proof
