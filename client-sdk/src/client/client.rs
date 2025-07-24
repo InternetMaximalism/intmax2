@@ -27,7 +27,7 @@ use intmax2_interfaces::{
     },
     utils::{
         address::IntmaxAddress,
-        circuit_verifiers::CircuitVerifiers,
+        circuit_verifiers::{safe_proof_verify, CircuitVerifiers},
         digest::get_digest,
         key::{KeyPair, PrivateKey, PublicKey, PublicKeyPair, ViewPair},
         random::default_rng,
@@ -909,7 +909,7 @@ impl Client {
             .get_validity_proof(onchain_block_number)
             .await?;
         let verifier = CircuitVerifiers::load().get_validity_vd();
-        verifier.verify(validity_proof.clone()).map_err(|e| {
+        safe_proof_verify(&verifier, &validity_proof).map_err(|e| {
             ClientError::ValidityProverError(format!("Failed to verify validity proof: {e}"))
         })?;
         let validity_pis =
