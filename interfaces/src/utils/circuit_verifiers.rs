@@ -1,3 +1,5 @@
+use std::panic::{self, AssertUnwindSafe};
+
 use intmax2_zkp::circuits::{
     balance::balance_processor::BalanceProcessor,
     claim::{determine_lock_time::LockTimeConfig, single_claim_processor::SingleClaimProcessor},
@@ -6,7 +8,10 @@ use intmax2_zkp::circuits::{
 };
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
-    plonk::{circuit_data::VerifierCircuitData, config::PoseidonGoldilocksConfig},
+    plonk::{
+        circuit_data::VerifierCircuitData, config::PoseidonGoldilocksConfig,
+        proof::ProofWithPublicInputs,
+    },
 };
 
 use super::serializer::U32GateSerializer;
@@ -166,6 +171,31 @@ fn deserialize_verifier_circuit_data(
     let vd =
         VerifierCircuitData::from_bytes(data, &gate_serializer).map_err(|e| anyhow::anyhow!(e))?;
     Ok(vd)
+}
+
+pub fn safe_proof_verify(
+    vd: &VerifierCircuitData<F, C, D>,
+    proof: &ProofWithPublicInputs<F, C, D>,
+) -> anyhow::Result<()> {
+    let result = panic::catch_unwind(AssertUnwindSafe(|| vd.verify(proof.clone())));
+    match result {
+        Ok(verify_result) => {
+            verify_result.map_err(|e| anyhow::anyhow!("Proof verification failed: {}", e))
+        }
+        Err(panic_payload) => {
+            let panic_message = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "Unknown panic occurred".to_string()
+            };
+            Err(anyhow::anyhow!(
+                "Proof verification panicked: {}",
+                panic_message
+            ))
+        }
+    }
 }
 
 #[cfg(test)]
