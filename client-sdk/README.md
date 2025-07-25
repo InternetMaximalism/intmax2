@@ -2,29 +2,21 @@
 
 ## Overview
 
-The Client SDK serves as the primary integration point for applications wanting to leverage INTMAX2's privacy-preserving, stateless Layer 2 protocol. It manages user state, handles cryptographic operations, and coordinates with various INTMAX2 services to provide a seamless developer experience.
-
-### Key Features
-- **Privacy-Preserving**: Zero-knowledge proof generation and verification
-- **Stateless Protocol**: Client-side state management with encrypted backups
-- **Multi-Asset Support**: ETH, ERC20, and ERC721 token operations
-- **Mining Integration**: Liquidity mining for deposit rewards
-- **Fee Management**: Automated fee calculation and payment handling
-- **Cross-Chain**: L1 (Ethereum) and L2 (Scroll) integration
+The Client SDK serves as the primary integration point for applications wanting to leverage INTMAX2's privacy-preserving, stateless Layer 2 protocol. It manages user state, handles cryptographic operations, and coordinates with various INTMAX2 services.
 
 ## Architecture
 
 ```mermaid
 graph TB
     App[Application] --> SDK[Client SDK]
-    
+
     subgraph "Client SDK Core"
         SDK --> Client[Client]
         SDK --> Strategy[Strategy Engine]
         SDK --> Sync[Sync Manager]
         SDK --> ExternalAPI[External API Layer]
     end
-    
+
     subgraph "Strategy Architecture"
         Strategy --> Common[Common Utils]
         Strategy --> Deposit[Deposit Strategy]
@@ -33,7 +25,7 @@ graph TB
         Strategy --> Mining[Mining Strategy]
         Strategy --> TxStatus[Transaction Status]
     end
-    
+
     subgraph "External Services"
         ExternalAPI --> BB[Block Builder]
         ExternalAPI --> BP[Balance Prover]
@@ -44,9 +36,9 @@ graph TB
     end
 ```
 
-## Strategy Engine - Core Innovation
+## Strategy Engine
 
-The Strategy Engine determines the optimal sequence of operations to maintain consistency between L1/L2 blockchain state and client-side state.
+The Strategy Engine determines the sequence to incorporate transactions, deposits, and withdrawals into the user state. It ensures that all operations are processed in a consistent order while maintaining the integrity of user balances.
 
 ### Strategy Components
 
@@ -69,11 +61,13 @@ pub enum ReceiveAction {
 ```
 
 **Key Functions:**
+
 - `determine_sequence()`: Main orchestrator for transaction processing order
-- `determine_withdrawals()`: Manages withdrawal request sequencing  
+- `determine_withdrawals()`: Manages withdrawal request sequencing
 - `determine_claims()`: Handles mining reward claim processing
 
 **Processing Logic:**
+
 1. Waits for validity prover to sync with on-chain block number
 2. Fetches user data and validates balance sufficiency
 3. Processes settled transactions in block order
@@ -124,6 +118,7 @@ pub struct DepositInfo {
 ```
 
 **Core Processing:**
+
 1. **Batch Fetching**: Uses `get_deposit_info_batch()` for efficient deposit info retrieval
 2. **Settlement Check**: Deposits with `block_number` are settled
 3. **Liquidity Validation**: Checks `liquidity_contract.check_if_deposit_exists()` for pending deposits
@@ -153,6 +148,7 @@ pub enum MiningStatus {
 ```
 
 **Mining Process:**
+
 1. **Deposit Filtering**: Only eligible deposits (`is_eligible: true`) are considered
 2. **Criteria Validation**: Uses `validate_mining_deposit_criteria()` for amount/token checks
 3. **Lock Configuration**: `LockTimeConfig::normal()` or `LockTimeConfig::faster()`
@@ -172,6 +168,7 @@ pub struct TransferInfo {
 ```
 
 **Core Processing:**
+
 1. **Data Fetching**: Uses `fetch_decrypt_validate` to retrieve and decrypt TransferData
 2. **SenderProofSet Validation**: Fetches and validates `sender_proof_set_ephemeral_key`
 3. **Spent Proof Verification**: Decompresses and validates spent proofs match transfer data
@@ -191,6 +188,7 @@ pub struct WithdrawalInfo {
 ```
 
 **Key Features:**
+
 1. **SenderProofSet Decryption**: Uses ephemeral keys for withdrawal proof decryption
 2. **Batch Processing**: Processes multiple withdrawals efficiently
 3. **Settlement Verification**: Confirms withdrawal processing through block numbers
@@ -226,6 +224,7 @@ let client = Client::new(config).await?;
 ### Key Operations
 
 #### 1. **Deposit Operations**
+
 ```rust
 // Prepare deposit (backup before L1 transaction)
 let deposit_result = client.prepare_deposit(
@@ -235,15 +234,7 @@ let deposit_result = client.prepare_deposit(
     TokenType::ETH,
     token_address,
     token_id,
-    is_mining, // Enable liquidity mining
-).await?;
-
-// Process L1 deposit after confirmation
-client.deposit(
-    depositor_address,
-    public_keypair.view,
-    deposit_salt,
-    deposit_hash,
+    is_mining, // Enable privacy mining
 ).await?;
 ```
 
@@ -257,7 +248,7 @@ impl Client {
         let (user_data, _) = self.get_user_data_and_digest(view_pair).await?;
         Ok(user_data)
     }
-    
+
     pub(super) async fn get_user_data_and_digest(
         &self,
         view_pair: ViewPair,
@@ -291,6 +282,7 @@ pub async fn send_tx_request(
 The sync manager ensures client state consistency with blockchain using the strategy engine:
 
 #### Balance Synchronization (`sync_balance.rs`)
+
 ```rust
 impl Client {
     pub async fn get_user_data(&self, view_pair: ViewPair) -> Result<UserData, SyncError> {
@@ -302,6 +294,7 @@ impl Client {
 ```
 
 **Synchronization Process:**
+
 1. Determines processing sequence using `determine_sequence()`
 2. Applies actions in correct order (receives before transactions)
 3. Updates balance proofs incrementally
@@ -323,6 +316,7 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
 ```
 
 **Key Functions:**
+
 - `fetch_user_data()`: Retrieves and decrypts user state
 - `fetch_sender_proof_set()`: Fetches SenderProofSet using ephemeral keys
 - `fetch_single_data()`: Retrieves specific data by digest
@@ -330,24 +324,25 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
 ## Error Handling
 
 ### Strategy Errors
+
 ```rust
 #[derive(Debug, Error)]
 pub enum StrategyError {
     #[error("Server client error: {0}")]
     ServerError(#[from] ServerError),
-    
+
     #[error("Balance insufficient before sync")]
     BalanceInsufficientBeforeSync,
-    
+
     #[error("Pending receives error: {0}")]
     PendingReceivesError(String),
-    
+
     #[error("Pending tx error: {0}")]
     PendingTxError(String),
-    
+
     #[error("Sender proof set not found")]
     SenderProofSetNotFound,
-    
+
     // ... other error variants
 }
 ```
@@ -355,11 +350,13 @@ pub enum StrategyError {
 ## Security Features
 
 ### Privacy Protection
+
 - **Zero-Knowledge Proofs**: All operations use ZK proofs to maintain privacy
 - **BLS Encryption**: User data encrypted using BLS encryption with view keys
 - **View Key Separation**: Separate keys for viewing and spending operations
 
 ### Key Management
+
 ```rust
 pub struct ViewPair {
     pub view: PrivateKey,    // For data decryption and viewing
@@ -368,11 +365,12 @@ pub struct ViewPair {
 
 pub struct PublicKeyPair {
     pub view: PublicKey,     // Public view key
-    pub spend: PublicKey,    // Public spend key  
+    pub spend: PublicKey,    // Public spend key
 }
 ```
 
 ### Data Validation
+
 - **Cryptographic Verification**: All received data verified using cryptographic proofs
 - **Schema Validation**: Strict data schema validation using `Validation` trait
 - **Replay Protection**: Nonce-based transaction ordering
