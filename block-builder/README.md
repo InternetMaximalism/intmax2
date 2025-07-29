@@ -292,36 +292,6 @@ block_builder:{cluster_id}:{key_type}:{specific_identifier}
 | --------------------------- | ------ | ----------------------------------------- | ----- |
 | `{prefix}:lock:{operation}` | String | Distributed locks for critical operations | 10sec |
 
-### Data Flow Architecture
-
-```mermaid
-graph TB
-    subgraph "Transaction Processing Flow"
-        A[User Transaction] --> B[Redis: tx_requests queue]
-        B --> C[Background Job: process_requests]
-        C --> D[Redis: memos hash]
-        C --> E[Redis: request_id_to_block_id]
-
-        F[User Signature] --> G[Redis: signatures list]
-        G --> H[Background Job: process_signatures]
-        H --> I[Redis: block_post_tasks queue]
-    end
-
-    subgraph "Nonce Management Flow"
-        J[Reserve Nonce] --> K[Redis: INCR next_nonce]
-        K --> L[Redis: ZADD reserved_nonces]
-        M[Release Nonce] --> N[Redis: ZREM reserved_nonces]
-        O[Sync On-chain] --> P[Redis: ZREMRANGEBYSCORE]
-    end
-
-    subgraph "Block Posting Flow"
-        I --> Q[Background Job: post_block]
-        Q --> R[Dequeue with Nonce Check]
-        R --> S[Submit to L2 Contract]
-        S --> T[Release Nonce]
-    end
-```
-
 ### Transaction Request Processing
 
 #### 1. Transaction Submission (`add_tx`)
