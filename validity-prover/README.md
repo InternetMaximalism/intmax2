@@ -545,18 +545,65 @@ BLOCK_HASH_TREE_HEIGHT=32
 DEPOSIT_TREE_HEIGHT=32
 ```
 
-## Performance Considerations
+## Database Tag System
 
-### Optimization Strategies
+The Validity Prover uses a tag-based partitioning system for merkle tree data storage. Each table (`hash_nodes`, `leaves`, `leaves_len`, `indexed_leaves`) includes a `tag` column that categorizes data by tree type and purpose:
 
-1. **Batch Processing**: API endpoints support batch operations for efficiency
-2. **Async Processing**: Worker architecture separates proof generation
-3. **Database Indexing**: Optimized queries for tree operations
-4. **Caching**: In-memory caching for frequently accessed data
+### Tag Assignments
 
-### Scalability Features
+```rust
+const ACCOUNT_DB_TAG: u32 = 1;          // Account tree data
+const BLOCK_DB_TAG: u32 = 2;            // Block hash tree data  
+const DEPOSIT_DB_TAG: u32 = 3;          // Deposit tree data
+const ACCOUNT_BACKUP_DB_TAG: u32 = 11;  // Account tree backup
+const BLOCK_BACKUP_DB_TAG: u32 = 12;    // Block hash tree backup
+const DEPOSIT_BACKUP_DB_TAG: u32 = 13;  // Deposit tree backup
+```
 
-- **Horizontal Scaling**: Multiple worker instances supported
-- **Load Balancing**: Redis-based task distribution
-- **Database Optimization**: SQL-based tree storage with indexing
-- **Rate Limiting**: Built-in rate management for external API calls
+### Database Partitioning
+
+PostgreSQL table partitioning is used to optimize query performance:
+
+- **Primary Tables**: `hash_nodes_tag1`, `leaves_tag1`, etc. (tags 1-3)
+- **Backup Tables**: `hash_nodes_tag11`, `leaves_tag11`, etc. (tags 11-13)
+
+## Backup and Pruning
+
+### Performance Challenges
+
+As the database trees grow, query and update performance degrades due to PostgreSQL B-tree index limitations. B-tree indexes only encode the leading index columns (in this case, `position` or `bit_path`) in the tree path. When multiple timestamps exist for the same `position` or `bit_path`, timestamp queries become O(N), causing performance degradation.
+
+### Pruning
+
+**Purpose**: Remove old timestamp data to improve query and update performance.
+
+**Process**: The pruning script (`scripts/pruning.sql`) removes historical data while preserving the latest state for each tree node:
+
+- Keeps the most recent timestamp for each `(tag, bit_path)` combination in `hash_nodes`
+- Keeps the most recent timestamp for each `(tag, position)` combination in `leaves`
+- Keeps the most recent timestamp for each `tag` in `leaves_len`
+- For `indexed_leaves`, only processes account tree data (tag 1)
+
+### Backup
+
+**Purpose**: Create copies of tree data before pruning to enable queries on historical timestamps.
+
+**Process**: The backup script (`scripts/backup.sql`) copies data from primary tags (1-3) to backup tags (11-13):
+
+1. **Cutoff Calculation**: Determines backup cutoff as `MAX(block_number) - BLOCK_OFFSET` (default offset: 1000 blocks)
+2. **Data Copy**: Copies all data with timestamps ≤ cutoff from primary to backup tables
+3. **Cutoff Storage**: Updates the `cutoff` table with the backup timestamp
+
+### Script Usage
+
+Both operations can be performed using the scripts in the `scripts/` directory:
+
+```bash
+# Create backup before pruning
+psql -d validity_prover -f scripts/backup.sql
+
+# Remove old data to improve performance  
+psql -d validity_prover -f scripts/pruning.sql
+```
+
+**Important**: Always run backup before pruning to preserve historical data access.
