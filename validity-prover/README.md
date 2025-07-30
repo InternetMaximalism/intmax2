@@ -610,32 +610,6 @@ graph TB
     VP --> DB[(validity_proofs table)]
 ```
 
-### Database Schema Integration
-
-#### Event Tables
-
-- `deposited_events`: L1 deposit information
-- `deposit_leaf_events`: L2 deposit confirmations
-- `full_blocks`: Complete L2 block data
-
-#### State Tables
-
-- `validity_state`: Generated validity witnesses
-- `validity_proofs`: Final ZK proofs
-- `tx_tree_roots`: Transaction tree root mappings
-
-#### Merkle Tree Tables (Partitioned by Tag)
-
-- `hash_nodes`: Tree node hashes
-- `leaves`: Tree leaf data
-- `leaves_len`: Tree length tracking
-- `indexed_leaves`: Indexed tree data (account tree)
-
-#### Synchronization Tables
-
-- `event_sync_eth_block`: Observer checkpoints
-- `cutoff`: Backup/pruning cutoff points
-
 ### Error Handling and Recovery
 
 #### Automatic Recovery Mechanisms
@@ -679,28 +653,40 @@ if full_block.block.deposit_tree_root != deposit_tree_root {
 
 ## Database Schema
 
+The Validity Prover uses PostgreSQL with a comprehensive schema designed for high-performance merkle tree operations and event processing.
+
 ### Core Tables
 
-The Validity Prover uses PostgreSQL with the following key tables:
+#### Event Tables
 
-#### Merkle Tree Nodes
+- `deposited_events`: L1 deposit information with fields like `deposit_id`, `depositor`, `pubkey_salt_hash`, `token_index`, `amount`, `is_eligible`, `deposited_at`, `deposit_hash`, `tx_hash`, `eth_block_number`, `eth_tx_index`
+- `deposit_leaf_events`: L2 deposit confirmations with `deposit_index`, `deposit_hash`, `eth_block_number`, `eth_tx_index`
+- `full_blocks`: Complete L2 block data with `block_number`, `full_block` (serialized), `eth_block_number`, `eth_tx_index`
 
-- **Incremental Trees**: Stores tree nodes for block/deposit trees
-- **Indexed Trees**: Stores indexed tree nodes for account tree
-- **Node Hashes**: Cached hash computations
+#### State Tables
 
-#### State Tracking
+- `validity_state`: Generated validity witnesses stored per block number
+- `validity_proofs`: Final ZK proofs for each validated block
+- `tx_tree_roots`: Transaction tree root to block number mappings
 
-- **Block Information**: Block numbers, hashes, and timestamps
-- **Account Data**: Account registrations and indices
-- **Deposit Data**: Deposit information and processing status
+#### Merkle Tree Tables (Partitioned by Tag)
+
+- `hash_nodes`: Tree node hashes with partitioning by tag for performance
+- `leaves`: Tree leaf data organized by tag, timestamp, and position
+- `leaves_len`: Tree length tracking for each tag and timestamp
+- `indexed_leaves`: Indexed tree data specifically for account tree operations
+
+#### Synchronization Tables
+
+- `event_sync_eth_block`: Observer checkpoints tracking last processed Ethereum block numbers
+- `cutoff`: Backup/pruning cutoff points for historical data management
 
 ### Migration Support
 
 Database migrations are managed through `migrations/` directory:
 
-- `20250521081620_initial.up.sql`: Initial schema creation
-- `20250602024544_backup.up.sql`: Backup functionality
+- `20250521081620_initial.up.sql`: Initial schema creation with all core tables
+- `20250602024544_backup.up.sql`: Backup functionality and additional partitions
 
 ## Configuration
 
