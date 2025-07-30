@@ -1,6 +1,6 @@
 # Validity Prover
 
-The Validity Prover is a critical service in the INTMAX2 network that monitors L1 Liquidity and L2 Rollup contracts, maintains state merkle trees, and generates validity proofs for on-chain information. It operates on port 9002 and provides cryptographic proof generation capabilities for blockchain state verification.
+The Validity Prover is a service in the INTMAX2 network that monitors L1 Liquidity and L2 Rollup contracts, maintains state merkle trees, and generates validity proofs for on-chain information. It operates on port 9002 and provides ZKP generation capabilities for blockchain state verification.
 
 ## Overview
 
@@ -457,39 +457,225 @@ pub struct TransitionProofTaskResult {
 - **Parallel Processing**: Configurable `num_process`
 - **Heartbeat**: Configurable heartbeat interval for task management
 
-## Event Processing
+## Data Flow and Event Processing
 
-### Contract Event Monitoring
+### Overview
 
-The Validity Prover monitors the following contract events:
+The Validity Prover implements a comprehensive data flow system that monitors blockchain events, stores them in database tables, and updates merkle trees to generate validity proofs. The system uses a multi-stage pipeline with robust synchronization mechanisms.
 
-#### Liquidity Contract Events
+### Event Types and Sources
 
-- **Deposit Events**: New deposits from L1
-- **Token Registration**: New token additions
-- **Configuration Updates**: Contract parameter changes
+The system monitors three types of events from two different contracts:
 
-#### Rollup Contract Events
+#### L1 Liquidity Contract Events
 
-- **Block Submissions**: New L2 blocks
-- **State Updates**: Account and deposit tree updates
-- **Withdrawal Requests**: L2 to L1 withdrawal initiation
+- **Deposited Events**: User deposits from L1 to L2
+  - **Source**: Liquidity Contract on L1
+  - **Storage**: `deposited_events` table
+  - **Fields**: `deposit_id`, `depositor`, `pubkey_salt_hash`, `token_index`, `amount`, `is_eligible`, `deposited_at`, `deposit_hash`, `tx_hash`, `eth_block_number`, `eth_tx_index`
 
-### Data Synchronization
+#### L2 Rollup Contract Events
+
+- **DepositLeafInserted Events**: Deposit inclusion confirmations
+
+  - **Source**: Rollup Contract on L2
+  - **Storage**: `deposit_leaf_events` table
+  - **Fields**: `deposit_index`, `deposit_hash`, `eth_block_number`, `eth_tx_index`
+
+- **BlockPosted Events**: New L2 block submissions
+  - **Source**: Rollup Contract on L2
+  - **Storage**: `full_blocks` table
+  - **Fields**: `block_number`, `full_block` (serialized), `eth_block_number`, `eth_tx_index`
+
+### Observer Synchronization Mechanism
+
+#### Checkpoint-Based Sync
+
+The observer uses a checkpoint system to track synchronization progress:
 
 ```rust
-// Observer API handles contract event processing
-pub struct ObserverApi {
-    // Event monitoring and processing logic
+pub struct CheckPointStore {
+    // Tracks last processed Ethereum block number for each event type
 }
 ```
 
-**Key Components:**
+**Checkpoint Storage**: `event_sync_eth_block` table
 
-1. **Rate Manager**: Manages API call rates to avoid rate limiting
-2. **Leader Election**: Ensures only one instance processes events
-3. **Setting Consistency**: Validates configuration consistency
-4. **Observer Graph**: Processes The Graph protocol data
+- **Purpose**: Stores the last processed Ethereum block number for each event type
+- **Recovery**: Enables resumption from the last known good state after failures
+
+#### Sync Process Flow
+
+```mermaid
+sequenceDiagram
+    participant O as Observer
+    participant CP as CheckPoint Store
+    participant L1 as L1 Contract
+    participant L2 as L2 Contract
+    participant DB as Database
+
+    loop Every sync_interval
+        O->>CP: Get last checkpoint
+        O->>L1/L2: Fetch events from checkpoint
+        O->>O: Validate event sequence
+        O->>DB: Store events in batch
+        O->>CP: Update checkpoint
+    end
+```
+
+#### Event Synchronization Details
+
+**1. Event Gap Detection**
+
+```rust
+// Ensures no events are missed in the sequence
+if first.deposit_id != expected_next_event_id {
+    return Err(ObserverError::EventGapDetected {
+        expected_next_event_id,
+        got_event_id: first.deposit_id,
+    });
+}
+```
+
+**2. Batch Processing**
+
+- Events are fetched in configurable block intervals (`observer_event_block_interval`)
+- Maximum query attempts per sync cycle (`observer_max_query_times`)
+- Automatic retry with exponential backoff on failures
+
+**3. Leader Election**
+
+- Only one observer instance processes events at a time
+- Prevents duplicate event processing in multi-instance deployments
+- Uses Redis-based distributed locking
+
+### Data Flow Pipeline
+
+#### Stage 1: Event Collection and Storage
+
+```mermaid
+graph LR
+    L1[L1 Liquidity Contract] -->|Deposited Events| DE[deposited_events table]
+    L2[L2 Rollup Contract] -->|DepositLeafInserted| DLE[deposit_leaf_events table]
+    L2 -->|BlockPosted| FB[full_blocks table]
+```
+
+#### Stage 2: Validity Witness Generation
+
+The `sync_validity_witness` process transforms stored events into validity witnesses:
+
+```rust
+// For each new block
+let validity_witness = update_trees(
+    &block_witness,
+    block_number as u64,
+    &self.account_tree,
+    &self.block_tree,
+).await?;
+```
+
+**Process Steps:**
+
+1. **Deposit Processing**: Retrieves deposits between blocks from `deposit_leaf_events`
+2. **Tree Updates**: Updates account, block, and deposit merkle trees
+3. **Witness Generation**: Creates `ValidityWitness` containing all necessary proofs
+4. **Storage**: Saves witness to `validity_state` table
+
+#### Stage 3: Merkle Tree Updates
+
+**Account Tree Updates** (Tag 1):
+
+- **Registration Blocks**: New account registrations with membership proofs
+- **Non Registration Blocks**: Account state updates with inclusion proofs
+
+**Block Hash Tree Updates** (Tag 2):
+
+- Appends new block hashes for inclusion proofs
+- Maintains chronological block history
+
+**Deposit Tree Updates** (Tag 3):
+
+- Processes deposit events in order
+- Validates deposit tree root consistency
+
+#### Stage 4: Proof Generation
+
+```mermaid
+graph TB
+    VW[Validity Witness] --> TPT[TransitionProofTask]
+    TPT --> Redis[Redis Queue]
+    Redis --> Worker[Validity Prover Worker]
+    Worker --> ZKP[ZK Proof Generation]
+    ZKP --> VP[Validity Proof]
+    VP --> DB[(validity_proofs table)]
+```
+
+### Database Schema Integration
+
+#### Event Tables
+
+- `deposited_events`: L1 deposit information
+- `deposit_leaf_events`: L2 deposit confirmations
+- `full_blocks`: Complete L2 block data
+
+#### State Tables
+
+- `validity_state`: Generated validity witnesses
+- `validity_proofs`: Final ZK proofs
+- `tx_tree_roots`: Transaction tree root mappings
+
+#### Merkle Tree Tables (Partitioned by Tag)
+
+- `hash_nodes`: Tree node hashes
+- `leaves`: Tree leaf data
+- `leaves_len`: Tree length tracking
+- `indexed_leaves`: Indexed tree data (account tree)
+
+#### Synchronization Tables
+
+- `event_sync_eth_block`: Observer checkpoints
+- `cutoff`: Backup/pruning cutoff points
+
+### Error Handling and Recovery
+
+#### Automatic Recovery Mechanisms
+
+**1. Checkpoint Reset**
+
+```rust
+// Resets to last known good state on errors
+async fn reset_check_point(&self, event_type: EventType, reason: &str)
+```
+
+**2. State Consistency Validation**
+
+```rust
+// Validates deposit tree root consistency
+if full_block.block.deposit_tree_root != deposit_tree_root {
+    self.reset_state().await?;
+    return Err(ValidityProverError::DepositTreeRootMismatch);
+}
+```
+
+**3. Restart Loops**
+
+- Observer jobs automatically restart on failures
+- Configurable error thresholds before stopping
+- Rate limiting to prevent excessive API calls
+
+#### Monitoring and Observability
+
+**Rate Manager Integration**:
+
+- Tracks sync progress with heartbeats
+- Monitors error rates and failure patterns
+- Implements circuit breaker patterns
+
+**Leader Election**:
+
+- Ensures single active observer instance
+- Prevents race conditions in event processing
+- Enables high availability deployments
 
 ## Database Schema
 
@@ -553,7 +739,7 @@ The Validity Prover uses a tag-based partitioning system for merkle tree data st
 
 ```rust
 const ACCOUNT_DB_TAG: u32 = 1;          // Account tree data
-const BLOCK_DB_TAG: u32 = 2;            // Block hash tree data  
+const BLOCK_DB_TAG: u32 = 2;            // Block hash tree data
 const DEPOSIT_DB_TAG: u32 = 3;          // Deposit tree data
 const ACCOUNT_BACKUP_DB_TAG: u32 = 11;  // Account tree backup
 const BLOCK_BACKUP_DB_TAG: u32 = 12;    // Block hash tree backup
@@ -602,7 +788,7 @@ Both operations can be performed using the scripts in the `scripts/` directory:
 # Create backup before pruning
 psql -d validity_prover -f scripts/backup.sql
 
-# Remove old data to improve performance  
+# Remove old data to improve performance
 psql -d validity_prover -f scripts/pruning.sql
 ```
 
