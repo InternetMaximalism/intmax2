@@ -779,3 +779,53 @@ psql -d validity_prover -f scripts/pruning.sql
 ```
 
 **Important**: Always run backup before pruning to preserve historical data access.
+
+## Troubleshooting
+
+The Validity Prover is designed to automatically recover from abnormal states when errors occur. If recovery fails multiple times, the service will stop and require a manual restart. If restarting doesn't resolve the issue, it's recommended to clear Redis keys with the pattern `validity_prover:*`.
+
+### Common Errors and Solutions
+
+#### DepositTreeRootMismatch
+
+**Description**: This error occurs when the deposit tree root calculated from the chronological deposit event data differs from the actual root stored in the block.
+
+**Cause**: This typically happens when attempting to calculate chronological data while deposit event collection is incomplete.
+
+**Recovery**: The system usually recovers automatically. However, if the error persists after multiple restarts, the deposited event timestamps may be incorrect. In this case, clear the `deposited_events` and `full_blocks` data up to the point just before the error occurred.
+
+#### BlockWitnessGenerationError
+
+**Description**: This error occurs during block witness generation (validity proof witness creation).
+
+**Cause**: Usually caused by abnormal states in the Merkle tree structure.
+
+**Recovery**: The system will attempt automatic recovery. If recovery fails, clear the Merkle tree tables (`hash_nodes`, `leaves`, `leaves_len`, `indexed_leaves`) from the block number (timestamp) where the error occurred:
+
+```sql
+BEGIN;
+
+DELETE FROM hash_nodes
+ WHERE timestamp >= :block_number;
+
+DELETE FROM leaves
+ WHERE timestamp >= :block_number;
+
+DELETE FROM leaves_len
+ WHERE timestamp >= :block_number;
+
+DELETE FROM indexed_leaves
+ WHERE timestamp >= :block_number;
+
+COMMIT;
+```
+
+Replace `:block_number` with the actual block number where the error occurred.
+
+#### LeaderError
+
+**Description**: This error occurs during leader selection for sync execution.
+
+**Cause**: This happens when multiple validity-prover instances are running in sync mode simultaneously.
+
+**Solution**: Ensure only one validity-prover instance is running in sync mode at a time, or properly configure leader election in your deployment.
