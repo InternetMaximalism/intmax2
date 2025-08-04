@@ -34,8 +34,8 @@ func (c *VerifierCircuit) Define(api frontend.API) error {
 
 	inputDigest := frontend.Variable(0)
 	for i := 0; i < 8; i++ {
-		pubByte := publicInputs[8-i].Limb
-		inputDigest = api.Add(inputDigest, api.Mul(pubByte, frontend.Variable(new(big.Int).Lsh(big.NewInt(1), uint(32*i)))))
+		limb := publicInputs[7-i].Limb
+		inputDigest = api.Add(inputDigest, api.Mul(limb, frontend.Variable(new(big.Int).Lsh(big.NewInt(1), uint(32*i)))))
 	}
 
 	api.AssertIsEqual(c.InputHash, inputDigest)
