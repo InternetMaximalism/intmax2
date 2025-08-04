@@ -29,7 +29,7 @@ func loadCircuit() constraint.ConstraintSystem {
 	}
 	circuit := verifierCircuit.VerifierCircuit{
 		VerifierDigest:    verifierOnlyCircuitData.CircuitDigest,
-		InputHash:         inputHash,
+		InputHash:         frontend.Variable(inputHash),
 		VerifierData:      verifierOnlyCircuitData,
 		ProofWithPis:      proofWithPis,
 		CommonCircuitData: commonCircuitData,
