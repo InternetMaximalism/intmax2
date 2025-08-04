@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -16,14 +15,6 @@ import (
 
 func main() {
 	godotenv.Load()
-
-	circuitName := flag.String("circuit", "", "circuit name")
-	flag.Parse()
-
-	if *circuitName == "" {
-		log.Fatal("Please provide circuit name")
-		os.Exit(1)
-	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -52,7 +43,7 @@ func main() {
 		return
 	}
 
-	data := circuitData.InitCircuitData(*circuitName)
+	data := circuitData.InitCircuitData()
 	state := &handlers.State{
 		CircuitData: data,
 		RedisClient: rdb,
