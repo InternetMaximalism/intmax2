@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 intmax2-interfaces = { path = "../../interfaces" }
-intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp" }
+intmax2-zkp = { git = "https://github.com/InternetMaximalism/intmax2-zkp", branch = "dev" }
 plonky2 = { git = "https://github.com/InternetMaximalism/polygon-plonky2.git", branch = "intmax2-dev" }
 actix = "0.13"
 actix-web = "4.4"

@@ -1,12 +1,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
 	verifierCircuit "gnark-server/circuit"
 	"gnark-server/trusted_setup"
+	"gnark-server/utils"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/kzg"
@@ -18,15 +18,21 @@ import (
 	"github.com/qope/gnark-plonky2-verifier/variables"
 )
 
-func loadCircuit(circuitName string) constraint.ConstraintSystem {
-	commonCircuitData := types.ReadCommonCircuitData("data/" + circuitName + "/common_circuit_data.json")
-	proofWithPis := variables.DeserializeProofWithPublicInputs(types.ReadProofWithPublicInputs("data/" + circuitName + "/proof_with_public_inputs.json"))
-	verifierOnlyCircuitData := variables.DeserializeVerifierOnlyCircuitData(types.ReadVerifierOnlyCircuitData("data/" + circuitName + "/verifier_only_circuit_data.json"))
+func loadCircuit() constraint.ConstraintSystem {
+	commonCircuitData := types.ReadCommonCircuitData("data/common_circuit_data.json")
+	proofRaw := types.ReadProofWithPublicInputs("data/proof_with_public_inputs.json")
+	proofWithPis := variables.DeserializeProofWithPublicInputs(proofRaw)
+	verifierOnlyCircuitData := variables.DeserializeVerifierOnlyCircuitData(types.ReadVerifierOnlyCircuitData("data/verifier_only_circuit_data.json"))
+	inputHash, err := utils.CalculateInputDigest(proofRaw.PublicInputs)
+	if err != nil {
+		panic(fmt.Sprintf("failed to calculate input digest: %v", err))
+	}
 	circuit := verifierCircuit.VerifierCircuit{
-		Proof:                   proofWithPis.Proof,
-		PublicInputs:            proofWithPis.PublicInputs,
-		VerifierOnlyCircuitData: verifierOnlyCircuitData,
-		CommonCircuitData:       commonCircuitData,
+		VerifierDigest:    verifierOnlyCircuitData.CircuitDigest,
+		InputHash:         frontend.Variable(inputHash),
+		VerifierData:      verifierOnlyCircuitData,
+		ProofWithPis:      proofWithPis,
+		CommonCircuitData: commonCircuitData,
 	}
 	builder := scs.NewBuilder
 	ccs, err := frontend.Compile(ecc.BN254.ScalarField(), builder, &circuit)
@@ -37,18 +43,15 @@ func loadCircuit(circuitName string) constraint.ConstraintSystem {
 }
 
 func main() {
-	circuitName := flag.String("circuit", "", "circuit name")
-	flag.Parse()
+	r1cs := loadCircuit()
 
-	if *circuitName == "" {
-		fmt.Println("Please provide circuit name")
-		os.Exit(1)
+	proofRaw := types.ReadProofWithPublicInputs("data/proof_with_public_inputs.json")
+	proofWithPis := variables.DeserializeProofWithPublicInputs(proofRaw)
+	verifierOnlyCircuitData := variables.DeserializeVerifierOnlyCircuitData(types.ReadVerifierOnlyCircuitData("data/verifier_only_circuit_data.json"))
+	inputHash, err := utils.CalculateInputDigest(proofRaw.PublicInputs)
+	if err != nil {
+		panic(fmt.Sprintf("failed to calculate input digest: %v", err))
 	}
-
-	r1cs := loadCircuit(*circuitName)
-
-	proofWithPis := variables.DeserializeProofWithPublicInputs(types.ReadProofWithPublicInputs("data/" + *circuitName + "/proof_with_public_inputs.json"))
-	verifierOnlyCircuitData := variables.DeserializeVerifierOnlyCircuitData(types.ReadVerifierOnlyCircuitData("data/" + *circuitName + "/verifier_only_circuit_data.json"))
 
 	// 1. One setup
 	var srs kzg.SRS = kzg.NewSRS(ecc.BN254)
@@ -79,9 +82,11 @@ func main() {
 		os.Exit(1)
 	}
 	assignment := verifierCircuit.VerifierCircuit{
-		Proof:                   proofWithPis.Proof,
-		PublicInputs:            proofWithPis.PublicInputs,
-		VerifierOnlyCircuitData: verifierOnlyCircuitData,
+		VerifierDigest:    verifierOnlyCircuitData.CircuitDigest,
+		InputHash:         inputHash,
+		ProofWithPis:      proofWithPis,
+		VerifierData:      verifierOnlyCircuitData,
+		CommonCircuitData: types.ReadCommonCircuitData("data/common_circuit_data.json"),
 	}
 	witness, err := frontend.NewWitness(&assignment, ecc.BN254.ScalarField())
 	if err != nil {
@@ -101,22 +106,22 @@ func main() {
 		panic(err)
 	}
 	{
-		fSol, _ := os.Create("data/" + *circuitName + "/verifier.sol")
+		fSol, _ := os.Create("data/verifier.sol")
 		_ = vk.ExportSolidity(fSol)
 		fSol.Close()
 	}
 	{
-		fVk, _ := os.Create("data/" + *circuitName + "/verifying.key")
+		fVk, _ := os.Create("data/verifying.key")
 		_, _ = vk.WriteTo(fVk)
 		fVk.Close()
 	}
 	{
-		fPk, _ := os.Create("data/" + *circuitName + "/proving.key")
+		fPk, _ := os.Create("data/proving.key")
 		_, _ = pk.WriteTo(fPk)
 		fPk.Close()
 	}
 	{
-		fCs, _ := os.Create("data/" + *circuitName + "/circuit.r1cs")
+		fCs, _ := os.Create("data/circuit.r1cs")
 		_, _ = r1cs.WriteTo(fCs)
 		fCs.Close()
 	}

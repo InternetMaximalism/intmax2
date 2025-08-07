@@ -65,12 +65,18 @@ func (s *State) getProofResponse(ctx context.Context, jobId string) (ProofRespon
 	return response, err
 }
 
-func (s *State) prove(jobId string, proofRaw types.ProofWithPublicInputsRaw) error {
+func (s *State) prove(jobId string, proofRaw types.ProofWithPublicInputsRaw, vdRaw types.VerifierOnlyCircuitDataRaw) error {
 	proofWithPis := variables.DeserializeProofWithPublicInputs(proofRaw)
+	verifierData := variables.DeserializeVerifierOnlyCircuitData(vdRaw)
+	inputHash, err := utils.CalculateInputDigest(proofRaw.PublicInputs)
+	if err != nil {
+		return err
+	}
 	assignment := verifierCircuit.VerifierCircuit{
-		Proof:                   proofWithPis.Proof,
-		PublicInputs:            proofWithPis.PublicInputs,
-		VerifierOnlyCircuitData: s.CircuitData.VerifierOnlyCircuitData,
+		VerifierDigest: verifierData.CircuitDigest,
+		InputHash:      frontend.Variable(inputHash),
+		ProofWithPis:   proofWithPis,
+		VerifierData:   verifierData,
 	}
 	witness, err := frontend.NewWitness(&assignment, ecc.BN254.ScalarField())
 	ctx := context.Background()
@@ -133,19 +139,24 @@ func (s *State) StartProof(w http.ResponseWriter, r *http.Request) {
 	jobId := _jobId.String()
 
 	var rawInput struct {
-		Proof string `json:"proof"`
+		Proof        string `json:"proof"`
+		VerifierData string `json:"verifierData"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&rawInput); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var input types.ProofWithPublicInputsRaw
-	if err := json.Unmarshal([]byte(rawInput.Proof), &input); err != nil {
+	var proofRaw types.ProofWithPublicInputsRaw
+	if err := json.Unmarshal([]byte(rawInput.Proof), &proofRaw); err != nil {
 		http.Error(w, "Failed to parse proof JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-
+	var vdRaw types.VerifierOnlyCircuitDataRaw
+	if err := json.Unmarshal([]byte(rawInput.VerifierData), &vdRaw); err != nil {
+		http.Error(w, "Failed to parse verifier data JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 	resp := ProofResponse{
 		Success: true,
 		Proof:   nil,
@@ -153,8 +164,7 @@ func (s *State) StartProof(w http.ResponseWriter, r *http.Request) {
 	if err := s.setProofResponse(context.Background(), jobId, resp); err != nil {
 		log.Printf("Failed to store proof response in Redis: %v\n", err)
 	}
-
-	go s.prove(jobId, input)
+	go s.prove(jobId, proofRaw, vdRaw)
 	json.NewEncoder(w).Encode(map[string]string{"jobId": jobId})
 	log.Println("StartProof", jobId)
 }
