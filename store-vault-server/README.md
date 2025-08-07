@@ -1,4 +1,173 @@
-# Configuration
+# Store Vault Server
+
+Store-vault-server is a data storage service for the INTMAX2 protocol. It provides secure data backup, retrieval, and transfer capabilities between users through a stateless, self-custody architecture.
+
+## Architecture Overview
+
+Store-vault-server serves two primary roles:
+
+1. **User Data Storage & Retrieval**: Users can store their own state data as backups and retrieve them when needed
+2. **Inter-User Data Transfer**: Acts as a mailbox for users to send data to other users
+
+### Data Types
+
+#### Snapshot Data
+- **Purpose**: Single-file updates with state management
+- **Control**: Uses optimistic locking for conflict resolution
+- **Characteristics**: 
+  - One record per user per topic
+  - Updates replace previous versions
+  - Atomic operations with rollback support
+
+#### Historical Data  
+- **Purpose**: Append-only data storage
+- **Control**: No locking mechanism (append-only)
+- **Characteristics**:
+  - Immutable once stored
+  - Time-ordered sequence
+  - Batch operations supported
+
+### Data Storage Architecture
+
+All data follows the path structure: `{topic}/{pubkey}/{digest}`
+
+- **pubkey**: User identifier (top-level partition)
+- **topic**: Data type/category classifier  
+- **digest**: Content hash (unique file identifier)
+
+### API Endpoints
+
+#### Snapshot Data APIs
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    participant S3
+    participant DB
+
+    Note over Client,DB: Snapshot Data Flow
+    
+    Client->>Server: POST /pre-save-snapshot
+    Server->>DB: Check current digest
+    Server->>S3: Generate presigned upload URL
+    Server->>DB: Store pending upload
+    Server-->>Client: Return presigned URL
+    
+    Client->>S3: Upload data to presigned URL
+    
+    Client->>Server: POST /save-snapshot
+    Server->>DB: Validate prev_digest (optimistic lock)
+    Server->>S3: Verify object exists
+    Server->>DB: Update digest & cleanup pending
+    Server->>S3: Delete old version (if exists)
+    Server-->>Client: Confirm success
+    
+    Client->>Server: POST /get-snapshot
+    Server->>DB: Get current digest
+    Server->>S3: Generate presigned download URL
+    Server-->>Client: Return presigned URL
+```
+
+#### Historical Data APIs
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    participant S3
+    participant DB
+
+    Note over Client,DB: Historical Data Flow
+    
+    Client->>Server: POST /save-data-batch
+    Server->>DB: Insert batch metadata
+    Server->>S3: Generate presigned upload URLs
+    Server-->>Client: Return presigned URLs
+    
+    Client->>S3: Upload data to presigned URLs
+    
+    Client->>Server: POST /get-data-batch
+    Server->>DB: Query by digests
+    Server->>S3: Generate presigned download URLs
+    Server-->>Client: Return URLs with metadata
+    
+    Client->>Server: POST /get-data-sequence
+    Server->>DB: Query with pagination
+    Server->>S3: Generate presigned download URLs
+    Server-->>Client: Return URLs with cursor
+```
+
+### Database Schema
+
+#### Snapshot Data Tables
+```sql
+-- Main snapshot storage
+s3_snapshot_data (
+    pubkey VARCHAR(66),
+    topic VARCHAR(255), 
+    digest VARCHAR(66),
+    timestamp BIGINT,
+    UNIQUE(pubkey, topic)
+)
+
+-- Pending upload tracking
+s3_snapshot_pending_uploads (
+    digest VARCHAR(66) PRIMARY KEY,
+    pubkey VARCHAR(66),
+    topic VARCHAR(255),
+    timestamp BIGINT
+)
+```
+
+#### Historical Data Table
+```sql
+s3_historical_data (
+    digest VARCHAR(66) PRIMARY KEY,
+    pubkey VARCHAR(66),
+    topic VARCHAR(255), 
+    upload_finished BOOLEAN,
+    timestamp BIGINT
+)
+```
+
+### Security & Access Control
+
+#### Permission Types
+- **SingleAuthWrite/SingleOpenWrite**: Single-state writes (snapshots)
+- **AuthWrite/OpenWrite**: Historical data writes  
+- **AuthRead/OpenRead**: Read permissions
+
+#### Authentication Flow
+```mermaid
+graph LR
+    A[Client Request] --> B[Signature Verification]
+    B --> C[Extract Pubkey]
+    C --> D[Validate Topic Rights]
+    D --> E[Check Auth Permissions]
+    E --> F[Process Request]
+    
+    D --> G[SingleAuthWrite: pubkey must match]
+    D --> H[AuthWrite: pubkey must match]
+    D --> I[OpenWrite: any pubkey allowed]
+```
+
+### Cleanup & Maintenance
+
+The server runs background processes for:
+
+- **Historical Data Cleanup**: Validates S3 object existence and removes timed-out uploads
+- **Snapshot Cleanup**: Removes dangling pending uploads after timeout
+- **Consistency Checks**: Ensures database-S3 synchronization
+
+### Error Handling
+
+- **Lock Errors**: Optimistic lock failures on snapshot updates
+- **Timeout Errors**: Upload timeouts and cleanup
+- **Validation Errors**: Permission and data integrity checks
+- **Storage Errors**: S3 operation failures
+
+## Configuration
 
 This application requires specific AWS and CloudFront configurations. Follow the steps below to set up your environment properly.
 
