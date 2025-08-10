@@ -61,7 +61,7 @@ pub async fn fetch_deposit_info(
                     all.push(HistoryEntry {
                         data: deposit_data,
                         status: EntryStatus::Settled(block_number),
-                        meta: meta,
+                        meta,
                     });
                 } else {
                     // deposit is not settled

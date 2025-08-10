@@ -69,7 +69,7 @@ use crate::{
         receipt::generate_transfer_receipt,
         strategy::{
             entry_status::HistoryEntry, mining::validate_mining_deposit_criteria,
-            utils::wait_till_validity_prover_synced,
+            strategy::GroupedEntries, utils::wait_till_validity_prover_synced,
         },
         sync::utils::generate_salt,
         types::{
@@ -263,7 +263,7 @@ impl Client {
         .await?;
 
         let current_time = chrono::Utc::now().timestamp() as u64;
-        let tx_info = fetch_all_unprocessed_tx_info(
+        let tx_history_entries = fetch_all_unprocessed_tx_info(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             view_pair,
@@ -272,6 +272,7 @@ impl Client {
             self.config.tx_timeout,
         )
         .await?;
+        let tx_info = GroupedEntries::from_history_entries(&tx_history_entries);
         if !tx_info.settled.is_empty() || !tx_info.pending.is_empty() {
             if already_synced {
                 return Err(ClientError::UnexpectedError(
