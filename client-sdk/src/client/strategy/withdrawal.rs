@@ -1,3 +1,5 @@
+use crate::client::strategy::entry_status::{EntryStatus, HistoryEntry};
+
 use super::{common::fetch_decrypt_validate, error::StrategyError};
 use intmax2_interfaces::{
     api::{
@@ -8,24 +10,12 @@ use intmax2_interfaces::{
         validity_prover::interface::ValidityProverClientInterface,
     },
     data::{
-        data_type::DataType,
-        encryption::BlsEncryption,
-        meta_data::{MetaData, MetaDataWithBlockNumber},
-        rw_rights::WriteRights,
-        sender_proof_set::SenderProofSet,
-        transfer_data::TransferData,
-        user_data::ProcessStatus,
+        data_type::DataType, encryption::BlsEncryption, rw_rights::WriteRights,
+        sender_proof_set::SenderProofSet, transfer_data::TransferData, user_data::ProcessStatus,
     },
     utils::key::ViewPair,
 };
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait as _};
-
-#[derive(Debug, Clone)]
-pub struct WithdrawalInfo {
-    pub settled: Vec<(MetaDataWithBlockNumber, TransferData)>,
-    pub pending: Vec<(MetaData, TransferData)>,
-    pub timeout: Vec<(MetaData, TransferData)>,
-}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn fetch_withdrawal_info(
@@ -37,10 +27,8 @@ pub async fn fetch_withdrawal_info(
     excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
     tx_timeout: u64,
-) -> Result<(WithdrawalInfo, MetaDataCursorResponse), StrategyError> {
-    let mut settled = Vec::new();
-    let mut pending = Vec::new();
-    let mut timeout = Vec::new();
+) -> Result<(Vec<HistoryEntry<TransferData>>, MetaDataCursorResponse), StrategyError> {
+    let mut all = Vec::new();
 
     let (data_with_meta, cursor_response) = fetch_decrypt_validate::<TransferData>(
         store_vault_server,
@@ -103,39 +91,42 @@ pub async fn fetch_withdrawal_info(
         match block_number {
             Some(block_number) => {
                 // Transfer is settled
-                let meta = MetaDataWithBlockNumber { meta, block_number };
-                settled.push((meta, transfer_data));
+                all.push(HistoryEntry {
+                    data: transfer_data,
+                    status: EntryStatus::Settled(block_number),
+                    meta,
+                });
             }
             None if meta.timestamp + tx_timeout < current_time => {
                 // Transfer has timed out
-                timeout.push((meta, transfer_data));
+                all.push(HistoryEntry {
+                    data: transfer_data,
+                    status: EntryStatus::Timeout,
+                    meta,
+                });
             }
             None => {
                 // Transfer is still pending
                 log::info!("Withdrawal {} is pending", meta.digest);
-                pending.push((meta, transfer_data));
+                all.push(HistoryEntry {
+                    data: transfer_data,
+                    status: EntryStatus::Pending,
+                    meta,
+                });
             }
         }
     }
 
     // sort
-    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.digest.to_hex()));
-    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
-    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
+    all.sort_by_key(|entry| {
+        let HistoryEntry { meta, .. } = entry;
+        (meta.timestamp, meta.digest.to_hex())
+    });
     if cursor.order == CursorOrder::Desc {
-        settled.reverse();
-        pending.reverse();
-        timeout.reverse();
+        all.reverse();
     }
 
-    Ok((
-        WithdrawalInfo {
-            settled,
-            pending,
-            timeout,
-        },
-        cursor_response,
-    ))
+    Ok((all, cursor_response))
 }
 
 pub async fn fetch_all_unprocessed_withdrawal_info(
@@ -145,7 +136,7 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
     current_time: u64, // current timestamp for timeout checking
     process_status: &ProcessStatus,
     tx_timeout: u64,
-) -> Result<WithdrawalInfo, StrategyError> {
+) -> Result<Vec<HistoryEntry<TransferData>>, StrategyError> {
     let mut cursor = MetaDataCursor {
         cursor: process_status.last_processed_meta_data.clone(),
         order: CursorOrder::Asc,
@@ -153,18 +144,9 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
     };
     let mut included_digests = process_status.pending_digests.clone(); // cleared after first fetch
 
-    let mut settled = Vec::new();
-    let mut pending = Vec::new();
-    let mut timeout = Vec::new();
+    let mut all = Vec::new();
     loop {
-        let (
-            WithdrawalInfo {
-                settled: settled_part,
-                pending: pending_part,
-                timeout: timeout_part,
-            },
-            cursor_response,
-        ) = fetch_withdrawal_info(
+        let (part, cursor_response) = fetch_withdrawal_info(
             store_vault_server,
             validity_prover,
             view_pair,
@@ -179,18 +161,12 @@ pub async fn fetch_all_unprocessed_withdrawal_info(
             included_digests = Vec::new(); // clear included_digests after first fetch
         }
 
-        settled.extend(settled_part);
-        pending.extend(pending_part);
-        timeout.extend(timeout_part);
+        all.extend(part);
         if !cursor_response.has_more {
             break;
         }
         cursor.cursor = cursor_response.next_cursor;
     }
 
-    Ok(WithdrawalInfo {
-        settled,
-        pending,
-        timeout,
-    })
+    Ok(all)
 }

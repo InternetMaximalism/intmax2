@@ -18,7 +18,10 @@ use intmax2_zkp::{
 use num_bigint::BigUint;
 use std::fmt::Display;
 
-use crate::external_api::contract::liquidity_contract::LiquidityContract;
+use crate::{
+    client::strategy::entry_status::EntryStatus,
+    external_api::contract::liquidity_contract::LiquidityContract,
+};
 
 use super::{
     deposit::fetch_all_unprocessed_deposit_info, error::StrategyError,
@@ -86,14 +89,17 @@ pub async fn fetch_mining_info(
     .await?;
 
     let eligible_pending_deposits = deposit_info
-        .pending
-        .into_iter()
-        .filter(|(_, deposit_data)| {
-            if !deposit_data.is_eligible {
+        .iter()
+        .filter(|entry| {
+            if !matches!(entry.status, EntryStatus::Pending) {
+                return false; // only consider pending deposits
+            }
+
+            if !entry.data.is_eligible {
                 // skip ineligible deposits
                 return false;
             }
-            if !validate_mining_deposit_criteria(deposit_data.token_type, deposit_data.amount) {
+            if !validate_mining_deposit_criteria(entry.data.token_type, entry.data.amount) {
                 // skip deposits that do not meet the mining criteria
                 return false;
             }
@@ -102,9 +108,9 @@ pub async fn fetch_mining_info(
         .collect::<Vec<_>>();
     let pending_minings = eligible_pending_deposits
         .into_iter()
-        .map(|(meta, deposit_data)| Mining {
-            meta,
-            deposit_data,
+        .map(|entry| Mining {
+            meta: entry.meta.clone(),
+            deposit_data: entry.data.clone(),
             block: None,
             maturity: None,
             status: MiningStatus::Pending,
@@ -113,9 +119,12 @@ pub async fn fetch_mining_info(
 
     // filter out ineligible deposits
     let eligible_settled_deposits = deposit_info
-        .settled
         .into_iter()
-        .filter(|(meta, deposit_data)| {
+        .filter(|entry| {
+            if !matches!(entry.status, EntryStatus::Settled(_)) {
+                return false; // only consider settled deposits
+            }
+            let deposit_data = &entry.data;
             let deposit = deposit_data.deposit().unwrap(); // unwrap is safe here because already settled
             if !deposit.is_eligible {
                 // skip ineligible deposits
@@ -125,7 +134,7 @@ pub async fn fetch_mining_info(
                 // skip deposits that do not meet the mining criteria
                 return false;
             }
-            if claim_status.processed_digests.contains(&meta.meta.digest) {
+            if claim_status.processed_digests.contains(&entry.meta.digest) {
                 // skip deposits that are already claimed
                 return false;
             }
@@ -152,28 +161,45 @@ pub async fn fetch_mining_info(
         tx_timeout,
     )
     .await?;
-    let settled_txs = tx_info.settled;
+    let settled_txs = tx_info
+        .into_iter()
+        .filter(|entry| matches!(entry.status, EntryStatus::Settled(_)))
+        .collect::<Vec<_>>();
 
     let mut settled_minings = Vec::new();
     let current_block_number = validity_prover.get_block_number().await?;
     let current_block = fetch_block(validity_prover, current_block_number).await?;
     let current_time = current_block.timestamp;
 
-    for (meta, deposit_data) in eligible_settled_deposits {
-        let block = fetch_block(validity_prover, meta.block_number).await?;
-        let lock_time = get_lock_time(&lock_config, block.hash(), deposit_data.deposit_salt);
+    for entry in eligible_settled_deposits {
+        let block_number = match entry.status {
+            EntryStatus::Settled(block_number) => block_number,
+            _ => panic!("Expected settled entry status"),
+        };
+        let block = fetch_block(validity_prover, block_number).await?;
+        let lock_time = get_lock_time(&lock_config, block.hash(), entry.data.deposit_salt);
         let maturity = block.timestamp + lock_time;
         let status = {
             if block.block_number <= last_block_number {
                 // there is a send tx after the deposit
                 // get the first send tx block number
-                let (meta, _) = settled_txs
+                let first_send_tx_block_number = settled_txs
                     .iter()
-                    .filter(|(meta, _)| meta.block_number > block.block_number)
-                    .min_by_key(|(meta, _)| meta.block_number)
+                    .filter_map(|entry| {
+                        let block_number = match entry.status {
+                            EntryStatus::Settled(block_number) => block_number,
+                            _ => panic!("Expected settled entry status"),
+                        };
+                        if block_number > block.block_number {
+                            Some(block_number)
+                        } else {
+                            None
+                        }
+                    })
+                    .min()
                     .expect("send tx block number not found"); // must exist because there is a send tx after the deposit
                                                                // one block before tx is the candidate of the claimable block number
-                let candidate_claimable_block_number = meta.block_number - 1;
+                let candidate_claimable_block_number = first_send_tx_block_number - 1;
                 let candidate_claimable_block =
                     fetch_block(validity_prover, candidate_claimable_block_number).await?;
                 if candidate_claimable_block.timestamp < maturity {
@@ -192,8 +218,8 @@ pub async fn fetch_mining_info(
             }
         };
         settled_minings.push(Mining {
-            meta: meta.meta,
-            deposit_data,
+            meta: entry.meta,
+            deposit_data: entry.data,
             block: Some(block),
             maturity: Some(maturity),
             status,

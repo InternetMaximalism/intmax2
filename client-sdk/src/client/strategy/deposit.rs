@@ -6,26 +6,17 @@ use intmax2_interfaces::{
         },
         validity_prover::interface::ValidityProverClientInterface,
     },
-    data::{
-        data_type::DataType,
-        deposit_data::DepositData,
-        meta_data::{MetaData, MetaDataWithBlockNumber},
-        user_data::ProcessStatus,
-    },
+    data::{data_type::DataType, deposit_data::DepositData, user_data::ProcessStatus},
     utils::key::ViewPair,
 };
 use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait};
 
-use crate::external_api::contract::liquidity_contract::LiquidityContract;
+use crate::{
+    client::strategy::entry_status::{EntryStatus, HistoryEntry},
+    external_api::contract::liquidity_contract::LiquidityContract,
+};
 
 use super::{common::fetch_decrypt_validate, error::StrategyError};
-
-#[derive(Debug, Clone)]
-pub struct DepositInfo {
-    pub settled: Vec<(MetaDataWithBlockNumber, DepositData)>,
-    pub pending: Vec<(MetaData, DepositData)>,
-    pub timeout: Vec<(MetaData, DepositData)>,
-}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn fetch_deposit_info(
@@ -38,10 +29,8 @@ pub async fn fetch_deposit_info(
     excluded_digests: &[Bytes32],
     cursor: &MetaDataCursor,
     deposit_timeout: u64,
-) -> Result<(DepositInfo, MetaDataCursorResponse), StrategyError> {
-    let mut settled = Vec::new();
-    let mut pending = Vec::new();
-    let mut timeout = Vec::new();
+) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), StrategyError> {
+    let mut all = Vec::new();
     let (data_with_meta, cursor_response) = fetch_decrypt_validate::<DepositData>(
         store_vault_server,
         view_pair.view,
@@ -69,18 +58,24 @@ pub async fn fetch_deposit_info(
 
                 if let Some(block_number) = info.block_number {
                     // deposit is settled
-                    let meta = MetaDataWithBlockNumber { meta, block_number };
-                    settled.push((meta, deposit_data));
+                    all.push(HistoryEntry {
+                        data: deposit_data,
+                        status: EntryStatus::Settled(block_number),
+                        meta: meta,
+                    });
                 } else {
                     // deposit is not settled
-
                     let exists = liquidity_contract
                         .check_if_deposit_exists(info.deposit_id)
                         .await?;
                     if exists {
                         // deposit is not relayed to L2 yet
                         log::info!("Deposit {} is pending", meta.digest);
-                        pending.push((meta, deposit_data));
+                        all.push(HistoryEntry {
+                            data: deposit_data,
+                            status: EntryStatus::Pending,
+                            meta,
+                        });
                     } else {
                         // deposit is canceled
                         log::info!(
@@ -88,40 +83,44 @@ pub async fn fetch_deposit_info(
                             meta.digest,
                             deposit_data.deposit_hash().unwrap()
                         );
-                        timeout.push((meta, deposit_data));
+                        all.push(HistoryEntry {
+                            data: deposit_data,
+                            status: EntryStatus::Timeout,
+                            meta,
+                        });
                     }
                 }
             }
             None if meta.timestamp + deposit_timeout < current_time => {
                 // Deposit has timed out
-                timeout.push((meta, deposit_data));
+                all.push(HistoryEntry {
+                    data: deposit_data,
+                    status: EntryStatus::Timeout,
+                    meta,
+                });
             }
             None => {
                 // Deposit is still pending
                 log::info!("Deposit {} is pending", meta.digest);
-                pending.push((meta, deposit_data));
+                all.push(HistoryEntry {
+                    data: deposit_data,
+                    status: EntryStatus::Pending,
+                    meta,
+                });
             }
         }
     }
 
     // sort
-    settled.sort_by_key(|(meta, _)| (meta.block_number, meta.meta.digest.to_hex()));
-    pending.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
-    timeout.sort_by_key(|(meta, _)| (meta.timestamp, meta.digest.to_hex()));
+    all.sort_by_key(|entry| {
+        let HistoryEntry { meta, .. } = entry;
+        (meta.timestamp, meta.digest.to_hex())
+    });
     if cursor.order == CursorOrder::Desc {
-        settled.reverse();
-        pending.reverse();
-        timeout.reverse();
+        all.reverse();
     }
 
-    Ok((
-        DepositInfo {
-            settled,
-            pending,
-            timeout,
-        },
-        cursor_response,
-    ))
+    Ok((all, cursor_response))
 }
 
 pub async fn fetch_all_unprocessed_deposit_info(
@@ -132,7 +131,7 @@ pub async fn fetch_all_unprocessed_deposit_info(
     current_time: u64,
     process_status: &ProcessStatus,
     deposit_timeout: u64,
-) -> Result<DepositInfo, StrategyError> {
+) -> Result<Vec<HistoryEntry<DepositData>>, StrategyError> {
     let mut cursor = MetaDataCursor {
         cursor: process_status.last_processed_meta_data.clone(),
         order: CursorOrder::Asc,
@@ -140,18 +139,9 @@ pub async fn fetch_all_unprocessed_deposit_info(
     };
     let mut included_digests = process_status.pending_digests.clone(); // cleared after first fetch
 
-    let mut settled = Vec::new();
-    let mut pending = Vec::new();
-    let mut timeout = Vec::new();
+    let mut all = Vec::new();
     loop {
-        let (
-            DepositInfo {
-                settled: settled_part,
-                pending: pending_part,
-                timeout: timeout_part,
-            },
-            cursor_response,
-        ) = fetch_deposit_info(
+        let (part, cursor_response) = fetch_deposit_info(
             store_vault_server,
             validity_prover,
             liquidity_contract,
@@ -167,18 +157,12 @@ pub async fn fetch_all_unprocessed_deposit_info(
             included_digests = Vec::new(); // clear included_digests after first fetch
         }
 
-        settled.extend(settled_part);
-        pending.extend(pending_part);
-        timeout.extend(timeout_part);
+        all.extend(part);
         if !cursor_response.has_more {
             break;
         }
         cursor.cursor = cursor_response.next_cursor;
     }
 
-    Ok(DepositInfo {
-        settled,
-        pending,
-        timeout,
-    })
+    Ok(all)
 }
