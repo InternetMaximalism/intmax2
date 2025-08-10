@@ -1,48 +1,17 @@
 use intmax2_interfaces::{
     api::store_vault_server::types::{MetaDataCursor, MetaDataCursorResponse},
-    data::{
-        deposit_data::DepositData,
-        meta_data::{MetaData, MetaDataWithBlockNumber},
-        transfer_data::TransferData,
-        tx_data::TxData,
-    },
+    data::{deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData},
     utils::key::ViewPair,
 };
-use intmax2_zkp::ethereum_types::{bytes32::Bytes32, u32limb_trait::U32LimbTrait};
-use serde::{Deserialize, Serialize};
+use intmax2_zkp::ethereum_types::u32limb_trait::U32LimbTrait;
+
+use crate::client::strategy::entry_status::{EntryStatus, HistoryEntry};
 
 use super::{
     client::Client,
     error::ClientError,
     strategy::{deposit::fetch_deposit_info, transfer::fetch_transfer_info, tx::fetch_tx_info},
 };
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HistoryEntry<T> {
-    pub data: T,
-    pub status: EntryStatus,
-    pub meta: MetaData,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum EntryStatus {
-    Settled(u32),   // Settled at block number but not processed yet
-    Processed(u32), // Incorporated into the balance proof
-    Pending,        // Not settled yet
-    Timeout,        // Timed out
-}
-
-impl EntryStatus {
-    pub fn from_settled(processed_digests: &[Bytes32], meta: MetaDataWithBlockNumber) -> Self {
-        if processed_digests.contains(&meta.meta.digest) {
-            EntryStatus::Processed(meta.block_number)
-        } else {
-            EntryStatus::Settled(meta.block_number)
-        }
-    }
-}
 
 pub async fn fetch_deposit_history(
     client: &Client,
@@ -52,8 +21,6 @@ pub async fn fetch_deposit_history(
     // We don't need to check validity prover's sync status like in strategy
     // because fetching history is not a critical operation.
     let current_time = chrono::Utc::now().timestamp() as u64;
-    let user_data = client.get_user_data(view_pair).await?;
-
     let mut history = Vec::new();
     let (all_deposit_info, cursor_response) = fetch_deposit_info(
         client.store_vault_server.as_ref(),
@@ -70,10 +37,7 @@ pub async fn fetch_deposit_history(
     for (meta, settled) in all_deposit_info.settled {
         history.push(HistoryEntry {
             data: settled,
-            status: EntryStatus::from_settled(
-                &user_data.deposit_status.processed_digests,
-                meta.clone(),
-            ),
+            status: EntryStatus::Settled(meta.block_number),
             meta: meta.meta,
         });
     }

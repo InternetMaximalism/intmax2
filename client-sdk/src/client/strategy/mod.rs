@@ -1,5 +1,6 @@
 pub mod common;
 pub mod deposit;
+pub mod entry_status;
 pub mod error;
 pub mod mining;
 #[allow(clippy::module_inception)]

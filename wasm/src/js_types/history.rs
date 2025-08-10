@@ -1,4 +1,4 @@
-use intmax2_client_sdk::client::history::{EntryStatus, HistoryEntry};
+use intmax2_client_sdk::client::strategy::entry_status::{EntryStatus, HistoryEntry};
 use intmax2_interfaces::data::{
     deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData,
 };

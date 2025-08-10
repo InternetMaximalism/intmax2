@@ -52,7 +52,7 @@ use super::{
         WITHDRAWAL_FEE_MEMO,
     },
     fee_proof::{generate_fee_proof, quote_transfer_fee},
-    history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
+    history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history},
     misc::payment_memo::{payment_memo_topic, PaymentMemo},
     receipt::validate_transfer_receipt,
     strategy::{
@@ -68,7 +68,8 @@ use crate::{
         fee_payment::generate_withdrawal_transfers,
         receipt::generate_transfer_receipt,
         strategy::{
-            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
+            entry_status::HistoryEntry, mining::validate_mining_deposit_criteria,
+            utils::wait_till_validity_prover_synced,
         },
         sync::utils::generate_salt,
         types::{
