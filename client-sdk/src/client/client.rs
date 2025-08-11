@@ -66,6 +66,7 @@ use super::{
 use crate::{
     client::{
         fee_payment::generate_withdrawal_transfers,
+        history::{fetch_deposit_batch, fetch_transfer_batch, fetch_tx_batch},
         receipt::generate_transfer_receipt,
         strategy::{
             entry_status::HistoryEntry, mining::validate_mining_deposit_criteria,
@@ -784,6 +785,30 @@ impl Client {
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
         fetch_tx_history(self, view_pair, cursor).await
+    }
+
+    pub async fn fetch_deposit_batch(
+        &self,
+        view_pair: ViewPair,
+        digests: &[Bytes32],
+    ) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
+        fetch_deposit_batch(self, view_pair, digests).await
+    }
+
+    pub async fn fetch_transfer_batch(
+        &self,
+        view_pair: ViewPair,
+        digests: &[Bytes32],
+    ) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
+        fetch_transfer_batch(self, view_pair, digests).await
+    }
+
+    pub async fn fetch_tx_batch(
+        &self,
+        view_pair: ViewPair,
+        digests: &[Bytes32],
+    ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
+        fetch_tx_batch(self, view_pair, digests).await
     }
 
     pub async fn quote_transfer_fee(
