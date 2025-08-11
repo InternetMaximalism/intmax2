@@ -3,6 +3,7 @@ use intmax2_interfaces::{
     data::{deposit_data::DepositData, transfer_data::TransferData, tx_data::TxData},
     utils::key::ViewPair,
 };
+use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 
 use crate::client::strategy::entry_status::HistoryEntry;
 
@@ -85,4 +86,67 @@ pub async fn fetch_tx_history(
         history,
         cursor_response.expect("Cursor response should be present"),
     ))
+}
+
+pub async fn fetch_deposit_batch(
+    client: &Client,
+    view_pair: ViewPair,
+    digests: &[Bytes32],
+) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
+    // We don't need to check validity prover's sync status like in strategy
+    // because fetching history is not a critical operation.
+    let current_time = chrono::Utc::now().timestamp() as u64;
+    let (history, _) = fetch_deposit_info(
+        client.store_vault_server.as_ref(),
+        client.validity_prover.as_ref(),
+        &client.liquidity_contract,
+        view_pair,
+        current_time,
+        digests,
+        &[],
+        None,
+        client.config.deposit_timeout,
+    )
+    .await?;
+    Ok(history)
+}
+
+pub async fn fetch_transfer_batch(
+    client: &Client,
+    view_pair: ViewPair,
+    digests: &[Bytes32],
+) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
+    let current_time = chrono::Utc::now().timestamp() as u64;
+    let (history, _) = fetch_transfer_info(
+        client.store_vault_server.as_ref(),
+        client.validity_prover.as_ref(),
+        view_pair,
+        current_time,
+        digests,
+        &[],
+        None,
+        client.config.tx_timeout,
+    )
+    .await?;
+    Ok(history)
+}
+
+pub async fn fetch_tx_batch(
+    client: &Client,
+    view_pair: ViewPair,
+    digests: &[Bytes32],
+) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
+    let current_time = chrono::Utc::now().timestamp() as u64;
+    let (history, _) = fetch_tx_info(
+        client.store_vault_server.as_ref(),
+        client.validity_prover.as_ref(),
+        view_pair,
+        current_time,
+        digests,
+        &[],
+        None,
+        client.config.tx_timeout,
+    )
+    .await?;
+    Ok(history)
 }
