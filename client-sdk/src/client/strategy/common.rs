@@ -21,22 +21,27 @@ pub async fn fetch_decrypt_validate<T: BlsEncryption + Validation>(
     data_type: DataType,
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
-    cursor: &MetaDataCursor,
-) -> Result<(Vec<(MetaData, T)>, MetaDataCursorResponse), StrategyError> {
+    cursor: Option<&MetaDataCursor>,
+) -> Result<(Vec<(MetaData, T)>, Option<MetaDataCursorResponse>), StrategyError> {
     // fetch pending data
-    let encrypted_included_data_with_meta = store_vault_server
+    let mut all_encrypted_data_with_meta = store_vault_server
         .get_data_batch(view_priv, &data_type.to_topic(), included_digests)
         .await?;
 
     // fetch unprocessed data
-    let (encrypted_unprocessed_data_with_meta, cursor_response) = store_vault_server
-        .get_data_sequence(view_priv, &data_type.to_topic(), cursor)
-        .await?;
+    let cursor_response = if let Some(cursor) = cursor {
+        let (encrypted_unprocessed_data_with_meta, cursor_response) = store_vault_server
+            .get_data_sequence(view_priv, &data_type.to_topic(), cursor)
+            .await?;
+        all_encrypted_data_with_meta.extend(encrypted_unprocessed_data_with_meta);
+        Some(cursor_response)
+    } else {
+        None
+    };
 
     // decrypt
-    let data_with_meta = encrypted_included_data_with_meta
+    let data_with_meta = all_encrypted_data_with_meta
         .into_iter()
-        .chain(encrypted_unprocessed_data_with_meta.into_iter())
         .unique_by(|data_with_meta| data_with_meta.meta.digest) // remove duplicates
         .filter_map(|data_with_meta| {
             let DataWithMetaData { meta, data } = data_with_meta;

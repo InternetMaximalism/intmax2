@@ -27,9 +27,15 @@ pub async fn fetch_deposit_info(
     current_time: u64, // current timestamp for timeout checking
     included_digests: &[Bytes32],
     excluded_digests: &[Bytes32],
-    cursor: &MetaDataCursor,
+    cursor: Option<&MetaDataCursor>,
     deposit_timeout: u64,
-) -> Result<(Vec<HistoryEntry<DepositData>>, MetaDataCursorResponse), StrategyError> {
+) -> Result<
+    (
+        Vec<HistoryEntry<DepositData>>,
+        Option<MetaDataCursorResponse>,
+    ),
+    StrategyError,
+> {
     let mut all = Vec::new();
     let (data_with_meta, cursor_response) = fetch_decrypt_validate::<DepositData>(
         store_vault_server,
@@ -116,8 +122,12 @@ pub async fn fetch_deposit_info(
         let HistoryEntry { meta, .. } = entry;
         (meta.timestamp, meta.digest.to_hex())
     });
-    if cursor.order == CursorOrder::Desc {
-        all.reverse();
+
+    if let Some(cursor) = cursor {
+        // If cursor is provided, we need to respect the order
+        if cursor.order == CursorOrder::Desc {
+            all.reverse();
+        }
     }
 
     Ok((all, cursor_response))
@@ -149,10 +159,12 @@ pub async fn fetch_all_unprocessed_deposit_info(
             current_time,
             &included_digests,
             &process_status.processed_digests,
-            &cursor,
+            Some(&cursor),
             deposit_timeout,
         )
         .await?;
+        let cursor_response = cursor_response.expect("Cursor response should be present");
+
         if !included_digests.is_empty() {
             included_digests = Vec::new(); // clear included_digests after first fetch
         }

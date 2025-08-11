@@ -28,11 +28,14 @@ pub async fn fetch_deposit_history(
         current_time,
         &[],
         &[],
-        cursor,
+        Some(cursor),
         client.config.deposit_timeout,
     )
     .await?;
-    Ok((history, cursor_response))
+    Ok((
+        history,
+        cursor_response.expect("Cursor response should be present"),
+    ))
 }
 
 pub async fn fetch_transfer_history(
@@ -49,12 +52,15 @@ pub async fn fetch_transfer_history(
         current_time,
         &[],
         &[],
-        cursor,
+        Some(cursor),
         client.config.tx_timeout,
     )
     .await?;
 
-    Ok((history, cursor_response))
+    Ok((
+        history,
+        cursor_response.expect("Cursor response should be present"),
+    ))
 }
 
 pub async fn fetch_tx_history(
@@ -70,10 +76,13 @@ pub async fn fetch_tx_history(
         current_time,
         &[],
         &[],
-        cursor,
+        Some(cursor),
         client.config.tx_timeout,
     )
     .await?;
 
-    Ok((history, cursor_response))
+    Ok((
+        history,
+        cursor_response.expect("Cursor response should be present"),
+    ))
 }
