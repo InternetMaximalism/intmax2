@@ -52,7 +52,7 @@ use super::{
         WITHDRAWAL_FEE_MEMO,
     },
     fee_proof::{generate_fee_proof, quote_transfer_fee},
-    history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history, HistoryEntry},
+    history::{fetch_deposit_history, fetch_transfer_history, fetch_tx_history},
     misc::payment_memo::{payment_memo_topic, PaymentMemo},
     receipt::validate_transfer_receipt,
     strategy::{
@@ -66,9 +66,11 @@ use super::{
 use crate::{
     client::{
         fee_payment::generate_withdrawal_transfers,
+        history::{fetch_deposit_batch, fetch_transfer_batch, fetch_tx_batch},
         receipt::generate_transfer_receipt,
         strategy::{
-            mining::validate_mining_deposit_criteria, utils::wait_till_validity_prover_synced,
+            entry_status::HistoryEntry, mining::validate_mining_deposit_criteria,
+            strategy::GroupedEntries, utils::wait_till_validity_prover_synced,
         },
         sync::utils::generate_salt,
         types::{
@@ -262,7 +264,7 @@ impl Client {
         .await?;
 
         let current_time = chrono::Utc::now().timestamp() as u64;
-        let tx_info = fetch_all_unprocessed_tx_info(
+        let tx_history_entries = fetch_all_unprocessed_tx_info(
             self.store_vault_server.as_ref(),
             self.validity_prover.as_ref(),
             view_pair,
@@ -271,6 +273,7 @@ impl Client {
             self.config.tx_timeout,
         )
         .await?;
+        let tx_info = GroupedEntries::from_history_entries(&tx_history_entries);
         if !tx_info.settled.is_empty() || !tx_info.pending.is_empty() {
             if already_synced {
                 return Err(ClientError::UnexpectedError(
@@ -782,6 +785,30 @@ impl Client {
         cursor: &MetaDataCursor,
     ) -> Result<(Vec<HistoryEntry<TxData>>, MetaDataCursorResponse), ClientError> {
         fetch_tx_history(self, view_pair, cursor).await
+    }
+
+    pub async fn fetch_deposit_batch(
+        &self,
+        view_pair: ViewPair,
+        digests: &[Bytes32],
+    ) -> Result<Vec<HistoryEntry<DepositData>>, ClientError> {
+        fetch_deposit_batch(self, view_pair, digests).await
+    }
+
+    pub async fn fetch_transfer_batch(
+        &self,
+        view_pair: ViewPair,
+        digests: &[Bytes32],
+    ) -> Result<Vec<HistoryEntry<TransferData>>, ClientError> {
+        fetch_transfer_batch(self, view_pair, digests).await
+    }
+
+    pub async fn fetch_tx_batch(
+        &self,
+        view_pair: ViewPair,
+        digests: &[Bytes32],
+    ) -> Result<Vec<HistoryEntry<TxData>>, ClientError> {
+        fetch_tx_batch(self, view_pair, digests).await
     }
 
     pub async fn quote_transfer_fee(

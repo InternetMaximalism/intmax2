@@ -1,6 +1,6 @@
 use chrono::TimeZone;
 use colored::{ColoredString, Colorize as _};
-use intmax2_client_sdk::client::history::EntryStatus;
+use intmax2_client_sdk::client::strategy::entry_status::EntryStatus;
 use intmax2_interfaces::{
     api::store_vault_server::types::{CursorOrder, MetaDataCursor},
     data::{
