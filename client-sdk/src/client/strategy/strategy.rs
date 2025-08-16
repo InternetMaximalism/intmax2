@@ -9,8 +9,11 @@ use intmax2_interfaces::{
         },
     },
     data::{
-        deposit_data::DepositData, meta_data::MetaDataWithBlockNumber, transfer_data::TransferData,
-        tx_data::TxData, user_data::Balances,
+        deposit_data::DepositData,
+        meta_data::{MetaData, MetaDataWithBlockNumber},
+        transfer_data::TransferData,
+        tx_data::TxData,
+        user_data::Balances,
     },
     utils::key::ViewPair,
 };
@@ -27,6 +30,7 @@ use crate::{
     client::strategy::{
         common::fetch_user_data,
         deposit::fetch_all_unprocessed_deposit_info,
+        entry_status::{EntryStatus, HistoryEntry},
         mining::{fetch_mining_info, MiningStatus},
         transfer::fetch_all_unprocessed_transfer_info,
         tx::fetch_all_unprocessed_tx_info,
@@ -38,6 +42,44 @@ use crate::{
         liquidity_contract::LiquidityContract, rollup_contract::RollupContract,
     },
 };
+
+pub struct GroupedEntries<T> {
+    pub settled: Vec<(MetaDataWithBlockNumber, T)>,
+    pub pending: Vec<(MetaData, T)>,
+    pub unprocessed: Vec<(MetaData, T)>,
+}
+
+impl<T: Clone> GroupedEntries<T> {
+    pub fn from_history_entries(entries: &[HistoryEntry<T>]) -> Self {
+        let mut settled = Vec::new();
+        let mut pending = Vec::new();
+        let mut unprocessed = Vec::new();
+
+        for entry in entries {
+            match &entry.status {
+                EntryStatus::Settled(block_number) => {
+                    let meta = MetaDataWithBlockNumber {
+                        meta: entry.meta.clone(),
+                        block_number: *block_number,
+                    };
+                    settled.push((meta, entry.data.clone()));
+                }
+                EntryStatus::Pending => {
+                    pending.push((entry.meta.clone(), entry.data.clone()));
+                }
+                EntryStatus::Timeout => {
+                    unprocessed.push((entry.meta.clone(), entry.data.clone()));
+                }
+                _ => panic!("Unexpected entry status: {:?}", entry.status),
+            }
+        }
+        Self {
+            settled,
+            pending,
+            unprocessed,
+        }
+    }
+}
 
 // Next sync action
 #[derive(Debug, Clone)]
@@ -102,7 +144,7 @@ pub async fn determine_sequence(
         return Err(StrategyError::BalanceInsufficientBeforeSync);
     }
 
-    let tx_info = fetch_all_unprocessed_tx_info(
+    let tx_history_entries = fetch_all_unprocessed_tx_info(
         store_vault_server,
         validity_prover,
         view_pair,
@@ -111,6 +153,7 @@ pub async fn determine_sequence(
         tx_timeout,
     )
     .await?;
+    let tx_info = GroupedEntries::from_history_entries(&tx_history_entries);
 
     //  First, if there is a pending tx, return a pending error
     if let Some((meta, _tx_data)) = tx_info.pending.first() {
@@ -121,7 +164,7 @@ pub async fn determine_sequence(
     }
 
     // Then, collect deposit and transfer data
-    let deposit_info = fetch_all_unprocessed_deposit_info(
+    let deposit_history_entries = fetch_all_unprocessed_deposit_info(
         store_vault_server,
         validity_prover,
         liquidity_contract,
@@ -131,7 +174,9 @@ pub async fn determine_sequence(
         deposit_timeout,
     )
     .await?;
-    let transfer_info = fetch_all_unprocessed_transfer_info(
+    let deposit_info = GroupedEntries::from_history_entries(&deposit_history_entries);
+
+    let transfer_history_entries = fetch_all_unprocessed_transfer_info(
         store_vault_server,
         validity_prover,
         view_pair,
@@ -140,6 +185,8 @@ pub async fn determine_sequence(
         tx_timeout,
     )
     .await?;
+    let transfer_info = GroupedEntries::from_history_entries(&transfer_history_entries);
+
     log::info!(
         "num of deposits: pending={}, settled={}",
         deposit_info.pending.len(),
@@ -323,7 +370,7 @@ pub async fn determine_withdrawals(
     wait_till_validity_prover_synced(validity_prover, false, onchain_block_number).await?;
 
     let user_data = fetch_user_data(store_vault_server, view_pair).await?;
-    let withdrawal_info = fetch_all_unprocessed_withdrawal_info(
+    let withdrawal_history_entries = fetch_all_unprocessed_withdrawal_info(
         store_vault_server,
         validity_prover,
         view_pair,
@@ -332,6 +379,8 @@ pub async fn determine_withdrawals(
         tx_timeout,
     )
     .await?;
+    let withdrawal_info = GroupedEntries::from_history_entries(&withdrawal_history_entries);
+
     let pending_withdrawal_digests = withdrawal_info
         .pending
         .iter()
