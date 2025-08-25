@@ -18,7 +18,7 @@ jobs:
     name: fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
@@ -36,7 +36,7 @@ jobs:
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
@@ -51,7 +51,7 @@ jobs:
     name: typos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: typos-action
         uses: crate-ci/typos@master
 
@@ -60,7 +60,7 @@ jobs:
     needs: format-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
@@ -92,7 +92,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
