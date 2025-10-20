@@ -10,7 +10,7 @@ use crate::{
 
 use super::types::{DataWithMetaData, MetaDataCursor, MetaDataCursorResponse};
 
-pub const MAX_BATCH_SIZE: usize = 256;
+pub const MAX_BATCH_SIZE: usize = 64;
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
