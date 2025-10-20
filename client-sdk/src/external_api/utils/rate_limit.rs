@@ -1,9 +1,21 @@
-use std::{f64, future::Future, sync::Arc};
+use std::{f64, future::Future, sync::Arc, time::Duration};
 
-use tokio::{
-    sync::Mutex,
-    time::{Duration, Instant},
-};
+use tokio::sync::Mutex;
+
+#[cfg(target_arch = "wasm32")]
+use instant::Instant;
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::time::Instant;
+
+#[cfg(target_arch = "wasm32")]
+async fn sleep(duration: Duration) {
+    gloo_timers::future::sleep(duration).await;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
+}
 
 /// Simple token bucket rate limiter that works on native and WASM targets.
 #[derive(Debug)]
@@ -76,7 +88,7 @@ impl RequestRateLimiter {
 
             // Drop the lock before awaiting.
             drop(state);
-            tokio::time::sleep(sleep_duration).await;
+            sleep(sleep_duration).await;
         }
     }
 
