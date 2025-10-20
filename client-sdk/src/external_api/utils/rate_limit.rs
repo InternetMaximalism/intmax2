@@ -36,22 +36,19 @@ impl RequestRateLimiter {
     ///
     /// # Panics
     /// Panics if either parameter is zero.
-    pub fn new(permits_per_second: u32, capacity: u32) -> Self {
+    pub fn new(permits_per_second: f64, capacity: f64) -> Self {
         assert!(
-            permits_per_second > 0,
+            permits_per_second > 0.0,
             "permits_per_second must be positive"
         );
-        assert!(capacity > 0, "capacity must be positive");
-
-        let refill_rate_per_sec = permits_per_second as f64;
-        let capacity = capacity as f64;
+        assert!(capacity > 0.0, "capacity must be positive");
 
         RequestRateLimiter {
             state: Mutex::new(LimiterState {
                 tokens: capacity,
                 last_refill: Instant::now(),
             }),
-            refill_rate_per_sec,
+            refill_rate_per_sec: permits_per_second,
             capacity,
         }
     }
@@ -103,25 +100,61 @@ impl RequestRateLimiter {
     }
 }
 
+fn parse_permits_per_second(raw: &str) -> Option<f64> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+
+    if let Some(stripped) = lower.strip_suffix("ms") {
+        let millis: f64 = stripped.trim().parse().ok()?;
+        if millis <= 0.0 {
+            return None;
+        }
+        return Some(1_000.0 / millis);
+    }
+
+    if let Some(stripped) = lower.strip_suffix("s") {
+        let seconds: f64 = stripped.trim().parse().ok()?;
+        if seconds <= 0.0 {
+            return None;
+        }
+        return Some(1.0 / seconds);
+    }
+
+    trimmed.parse::<f64>().ok().filter(|v| *v > 0.0)
+}
+
+fn parse_capacity(raw: &str) -> Option<f64> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    trimmed.parse::<f64>().ok().filter(|value| *value > 0.0)
+}
+
 pub fn limiter_from_env(
     permits_var: &str,
     burst_var: &str,
-    default_rps: u32,
+    default_rps: f64,
     default_burst_multiplier: u32,
 ) -> Arc<RequestRateLimiter> {
     let permits_per_second = std::env::var(permits_var)
         .ok()
-        .and_then(|value| value.parse::<u32>().ok())
-        .filter(|v| *v > 0)
+        .and_then(|value| parse_permits_per_second(&value))
+        .filter(|v| *v > 0.0)
         .unwrap_or(default_rps);
 
-    let default_capacity = permits_per_second.saturating_mul(default_burst_multiplier);
+    let default_capacity =
+        (permits_per_second * default_burst_multiplier as f64).max(permits_per_second);
 
     let capacity = std::env::var(burst_var)
         .ok()
-        .and_then(|value| value.parse::<u32>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(default_capacity.max(permits_per_second));
+        .and_then(|value| parse_capacity(&value))
+        .filter(|v| *v > 0.0)
+        .unwrap_or(default_capacity);
 
     Arc::new(RequestRateLimiter::new(permits_per_second, capacity))
 }
@@ -131,7 +164,7 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn waits_until_tokens_refilled() {
-        let limiter = RequestRateLimiter::new(5, 5);
+        let limiter = RequestRateLimiter::new(5.0, 5.0);
 
         // Consume entire bucket instantly.
         limiter.acquire_permits(5).await;
@@ -144,5 +177,23 @@ mod tests {
             waited >= Duration::from_millis(180),
             "expected to wait for refill, but only waited {waited:?}",
         );
+    }
+
+    #[test]
+    fn parses_seconds_interval_into_rps() {
+        let parsed = parse_permits_per_second("2s").expect("should parse");
+        assert!((parsed - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parses_millis_interval_into_rps() {
+        let parsed = parse_permits_per_second("500ms").expect("should parse");
+        assert!((parsed - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parses_float_rps() {
+        let parsed = parse_permits_per_second("0.25").expect("should parse");
+        assert!((parsed - 0.25).abs() < f64::EPSILON);
     }
 }

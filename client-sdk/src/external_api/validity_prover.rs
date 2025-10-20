@@ -282,5 +282,5 @@ impl ValidityProverClientInterface for ValidityProverClient {
     }
 }
 
-const DEFAULT_RPS: u32 = 1;
+const DEFAULT_RPS: f64 = 1.0;
 const DEFAULT_BURST_MULTIPLIER: u32 = 2;

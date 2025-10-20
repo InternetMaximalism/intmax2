@@ -32,7 +32,7 @@ use std::sync::Arc;
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute for normal requests
 const TIME_TO_EXPIRY_READONLY: u64 = 60 * 60 * 24; // 24 hours for readonly
-const STORE_VAULT_DEFAULT_RPS: u32 = 1;
+const STORE_VAULT_DEFAULT_RPS: f64 = 1.0;
 const STORE_VAULT_DEFAULT_BURST_MULTIPLIER: u32 = 2;
 
 #[derive(Debug, Clone)]
