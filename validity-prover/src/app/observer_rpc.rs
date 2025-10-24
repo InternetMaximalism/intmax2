@@ -469,7 +469,7 @@ impl SyncEvent for RPCObserver {
     }
 }
 
-// This function is used to generate an error for trigging RPC error for testing purposes.
+// This function is used to generate an error for triggering RPC error for testing purposes.
 pub fn generate_error_for_test() -> Result<(), ObserverError> {
     let error_timestamps = match std::env::var("ERROR_TIMESTAMPS") {
         Ok(val) => val,
