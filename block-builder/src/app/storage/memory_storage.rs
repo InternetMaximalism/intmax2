@@ -207,7 +207,7 @@ impl Storage for InMemoryStorage {
             )));
         }
 
-        // verify signature
+        // Verify signature
         signature
             .verify(&memo.block_sign_payload, memo.pubkey_hash)
             .map_err(|e| {
