@@ -200,6 +200,13 @@ impl Storage for InMemoryStorage {
                 "memo not found for block_id: {block_id}"
             )))?;
 
+        // verify pubkey membership
+        if !memo.pubkeys.contains(&signature.pubkey) {
+            return Err(StorageError::AddSignatureError(format!(
+                "pubkey not found in memo for block_id: {block_id}"
+            )));
+        }
+
         // verify signature
         signature
             .verify(&memo.block_sign_payload, memo.pubkey_hash)
