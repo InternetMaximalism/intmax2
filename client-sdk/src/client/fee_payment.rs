@@ -203,6 +203,15 @@ pub async fn generate_withdrawal_transfers(
     })
 }
 
+pub async fn get_used_memos(
+    store_vault_server: &dyn StoreVaultClientInterface,
+    view_pair: ViewPair,
+) -> Result<Vec<PaymentMemo>, SyncError> {
+    let used_memos =
+        get_all_payment_memos(store_vault_server, view_pair.view, USED_OR_INVALID_MEMO).await?;
+    Ok(used_memos)
+}
+
 /// get unused payment memos
 pub async fn get_unused_payments(
     store_vault_server: &dyn StoreVaultClientInterface,
