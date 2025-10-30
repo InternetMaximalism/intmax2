@@ -5,8 +5,11 @@ use crate::{
     client::{get_client, Config},
     init_logger,
     js_types::{
-        client::JsTransferRequest, fee::JsWithdrawalTransfers, payment_memo::JsPaymentMemoEntry,
+        client::JsTransferRequest,
+        fee::JsWithdrawalTransfers,
+        payment_memo::{JsPaymentMemo, JsPaymentMemoEntry},
     },
+    utils::str_to_view_pair,
 };
 
 // Quote the fee for withdrawal and claim fee (if with_claim_fee is true), and generate the corresponding transfers
@@ -56,5 +59,22 @@ pub fn generate_fee_payment_memo(
         .into_iter()
         .map(JsPaymentMemoEntry::from)
         .collect();
+    Ok(js_payment_memos)
+}
+
+#[wasm_bindgen]
+pub async fn get_used_memos(
+    config: &Config,
+    view_pair: &str,
+) -> Result<Vec<JsPaymentMemo>, JsError> {
+    init_logger();
+    let client = get_client(config);
+    let view_pair = str_to_view_pair(view_pair)?;
+    let payment_memos = intmax2_client_sdk::client::fee_payment::get_used_memos(
+        client.store_vault_server.as_ref(),
+        view_pair,
+    )
+    .await?;
+    let js_payment_memos = payment_memos.into_iter().map(JsPaymentMemo::from).collect();
     Ok(js_payment_memos)
 }
