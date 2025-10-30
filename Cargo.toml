@@ -29,7 +29,7 @@ plonky2_u32 = { git = "https://github.com/InternetMaximalism/plonky2-u32.git", b
 plonky2_bn254 = { git = "https://github.com/InternetMaximalism/plonky2_bn254" }
 plonky2_keccak = { git = "https://github.com/InternetMaximalism/plonky2_keccak" }
 # Only features sync,macros,io-util,rt,time are supported on wasm.
-tokio = { version = "1.45", features = [
+tokio = { version = "1.48", features = [
     "io-util",
     "macros",
     "rt",
