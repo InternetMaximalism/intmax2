@@ -1,4 +1,5 @@
 use alloy::{primitives::B256, providers::Provider};
+use common::env::EnvType;
 use intmax2_client_sdk::{
     client::client::Client,
     external_api::{
@@ -225,6 +226,11 @@ pub async fn fetch_predicate_permission(
     let value = convert_u256_to_alloy(value);
     let amount = convert_u256_to_alloy(amount);
     let token_id = convert_u256_to_alloy(token_id);
+    let chain_id = if env.env == EnvType::Prod {
+        1u32
+    } else {
+        11155111u32
+    };
     let request = match token_type {
         TokenType::NATIVE => PermissionRequest::Native {
             recipient_salt_hash,
@@ -249,7 +255,7 @@ pub async fn fetch_predicate_permission(
     };
     let from = convert_address_to_alloy(from);
     let permission = predicate_client
-        .get_deposit_permission(from, aml_permitter_address, value, request)
+        .get_deposit_permission(from, aml_permitter_address, value, chain_id, request)
         .await?;
     Ok(permission)
 }
