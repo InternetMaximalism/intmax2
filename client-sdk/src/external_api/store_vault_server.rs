@@ -19,18 +19,26 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use reqwest::Client;
+use serde::{de::DeserializeOwned, Serialize};
+use std::sync::Arc;
 
-use crate::external_api::utils::query::build_client;
+use crate::external_api::utils::{
+    query::build_client,
+    rate_limit::{limiter_from_env, RequestRateLimiter},
+};
 
 use super::utils::query::post_request;
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute for normal requests
 const TIME_TO_EXPIRY_READONLY: u64 = 60 * 60 * 24; // 24 hours for readonly
+const STORE_VAULT_DEFAULT_RPS: f64 = 1.0;
+const STORE_VAULT_DEFAULT_BURST_MULTIPLIER: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub struct StoreVaultServerClient {
     client: Client,
     base_url: String,
+    rate_limiter: Arc<RequestRateLimiter>,
 }
 
 impl StoreVaultServerClient {
@@ -38,7 +46,29 @@ impl StoreVaultServerClient {
         StoreVaultServerClient {
             client: build_client(),
             base_url: base_url.to_string(),
+            rate_limiter: limiter_from_env(
+                "STORE_VAULT_MAX_RPS",
+                "STORE_VAULT_MAX_BURST",
+                STORE_VAULT_DEFAULT_RPS,
+                STORE_VAULT_DEFAULT_BURST_MULTIPLIER,
+            ),
         }
+    }
+
+    async fn post_with_limit<B, R>(
+        &self,
+        endpoint: &str,
+        body: Option<&B>,
+    ) -> Result<R, ServerError>
+    where
+        B: Serialize,
+        R: DeserializeOwned,
+    {
+        self.rate_limiter
+            .run(1, || async {
+                post_request(&self.client, &self.base_url, endpoint, body).await
+            })
+            .await
     }
 }
 
@@ -59,13 +89,8 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             prev_digest,
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-        post_request::<_, ()>(
-            &self.client,
-            &self.base_url,
-            "/save-snapshot",
-            Some(&request_with_auth),
-        )
-        .await?;
+        self.post_with_limit::<_, ()>("/save-snapshot", Some(&request_with_auth))
+            .await?;
         Ok(())
     }
 
@@ -80,13 +105,9 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             pubkey: key.pubkey,
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-        let response: GetSnapshotResponse = post_request(
-            &self.client,
-            &self.base_url,
-            "/get-snapshot",
-            Some(&request_with_auth),
-        )
-        .await?;
+        let response: GetSnapshotResponse = self
+            .post_with_limit("/get-snapshot", Some(&request_with_auth))
+            .await?;
         Ok(response.data)
     }
 
@@ -102,13 +123,9 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
                 data: chunk.to_vec(),
             };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-            let response: SaveDataBatchResponse = post_request(
-                &self.client,
-                &self.base_url,
-                "/save-data-batch",
-                Some(&request_with_auth),
-            )
-            .await?;
+            let response: SaveDataBatchResponse = self
+                .post_with_limit("/save-data-batch", Some(&request_with_auth))
+                .await?;
             all_digests.extend(response.digests);
         }
         Ok(all_digests)
@@ -129,13 +146,9 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
                 pubkey: key.pubkey,
             };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-            let response: GetDataBatchResponse = post_request(
-                &self.client,
-                &self.base_url,
-                "/get-data-batch",
-                Some(&request_with_auth),
-            )
-            .await?;
+            let response: GetDataBatchResponse = self
+                .post_with_limit("/get-data-batch", Some(&request_with_auth))
+                .await?;
             all_data.extend(response.data);
         }
         Ok(all_data)
@@ -177,13 +190,9 @@ impl StoreVaultClientInterface for StoreVaultServerClient {
             },
             auth: auth.clone(),
         };
-        let response: GetDataSequenceResponse = post_request(
-            &self.client,
-            &self.base_url,
-            "/get-data-sequence",
-            Some(&request_with_auth),
-        )
-        .await?;
+        let response: GetDataSequenceResponse = self
+            .post_with_limit("/get-data-sequence", Some(&request_with_auth))
+            .await?;
         Ok((response.data, response.cursor_response))
     }
 }

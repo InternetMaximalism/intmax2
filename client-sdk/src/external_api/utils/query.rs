@@ -4,7 +4,7 @@ use intmax2_interfaces::api::error::ServerError;
 use reqwest::{header, Client, Response, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::external_api::utils::retry::with_retry;
+use crate::external_api::utils::{retry::with_retry, time::sleep_for};
 
 /// Timeout for reqwest requests.
 /// Because WASM only accepts timeout in the request builder, not the client builder,
@@ -13,6 +13,8 @@ pub const REQWEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Maximum response body size for logging (in characters)
 const MAX_RESPONSE_LOG_SIZE: usize = 500;
+const DEFAULT_BAD_GATEWAY_RETRIES: u32 = 1;
+const DEFAULT_BAD_GATEWAY_RETRY_DELAY_SECS: u64 = 30;
 
 #[derive(Debug, Deserialize)]
 struct ErrorResponse {
@@ -133,9 +135,42 @@ fn serialize_body_for_logging<B: Serialize>(body: Option<&B>) -> Result<BodyInfo
 async fn execute_request_with_retry(
     request_builder: reqwest::RequestBuilder,
 ) -> Result<Response, ServerError> {
-    with_retry(|| async { request_builder.try_clone().unwrap().send().await })
-        .await
-        .map_err(|e| ServerError::NetworkError(e.to_string()))
+    let max_502_retries: u32 = std::env::var("BAD_GATEWAY_RETRY_LIMIT")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(DEFAULT_BAD_GATEWAY_RETRIES);
+
+    let retry_delay_secs: u64 = std::env::var("BAD_GATEWAY_RETRY_DELAY_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_BAD_GATEWAY_RETRY_DELAY_SECS);
+
+    let mut bad_gateway_retries: u32 = 0;
+
+    loop {
+        let response = with_retry(|| async { request_builder.try_clone().unwrap().send().await })
+            .await
+            .map_err(|e| ServerError::NetworkError(e.to_string()))?;
+
+        let status = response.status().as_u16();
+
+        if status != 502 {
+            return Ok(response);
+        }
+
+        if bad_gateway_retries >= max_502_retries {
+            return Ok(response);
+        }
+
+        log::warn!(
+            "Received 502 Bad Gateway from upstream. Waiting {delay}s before retry (attempt {}/{})",
+            bad_gateway_retries + 1,
+            max_502_retries,
+            delay = retry_delay_secs
+        );
+        sleep_for(retry_delay_secs).await;
+        bad_gateway_retries += 1;
+    }
 }
 
 /// Handles HTTP response, including error cases and deserialization

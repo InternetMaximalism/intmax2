@@ -1,6 +1,7 @@
 use super::utils::query::post_request;
 use crate::external_api::utils::{
     query::{build_client, REQWEST_TIMEOUT},
+    rate_limit::{limiter_from_env, RequestRateLimiter},
     retry::with_retry,
 };
 use async_trait::async_trait;
@@ -26,14 +27,19 @@ use intmax2_interfaces::{
 };
 use intmax2_zkp::ethereum_types::bytes32::Bytes32;
 use reqwest::Client;
+use serde::{de::DeserializeOwned, Serialize};
+use std::sync::Arc;
 
 const TIME_TO_EXPIRY: u64 = 60; // 1 minute for normal requests
 const TIME_TO_EXPIRY_READONLY: u64 = 60 * 60 * 24; // 24 hours for readonly
+const STORE_VAULT_DEFAULT_RPS: f64 = 1.0;
+const STORE_VAULT_DEFAULT_BURST_MULTIPLIER: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub struct S3StoreVaultClient {
     client: Client,
     base_url: String,
+    rate_limiter: Arc<RequestRateLimiter>,
 }
 
 impl S3StoreVaultClient {
@@ -41,7 +47,29 @@ impl S3StoreVaultClient {
         S3StoreVaultClient {
             client: build_client(),
             base_url: base_url.to_string(),
+            rate_limiter: limiter_from_env(
+                "STORE_VAULT_MAX_RPS",
+                "STORE_VAULT_MAX_BURST",
+                STORE_VAULT_DEFAULT_RPS,
+                STORE_VAULT_DEFAULT_BURST_MULTIPLIER,
+            ),
         }
+    }
+
+    async fn post_with_limit<B, R>(
+        &self,
+        endpoint: &str,
+        body: Option<&B>,
+    ) -> Result<R, ServerError>
+    where
+        B: Serialize,
+        R: DeserializeOwned,
+    {
+        self.rate_limiter
+            .run(1, || async {
+                post_request(&self.client, &self.base_url, endpoint, body).await
+            })
+            .await
     }
 }
 
@@ -62,13 +90,9 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             digest,
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-        let response: S3PreSaveSnapshotResponse = post_request(
-            &self.client,
-            &self.base_url,
-            "/pre-save-snapshot",
-            Some(&request_with_auth),
-        )
-        .await?;
+        let response: S3PreSaveSnapshotResponse = self
+            .post_with_limit("/pre-save-snapshot", Some(&request_with_auth))
+            .await?;
 
         // upload data to s3
         upload_s3(&self.client, &response.presigned_url, data).await?;
@@ -81,13 +105,8 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             digest,
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-        let () = post_request(
-            &self.client,
-            &self.base_url,
-            "/save-snapshot",
-            Some(&request_with_auth),
-        )
-        .await?;
+        self.post_with_limit::<_, ()>("/save-snapshot", Some(&request_with_auth))
+            .await?;
 
         Ok(())
     }
@@ -103,13 +122,9 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             pubkey: key.pubkey,
         };
         let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-        let response: S3GetSnapshotResponse = post_request(
-            &self.client,
-            &self.base_url,
-            "/get-snapshot",
-            Some(&request_with_auth),
-        )
-        .await?;
+        let response: S3GetSnapshotResponse = self
+            .post_with_limit("/get-snapshot", Some(&request_with_auth))
+            .await?;
 
         match response.presigned_url {
             Some(url) => {
@@ -139,13 +154,9 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             let digests = data.iter().map(|entry| entry.digest).collect::<Vec<_>>();
             let request = S3SaveDataBatchRequest { data };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-            let response: S3SaveDataBatchResponse = post_request(
-                &self.client,
-                &self.base_url,
-                "/save-data-batch",
-                Some(&request_with_auth),
-            )
-            .await?;
+            let response: S3SaveDataBatchResponse = self
+                .post_with_limit("/save-data-batch", Some(&request_with_auth))
+                .await?;
 
             let data = chunk
                 .iter()
@@ -173,13 +184,9 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
                 pubkey: key.pubkey,
             };
             let request_with_auth = request.sign(view_key, TIME_TO_EXPIRY);
-            let response: S3GetDataBatchResponse = post_request(
-                &self.client,
-                &self.base_url,
-                "/get-data-batch",
-                Some(&request_with_auth),
-            )
-            .await?;
+            let response: S3GetDataBatchResponse = self
+                .post_with_limit("/get-data-batch", Some(&request_with_auth))
+                .await?;
             let urls = response
                 .presigned_urls_with_meta
                 .iter()
@@ -239,13 +246,9 @@ impl StoreVaultClientInterface for S3StoreVaultClient {
             },
             auth: auth.clone(),
         };
-        let response: S3GetDataSequenceResponse = post_request(
-            &self.client,
-            &self.base_url,
-            "/get-data-sequence",
-            Some(&request_with_auth),
-        )
-        .await?;
+        let response: S3GetDataSequenceResponse = self
+            .post_with_limit("/get-data-sequence", Some(&request_with_auth))
+            .await?;
 
         let urls = response
             .presigned_urls_with_meta

@@ -29,10 +29,13 @@ use plonky2::{
     plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs},
 };
 use reqwest::Client;
+use serde::{de::DeserializeOwned, Serialize};
+use std::sync::Arc;
 
-use crate::external_api::utils::query::build_client;
-
-use super::utils::query::{get_request, post_request};
+use crate::external_api::utils::{
+    query::{build_client, get_request, post_request},
+    rate_limit::{limiter_from_env, RequestRateLimiter},
+};
 
 type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
@@ -42,6 +45,7 @@ const D: usize = 2;
 pub struct ValidityProverClient {
     client: Client,
     base_url: String,
+    rate_limiter: Arc<RequestRateLimiter>,
 }
 
 impl ValidityProverClient {
@@ -49,7 +53,39 @@ impl ValidityProverClient {
         ValidityProverClient {
             client: build_client(),
             base_url: base_url.to_string(),
+            rate_limiter: limiter_from_env(
+                "VALIDITY_PROVER_MAX_RPS",
+                "VALIDITY_PROVER_MAX_BURST",
+                DEFAULT_RPS,
+                DEFAULT_BURST_MULTIPLIER,
+            ),
         }
+    }
+
+    async fn get_with_limit<Q, R>(
+        &self,
+        endpoint: &str,
+        query: Option<&Q>,
+    ) -> Result<R, ServerError>
+    where
+        Q: Serialize,
+        R: DeserializeOwned,
+    {
+        self.rate_limiter.acquire().await;
+        get_request(&self.client, &self.base_url, endpoint, query).await
+    }
+
+    async fn post_with_limit<B, R>(
+        &self,
+        endpoint: &str,
+        body: Option<&B>,
+    ) -> Result<R, ServerError>
+    where
+        B: Serialize,
+        R: DeserializeOwned,
+    {
+        self.rate_limiter.acquire().await;
+        post_request(&self.client, &self.base_url, endpoint, body).await
     }
 }
 
@@ -57,35 +93,28 @@ impl ValidityProverClient {
 impl ValidityProverClientInterface for ValidityProverClient {
     async fn get_block_number(&self) -> Result<u32, ServerError> {
         let response: GetBlockNumberResponse =
-            get_request::<(), _>(&self.client, &self.base_url, "/block-number", None).await?;
+            self.get_with_limit::<(), _>("/block-number", None).await?;
         Ok(response.block_number)
     }
 
     async fn get_validity_proof_block_number(&self) -> Result<u32, ServerError> {
-        let response: GetBlockNumberResponse = get_request::<(), _>(
-            &self.client,
-            &self.base_url,
-            "/validity-proof-block-number",
-            None,
-        )
-        .await?;
+        let response: GetBlockNumberResponse = self
+            .get_with_limit::<(), _>("/validity-proof-block-number", None)
+            .await?;
         Ok(response.block_number)
     }
 
     async fn get_next_deposit_index(&self) -> Result<u32, ServerError> {
-        let response: GetNextDepositIndexResponse =
-            get_request::<(), _>(&self.client, &self.base_url, "/next-deposit-index", None).await?;
+        let response: GetNextDepositIndexResponse = self
+            .get_with_limit::<(), _>("/next-deposit-index", None)
+            .await?;
         Ok(response.deposit_index)
     }
 
     async fn get_latest_included_deposit_index(&self) -> Result<Option<u32>, ServerError> {
-        let response: GetLatestIncludedDepositIndexResponse = get_request::<(), _>(
-            &self.client,
-            &self.base_url,
-            "/latest-included-deposit-index",
-            None,
-        )
-        .await?;
+        let response: GetLatestIncludedDepositIndexResponse = self
+            .get_with_limit::<(), _>("/latest-included-deposit-index", None)
+            .await?;
         Ok(response.deposit_index)
     }
 
@@ -102,13 +131,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
             leaf_block_number,
             is_prev_account_tree,
         };
-        let response: GetUpdateWitnessResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-update-witness",
-            Some(&query),
-        )
-        .await?;
+        let response: GetUpdateWitnessResponse = self
+            .get_with_limit("/get-update-witness", Some(&query))
+            .await?;
         Ok(response.update_witness)
     }
 
@@ -117,13 +142,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
         pubkey_salt_hash: Bytes32,
     ) -> Result<Option<DepositInfo>, ServerError> {
         let query = GetDepositInfoQuery { pubkey_salt_hash };
-        let response: GetDepositInfoResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-deposit-info",
-            Some(&query),
-        )
-        .await?;
+        let response: GetDepositInfoResponse = self
+            .get_with_limit("/get-deposit-info", Some(&query))
+            .await?;
         Ok(response.deposit_info)
     }
 
@@ -138,13 +159,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
                 pubkey_salt_hashes: chunk.to_vec(),
             };
 
-            let response: GetDepositInfoBatchResponse = post_request(
-                &self.client,
-                &self.base_url,
-                "/get-deposit-info-batch",
-                Some(&request),
-            )
-            .await?;
+            let response: GetDepositInfoBatchResponse = self
+                .post_with_limit("/get-deposit-info-batch", Some(&request))
+                .await?;
 
             all_deposit_info.extend(response.deposit_info);
         }
@@ -157,13 +174,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
         tx_tree_root: Bytes32,
     ) -> Result<Option<u32>, ServerError> {
         let query = GetBlockNumberByTxTreeRootQuery { tx_tree_root };
-        let response: GetBlockNumberByTxTreeRootResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-block-number-by-tx-tree-root",
-            Some(&query),
-        )
-        .await?;
+        let response: GetBlockNumberByTxTreeRootResponse = self
+            .get_with_limit("/get-block-number-by-tx-tree-root", Some(&query))
+            .await?;
         Ok(response.block_number)
     }
 
@@ -177,13 +190,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
             let request = GetBlockNumberByTxTreeRootBatchRequest {
                 tx_tree_roots: chunk.to_vec(),
             };
-            let response: GetBlockNumberByTxTreeRootBatchResponse = post_request(
-                &self.client,
-                &self.base_url,
-                "/get-block-number-by-tx-tree-root-batch",
-                Some(&request),
-            )
-            .await?;
+            let response: GetBlockNumberByTxTreeRootBatchResponse = self
+                .post_with_limit("/get-block-number-by-tx-tree-root-batch", Some(&request))
+                .await?;
             all_block_numbers.extend(response.block_numbers);
         }
 
@@ -195,13 +204,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
         block_number: u32,
     ) -> Result<ValidityWitness, ServerError> {
         let query = GetValidityWitnessQuery { block_number };
-        let response: GetValidityWitnessResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-validity-witness",
-            Some(&query),
-        )
-        .await?;
+        let response: GetValidityWitnessResponse = self
+            .get_with_limit("/get-validity-witness", Some(&query))
+            .await?;
         Ok(response.validity_witness)
     }
 
@@ -210,13 +215,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
         block_number: u32,
     ) -> Result<ProofWithPublicInputs<F, C, D>, ServerError> {
         let query = GetValidityProofQuery { block_number };
-        let response: GetValidityProofResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-validity-proof",
-            Some(&query),
-        )
-        .await?;
+        let response: GetValidityProofResponse = self
+            .get_with_limit("/get-validity-proof", Some(&query))
+            .await?;
         let validity_proof = response.validity_proof.decompress().map_err(|e| {
             ServerError::ProofDecodeError(format!("Failed to decompress proof: {e}"))
         })?;
@@ -232,13 +233,9 @@ impl ValidityProverClientInterface for ValidityProverClient {
             root_block_number,
             leaf_block_number,
         };
-        let response: GetBlockMerkleProofResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-block-merkle-proof",
-            Some(&query),
-        )
-        .await?;
+        let response: GetBlockMerkleProofResponse = self
+            .get_with_limit("/get-block-merkle-proof", Some(&query))
+            .await?;
         Ok(response.block_merkle_proof)
     }
 
@@ -251,25 +248,17 @@ impl ValidityProverClientInterface for ValidityProverClient {
             block_number,
             deposit_index,
         };
-        let response: GetDepositMerkleProofResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-deposit-merkle-proof",
-            Some(&query),
-        )
-        .await?;
+        let response: GetDepositMerkleProofResponse = self
+            .get_with_limit("/get-deposit-merkle-proof", Some(&query))
+            .await?;
         Ok(response.deposit_merkle_proof)
     }
 
     async fn get_account_info(&self, pubkey: U256) -> Result<AccountInfo, ServerError> {
         let query = GetAccountInfoQuery { pubkey };
-        let response: GetAccountInfoResponse = get_request(
-            &self.client,
-            &self.base_url,
-            "/get-account-info",
-            Some(&query),
-        )
-        .await?;
+        let response: GetAccountInfoResponse = self
+            .get_with_limit("/get-account-info", Some(&query))
+            .await?;
         Ok(response.account_info)
     }
 
@@ -283,16 +272,15 @@ impl ValidityProverClientInterface for ValidityProverClient {
             let request = GetAccountInfoBatchRequest {
                 pubkeys: chunk.to_vec(),
             };
-            let response: GetAccountInfoBatchResponse = post_request(
-                &self.client,
-                &self.base_url,
-                "/get-account-info-batch",
-                Some(&request),
-            )
-            .await?;
+            let response: GetAccountInfoBatchResponse = self
+                .post_with_limit("/get-account-info-batch", Some(&request))
+                .await?;
             all_account_info.extend(response.account_info);
         }
 
         Ok(all_account_info)
     }
 }
+
+const DEFAULT_RPS: f64 = 1.0;
+const DEFAULT_BURST_MULTIPLIER: u32 = 2;

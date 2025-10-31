@@ -19,7 +19,7 @@ type F = GoldilocksField;
 type C = PoseidonGoldilocksConfig;
 const D: usize = 2;
 
-pub const MAX_BATCH_SIZE: usize = 128;
+pub const MAX_BATCH_SIZE: usize = 32;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
