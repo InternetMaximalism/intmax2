@@ -50,11 +50,11 @@ pub async fn validate_receive(
 ) -> Result<Transfer, ReceiveValidationError> {
     transfer_data
         .validate()
-        .map_err(|e| StrategyError::ValidationError(e.to_string()))?;
+        .map_err(|e| ReceiveValidationError::ValidationError(e.to_string()))?;
 
     let recipient = transfer_data.transfer.recipient;
     if recipient != recipient_spend_pub.0.into() {
-        return Err(ReceiveValidationError::GeneralError(
+        return Err(ReceiveValidationError::ValidationError(
             "Recipient is not the same as the key".to_string(),
         ));
     }
@@ -80,7 +80,7 @@ pub async fn validate_receive(
         ReceiveValidationError::ValidationError(format!("Failed to decompress spent proof: {e}"))
     })?;
     if spent_pis.tx != transfer_data.tx {
-        return Err(ReceiveValidationError::GeneralError(
+        return Err(ReceiveValidationError::ValidationError(
             "Tx in spent proof is not the same as transfer witness tx".to_string(),
         ));
     }
@@ -88,7 +88,7 @@ pub async fn validate_receive(
         .insufficient_flags
         .random_access(transfer_data.transfer_index as usize);
     if insufficient_flag {
-        return Err(ReceiveValidationError::GeneralError(
+        return Err(ReceiveValidationError::ValidationError(
             "Insufficient flag is on in spent proof".to_string(),
         ));
     }

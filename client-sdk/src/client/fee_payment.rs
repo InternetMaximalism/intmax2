@@ -32,6 +32,7 @@ use super::{
 pub const WITHDRAWAL_FEE_MEMO: &str = "withdrawal_fee_memo";
 pub const CLAIM_FEE_MEMO: &str = "claim_fee_memo";
 pub const USED_OR_INVALID_MEMO: &str = "used_or_invalid_memo";
+pub const TX_TIMEOUT_BUFFER_SECS: u64 = 600;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FeeType {
@@ -293,15 +294,22 @@ pub async fn select_unused_fees(
                 collected_total_fee += transfer.amount;
             }
             Err(ReceiveValidationError::TxIsNotSettled(timestamp)) => {
-                if timestamp + tx_timeout < chrono::Utc::now().timestamp() as u64 {
+                if timestamp + tx_timeout + TX_TIMEOUT_BUFFER_SECS
+                    < chrono::Utc::now().timestamp() as u64
+                {
                     consume_payment(store_vault_server, view_pair, &memo, "tx is timeout").await?;
                 }
                 log::info!("fee: {} is not settled yet", memo.meta.digest);
                 continue;
             }
-            Err(e) => {
+            Err(ReceiveValidationError::ValidationError(e)) => {
                 log::warn!("invalid fee: {} reason: {}", memo.meta.digest, e,);
                 consume_payment(store_vault_server, view_pair, &memo, &e.to_string()).await?;
+            }
+            Err(e) => {
+                return Err(SyncError::FeeError(format!(
+                    "failed to validate fee memo: {e}",
+                )));
             }
         }
         if collected_total_fee >= fee.amount {
