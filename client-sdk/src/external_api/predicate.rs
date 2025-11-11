@@ -100,10 +100,12 @@ impl PredicateClient {
         from: Address,
         to: Address,
         value: U256,
+        chain_id: u32,
         request: PermissionRequest,
     ) -> Result<Vec<u8>, ServerError> {
         let encoded_data = request.to_encoded_data();
-        self.get_permission(from, to, value, &encoded_data).await
+        self.get_permission(from, to, value, chain_id, &encoded_data)
+            .await
     }
 
     async fn get_permission(
@@ -111,6 +113,7 @@ impl PredicateClient {
         from: Address,
         to: Address,
         value: U256,
+        chain_id: u32,
         encoded_data: &[u8],
     ) -> Result<Vec<u8>, ServerError> {
         let body = serde_json::json!({
@@ -118,6 +121,7 @@ impl PredicateClient {
             "to": format!("{:?}", to),
             "data": "0x".to_string() + &hex::encode(encoded_data),
             "msg_value":format!("{:?}", value),
+            "chain_id": chain_id,
         });
         let response: PredicateResponse = post_request(
             &self.client,
