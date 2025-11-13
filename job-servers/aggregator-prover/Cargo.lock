@@ -2225,7 +2225,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2991,7 +2991,7 @@ dependencies = [
 
 [[package]]
 name = "intmax2-interfaces"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3035,7 +3035,7 @@ dependencies = [
 [[package]]
 name = "intmax2-zkp"
 version = "0.1.0"
-source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=dev#c0a58baffdcaf25bc6ab82a396a8ef861538042a"
+source = "git+https://github.com/InternetMaximalism/intmax2-zkp?branch=main#92b0f93459faceea16605c116e0736cb573e8dec"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4400,7 +4400,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4921,7 +4921,7 @@ dependencies = [
  "getrandom 0.3.1",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
